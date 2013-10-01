@@ -2471,6 +2471,7 @@ evaluate_subexp_standard (struct type *expect_type,
 	}
 
     case BINOP_LOGICAL_OR:
+    case BINOP_LOGICAL_XOR:
       arg1 = evaluate_subexp (nullptr, exp, pos, noside);
       if (noside == EVAL_SKIP)
 	{
@@ -2493,8 +2494,18 @@ evaluate_subexp_standard (struct type *expect_type,
 	  arg2
 	    = evaluate_subexp (nullptr, exp, pos, (!tem ? EVAL_SKIP : noside));
 	  type = language_bool_type (exp->language_defn, exp->gdbarch);
-	  return value_from_longest (type,
-			     (LONGEST) (!tem || !value_logical_not (arg2)));
+
+          if(op == BINOP_LOGICAL_OR)
+	    {
+	      return value_from_longest (type,
+			         (LONGEST) (!tem || !value_logical_not (arg2)));
+	    }
+          else
+	    {
+	      return value_from_longest (type,
+			          (LONGEST) ((tem && !value_logical_not (arg2))
+			          || (!tem && value_logical_not (arg2))));
+	    }
 	}
 
     case BINOP_EQUAL:

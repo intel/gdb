@@ -169,7 +169,7 @@ static int parse_number (struct parser_state *, const char *, int,
 %token LOGICAL_KEYWORD REAL_KEYWORD REAL_S8_KEYWORD REAL_S16_KEYWORD 
 %token COMPLEX_KEYWORD
 %token COMPLEX_S8_KEYWORD COMPLEX_S16_KEYWORD COMPLEX_S32_KEYWORD 
-%token BOOL_AND BOOL_OR BOOL_NOT   
+%token BOOL_AND BOOL_OR BOOL_NOT BOOL_XOR  
 %token SINGLE DOUBLE PRECISION
 %token <lval> CHARACTER 
 
@@ -185,6 +185,7 @@ static int parse_number (struct parser_state *, const char *, int,
 %left BOOL_OR
 %right BOOL_NOT
 %left BOOL_AND
+%left BOOL_XOR
 %left '|'
 %left '^'
 %left '&'
@@ -415,6 +416,10 @@ exp     :       exp BOOL_AND exp
 
 exp	:	exp BOOL_OR exp
 			{ write_exp_elt_opcode (pstate, BINOP_LOGICAL_OR); }
+	;
+
+exp	:	exp BOOL_XOR exp
+			{ write_exp_elt_opcode (pstate, BINOP_LOGICAL_XOR); }
 	;
 
 exp	:	exp '=' exp
@@ -938,6 +943,7 @@ static const struct token dot_ops[] =
   { ".ge.", GEQ, BINOP_END, false },
   { ".gt.", GREATERTHAN, BINOP_END, false },
   { ".lt.", LESSTHAN, BINOP_END, false },
+  { ".xor.", BOOL_XOR, BINOP_END, false },
 };
 
 /* Holds the Fortran representation of a boolean, and the integer value we

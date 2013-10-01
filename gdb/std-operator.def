@@ -34,6 +34,7 @@ OP (BINOP_LSH)			/* << */
 OP (BINOP_RSH)			/* >> */
 OP (BINOP_LOGICAL_AND)		/* && */
 OP (BINOP_LOGICAL_OR)		/* || */
+OP (BINOP_LOGICAL_XOR)		/* ^^ */
 OP (BINOP_BITWISE_AND)		/* & */
 OP (BINOP_BITWISE_IOR)		/* | */
 OP (BINOP_BITWISE_XOR)		/* ^ */

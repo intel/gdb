@@ -94,6 +94,7 @@ static const struct op_print f_op_print_tab[] =
   {".LT.", BINOP_LESS, PREC_ORDER, 0},
   {"**", UNOP_IND, PREC_PREFIX, 0},
   {"@", BINOP_REPEAT, PREC_REPEAT, 0},
+  {".XOR.", BINOP_LOGICAL_XOR, PREC_LOGICAL_XOR, 0},
   {NULL, OP_NULL, PREC_REPEAT, 0}
 };
 

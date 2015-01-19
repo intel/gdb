@@ -159,7 +159,7 @@ static int parse_number (struct parser_state *, const char *, int,
 
 %token <ssym> NAME_OR_INT 
 
-%token SIZEOF KIND
+%token SIZEOF KIND LOC
 %token ERROR
 
 /* Special type cases, put in to allow the parser to distinguish different
@@ -239,6 +239,10 @@ exp	:	'~' exp    %prec UNARY
 
 exp	:	SIZEOF exp       %prec UNARY
 			{ write_exp_elt_opcode (pstate, UNOP_SIZEOF); }
+	;
+
+exp	:	LOC exp       %prec UNARY
+			{ write_exp_elt_opcode (pstate, UNOP_LOC); }
 	;
 
 exp	:	KIND '(' exp ')'       %prec UNARY
@@ -977,6 +981,7 @@ static const struct token f77_keywords[] =
   { "precision", PRECISION, BINOP_END, true },
   /* The following correspond to actual functions in Fortran and are case
      insensitive.  */
+  { "loc", LOC, BINOP_END, false },
   { "kind", KIND, BINOP_END, false },
   { "abs", UNOP_INTRINSIC, UNOP_ABS, false },
   { "mod", BINOP_INTRINSIC, BINOP_MOD, false },

@@ -2746,6 +2746,19 @@ evaluate_subexp_standard (struct type *expect_type,
 	return value_from_longest (size_type, align);
       }
 
+    case UNOP_LOC:
+      if (noside == EVAL_SKIP)
+	{
+	  evaluate_subexp (nullptr, exp, pos, EVAL_SKIP);
+	  return eval_skip_value (exp);
+	}
+      else
+	{
+	  struct value *retvalp = evaluate_subexp_for_address (exp, pos,
+							       noside);
+	  return retvalp;
+	}
+
     case UNOP_CAST:
       (*pos) += 2;
       type = exp->elts[pc + 1].type;

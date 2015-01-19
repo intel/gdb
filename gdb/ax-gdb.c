@@ -131,6 +131,7 @@ static void gen_logical_not (struct agent_expr *ax, struct axs_value *value,
 static void gen_complement (struct agent_expr *ax, struct axs_value *value);
 static void gen_deref (struct axs_value *);
 static void gen_address_of (struct axs_value *);
+static void gen_loc (struct agent_expr *, struct axs_value *);
 static void gen_bitfield_ref (struct agent_expr *ax, struct axs_value *value,
 			      struct type *type, int start, int end);
 static void gen_primitive_field (struct agent_expr *ax,
@@ -1248,6 +1249,34 @@ gen_address_of (struct axs_value *value)
       }
 }
 
+/* Produce the output of LOC intrinsic.
+  (i.e. produce address of lvalue on the top of the stack)  */
+static void
+gen_loc (struct agent_expr *ax, struct axs_value *value)
+{
+  /* LOC is not a Standard Fortran Intrinsic. However, different vendors have
+     different definition for LOC. Some definitions accept function name
+     also as an argument of LOC (apart from a variable name).
+     Hence, Address of Function is taken care of separately like this. */
+  if (value->type->code () == TYPE_CODE_FUNC)
+    /* The value's already an rvalue on the stack, so just change the type.*/
+    value->type = lookup_pointer_type (value->type);
+  else
+    switch (value->kind)
+      {
+      case axs_rvalue:
+	error (_("Operand of 'loc' is an rvalue, which has no address."));
+
+      case axs_lvalue_register:
+	error (_("Operand of `loc' is in a register, and has no address."));
+
+      case axs_lvalue_memory:
+	value->kind = axs_rvalue;
+	value->type = lookup_pointer_type (value->type);
+	break;
+      }
+}
+
 /* Generate code to push the value of a bitfield of a structure whose
    address is on the top of the stack.  START and END give the
    starting and one-past-ending *bit* numbers of the field within the
@@ -2190,6 +2219,12 @@ gen_expr (struct expression *exp, union exp_element **pc,
       (*pc)++;
       gen_expr (exp, pc, ax, value);
       gen_address_of (value);
+      break;
+
+    case UNOP_LOC:
+      (*pc)++;
+      gen_expr (exp, pc, ax, value);
+      gen_loc (ax, value);
       break;
 
     case UNOP_SIZEOF:

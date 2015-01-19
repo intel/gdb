@@ -235,6 +235,7 @@ OP (UNOP_PREDECREMENT)		/* -- before an expression */
 OP (UNOP_POSTDECREMENT)		/* -- after an expression */
 OP (UNOP_SIZEOF)		/* Unary sizeof (followed by expression) */
 OP (UNOP_ALIGNOF)		/* Unary alignof (followed by expression) */
+OP (UNOP_LOC)			/* Unary loc (followed by expression) */
 
 OP (UNOP_PLUS)			/* Unary plus */
 

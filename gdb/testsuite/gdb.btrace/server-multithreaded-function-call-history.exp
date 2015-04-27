@@ -1,0 +1,61 @@
+# This testcase is part of GDB, the GNU debugger.
+
+# Copyright 2005-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+load_lib gdbserver-support.exp
+
+standard_testfile
+
+if { [skip_gdbserver_tests] } {
+    return 0
+}
+
+if { [skip_btrace_tests] } {
+    return -1
+}
+
+set opts { debug }
+if [info exists DEBUG] {
+    lappend opts "additional_flags=-DDEBUG"
+}
+
+if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable $opts] != "" } {
+    return -1
+}
+
+gdb_exit
+gdb_start
+gdb_load $binfile
+
+# Make sure we're disconnected, in case we're testing with an
+# extended-remote board, therefore already connected.
+gdb_test "disconnect" ".*"
+
+gdbserver_run ""
+gdb_reinitialize_dir $srcdir/$subdir
+
+gdb_breakpoint main
+gdb_test "continue" "Breakpoint.* main .*" "continue to main"
+
+gdb_test_no_output "record btrace"
+
+gdb_breakpoint thread_function
+gdb_test "continue" "Breakpoint.* thread_function .*" "continue to thread_function one"
+
+# test passes if this does not crash
+gdb_test "record function-call-history" ".*"
+
+gdb_test "continue" "Breakpoint.* thread_function .*" "continue to thread_function two"

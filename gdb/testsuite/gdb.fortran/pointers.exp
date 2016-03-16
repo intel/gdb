@@ -94,6 +94,11 @@ gdb_continue_to_breakpoint "Before value assignment"
 gdb_test "print *(twop)%ivla2" "= <not allocated>"
 
 
+gdb_test "print sizeof(intp)" "= 4" \
+  "print sizeof(intp), not associated"
+gdb_test "print sizeof(realp)" "= 4" \
+  "print sizeof(realp), not associated"
+
 gdb_breakpoint [gdb_get_line_number "After value assignment"]
 gdb_continue_to_breakpoint "After value assignment"
 gdb_test "print logp" "= \\(PTR TO -> \\( $logical \\)\\) $hex\( <.*>\)?"
@@ -155,3 +160,7 @@ gdb_test "print *((integer*) &inta + 2)" "= 3" "print temporary pointer, array"
 gdb_test "print *((integer*) &intvla + 3)" "= 4" "print temporary pointer, allocated vla"
 gdb_test "print \$pc" "\\(PTR TO -> \\( void \\(\\) \\(\\) \\)\\) $hex <pointers\\+\\d+>" \
     "Print program counter"
+
+gdb_test "print sizeof(intp)" "= 4"
+gdb_test "print sizeof(realp)" "= 4"
+gdb_test "print sizeof(charap)" "= 3"

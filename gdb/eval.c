@@ -3302,6 +3302,16 @@ evaluate_subexp_for_sizeof (struct expression *exp, int *pos,
   if (exp->language_defn->la_language == language_cplus
       && (TYPE_IS_REFERENCE (type)))
     type = check_typedef (TYPE_TARGET_TYPE (type));
+  else if (exp->language_defn->la_language == language_fortran)
+    {
+      if (type_not_associated (type)
+	  || type_not_allocated (type))
+	return value_from_longest (size_type, 0);
+
+      if (type->code () == TYPE_CODE_PTR)
+	type = check_typedef (TYPE_TARGET_TYPE (type));
+    }
+
   return value_from_longest (size_type, (LONGEST) TYPE_LENGTH (type));
 }
 

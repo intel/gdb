@@ -174,6 +174,8 @@ BPF				bpf-unknown-none
      using Guile 2.2 and later, users who need to control the size of
      a memory port's internal buffer can use the 'setvbuf' procedure.
 
+* Fortran: Support pointers to dynamic types.
+
 *** Changes in GDB 9
 
 * GDB now supports printing of ptwrite payloads from the Intel Processor

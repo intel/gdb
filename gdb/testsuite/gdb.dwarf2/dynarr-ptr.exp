@@ -179,7 +179,7 @@ gdb_test "print foo.three_ptr'length" \
          " = 3"
 
 gdb_test "ptype foo.three_ptr" \
-         " = access array \\(<>\\) of integer"
+         " = access array \\(1 \\.\\. 3\\) of integer"
 
 # foo.three_ptr_tdef.all
 
@@ -289,7 +289,7 @@ gdb_test "print foo.five_ptr'length" \
          " = 5"
 
 gdb_test "ptype foo.five_ptr" \
-         " = access array \\(<>\\) of integer"
+         " = access array \\(2 \\.\\. 6\\) of integer"
 
 # foo.five_ptr_tdef.all
 

@@ -2050,7 +2050,8 @@ is_dynamic_type_internal (struct type *type, int top_level)
   type = check_typedef (type);
 
   /* We only want to recognize references at the outermost level.  */
-  if (top_level && type->code () == TYPE_CODE_REF)
+  if (top_level &&
+      (type->code () == TYPE_CODE_REF || type->code () == TYPE_CODE_PTR))
     type = check_typedef (TYPE_TARGET_TYPE (type));
 
   /* Types that have a dynamic TYPE_DATA_LOCATION are considered
@@ -2606,6 +2607,25 @@ resolve_dynamic_struct (struct type *type,
   return resolved_type;
 }
 
+/* Worker for pointer types.  */
+
+static struct type *
+resolve_dynamic_pointer (struct type *type,
+			 struct property_addr_info *addr_stack)
+{
+  struct dynamic_prop *prop;
+  CORE_ADDR value;
+
+  type = copy_type (type);
+
+  /* Resolve associated property.  */
+  prop = TYPE_ASSOCIATED_PROP (type);
+  if (prop != NULL && dwarf2_evaluate_property (prop, NULL, addr_stack, &value))
+    prop->set_const_val (value);
+
+  return type;
+}
+
 /* Worker for resolved_dynamic_type.  */
 
 static struct type *
@@ -2660,6 +2680,10 @@ resolve_dynamic_type_internal (struct type *type,
 					       &pinfo, top_level);
 	    break;
 	  }
+
+        case TYPE_CODE_PTR:
+ 	  resolved_type = resolve_dynamic_pointer (type, addr_stack);
+ 	  break;
 
 	case TYPE_CODE_STRING:
 	  /* Strings are very much like an array of characters, and can be

@@ -1446,13 +1446,12 @@ There is NO WARRANTY, to the extent permitted by law.");
   if (REPORT_BUGS_TO[0])
     {
       fprintf_filtered (stream,
-			_("For bug reporting instructions, please see:\n"));
+			_("\nFor information about how to find Technical \
+Support, Product Updates,\nUser Forums, FAQs, tips and tricks, and other \
+support information, please visit:\n"));
       fprintf_filtered (stream, "%s.\n", REPORT_BUGS_TO);
     }
-  fprintf_filtered (stream,
-		    _("Find the GDB manual and other documentation \
-resources online at:\n    <http://www.gnu.org/software/gdb/documentation/>."));
-  fprintf_filtered (stream, "\n\n");
+
   fprintf_filtered (stream, _("For help, type \"help\".\n"));
   fprintf_filtered (stream,
 		    _("Type \"apropos word\" to search for commands \

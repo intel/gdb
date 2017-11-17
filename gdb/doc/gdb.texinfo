@@ -108,6 +108,12 @@ Boston, MA 02110-1301, USA@*
 ISBN 978-0-9831592-3-0 @*
 
 @insertcopying
+For more information, @pxref{GNU Free Documentation License,,GNU Free
+Documentation License}.
+@page
+List of extended features for @value{GDBN} version @value{GDBVN}:
+@itemize @bullet
+@end itemize
 @end titlepage
 @page
 
@@ -144,6 +150,7 @@ software in general.  We will miss him.
 * Source::                      Examining source files
 * Data::                        Examining data
 * Optimized Code::              Debugging optimized code
+* Intel Architecture::          Debugging on Intel(R) Architecture
 * Macros::                      Preprocessor Macros
 * Tracepoints::                 Debugging remote targets non-intrusively
 * Overlays::                    Debugging programs that use overlays
@@ -14041,6 +14048,12 @@ function @code{a} call itself (via function @code{b}) as these calls would be
 tail calls.  Such tail calls would modify the @code{i} variable, therefore
 @value{GDBN} cannot be sure the value it knows would be right - @value{GDBN}
 prints @code{<optimized out>} instead.
+
+@node Intel Architecture
+@chapter Debugging on Intel(R) Architecture
+
+@menu
+@end menu
 
 @node Macros
 @chapter C Preprocessor Macros

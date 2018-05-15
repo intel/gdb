@@ -809,6 +809,109 @@ recpy_bt_function_call_history (PyObject *self, void *closure)
   return btpy_list_new (tinfo, first, last, 1, &recpy_func_type);
 }
 
+/* Helper function that calls PTW_FILTER with PAYLOAD and IP as arguments.
+   Returns the string that will be printed, if there is a filter to call.  */
+static gdb::optional<std::string>
+recpy_call_filter (const uint64_t payload, const uint64_t ip,
+		   const void *ptw_filter)
+{
+  gdb::optional<std::string> result;
+
+  gdb_assert (ptw_filter != nullptr);
+  if ((PyObject *) ptw_filter == Py_None)
+    return result;
+
+  gdbpy_enter enter_py;
+
+  gdbpy_ref<> py_payload (PyLong_FromUnsignedLongLong (payload));
+
+  if (py_payload == nullptr)
+    return result;
+
+  gdbpy_ref<> py_ip;
+
+  if (ip == 0)
+    py_ip = gdbpy_ref<>::new_reference (Py_None);
+  else
+    py_ip = gdbpy_ref<>::new_reference (PyLong_FromUnsignedLongLong (ip));
+
+  if (py_ip == nullptr)
+    return result;
+
+  gdbpy_ref<> py_result (PyObject_CallFunctionObjArgs ((PyObject *) ptw_filter,
+							py_payload.get (),
+							py_ip.get (),
+							nullptr));
+
+  if (py_result == nullptr)
+    {
+      gdbpy_print_stack ();
+      gdbpy_error (_("Couldn't call the ptwrite filter."));
+    }
+
+  /* Py_None is valid and results in no output.  */
+  if (py_result == Py_None)
+    {
+      result = "";
+      return result;
+    }
+
+  gdb::unique_xmalloc_ptr<char> user_string
+    = gdbpy_obj_to_string (py_result.get ());
+
+  if (user_string == nullptr)
+    {
+      gdbpy_print_stack ();
+      gdbpy_error (_("The ptwrite filter didn't return a string."));
+    }
+  else
+    result = user_string.get ();
+
+  return result;
+}
+
+/* Helper function returning the current ptwrite filter.  */
+
+static PyObject *
+get_ptwrite_filter ()
+{
+  gdbpy_ref<> module (PyImport_ImportModule ("gdb.ptwrite"));
+
+  if (PyErr_Occurred ())
+  {
+    gdbpy_print_stack ();
+    return nullptr;
+  }
+
+  /* We need to keep the reference count.  */
+  gdbpy_ref<> ptw_filter (PyObject_CallMethod (module.get (), "get_filter",
+					       nullptr));
+
+  if (PyErr_Occurred ())
+    {
+      gdbpy_print_stack ();
+      gdbpy_error (_("Couldn't get the ptwrite filter."));
+    }
+
+  return ptw_filter.get();
+}
+
+/* Used for registering any python ptwrite filter to the current thread.  A
+   pointer to this function is stored in the python extension interface.  */
+
+void
+gdbpy_load_ptwrite_filter (const struct extension_language_defn *extlang,
+			   struct btrace_thread_info *btinfo)
+{
+  gdb_assert (btinfo != nullptr);
+
+  gdbpy_enter enter_py;
+
+  btinfo->ptw_context = get_ptwrite_filter ();
+  if (btinfo->ptw_context != nullptr)
+    btinfo->ptw_callback_fun = &recpy_call_filter;
+}
+
 /* Implementation of BtraceRecord.goto (self, BtraceInstruction) -> None.  */
 
 PyObject *

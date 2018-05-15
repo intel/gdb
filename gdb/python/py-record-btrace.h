@@ -91,4 +91,10 @@ extern PyObject *recpy_bt_func_prev (PyObject *self, void *closure);
 /* Implementation of RecordFunctionSegment.next [RecordFunctionSegment].  */
 extern PyObject *recpy_bt_func_next (PyObject *self, void *closure);
 
+/* Helper function to initialize the ptwrite listener.  */
+extern PyObject *recpy_initialize_listener (ptid_t inferior_ptid);
+
+/* Helper function returning the current ptwrite listener.  */
+extern PyObject *get_ptwrite_listener ();
+
 #endif /* PYTHON_PY_RECORD_BTRACE_H */

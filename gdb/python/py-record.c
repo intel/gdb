@@ -24,6 +24,7 @@
 #include "py-record-full.h"
 #include "target.h"
 #include "gdbthread.h"
+#include "gdbarch.h"
 
 /* Python Record type.  */
 
@@ -734,4 +735,33 @@ gdbpy_stop_recording (PyObject *self, PyObject *args)
     }
 
   Py_RETURN_NONE;
+}
+
+/* Used for registering the default ptwrite listener to the current thread.  A
+   pointer to this function is stored in the python extension interface.  */
+
+enum ext_lang_bt_status
+gdbpy_load_ptwrite_listener (const struct extension_language_defn *extlang,
+			     ptid_t inferior_ptid)
+{
+  struct gdbarch *gdbarch = NULL;
+
+  if (!gdb_python_initialized)
+    return EXT_LANG_BT_NO_FILTERS;
+
+  try
+    {
+      gdbarch = target_gdbarch ();
+    }
+  catch (const gdb_exception &except)
+    {
+      /* Let gdb try to print the stack trace.  */
+      return EXT_LANG_BT_NO_FILTERS;
+    }
+
+  gdbpy_enter enter_py (gdbarch, current_language);
+
+  recpy_initialize_listener (inferior_ptid);
+
+  return EXT_LANG_BT_OK;
 }

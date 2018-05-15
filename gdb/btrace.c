@@ -34,6 +34,7 @@
 #include "gdbsupport/rsp-low.h"
 #include "gdbcmd.h"
 #include "cli/cli-utils.h"
+#include "extension.h"
 #include "gdbarch.h"
 
 /* For maintenance commands.  */
@@ -1307,6 +1308,8 @@ ftrace_add_pt (struct btrace_thread_info *btinfo,
   struct btrace_function *bfun;
   uint64_t offset;
   int status;
+
+  apply_ext_lang_ptwrite_listener (inferior_ptid);
 
   for (;;)
     {

@@ -351,6 +351,9 @@ struct btrace_thread_info
      stepping through the execution history.  */
   std::vector<std::string> aux_data;
 
+  /* PyObject pointer to the ptwrite listener function.  */
+  void *ptw_listener = nullptr;
+
   /* The function level offset.  When added to each function's LEVEL,
      this normalizes the function levels such that the smallest level
      becomes zero.  */

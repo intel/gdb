@@ -395,6 +395,9 @@ extern enum ext_lang_rc gdbpy_apply_val_pretty_printer
    struct ui_file *stream, int recurse,
    const struct value_print_options *options,
    const struct language_defn *language);
+extern enum ext_lang_bt_status gdbpy_load_ptwrite_listener
+  (const struct extension_language_defn *extlang,
+   ptid_t inferior_ptid);
 extern enum ext_lang_bt_status gdbpy_apply_frame_filter
   (const struct extension_language_defn *,
    struct frame_info *frame, frame_filter_flags flags,

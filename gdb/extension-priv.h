@@ -182,6 +182,10 @@ struct extension_language_ops
      enum ext_lang_frame_args args_type,
      struct ui_out *out, int frame_low, int frame_high);
 
+  /* Used for registering the ptwrite listener to the current thread.  */
+  enum ext_lang_bt_status (*apply_ptwrite_listener)
+    (const struct extension_language_defn *, ptid_t inferior_ptid);
+
   /* Update values held by the extension language when OBJFILE is discarded.
      New global types must be created for every such value, which must then be
      updated to use the new types.

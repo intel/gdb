@@ -153,6 +153,8 @@ static const struct extension_language_ops python_extension_ops =
 
   gdbpy_apply_frame_filter,
 
+  gdbpy_load_ptwrite_filter,
+
   gdbpy_preserve_values,
 
   gdbpy_breakpoint_has_cond,

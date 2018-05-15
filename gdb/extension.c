@@ -525,6 +525,27 @@ apply_ext_lang_frame_filter (struct frame_info *frame,
   return EXT_LANG_BT_NO_FILTERS;
 }
 
+/* Used for registering the ptwrite listener to the current thread.  */
+
+enum ext_lang_bt_status
+apply_ext_lang_ptwrite_listener (ptid_t inferior_ptid)
+{
+  for (const struct extension_language_defn *extlang : extension_languages)
+    {
+      enum ext_lang_bt_status status;
+
+      if (!extlang->ops || extlang->ops->apply_ptwrite_listener == NULL)
+	continue;
+
+      status = extlang->ops->apply_ptwrite_listener (extlang, inferior_ptid);
+
+      if (status != EXT_LANG_BT_NO_FILTERS)
+	return status;
+    }
+
+  return EXT_LANG_BT_NO_FILTERS;
+}
+
 /* Update values held by the extension language when OBJFILE is discarded.
    New global types must be created for every such value, which must then be
    updated to use the new types.

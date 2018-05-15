@@ -774,6 +774,45 @@ recpy_bt_function_call_history (PyObject *self, void *closure)
   return btpy_list_new (tinfo, first, last, 1, &recpy_func_type);
 }
 
+/* Helper function returning the current ptwrite listener.  Returns nullptr
+   in case of errors.  */
+
+PyObject *
+get_ptwrite_listener ()
+{
+  PyObject *module = PyImport_ImportModule ("gdb.ptwrite");
+
+  if (PyErr_Occurred ())
+  {
+    gdbpy_print_stack ();
+    return nullptr;
+  }
+
+  PyObject *default_ptw_listener = PyObject_CallMethod (module,	"get_listener",
+							NULL);
+
+  gdb_Py_DECREF (module);
+
+  if (PyErr_Occurred ())
+    gdbpy_print_stack ();
+
+  return default_ptw_listener;
+}
+
+/* Helper function to initialize the ptwrite listener.  Returns nullptr in
+   case of errors.  */
+
+PyObject *
+recpy_initialize_listener (ptid_t inferior_ptid)
+{
+  process_stratum_target *proc_target = current_inferior ()->process_target ();
+  struct thread_info * const tinfo = find_thread_ptid (proc_target, inferior_ptid);
+
+  tinfo->btrace.ptw_listener = get_ptwrite_listener ();
+
+  return (PyObject *) tinfo->btrace.ptw_listener;
+}
+
 /* Implementation of BtraceRecord.goto (self, BtraceInstruction) -> None.  */
 
 PyObject *

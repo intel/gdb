@@ -32,6 +32,10 @@
 
 #include <sys/syscall.h>
 
+#if defined (HAVE_LIBIPT)
+#include <intel-pt.h>
+#endif
+
 #if HAVE_LINUX_PERF_EVENT_H && defined(SYS_perf_event_open)
 #include <unistd.h>
 #include <sys/mman.h>
@@ -415,6 +419,31 @@ cpu_supports_bts (void)
     }
 }
 
+#if defined (PERF_ATTR_SIZE_VER5)
+/* Check whether the linux target supports Intel Processor Trace PTWRITE.  */
+
+static bool
+linux_supports_ptwrite ()
+{
+  static const char filename[]
+      = "/sys/bus/event_source/devices/intel_pt/caps/ptwrite";
+  gdb_file_up file = gdb_fopen_cloexec (filename, "r");
+
+  if (file.get () == nullptr)
+    return false;
+
+  int status, found = fscanf (file.get (), "%d", &status);
+
+  if (found != 1)
+    {
+      warning (_("Failed to determine ptwrite support from %s."), filename);
+      return false;
+    }
+
+  return status == 1;
+}
+#endif /* defined (PERF_ATTR_SIZE_VER5) */
+
 /* The perf_event_open syscall failed.  Try to print a helpful error
    message.  */
 
@@ -606,6 +635,9 @@ linux_enable_pt (ptid_t ptid, const struct btrace_config_pt *conf)
   pt->attr.exclude_kernel = 1;
   pt->attr.exclude_hv = 1;
   pt->attr.exclude_idle = 1;
+
+  if (linux_supports_ptwrite ())
+    pt->attr.config |= 0x1000;
 
   errno = 0;
   scoped_fd fd (syscall (SYS_perf_event_open, &pt->attr, pid, -1, -1, 0));

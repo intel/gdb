@@ -415,6 +415,51 @@ cpu_supports_bts (void)
     }
 }
 
+/* Return the Intel PT config bit from the linux sysfs for a FEATURE.
+   The bit can be used in the perf_event configuration when enabling PT.  */
+
+static uint64_t
+linux_read_pt_config_bit (const char *feature)
+{
+  uint64_t config_bit = 0;
+  std::string filename
+      = std::string ("/sys/bus/event_source/devices/intel_pt/format/")
+      + feature;
+
+  gdb_file_up file = gdb_fopen_cloexec (filename.c_str (), "r");
+  if (file.get () == nullptr)
+    return false;
+
+  int found = fscanf (file.get (), "config:%" SCNu64, &config_bit);
+  if (found != 1)
+    error (_("Failed to determine config bit from %s."),  filename.c_str ());
+
+  return config_bit;
+}
+
+/* Check whether the linux target supports the Intel PT FEATURE.  */
+
+static bool
+linux_supports_pt_feature (const char *feature)
+{
+  std::string filename
+    = std::string ("/sys/bus/event_source/devices/intel_pt/caps/") + feature;
+
+  gdb_file_up file = gdb_fopen_cloexec (filename.c_str (), "r");
+  if (file.get () == nullptr)
+    return false;
+
+  int status, found = fscanf (file.get (), "%d", &status);
+  if (found != 1)
+    {
+      warning (_("Failed to determine %s support from %s."), feature,
+	       filename.c_str ());
+      return false;
+    }
+
+  return (status == 1);
+}
+
 /* The perf_event_open syscall failed.  Try to print a helpful error
    message.  */
 
@@ -626,6 +671,12 @@ linux_enable_pt (ptid_t ptid, const struct btrace_config_pt *conf)
   tinfo->attr.exclude_kernel = 1;
   tinfo->attr.exclude_hv = 1;
   tinfo->attr.exclude_idle = 1;
+
+  if (conf->ptwrite && linux_supports_pt_feature ("ptwrite"))
+    {
+      tinfo->attr.config |= 0x1ull << linux_read_pt_config_bit ("ptw");
+      tinfo->conf.pt.ptwrite = conf->ptwrite;
+    }
 
   errno = 0;
   scoped_fd fd (syscall (SYS_perf_event_open, &tinfo->attr, pid, -1, -1, 0));

@@ -417,6 +417,60 @@ cpu_supports_bts (void)
     }
 }
 
+/* Read config bits.  */
+
+static bool
+linux_read_pt_config_bit (const std::string &feature, uint64_t *config_bit)
+{
+  if (config_bit == nullptr)
+    return false;
+
+  std::string filename
+      = "/sys/bus/event_source/devices/intel_pt/format/" + feature;
+  gdb_file_up file = gdb_fopen_cloexec (filename.c_str (), "r");
+
+  if (file.get () == nullptr)
+    return false;
+
+  int found = fscanf (file.get (), "config:%" SCNu64, config_bit);
+
+  if (found != 1)
+    {
+      warning (_("Failed to determine config bit from %s."),
+	       filename.c_str ());
+      return false;
+    }
+
+  return true;
+}
+
+
+/* Check whether the linux target supports Intel Processor Trace PTWRITE.  */
+
+static bool
+linux_supports_ptwrite (uint64_t *config_bit)
+{
+  static const char filename[]
+      = "/sys/bus/event_source/devices/intel_pt/caps/ptwrite";
+  gdb_file_up file = gdb_fopen_cloexec (filename, "r");
+
+  if (file.get () == nullptr)
+    return false;
+
+  int status, found = fscanf (file.get (), "%d", &status);
+
+  if (found != 1)
+    {
+      warning (_("Failed to determine ptwrite support from %s."), filename);
+      return false;
+    }
+
+  if (status == 1 && linux_read_pt_config_bit ("ptw", config_bit))
+    return true;
+
+  return false;
+}
+
 /* The perf_event_open syscall failed.  Try to print a helpful error
    message.  */
 
@@ -627,6 +681,13 @@ linux_enable_pt (ptid_t ptid, const struct btrace_config_pt *conf)
   tinfo->attr.exclude_kernel = 1;
   tinfo->attr.exclude_hv = 1;
   tinfo->attr.exclude_idle = 1;
+
+  uint64_t config_bit;
+  if (conf->ptwrite && linux_supports_ptwrite (&config_bit))
+    {
+      tinfo->attr.config |= 1 << config_bit;
+      tinfo->conf.pt.ptwrite = conf->ptwrite;
+    }
 
   errno = 0;
   scoped_fd fd (syscall (SYS_perf_event_open, &tinfo->attr, pid, -1, -1, 0));

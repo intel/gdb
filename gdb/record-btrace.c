@@ -821,6 +821,16 @@ btrace_insn_history (struct ui_out *uiout,
 	  btrace_ui_out_decode_error (uiout, btrace_insn_get_error (&it),
 				      conf->format);
 	}
+      else if (insn->iclass == BTRACE_INSN_AUX)
+	{
+	  uiout->field_fmt ("insn-number", "%u", btrace_insn_number (&it));
+	  uiout->text ("\t");
+	  uiout->spaces (3);
+	  uiout->text ("[");
+	  uiout->field_fmt ("aux-insn", "%s",
+			    it.btinfo->aux_data[insn->aux_data_index].c_str ());
+	  uiout->text ("]\n");
+	}
       else
 	{
 	  struct disasm_insn dinsn;

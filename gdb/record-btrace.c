@@ -1159,6 +1159,23 @@ btrace_get_bfun_name (const struct btrace_function *bfun)
     return "??";
 }
 
+static void
+btrace_print_aux_insn (struct ui_out *uiout,
+		       const struct btrace_function *bfun,
+		       const struct btrace_thread_info *btinfo)
+{
+  for (const btrace_insn &insn : bfun->insn)
+    {
+      if (insn.iclass == BTRACE_INSN_AUX)
+	{
+	  uiout->text ("\t\t[");
+	  uiout->field_fmt ("aux-data", "%s",
+			    btinfo->aux_data.at (insn.aux_data_index).c_str ());
+	  uiout->text ("]\n");
+	}
+    }
+}
+
 /* Disassemble a section of the recorded function trace.  */
 
 static void
@@ -1234,6 +1251,10 @@ btrace_call_history (struct ui_out *uiout,
 	}
 
       uiout->text ("\n");
+
+      if (((flags & RECORD_DONT_PRINT_AUX) == 0)
+	  && ((bfun->flags & BFUN_CONTAINS_AUX) != 0))
+	btrace_print_aux_insn(uiout, bfun, btinfo);
     }
 }
 

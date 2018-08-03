@@ -1,0 +1,117 @@
+# Copyright 2018 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Please email any bugs, comments, and/or additions to this file to:
+# bug-gdb@gnu.org
+
+# Test the info cet commands.
+
+if {[skip_cet_tests]} {
+    unsupported "target does not support CET"
+    return 0
+}
+
+standard_testfile i386-cet.c
+
+if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
+     additional_flags="-fcf-protection=full"] } {
+    return -1
+}
+
+if ![runto_main] {
+    untested "could not run to main"
+    return -1
+}
+
+# test info cet status
+gdb_test "info cet status" [multi_line \
+      "Target Id:.*process|LWP \[0-9\]+.*" \
+      "Shadow Stack:.*enabled.*" \
+      "Shadow Stack Pointer:.*$hex.*" \
+      "WRSS_EN:.*enabled|disabled.*" \
+      "Indirect Branch Tracking:.*enabled.*" \
+      "TRACKER:.*IDLE|WAIT_FOR_ENDBRANCH.*" \
+      "LEG_IW_EN:.*enabled|disabled.*" \
+      "NO_TRACK_EN:.*enabled|disabled.*" \
+      "SUPRESS_DIS:.*enabled|disabled.*" \
+      "SUPRESS:.*enabled|disabled.*" \
+      "EB_LEG_BITMAP_BASE:.*$hex.*"
+  ]
+
+# test call
+gdb_test "break call1" \
+	"Breakpoint \[0-9\]* at $hex.*"
+
+gdb_test "continue" \
+	"Breakpoint \[0-9\]*.*call1.*" \
+	"continue to call1"
+
+gdb_test "call (int) call2()" \
+	".. = 0|1|2|3.*"
+
+gdb_test "break call2" \
+	"Breakpoint \[0-9\]* at $hex.*"
+
+# Potential CET violations caused by 'call' or 'return' commands often only
+# occur after resuming normal execution.  Therefore it is important to test
+# normal program continuation after each of these commands in this test.
+gdb_test "continue" \
+	"Breakpoint \[0-9\]*.*call2.*" \
+	"continue to call2"
+
+# test info cet backtrace
+gdb_test "info cet backtrace" [multi_line \
+	"Address.*Symbol.*" \
+	"#0.*$hex.*call1.*" \
+	"#1.*$hex.*main.*"
+  ]
+
+# test return from current frame
+gdb_test "return (int) 1" \
+	"#0.*call1.*" \
+	"Test CET return from current frame" \
+	"Make.*return now\\? \\(y or n\\) " "y"
+
+gdb_test "continue" \
+	".*exited normally.*" \
+	"continue (return from current frame)"
+
+# test return from past frame
+clean_restart ${binfile}
+
+if ![runto_main] {
+    untested "could not run to main"
+    return -1
+}
+
+with_test_prefix "return testing" {
+    gdb_test "break call2" \
+	"Breakpoint \[0-9\]* at $hex.*"
+
+    gdb_test "continue" \
+	"Breakpoint \[0-9\]*.*call2.*"
+}
+
+gdb_test "frame 1" \
+	".*in call1.*"
+
+gdb_test "return (int) 1" \
+	"#0.*main.*" \
+	"Test CET return from past frame" \
+	"Make.*return now\\? \\(y or n\\) " "y"
+
+gdb_test "continue" \
+	".*exited normally.*" \
+	"continue (return from past frame)"

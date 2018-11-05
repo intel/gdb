@@ -1,5 +1,7 @@
 -*- text -*-
 
+* Add support for Intel Key Locker instructions.
+
 * Removed --reduce-memory-overheads and --hash-size as gas now
   uses hash tables that can be expand and shrink automatically.
 

@@ -1,0 +1,43 @@
+# Copyright 2020-2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Intelgt utility procedures.
+
+# The lock file used to ensure that only one GDB has access to the GPU
+# at a time.
+
+set intelgt_lock_filename intelgt-parallel.lock
+
+# Return non-zero if the instruction at ADDRESS is compact, 0 otherwise.
+
+proc is_compact_insn {address} {
+    # Check the CmptCtrl flag (bit 29).
+    set test "is compact insn"
+    set is_compact [get_integer_valueof \
+			"((unsigned char *)${address})\[3\] & 0x20" 0 $test]
+    return $is_compact
+}
+
+# Set the breakpoint bit of the instruction at ADDRESS.
+
+proc_with_prefix set_breakpoint_bit {address} {
+    # Set Bit 7 on a compacted instruction, Bit 30 on a full instruction.
+    set test "set bp bit"
+    if {[is_compact_insn $address]} {
+	gdb_test "print/x ((unsigned char *)${address})\[0\] |= 0x80" "" $test
+    } else {
+	gdb_test "print/x ((unsigned char *)${address})\[3\] |= 0x40" "" $test
+    }
+}

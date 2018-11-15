@@ -1,0 +1,464 @@
+# Copyright 2019-2023 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Support library for testing SYCL GDB features
+#
+# A particular SYCL device can be selected by passing the SYCL program
+# two command-line arguments:
+#   1. the device type, whose value is in {host, cpu, gpu, accelerator}.
+#   2. a substring of the device name.
+#
+# To set these arguments properly, use a SYCL board file, and
+# make your test program select a queue via the get_sycl_queue
+# function in gdb.sycl/sycl-util.cpp.  See gdb.sycl/sycl-hello.cpp
+# for a sample SYCL program setup.
+
+# Define global variables for the driver version and platform.
+
+load_lib mi-support.exp
+
+if {![info exists OFFLOAD_GPU_ID]} {
+    set OFFLOAD_GPU_ID ""
+}
+if {![info exists OFFLOAD_DEVICE_GROUP]} {
+    set OFFLOAD_DEVICE_GROUP ""
+}
+if {![info exists OFFLOAD_IGNORE_PREPARE_FOR_TESTING]} {
+    set OFFLOAD_IGNORE_PREPARE_FOR_TESTING "0"
+}
+if {![info exists OFFLOAD_PERF_AOT_TESTING]} {
+    set OFFLOAD_PERF_AOT_TESTING "0"
+}
+if {![info exists OFFLOAD_BACKEND_GROUP]} {
+    set OFFLOAD_BACKEND_GROUP "level0,opencl,host"
+}
+
+# Return true if the SYCL device selected via the board file
+# matches the arguments.  Otherwise return false.
+# Input arg DEVICE contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version.
+# See an example in init_sycl_devices_list.
+
+proc require_sycl_device {device type name} {
+    set args_list [sycl_get_device_args $device]
+    if {[llength $args_list] <= 2} {
+	return 0
+    }
+
+    set type_match [expr {[lindex $args_list 0] eq $type}]
+    set name_match [string match $name [lindex $args_list 1]]
+
+    return [expr $type_match && $name_match]
+}
+
+# Run a test on the target to check if it recognizes SYCL.
+# Remove device from the available devices list if SYCL is not supported
+# and return the updated list.
+
+proc get_sycl_supported_devices {sycl_device_list} {
+    global srcdir objdir subdir gdb_prompt inferior_exited_re
+    global OFFLOAD_IGNORE_PREPARE_FOR_TESTING
+
+    set supported_sycl_device_list {}
+
+    # Set up, compile, and execute a simple SYCL program.
+    set exe "$objdir/sycl-hello"
+    set src "$srcdir/lib/sycl-hello.cpp"
+
+    # Don't re-compile in case OFFLOAD_IGNORE_PREPARE_FOR_TESTING option
+    # is set.
+    if {$OFFLOAD_IGNORE_PREPARE_FOR_TESTING != "1"} {
+	if {[build_executable "failed to compile $src" \
+			    $exe $src {sycl debug}]} {
+	    verbose "SYCL: Compilation failed" 0
+	    return 1
+	}
+	verbose -log "\nSYCL: Compilation succeeded"
+    }
+
+    foreach device $sycl_device_list {
+	if ![is_sycl_device_filtered $device] {
+	    continue
+	}
+
+	clean_restart "${exe}"
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set inside_kernel [gdb_get_line_number "inside-kernel" $src]
+	gdb_breakpoint $inside_kernel
+
+	set result 1
+	gdb_test_multiple "continue" "continue" {
+	    -re -wrap "$inferior_exited_re normally].*" {
+		set result 1
+	    }
+	    -re -wrap "$inferior_exited_re with code.*" {
+		set result 1
+	    }
+	    -re -wrap "(?:Breakpoint) .* (at|in).*sycl-hello.cpp:$inside_kernel.*" {
+		set result 0
+	    }
+	    -re -wrap "received signal SIGABRT, Aborted.*" {
+		set result 1
+	    }
+	}
+
+	if {$result == 0} {
+	    verbose "SYCL: Support detected for ${device}" 0
+	    lappend supported_sycl_device_list "${device}"
+	} else {
+	    verbose "SYCL: Support not detected for ${device}" 0
+	}
+
+	gdb_exit
+    }
+
+    return $supported_sycl_device_list
+}
+
+# Get list of devices and return 0 if device list is non-empty else
+# return 1.  Each device entry of this list contains ";" separated
+# following information:
+# Device name;Backend Type;Backend Platform version.
+# e.g.
+# Intel(R) Iris(R) Plus Graphics 655 [0x3ea5];ext_oneapi_level_zero;1.3.24347
+
+gdb_caching_proc init_sycl_devices_list {} {
+    global srcdir objdir subdir gdb_prompt
+    global inferior_exited_re
+    global sycl_device_list
+    global env OFFLOAD_IGNORE_PREPARE_FOR_TESTING
+
+    set sycl_device_list {}
+    set supported_sycl_device_list {}
+
+    if {![is_sycl_offload_supported_compiler]} {
+	unsupported "SYCL tests supported only for dpcpp and icpx compilers"
+	return $sycl_device_list
+    }
+
+    # Set up, compile, and execute a simple SYCL program.
+    set exe "$objdir/sycl-devices"
+    set src "$srcdir/lib/sycl-devices.cpp"
+
+    # Don't re-compile in case OFFLOAD_IGNORE_PREPARE_FOR_TESTING option
+    # is set.
+    if {$OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"} {
+	clean_restart $exe
+    } else {
+	if {[prepare_for_testing "failed to compile $src" \
+		$exe $src {sycl debug}]} {
+	    verbose "SYCL: Compilation failed" 0
+	    return $sycl_device_list
+	}
+	verbose -log "\nSYCL: Compilation succeeded"
+    }
+
+    if {![runto_main]} {
+	untested "failed to run sycl-devices to main"
+	return $sycl_device_list
+    }
+
+    set result 1
+    gdb_test_multiple "continue" "continue" {
+	-re "SYCL: List of Target devices: \\\[(\[^\r\n\]+)\\\]" {
+	    set sycl_device_list [split $expect_out(1,string) ","]
+	    exp_continue
+	}
+	-re -wrap "$inferior_exited_re normally].*" {
+	    set result 0
+	}
+	-re -wrap "$inferior_exited_re with code.*" {
+	    set result 1
+	}
+    }
+
+    set supported_sycl_device_list [get_sycl_supported_devices $sycl_device_list]
+    if {($result == 0) && ([llength $supported_sycl_device_list])} {
+	verbose "SYCL: Devices found: $supported_sycl_device_list" 0
+    } else {
+	set result 1
+	verbose "SYCL: No device found" 0
+    }
+
+    gdb_exit
+
+    return $supported_sycl_device_list
+}
+
+# Return non-zero, if we are runing at Level-Zero.
+# device contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version.
+# See an example in init_sycl_devices_list.
+
+proc is_level_zero {device} {
+    return [regexp {.*(Level-Zero)} $device]
+}
+
+# Return non-zero, if we are runing on OpenCL.
+# device contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version.
+# See an example in init_sycl_devices_list.
+
+proc is_opencl {device} {
+    return [regexp {.*(OpenCL)} $device]
+}
+
+# Return non-zero, if the Level-Zero Debug API is being used.
+
+proc is_level_zero_debug_api {} {
+    global env
+
+    if {![info exists env(ZET_ENABLE_PROGRAM_DEBUGGING)]} {
+	return 0
+    }
+
+    set env_var $env(ZET_ENABLE_PROGRAM_DEBUGGING)
+    if {[string is integer $env_var]} {
+	return [expr $env_var ne "0"]
+    } else {
+	return 0
+    }
+}
+
+# Issue a 'continue' command and expect to see program termination.
+
+proc continue_sycl_program_to_termination {{msg_suffix ""}} {
+    global gdb_prompt inferior_exited_re
+
+    gdb_test "continue" "$inferior_exited_re normally].*" \
+	"continue to end $msg_suffix"
+}
+
+# Return the ID of a current thread (<inferior number>.<thread number>).
+# SIMD lane information is omitted.
+# For thread 2.3:0 returns "2.3".
+# For thread 3:5 returns "3".
+proc get_current_thread {location} {
+    global gdb_prompt decimal
+
+    gdb_test_multiple "thread" "get current thread at $location" {
+	-re "Current thread is ($decimal|$decimal\.$decimal).*$gdb_prompt $" {
+	    pass $gdb_test_name
+	    return $expect_out(1,string)
+	}
+	-re "$gdb_prompt $" {
+	    fail $gdb_test_name
+	}
+    }
+    return 0
+}
+
+# Returns a non-negative integer value of variable VAR for SIMD lane
+# LANE_NUM in the current thread.
+# Returns -1 on error.
+proc get_var_for_lane {var {lane_num 0}} {
+    global decimal
+    global gdb_prompt
+
+    gdb_test "thread :$lane_num" ":$lane_num.*" \
+	"switch the current thread to lane $lane_num"
+
+    set msg "get $var value for the current thread, lane $lane_num"
+    gdb_test_multiple "print $var" $msg {
+	-re "= ($decimal).*$gdb_prompt" {
+	    pass $gdb_test_name
+	    return $expect_out(1,string)
+	}
+	-re "$gdb_prompt" {
+	    fail $gdb_test_name
+	    return -1
+	}
+    }
+}
+
+# Returns 1 if the target device is selected via OFFLOAD_DEVICE_GROUP
+# and OFFLOAD_GPU_ID, 0 otherwise.
+# device contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version.
+# See an example in init_sycl_devices_list.
+
+proc is_sycl_device_filtered {device} {
+    global OFFLOAD_DEVICE_GROUP OFFLOAD_GPU_ID OFFLOAD_BACKEND_GROUP
+
+    # Filter according to OFFLOAD_DEVICE_GROUP.
+    set device_info [split "$device" ";"]
+    set backend [lindex $device_info 1]
+    set device_type [lindex $device_info 3]
+    set checking_gpu_device [string equal $device_type "gpu"]
+    set checking_cpu_device [string equal $device_type "cpu"]
+    set checking_fpga_device [string equal $device_type "accelerator"]
+
+    if {[string match -nocase "*level*" $backend]} {
+	set backend "level"
+    } else {
+	set backend "opencl"
+    }
+
+    if {![string match "" $OFFLOAD_DEVICE_GROUP]} {
+	if {($checking_cpu_device
+	     && (![string match -nocase "*cpu*" $OFFLOAD_DEVICE_GROUP]
+		 || ![string match -nocase "*opencl*" $OFFLOAD_BACKEND_GROUP]))
+	    || ($checking_fpga_device
+		&& (![string match -nocase "*accelerator*" $OFFLOAD_DEVICE_GROUP]
+		    || ![string match -nocase "*opencl*" $OFFLOAD_BACKEND_GROUP]))
+	    || ($checking_gpu_device
+		&& (![string match -nocase "*gpu*" $OFFLOAD_DEVICE_GROUP]
+		    || ![string match -nocase "*${backend}*" $OFFLOAD_BACKEND_GROUP]))} {
+	    return 0
+	}
+    }
+
+    # Filter according to OFFLOAD_GPU_ID.
+    if {![string match "" $OFFLOAD_GPU_ID]} {
+	if {$checking_gpu_device
+	    && ![string match -nocase "*${OFFLOAD_GPU_ID}*" $device]} {
+	    return 0
+	}
+    }
+
+    return 1
+}
+
+# Gets the list of args required for running the SYCL tests, where input device
+# contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version;Device Type.
+# See an example in init_sycl_devices_list.
+
+proc sycl_get_device_args {device} {
+    global hex
+
+    set device_info [split "$device" ";"]
+    set sycl_driver_platform [lindex $device_info 1]
+    set sycl_driver_version [lindex $device_info 2]
+    set device_type [lindex $device_info 3]
+    set device_name ""
+    set args_list {}
+
+    if {$device_type eq "gpu"} {
+	lappend args_list "gpu"
+	lappend args_list [lindex $device_info 0]
+    } elseif {$device_type eq "cpu"} {
+	lappend args_list "cpu"
+	if {[string match "*Intel*" $device]} {
+	    lappend args_list "Intel"
+	}
+    } elseif {$device_type eq "accelerator"} {
+	lappend args_list "accelerator"
+	if {[string match "*Intel*" $device]} {
+	    lappend args_list "Intel"
+	}
+    } elseif {$device_type eq "host"} {
+	lappend args_list "host"
+	lappend args_list "host"
+    } else {
+	verbose "SYCL: Unexpected device type: ${device_type}" 0
+    }
+    lappend args_list $sycl_driver_platform
+    lappend args_list $sycl_driver_version
+    return $args_list
+}
+
+# Gets the prefix string required for the SYCL tests.
+# DEVICE contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version;Device type.
+# e.g.
+# Intel(R) Iris(R) Plus Graphics 655 [0x3ea5];ext_oneapi_level_zero;1.3.24347;gpu
+# Function returns ":" separated test prefix which has following info:
+# In case of non GPU device: Device type:Backend type:cpp
+# and in case of GPU: Device type GPU: Backend type: Graphics device ID
+# e.g. gpu:opencl:{0x3ea5}
+
+proc sycl_get_device_prefix {device} {
+    global hex
+    set args_list [sycl_get_device_args $device]
+
+    if {[string match -nocase "*Graphics*" $device]
+	 || [string match -nocase "*GPU*" $device]} {
+	    # In case of GPU device, add device ID to the prefix to get a unique
+	    # test name for multi GPU test machines.
+	    return "[lindex $args_list 0]:[lindex $args_list 2]:\
+		    {[regexp -all -inline $hex [lindex $args_list 1]]}"
+    }
+    return "[lindex $args_list 0]:[lindex $args_list 2]:cpp"
+}
+
+# Get compiler info and return 1 if the compiler is icpx, otherwise
+# return 0.
+
+proc is_sycl_offload_supported_compiler {} {
+    global OFFLOAD_IGNORE_PREPARE_FOR_TESTING
+
+    if {$OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"} {
+	return 1
+    }
+
+    if {[test_compiler_info {icx-*} c++]} {
+	return 1
+    }
+
+    return 0
+}
+
+# Get the namespace version for the SYCL header corresponding to the compiler
+# used.  Return 0 for older compilers using SYCL without namespace versioning.
+
+proc get_sycl_header_version {} {
+    if {[test_compiler_info {icx-202[3-9]-*} c++]} {
+	return 1
+    }
+
+    return 0
+}
+
+# Function is for the performance tests common "assemble section"
+# of the tests.
+
+proc sycl_perftest_initialize {} {
+    global binfile srcfile OFFLOAD_PERF_AOT_TESTING
+
+    set sycl_device_list [init_sycl_devices_list]
+    if {[llength $sycl_device_list] == 0} {
+	unsupported "target does not support SYCL"
+	return ""
+    }
+
+    set option ""
+    if {$OFFLOAD_PERF_AOT_TESTING == "1"} {
+	# LD and compile flags setting is needed for AOT testing.
+	# gen9: option creates AOT binary for gen9 and newer targets.
+	set option [list "additional_flags=-fsycl-targets=spir64_x86_64,spir64_fpga,spir64_gen" "ldflags=-Xsycl-target-backend=spir64_gen \"-q -device gen9:\""]
+    }
+
+    if {[build_executable "failed to compile $srcfile" \
+	    "${binfile}" $srcfile [concat sycl debug $option]]} {
+	return ""
+    }
+
+    # SYCL performance tests will run on the first available device, so make
+    # sure to set the device filter properly for the required device.
+    foreach device $sycl_device_list {
+	with_test_prefix [sycl_get_device_prefix $device] {
+	    verbose "SYCL: Initalized the device $device" 0
+	    clean_restart "${binfile}"
+	    return $device
+	}
+    }
+
+    return ""
+}

@@ -6988,6 +6988,27 @@ proc gdb_compile_openmp {source dest type options} {
     return [gdb_compile $source $dest $type $options]
 }
 
+# Build a sycl program from SOURCE.  See prefatory comment for
+# gdb_compile, above, for discussion of the parameters to this proc.
+
+proc gdb_compile_sycl {source dest type options} {
+    set new_options ""
+    if {[test_compiler_info {icx-*} c++]} {
+	lappend new_options {additional_flags=-fsycl}
+    }
+
+    lappend new_options {c++}
+    lappend new_options {optimize=-O0}
+    if {[lsearch -exact $options impi] != -1} {
+	append options { $::impi_library_path ldflags=-lmpi}
+    }
+
+    # If the optimize option is given multiple times, only the last use is
+    # significant in DEJAGNU.  So, to make optimize option set in the test
+    # significant, input 'options' are appended to the end here.
+    return [gdb_compile $source $dest $type [concat $new_options $options]]
+}
+
 # Send a command to GDB.
 # For options for TYPE see gdb_stdin_log_write
 
@@ -7802,8 +7823,12 @@ proc gdb_continue { function } {
 # Clean the directory containing the standard output files.
 
 proc clean_standard_output_dir {} {
-    if { [info exists ::GDB_PERFTEST_MODE] && $::GDB_PERFTEST_MODE == "run" } {
-	# Don't clean, use $GDB_PERFTEST_MODE == compile results.
+    if { (([info exists ::GDB_PERFTEST_MODE]
+	   && $::GDB_PERFTEST_MODE == "run")
+	  || ([info exists ::OFFLOAD_IGNORE_PREPARE_FOR_TESTING]
+	      && $::OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1")) } {
+	# Don't clean, use $GDB_PERFTEST_MODE == compile results or pre built
+	# binaries option OFFLOAD_IGNORE_PREPARE_FOR_TESTING = "1".
 	return
     }
 

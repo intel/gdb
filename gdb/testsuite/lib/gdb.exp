@@ -7309,8 +7309,12 @@ proc gdb_continue { function } {
 # Clean the directory containing the standard output files.
 
 proc clean_standard_output_dir {} {
-    if { [info exists ::GDB_PERFTEST_MODE] && $::GDB_PERFTEST_MODE == "run" } {
-	# Don't clean, use $GDB_PERFTEST_MODE == compile results.
+    if { (([info exists ::GDB_PERFTEST_MODE]
+	   && $::GDB_PERFTEST_MODE == "run")
+	  || ([info exists ::OFFLOAD_IGNORE_PREPARE_FOR_TESTING]
+	      && $::OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1")) } {
+	# Don't clean, use $GDB_PERFTEST_MODE == compile results or pre built
+	# binaries option OFFLOAD_IGNORE_PREPARE_FOR_TESTING = "1".
 	return
     }
 

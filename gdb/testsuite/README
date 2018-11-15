@@ -328,6 +328,67 @@ For example, to turn on gdbserver debugging, you can do:
 
 	make check GDBSERVER_DEBUG="debug,replay"
 
+OFFLOAD_PERF_AOT_TESTING
+
+When set to "1", GDB offload performance tests will set the AOT flags
+for compilation.
+
+OFFLOAD_DEVICE_GROUP
+
+By default, tests that offload parts of the test program to a device try
+to run on all available devices.  This option can be used to restrict these
+tests to run only on a specific group/family of devices.  Possible values
+for this option are:
+gpu, cpu, host and accelerator
+
+Multiple target device groups can be selected by passing a comma separated
+list.
+
+	make check RUNTESTFLAGS='OFFLOAD_DEVICE_GROUP="gpu,cpu,host,accelerator"'
+
+OFFLOAD_GPU_ID
+
+In cases where the target machine contains multiple GPUs and the user
+does not want to run tests on all of the available GPU devices, this
+option allows to select specific GPUs.  This option can be a comma
+separated list to filter for multiple GPUs, and can be passed together
+with OFFLOAD_DEVICE_GROUP.
+For example, this make check command runs for all cpu, host and accelerator
+devices but only on the GPU with ID 0x3ea5.
+
+        make check RUNTESTFLAGS='OFFLOAD_GPU_ID="0x3ea5"'
+
+OFFLOAD_IGNORE_PREPARE_FOR_TESTING
+
+When set to "1", GDB offload tests will only restart the executable
+for the test instead of building it.  This requires a previous run
+without this option set.
+
+OFFLOAD_PERF_AOT_TESTING
+
+When set to "1", GDB offload performance tests will set the AOT flags
+for compilation.
+
+OFFLOAD_BACKEND_GROUP
+
+By default, it is set to "opencl,level0".  This option can be used in the
+"make check" command to filter the required backend by using comma-separated
+values.
+
+For example, this make check command runs offload tests for level0 only.
+
+	make check RUNTESTFLAGS='OFFLOAD_BACKEND_GROUP="level0"'
+
+OPENMP_LANG_GROUP
+
+This option can be used to filter the required language for openmp tests.  It
+contains comma separated values and possible values for this option are
+cpp and fortran.
+
+For example, this make check command runs OpenMP offload tests for CPP only.
+
+	make check RUNTESTFLAGS='OPENMP_LANG_GROUP="cpp"'
+
 Architecture-specific Parameters
 ******************************
 

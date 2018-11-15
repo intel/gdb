@@ -807,8 +807,17 @@ proc runto { linespec args } {
 #
 # N.B. This function deletes all existing breakpoints.
 # If you don't want that, use gdb_start_cmd.
+# ARGS_LIST is optional input, in case it exists then
+# arguments are set before running to the main.
 
-proc runto_main { } {
+proc runto_main { {args_list {}} } {
+    if {[llength $args_list] > 0} {
+	set args ""
+	foreach arg $args_list {
+	    append args "'$arg' "
+	}
+	gdb_test_no_output "set args $args"
+    }
     return [runto main qualified]
 }
 
@@ -6601,8 +6610,10 @@ proc gdb_continue { function } {
 # Clean the directory containing the standard output files.
 
 proc clean_standard_output_dir {} {
-    if { [info exists ::GDB_PERFTEST_MODE] && $::GDB_PERFTEST_MODE == "run" } {
-	# Don't clean, use $GDB_PERFTEST_MODE == compile results.
+    if { ([info exists ::GDB_PERFTEST_MODE] && $::GDB_PERFTEST_MODE == "run")
+	  || $::OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1" } {
+	# Don't clean, use $GDB_PERFTEST_MODE == compile results or pre built
+	# binaries option OFFLOAD_IGNORE_PREPARE_FOR_TESTING = "1".
 	return
     }
 

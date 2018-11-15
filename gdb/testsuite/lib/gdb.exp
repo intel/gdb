@@ -797,8 +797,17 @@ proc runto { linespec args } {
 #
 # N.B. This function deletes all existing breakpoints.
 # If you don't want that, use gdb_start_cmd.
+# ARGS_LIST is optional input, in case it exists then
+# arguments are set before running to the main.
 
-proc runto_main { } {
+proc runto_main { {args_list {}} } {
+    if {[llength $args_list] > 0} {
+	set args ""
+	foreach arg $args_list {
+	    append args "'$arg' "
+	}
+	gdb_test_no_output "set args $args"
+    }
     return [runto main qualified]
 }
 

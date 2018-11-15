@@ -1,0 +1,158 @@
+# Copyright 2019 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Support library for testing SYCL GDB features
+#
+# A particular SYCL device can be selected by passing the SYCL program
+# two command-line arguments:
+#   1. the device type, whose value is in {host, cpu, gpu, accelerator}.
+#   2. a substring of the device name.
+#
+# To set these arguments properly, use a SYCL board file, and
+# make your test program select a queue via the get_sycl_queue
+# function in gdb.sycl/sycl-util.cpp.  See gdb.sycl/sycl-hello.cpp
+# for a sample SYCL program setup.
+
+# Return compiler flags for SYCL.
+
+proc sycl_compilation_options {options} {
+    set flags {optimize=-O0}
+    return [concat {c++ debug} $options $flags]
+}
+
+# Compile a given SYCL source file.
+
+proc prepare_sycl_for_testing {binfile srcfile {options ""}} {
+    set options [sycl_compilation_options $options]
+    set message "failed to compile $srcfile"
+    return [prepare_for_testing $message $binfile $srcfile $options]
+}
+
+# Start the process by passing the SYCL device type and a
+# substring of the device name as the command line arguments.
+
+proc start_sycl_program {} {
+    global device_type
+    global device_name
+    global gdb_prompt
+
+    if {![info exists device_type] || ![info exists device_name]} {
+	verbose "SYCL: test parameters not set; use a SYCL board file" 0
+	return -1
+    }
+
+    # Because we're doing an internal setup, use gdb_test_multiple
+    # instead of gdb_test to not include this as a pass.
+    set set_args_cmd "set args '$device_type' '$device_name'"
+    gdb_test_multiple $set_args_cmd $set_args_cmd {
+	-re "$gdb_prompt $" { }
+    }
+
+    if {![runto_main]} {
+	untested "failed to run to main"
+	return -1
+    }
+
+    return 0
+}
+
+# Run a test on the target to check if it recognizes SYCL.
+# Return 0 if SYCL is supported, 1 otherwise.
+
+gdb_caching_proc skip_sycl_tests {
+    global srcdir objdir subdir gdb_prompt
+    global inferior_exited_re
+    global device_type device_name
+
+    if {![info exists device_type] || ![info exists device_name]} {
+	verbose -log "SYCL: test parameters not set; use a SYCL board file"
+	return 1
+    }
+
+    # Set up, compile, and execute a simple SYCL program.
+    set exe "sycl-hello"
+    set src "$srcdir/lib/sycl-hello.cpp"
+
+    if {[prepare_sycl_for_testing $exe $src]} {
+	verbose "SYCL: Compilation failed" 0
+	return 1
+    }
+    verbose -log "\nSYCL: Compilation succeeded"
+
+    if {[start_sycl_program] < 0} {
+	return 1
+    }
+
+    set result 1
+    gdb_test_multiple "continue" "continue" {
+	-re "SYCL: Using device: \\\[(\[^\r\n\]*)\\\] from \\\[(\[^\r\n\]*)\\\] version \\\[(\[^\r\n\]*)\\\]\r\n" {
+	    set dev $expect_out(1,string)
+	    set platform $expect_out(2,string)
+	    set version $expect_out(3,string)
+	    verbose "SYCL: Selected device is '${dev}' from '${platform}' version '${version}'" 0
+	    exp_continue
+	}
+	-re -wrap "$inferior_exited_re normally].*" {
+	    set result 0
+	}
+	-re -wrap "$inferior_exited_re with code.*" {
+	    set result 1
+	}
+    }
+
+    if {$result == 0} {
+	verbose "SYCL: Support detected" 0
+    } else {
+	verbose "SYCL: Support not detected" 0
+    }
+
+    gdb_exit
+
+    return $result
+}
+
+# Continue an already-started program until the point where the device
+# is selected, and return the selected device name.
+
+proc continue_and_get_device_name {} {
+    global gdb_prompt
+
+    set bp [gdb_get_line_number "return-sycl-queue" "../lib/sycl-util.cpp"]
+    gdb_breakpoint "sycl-util.cpp:$bp" {temporary}
+
+    set selected_sycl_device ""
+    gdb_test_multiple "continue" "continue to fetch selected device" {
+	-re "SYCL: Using device: \\\[(\[^\r\n\]*)\\\] from \\\[(\[^\r\n\]*)\\\]\r\n" {
+	    set selected_sycl_device $expect_out(1,string)
+	    set selected_sycl_platform $expect_out(1,string)
+	    exp_continue
+	}
+	-re ".reakpoint .*sycl-util.cpp:${bp}.*$gdb_prompt $" {
+	    # do nothing
+	}
+    }
+    gdb_test "finish"
+
+    return $selected_sycl_device
+}
+
+# Issue a 'continue' command and expect to see program termination.
+
+proc continue_sycl_program_to_termination {{msg_suffix ""}} {
+    global gdb_prompt inferior_exited_re
+
+    gdb_test "continue" "$inferior_exited_re normally].*" \
+	"continue to end $msg_suffix"
+}

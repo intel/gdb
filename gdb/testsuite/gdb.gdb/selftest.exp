@@ -65,7 +65,7 @@ proc test_with_self { } {
     } else {
 	set banner [multi_line \
 			"GNU gdb \[0-9\.\]*\[^\r\n\]*" \
-			"Copyright \\(C\\) \[0-9\]* Free Software Foundation, Inc\." \
+			"Copyright \\(C\\) \[0-9\]* Free Software Foundation, Inc\.; \\(C\\) \[0-9\]* Intel Corp\." \
 			"License GPLv3\\+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>" \
 			"This is free software: you are free to change and redistribute it\." \
 			"There is NO WARRANTY, to the extent permitted by law\." \

@@ -62,6 +62,10 @@ and with the Back-Cover Texts as in (a) below.
 (a) The FSF's Back-Cover Text is: ``You are free to copy and modify
 this GNU Manual.  Buying copies from GNU Press supports the FSF in
 developing GNU and promoting software freedom.''
+@sp 1
+Copyright @copyright{} 2021, Intel Corporation.
+Intel's modifications are provided pursuant to the GNU Free
+Documentation license.
 @c man end
 @end copying
 

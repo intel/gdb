@@ -3811,7 +3811,7 @@ static void
 gdbserver_version (void)
 {
   printf ("GNU gdbserver %s%s\n"
-	  "Copyright (C) 2024 Free Software Foundation, Inc.\n"
+	  "Copyright (C) 2025 Free Software Foundation, Inc.; (C) 2025 Intel Corp.\n"
 	  "gdbserver is free software, covered by the "
 	  "GNU General Public License.\n"
 	  "This gdbserver was configured as \"%s\"\n",

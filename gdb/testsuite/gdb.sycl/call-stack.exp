@@ -1,0 +1,146 @@
+# Copyright 2019 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for SYCL when there are function calls inside
+# the kernel.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set inner_loc [gdb_get_line_number "ordinary-inner-loc"]
+set middle_loc [gdb_get_line_number "ordinary-middle-loc"]
+set outer_loc [gdb_get_line_number "ordinary-outer-loc"]
+set inlined_inner_loc [gdb_get_line_number "inlined-inner-loc"]
+set inlined_middle_loc [gdb_get_line_number "inlined-middle-loc"]
+set inlined_outer_loc [gdb_get_line_number "inlined-outer-loc"]
+
+set fill "\[^\r\n\]*"
+
+set inner_desc  "second ${fill} at ${fill}$srcfile:$inner_loc"
+set middle_desc "first ${fill} at ${fill}$srcfile:$middle_loc"
+set outer_desc  "${fill}operator\\(\\)${fill} at ${fill}$srcfile:$outer_loc"
+set inlined_inner_desc \
+    "inlined_second ${fill} at ${fill}$srcfile:$inlined_inner_loc"
+set inlined_middle_desc \
+    "inlined_first ${fill} at ${fill}$srcfile:$inlined_middle_loc"
+set inlined_outer_desc \
+    "${fill}operator\\(\\)${fill} at ${fill}$srcfile:$inlined_outer_loc"
+
+# Set breakpoint inside the kernel.
+gdb_breakpoint "$srcfile:$inner_loc"
+
+gdb_continue_to_breakpoint "innermost-body" ".*$srcfile:$inner_loc.*"
+
+# Limit the backtrace to 3 frames because frame #3
+# and beyond are implementation-specific to the SYCL runtime.
+gdb_test "backtrace 3" [multi_line \
+        "#0${fill} $inner_desc" \
+        "#1${fill} $middle_desc" \
+        "#2${fill} $outer_desc.*"] \
+    "first backtrace"
+
+# Now switch frames and examine locals.
+gdb_test "frame 1" "#1${fill} $middle_desc.*" "switch to frame 1"
+gdb_test "print num1" "= 15" "print num1 at first bp"
+gdb_test "print num2" "= 3" "print num2 at first bp"
+
+gdb_test "frame 2" "#2${fill} $outer_desc.*" "switch to frame 2"
+gdb_test "print fourteen" "= 14" "print fourteen at first bp"
+gdb_test "print four" "= 4"
+gdb_test "print ten" "= 10"
+
+gdb_test "frame 0" "#0${fill} $inner_desc.*" "switch to frame 0"
+gdb_test "print x" "= 20" "print x at first bp"
+gdb_test "print y" "= 9" "print y at first bp"
+
+# Finish the function calls.  Normally we expect to see a "Value
+# returned is ..." line.  However, some SYCL device compilers may
+# inline the kernel functions.  In that case we won't get that line.
+set value_returned "(\r\nValue returned is $valnum_re = 180)?"
+
+gdb_test "finish" [multi_line \
+	"Run till exit from #0 $fill second \\(x=20, y=9\\) $fill" \
+	"${fill}first \\(num1=15, num2=3\\)${fill}" \
+	"${fill}${value_returned}"] \
+    "finish the innermost frame"
+
+gdb_test "backtrace 2" [multi_line \
+        "#0${fill} $middle_desc" \
+        "#1${fill} $outer_desc.*"] \
+    "second backtrace"
+
+# 'finish' may not have stopped at the perfect spot.  Redefine
+# 'middle_desc' to prevent error propagation.
+set middle_desc "first ${fill} at ${fill}$srcfile:$decimal"
+
+set value_returned "(\r\nValue returned is $valnum_re = 210)?"
+gdb_test "finish" [multi_line \
+	"Run till exit from #0 $fill first \\(num1=15, num2=3\\) $fill.*" \
+	"${fill}operator\\(\\)${fill}" \
+	"${fill}${value_returned}"] \
+    "finish the middle frame"
+
+gdb_test "backtrace 1" "#0${fill} $outer_desc.*" \
+    "third backtrace"
+
+# Test inlined function calls.
+gdb_breakpoint $inlined_inner_loc
+
+gdb_continue_to_breakpoint "inlined-body" ".*$srcfile:$inlined_inner_loc.*"
+
+gdb_test "backtrace 3" [multi_line \
+        "#0${fill} $inlined_inner_desc" \
+        "#1${fill} $inlined_middle_desc" \
+        "#2${fill} $inlined_outer_desc.*"] \
+    "backtrace for inlined calls"
+
+gdb_test "frame 1" "#1${fill} $inlined_middle_desc.*" \
+    "switch to frame 1, inlined"
+gdb_test "print num1" "= 10" "print num1 at second bp"
+gdb_test "print num2" "= 2" "print num2 at second bp"
+
+gdb_test "frame 2" "#2${fill} $inlined_outer_desc.*" \
+    "switch to frame 2, inlined"
+gdb_test "print fourteen" "= 14" "print fourteen at second bp"
+
+gdb_test "frame 0" "#0${fill} $inlined_inner_desc.*" \
+    "switch to frame 0, inlined"
+gdb_test "print x" "= 15" "print x at second bp"
+gdb_test "print y" "= 6" "print y at second bp"
+
+# Test defining a breakpoint using the function name.
+delete_breakpoints
+gdb_breakpoint "second"
+
+gdb_continue_to_breakpoint "function 'second'" ".*"
+gdb_test "backtrace 3" [multi_line \
+	"#0${fill} second ${fill}" \
+	"#1${fill} $middle_desc" \
+	"#2${fill} main${fill}operator${fill}lambda${fill} at .*"] \
+    "fourth backtrace"

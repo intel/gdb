@@ -14065,6 +14065,23 @@ signals control protection exception.
 
 @subsection Command Description
 @table @code
+@item info cet status
+This command prints general status information of CET at the current point
+of execution.
+@smallexample
+(gdb) info cet status
+Target Id:                process 30055
+Shadow Stack:             enabled
+Shadow Stack Pointer:     0x7ffff7ffefe8
+WR_SHSTK_EN:              disabled
+Indirect Branch Tracking: enabled
+TRACKER:                  WAIT_FOR_ENDBRANCH
+LEG_IW_EN:                disabled
+NO_TRACK_EN:              enabled
+SUPRESS_DIS:              disabled
+SUPRESS:                  disabled
+EB_LEG_BITMAP_BASE:       0x000000000000
+@end smallexample
 @item info cet backtrace
 This command prints backtrace of the shadow stack for the current running
 process.

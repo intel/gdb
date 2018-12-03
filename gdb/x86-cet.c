@@ -34,6 +34,17 @@
 #include <vector>
 
 
+/* MSR_IA32_U_CET and MSR_IA32_S_CET bits.  */
+#define MSR_CET_SHSTK_EN		(0x1 << 0)
+#define MSR_CET_WR_SHSTK_EN		(0x1 << 1)
+#define MSR_CET_ENDBR_EN		(0x1 << 2)
+#define MSR_CET_LEG_IW_EN		(0x1 << 3)
+#define MSR_CET_NO_TRACK_EN		(0x1 << 4)
+#define MSR_CET_SUPRESS_DIS		(0x1 << 5)
+#define MSR_CET_SUPRESS			(0x1 << 10)
+#define MSR_CET_TRACKER			(0x1 << 11)
+#define MSR_CET_EB_LEG_BITMAP_BASE	0xfffffffffffff000ULL
+
 extern int safe_read_memory_unsigned_integer (CORE_ADDR memaddr, int len,
 					      enum bfd_endian byte_order,
 					      ULONGEST *return_value);
@@ -86,6 +97,65 @@ cet_get_registers (const ptid_t tid, CORE_ADDR *ssp, uint64_t *cet_msr)
     return false;
 
   return true;
+}
+
+/* Print the information from the CET MSR and the SSP.  */
+
+static void
+print_cet_status (const CORE_ADDR *ssp, const uint64_t *cet_msr)
+{
+  const int ncols = 2, nrows = 10;
+  struct ui_out *uiout = current_uiout;
+
+  std::vector<std::string> names
+      = { "Shadow Stack:", "Shadow Stack Pointer:",
+	  "WR_SHSTK_EN:",  "Indirect Branch Tracking:",
+	  "TRACKER:",      "LEG_IW_EN:",
+	  "NO_TRACK_EN:",  "SUPRESS_DIS:",
+	  "SUPRESS:",      "EB_LEG_BITMAP_BASE:" };
+
+  std::vector<std::string> values
+      = { (*cet_msr & MSR_CET_SHSTK_EN) ? "enabled" : "disabled",
+	  hex_string_custom (*ssp, 12),
+	  (*cet_msr & MSR_CET_WR_SHSTK_EN) ? "enabled" : "disabled",
+	  (*cet_msr & MSR_CET_ENDBR_EN) ? "enabled" : "disabled",
+	  (*cet_msr & MSR_CET_TRACKER) ? "WAIT_FOR_ENDBRANCH" : "IDLE",
+	  (*cet_msr & MSR_CET_LEG_IW_EN) ? "enabled" : "disabled",
+	  (*cet_msr & MSR_CET_NO_TRACK_EN) ? "enabled" : "disabled",
+	  (*cet_msr & MSR_CET_SUPRESS_DIS) ? "enabled" : "disabled",
+	  (*cet_msr & MSR_CET_SUPRESS) ? "enabled" : "disabled",
+	  hex_string_custom (*cet_msr & MSR_CET_EB_LEG_BITMAP_BASE, 12) };
+
+  ui_out_emit_table table_emitter (uiout, ncols, nrows, "cet-status");
+
+  uiout->table_header (25, ui_left, "name", "Target Id:");
+  uiout->table_header (33, ui_left, "value",
+		       target_pid_to_str (inferior_ptid));
+  uiout->table_body ();
+
+  for (int i = 0; i < nrows; ++i)
+    {
+      ui_out_emit_tuple tuple_emitter (uiout, nullptr);
+      uiout->field_string ("name", names.at (i).c_str ());
+      uiout->field_string ("value", values.at (i).c_str ());
+      uiout->text ("\n");
+    }
+}
+
+/* The "info cet status" command.  */
+
+static void
+cet_status_cmd (const char *args, int from_tty)
+{
+  uint64_t cet_msr;
+  CORE_ADDR ssp;
+  if (!cet_get_registers (inferior_ptid, &ssp, &cet_msr))
+    {
+      warning (_("Failed to fetch CET registers."));
+      return;
+    }
+
+  print_cet_status (&ssp, &cet_msr);
 }
 
 /*  Retrieve the mapped memory regions [ADDR_LOW, ADDR_HIGH) for a given
@@ -402,6 +472,9 @@ _initialize_cet_commands ()
   add_prefix_cmd ("cet", class_info, info_cet_cmd,
 		  _("Control-flow enforcement info commands."),
 		  &info_cet_cmdlist, "info cet ", 1, &infolist);
+
+  add_cmd ("status", class_info, cet_status_cmd,
+	   _("Show the status information of CET.\n"), &info_cet_cmdlist);
 
   add_cmd ("backtrace", class_info, info_cet_shstk_backtrace_cmd, _("\
 Print backtrace of shadow stack for the current running process.\n\

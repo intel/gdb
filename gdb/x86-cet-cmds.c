@@ -21,6 +21,7 @@
 #include "command.h"
 #include "cli/cli-cmds.h"
 #include "gdbsupport/errors.h"
+#include "inferior.h"
 #include "i386-tdep.h"
 #include "gdbarch.h"
 #include "gdbcore.h"
@@ -33,6 +34,103 @@
 #include <string>
 #include <vector>
 
+/* Print the information from the CET MSR and the SSP.  */
+
+static void
+print_cet_status (const CORE_ADDR *ssp, const uint64_t *cet_msr)
+{
+  const int ncols = 2, nrows = 10;
+
+  const std::vector<std::string> names
+    = { "Shadow Stack:", "Shadow Stack Pointer:",
+	"WR_SHSTK_EN:",  "Indirect Branch Tracking:",
+	"TRACKER:",      "LEG_IW_EN:",
+	"NO_TRACK_EN:",  "SUPRESS_DIS:",
+	"SUPRESS:",      "EB_LEG_BITMAP_BASE:" };
+
+  const std::vector<std::string> values
+    = { (*cet_msr & MSR_CET_SHSTK_EN) ? "enabled" : "disabled",
+	hex_string_custom (*ssp, 12),
+	(*cet_msr & MSR_CET_WR_SHSTK_EN) ? "enabled" : "disabled",
+	(*cet_msr & MSR_CET_ENDBR_EN) ? "enabled" : "disabled",
+	(*cet_msr & MSR_CET_TRACKER) ? "WAIT_FOR_ENDBRANCH" : "IDLE",
+	(*cet_msr & MSR_CET_LEG_IW_EN) ? "enabled" : "disabled",
+	(*cet_msr & MSR_CET_NO_TRACK_EN) ? "enabled" : "disabled",
+	(*cet_msr & MSR_CET_SUPPRESS_DIS) ? "enabled" : "disabled",
+	(*cet_msr & MSR_CET_SUPPRESS) ? "enabled" : "disabled",
+	hex_string_custom (*cet_msr & MSR_CET_EB_LEG_BITMAP_BASE, 12) };
+
+  ui_out_emit_table table_emitter (current_uiout, ncols, nrows, "cet-status");
+
+  current_uiout->table_header (25, ui_left, "name", "Target Id:");
+  current_uiout->table_header (33, ui_left, "value",
+			       target_pid_to_str (inferior_ptid));
+  current_uiout->table_body ();
+
+  for (int i = 0; i < nrows; ++i)
+    {
+      ui_out_emit_tuple tuple_emitter (current_uiout, nullptr);
+      current_uiout->field_string ("name", names.at (i).c_str ());
+      current_uiout->field_string ("value", values.at (i).c_str ());
+      current_uiout->text ("\n");
+    }
+}
+
+/* Get the CET specific registers.  Print the reason in case CET registers are
+   not available.  */
+
+static bool
+cet_get_registers (CORE_ADDR *ssp, uint64_t *cet_msr)
+{
+  if (!target_has_execution ())
+    error (_("No current process: you must name one."));
+
+  regcache *regcache = get_current_regcache ();
+  const i386_gdbarch_tdep *tdep
+    = (i386_gdbarch_tdep *) gdbarch_tdep (regcache->arch ());
+
+  if (tdep == nullptr || tdep->cet_msr_regnum < 0)
+    {
+      printf_filtered (_("CET is not supported by the current target.\n"));
+      return false;
+    }
+
+  if (regcache_raw_read_unsigned
+       (regcache, tdep->cet_msr_regnum, (ULONGEST *) cet_msr)
+      != REG_VALID)
+    {
+      /* In case we have HW support and the registers are not available we
+      assume that the kernel does not support CET.  */
+      printf_filtered (_("CET is not supported by the current kernel.\n"));
+      return false;
+    }
+
+  if (tdep->ssp_regnum > 0)
+    {
+      if (regcache_raw_read_unsigned (regcache, tdep->ssp_regnum, ssp)
+	  != REG_VALID)
+	{
+	  printf_filtered (_("CET shadow stack is not supported by the current"
+			     " kernel.\n"));
+	  return false;
+	}
+    }
+
+  return true;
+}
+
+/* The "info cet status" command.  */
+
+static void
+cet_status_cmd (const char *args, int from_tty)
+{
+  uint64_t cet_msr = 0x0;
+  CORE_ADDR ssp = 0x0;
+  if (!cet_get_registers (&ssp, &cet_msr))
+    return;
+
+  print_cet_status (&ssp, &cet_msr);
+}
 
 /* Represents a frame in shadow stack.
    Shadow stack frames contain the Program Counter (PC).  Far-calls additionally
@@ -298,6 +396,9 @@ _initialize_cet_commands ()
   add_prefix_cmd ("cet", class_info, info_cet_cmd,
 		  _("Control-flow enforcement info commands."),
 		  &info_cet_cmdlist, 1, &infolist);
+
+  add_cmd ("status", class_info, cet_status_cmd,
+	   _("Show the status information of CET."), &info_cet_cmdlist);
 
   cmd_list_element *backtrace_cmd
     = add_cmd ("backtrace", class_info, info_cet_shstk_backtrace_cmd, _("\

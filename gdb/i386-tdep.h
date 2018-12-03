@@ -522,8 +522,16 @@ extern int i386_stap_is_single_operand (struct gdbarch *gdbarch,
 extern expr::operation_up i386_stap_parse_special_token
      (struct gdbarch *gdbarch, struct stap_parse_info *p);
 
-/* MSR_CET_SHSTK_EN bit.  */
+/* MSR_IA32_CET bits.  */
 #define MSR_CET_SHSTK_EN		(0x1 << 0)
+#define MSR_CET_WR_SHSTK_EN		(0x1 << 1)
+#define MSR_CET_ENDBR_EN		(0x1 << 2)
+#define MSR_CET_LEG_IW_EN		(0x1 << 3)
+#define MSR_CET_NO_TRACK_EN		(0x1 << 4)
+#define MSR_CET_SUPPRESS_DIS		(0x1 << 5)
+#define MSR_CET_SUPPRESS		(0x1 << 10)
+#define MSR_CET_TRACKER			(0x1 << 11)
+#define MSR_CET_EB_LEG_BITMAP_BASE	0xfffffffffffff000ULL
 
 /* Retrieve the mapped memory regions[ADDR_LOW, ADDR_HIGH] for a given
    address ADDR in memory space of process TID by reading the process

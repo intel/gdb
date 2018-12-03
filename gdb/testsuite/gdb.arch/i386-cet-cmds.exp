@@ -32,6 +32,21 @@ if ![runto_main] {
     return -1
 }
 
+# Test info cet status.
+gdb_test "info cet status" [multi_line \
+	"Target Id:.*process|LWP \[0-9\]+.*" \
+	"Shadow Stack:.*enabled.*" \
+	"Shadow Stack Pointer:.*$hex.*" \
+	"WRSS_EN:.*enabled|disabled.*" \
+	"Indirect Branch Tracking:.*enabled.*" \
+	"TRACKER:.*IDLE|WAIT_FOR_ENDBRANCH.*" \
+	"LEG_IW_EN:.*enabled|disabled.*" \
+	"NO_TRACK_EN:.*enabled|disabled.*" \
+	"SUPRESS_DIS:.*enabled|disabled.*" \
+	"SUPRESS:.*enabled|disabled.*" \
+	"EB_LEG_BITMAP_BASE:.*$hex.*"
+    ]
+
 gdb_test "break call2" \
 	"Breakpoint \[0-9\]* at $hex.*"
 

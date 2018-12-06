@@ -172,12 +172,10 @@ cet_status_cmd (const char *args, int from_tty)
   print_cet_status (&ssp, &cet_msr);
 }
 
-/*  Retrieve the mapped memory regions [ADDR_LOW, ADDR_HIGH) for a given
-    address ADDR in memory space of process TID by reading the process
-    information from its pseudo-file system.  */
+/* See x86-cet.h.  */
 
-static bool
-cet_get_shstk_mem_range (const CORE_ADDR addr, struct mem_range *range)
+bool
+cet_get_shstk_mem_range (const CORE_ADDR addr, mem_range *range)
 {
   if (!target_has_execution ())
     error (_("No current process: you must name one."));

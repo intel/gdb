@@ -20,6 +20,9 @@
 #ifndef X86_CET_H
 #define X86_CET_H
 
+/* Check if the shadow stack is enabled and read CET specific registers.  */
+extern bool shstk_is_enabled (CORE_ADDR *ssp, uint64_t *cet_msr);
+
 /* Get the CET specific registers.  Returns true on success.  */
 extern bool cet_get_registers (const ptid_t tid, CORE_ADDR *ssp,
 			       uint64_t *cet_msr);

@@ -568,6 +568,10 @@ i386_cet_get_shstk_pointer (struct gdbarch *gdbarch, CORE_ADDR *ssp);
 extern void
 i386_cet_set_shstk_pointer (struct gdbarch *gdbarch, const CORE_ADDR *ssp);
 
+/* Pushes an address to the shadow-stack and increments the ssp accordingly.  */
+extern void
+i386_cet_shstk_push (struct gdbarch *gdbarch, CORE_ADDR* new_addr);
+
 /* AMX utilities.  */
 
 /* TILECFG register.

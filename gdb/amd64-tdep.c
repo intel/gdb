@@ -1287,6 +1287,11 @@ amd64_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   /* ...and fake a frame pointer.  */
   regcache->cooked_write (AMD64_RBP_REGNUM, buf);
 
+  /* Pushes the return address of the inferior (bp_addr) on the shadow stack
+     and increments the shadow stack pointer.  As we don't execute a call
+     instruction to start the inferior we need to handle this manually.  */
+  i386_cet_shstk_push (gdbarch, &bp_addr);
+
   return sp + 16;
 }
 

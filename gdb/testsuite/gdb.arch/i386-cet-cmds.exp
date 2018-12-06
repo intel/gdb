@@ -13,7 +13,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Test the info cet commands, as well as CET enabling for the return command.
+# Test the info cet commands, as well as CET enabling for the return and call
+# commands.
 
 if {[skip_cet_tests]} {
     unsupported "target does not support CET"
@@ -46,6 +47,17 @@ gdb_test "info cet status" [multi_line \
 	"SUPRESS:.*enabled|disabled.*" \
 	"EB_LEG_BITMAP_BASE:.*$hex.*"
     ]
+
+# Test call.
+gdb_test "break call1" \
+	"Breakpoint \[0-9\]* at $hex.*"
+
+gdb_test "continue" \
+	"Breakpoint \[0-9\]*.*call1.*" \
+	"continue to call1"
+
+gdb_test "call (int) call2()" \
+	".. = 0|1|2|3.*"
 
 gdb_test "break call2" \
 	"Breakpoint \[0-9\]* at $hex.*"

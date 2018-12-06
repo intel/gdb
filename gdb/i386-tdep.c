@@ -2922,6 +2922,11 @@ i386_thiscall_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	}
     }
 
+  /* Pushes the return address of the inferior (bp_addr) on the shadow stack
+     and increments the shadow stack pointer.  As we don't execute a call
+     instruction to start the inferior we need to handle this manually.  */
+  i386_cet_shstk_push (gdbarch, &bp_addr);
+
   /* MarkK wrote: This "+ 8" is all over the place:
      (i386_frame_this_id, i386_sigtramp_frame_this_id,
      i386_dummy_id).  It's there, since all frame unwinders for
@@ -9531,6 +9536,39 @@ i386_cet_set_shstk_pointer (struct gdbarch *gdbarch, const CORE_ADDR *ssp)
     = (i386_gdbarch_tdep *) gdbarch_tdep (regcache->arch ());
 
   regcache_raw_write_unsigned (regcache, tdep->ssp_regnum, *ssp);
+}
+
+void
+i386_cet_shstk_push (struct gdbarch *gdbarch, CORE_ADDR *new_addr)
+{
+  if (!(i386_cet_shstk_state () == SHSTK_ENABLED))
+    return;
+
+  CORE_ADDR ssp;
+  i386_cet_get_shstk_pointer (gdbarch, &ssp);
+
+  const int shstk_addr_byte_align = gdbarch_shstk_addr_byte_align (gdbarch);
+  const CORE_ADDR new_ssp = ssp - shstk_addr_byte_align;
+
+  mem_range shstk_mem_range;
+  if (!i386_cet_get_shstk_mem_range (new_ssp, &shstk_mem_range))
+    {
+      /* No call instruction is executed and we cannot allocate more memory
+	 for the inferior.  */
+      error (_("No space left on the shadow-stack."));
+    }
+
+  const int addr_size = gdbarch_addr_bit (gdbarch) / TARGET_CHAR_BIT;
+  const enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+
+  write_memory_unsigned_integer (new_ssp, addr_size, byte_order,
+				 (ULONGEST) *new_addr);
+
+  regcache *regcache = get_current_regcache ();
+  i386_gdbarch_tdep *tdep
+    = (i386_gdbarch_tdep *) gdbarch_tdep (regcache->arch ());
+
+  regcache_raw_write_unsigned (regcache, tdep->ssp_regnum, new_ssp);
 }
 
 static struct cmd_list_element *mpx_set_cmdlist, *mpx_show_cmdlist;

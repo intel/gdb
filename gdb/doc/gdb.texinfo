@@ -25995,12 +25995,21 @@ the stack frame corresponding to the function @code{func2 ()} will display:
 @end smallexample
 @end table
 
-Impact on the return command:
+Impact on other GDB commands:
+@itemize @bullet
+@item Return:
 The command resets the current PC and discards the current stack frame (and all
 frames within).  Thus, the ret instruction of the current frame is not executed
 and the return address is not popped from the shadow stack.  To avoid a control
 protection exception, @value{GDBN} decrements the shadow stack pointer to match
 with the new current frame.
+@item Call/Print:
+Inferior calls in @value{GDBN} reset the current PC to the beginning of the
+function that is called.  No call instruction is executed, but the RET
+instruction actually is.  To avoid a control protection exception due to the
+missing return address on the shadow stack, @value{GDBN} pushes the new return
+address to the shadow stack and increments the shadow stack pointer.
+@end itemize
 
 @subsubsection Intel @dfn{Advanced Matrix Extensions} (AMX).
 @cindex Advanced Matrix Extensions (AMX).

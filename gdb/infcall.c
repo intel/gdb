@@ -40,6 +40,8 @@
 #include "top.h"
 #include "interps.h"
 #include "thread-fsm.h"
+#include "x86-cet.h"
+
 #include <algorithm>
 #include "gdbsupport/scope-exit.h"
 #include <list>
@@ -566,6 +568,24 @@ call_thread_fsm::should_notify_stop ()
   return true;
 }
 
+/* Pushes a breakpoint address to the shadow-stack and increments the ssp
+   accordingly.  */
+
+static void
+cet_shstk_push (CORE_ADDR *dummy_bp_addr, CORE_ADDR *pc_addr,
+		CORE_ADDR *ssp, uint64_t *cet_msr)
+{
+  const int addr_size = gdbarch_addr_bit (target_gdbarch ()) / TARGET_CHAR_BIT;
+  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+  CORE_ADDR new_ssp = *ssp - addr_size;
+
+  write_memory_unsigned_integer (new_ssp, addr_size, byte_order,
+				 (ULONGEST) *dummy_bp_addr);
+
+  if (!cet_set_registers (inferior_ptid, &new_ssp, cet_msr))
+    error (_("Couldn't set CET registers during inferior call."));
+}
+
 /* Subroutine of call_function_by_hand to simplify it.
    Start up the inferior and wait for it to stop.
    Return the exception if there's an error, or an exception with
@@ -840,6 +860,8 @@ call_function_by_hand_dummy (struct value *function,
      down) pushed onto a dummy frame stack.  This unique pointer
      is released once the regcache has been pushed).  */
   infcall_suspend_state_up caller_state (save_infcall_suspend_state ());
+
+  CORE_ADDR stop_pc = regcache_read_pc (get_current_regcache ());
 
   /* Ensure that the initial SP is correctly aligned.  */
   {
@@ -1221,6 +1243,16 @@ call_function_by_hand_dummy (struct value *function,
       }
   }
 
+  /* CET: Push the return address of the inferior on the shstk and increment
+     the shstk pointer.  As we don't execute a call instruction to start the
+     inferior we need to handle this manually.  */
+  CORE_ADDR ssp;
+  uint64_t cet_msr;
+  const bool with_cet = shstk_is_enabled (&ssp, &cet_msr);
+
+  if (with_cet)
+    cet_shstk_push (&bp_addr, &stop_pc, &ssp, &cet_msr);
+
   /* Create a breakpoint in std::terminate.
      If a C++ exception is raised in the dummy-frame, and the
      exception handler is (normally, and expected to be) out-of-frame,
@@ -1294,6 +1326,11 @@ call_function_by_hand_dummy (struct value *function,
 	       state.  */
 	    dummy_frame_pop (dummy_id, call_thread.get ());
 	    restore_infcall_control_state (inf_status.release ());
+
+	    /* Restore shadow-stack-pointer and CET state.  */
+	    if (with_cet)
+	      if (!cet_set_registers (inferior_ptid, &ssp, &cet_msr))
+		error (_("Couldn't set CET registers during inferior call."));
 
 	    /* Get the return value.  */
 	    retval = sm->return_value;
@@ -1425,6 +1462,11 @@ When the function is done executing, GDB will silently stop."),
 		 dummy call.  */
 	      restore_infcall_control_state (inf_status.release ());
 
+	      /* Restore shadow-stack-pointer and CET state.  */
+	      if (with_cet)
+		if (!cet_set_registers (inferior_ptid, &ssp, &cet_msr))
+		  error (_("Couldn't set CET registers during inferior call."));
+
 	      /* FIXME: Insert a bunch of wrap_here; name can be very
 		 long if it's a C++ name with arguments and stuff.  */
 	      error (_("\
@@ -1465,6 +1507,11 @@ When the function is done executing, GDB will silently stop."),
 	  /* We also need to restore inferior status to that before
 	     the dummy call.  */
 	  restore_infcall_control_state (inf_status.release ());
+
+	  /* Restore shadow-stack-pointer and CET state.  */
+	  if (with_cet)
+	    if (!cet_set_registers (inferior_ptid, &ssp, &cet_msr))
+	      error (_("Couldn't set CET registers during inferior call."));
 
 	  error (_("\
 The program being debugged entered a std::terminate call, most likely\n\

@@ -55,6 +55,7 @@
 #include "gdbsupport/def-vector.h"
 #include "cli/cli-option.h"
 #include "cli/cli-style.h"
+#include "x86-cet.h"
 
 /* The possible choices of "set print frame-arguments", and the value
    of this setting.  */
@@ -2733,6 +2734,23 @@ down_command (const char *count_exp, int from_tty)
   gdb::observers::user_selected_context_changed.notify (USER_SELECTED_FRAME);
 }
 
+/* Reset the shadow stack pointer to the state of the frame we return to.  */
+
+static void
+cet_reset_ssp (CORE_ADDR *ssp, uint64_t *cet_msr,
+		   const int frame_level)
+{
+  const int addr_size = gdbarch_addr_bit (target_gdbarch ()) / TARGET_CHAR_BIT;
+
+  /* If return is called from frame 0, we decrement ssp by one.  If return
+     is called from a different frame, we decrement the ssp by the number
+     of inner frames that are discarded (1 + frame_level).  */
+  CORE_ADDR new_ssp = *ssp + (addr_size * (1 + frame_level));
+
+  if (!cet_set_registers (inferior_ptid, &new_ssp, cet_msr))
+    error (_("Couldn't set CET registers during return."));
+}
+
 void
 return_command (const char *retval_exp, int from_tty)
 {
@@ -2744,10 +2762,12 @@ return_command (const char *retval_exp, int from_tty)
   struct value *return_value = NULL;
   struct value *function = NULL;
   const char *query_prefix = "";
+  int frame_level;
 
   thisframe = get_selected_frame ("No selected frame.");
   thisfun = get_frame_function (thisframe);
   gdbarch = get_frame_arch (thisframe);
+  frame_level = get_frame_level (thisframe);
 
   if (get_frame_type (get_current_frame ()) == INLINE_FRAME)
     error (_("Can not force return from an inlined function."));
@@ -2835,6 +2855,13 @@ return_command (const char *retval_exp, int from_tty)
 
   /* Discard the selected frame and all frames inner-to it.  */
   frame_pop (get_selected_frame (NULL));
+
+  /* Decrement the ssp by the required amount if shstk is enabled.  */
+  CORE_ADDR ssp;
+  uint64_t cet_msr;
+
+  if (shstk_is_enabled (&ssp, &cet_msr))
+    cet_reset_ssp (&ssp, &cet_msr, frame_level);
 
   /* Store RETURN_VALUE in the just-returned register set.  */
   if (return_value != NULL)

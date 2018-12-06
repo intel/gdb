@@ -99,6 +99,17 @@ cet_get_registers (const ptid_t tid, CORE_ADDR *ssp, uint64_t *cet_msr)
   return true;
 }
 
+/* See x86-cet.h.  */
+
+bool
+shstk_is_enabled (CORE_ADDR *ssp, uint64_t *cet_msr)
+{
+  if (!cet_get_registers (inferior_ptid, ssp, cet_msr))
+    return false;
+
+  return (*cet_msr & MSR_CET_SHSTK_EN);
+}
+
 /* Print the information from the CET MSR and the SSP.  */
 
 static void

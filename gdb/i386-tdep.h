@@ -564,6 +564,10 @@ i386_cet_shstk_state ();
 extern void
 i386_cet_get_shstk_pointer (struct gdbarch *gdbarch, CORE_ADDR *ssp);
 
+/* Write shadow stack pointer ssp to register cache.  */
+extern void
+i386_cet_set_shstk_pointer (struct gdbarch *gdbarch, const CORE_ADDR *ssp);
+
 /* AMX utilities.  */
 
 /* TILECFG register.

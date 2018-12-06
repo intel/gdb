@@ -2696,3 +2696,29 @@ shstk_addr_byte_align is the shadow stack address alignment in bytes.
     name="shstk_addr_byte_align",
     invalid=False,
 )
+
+Method(
+    comment="""
+Some targets support special hardware-assisted control-flow protection
+technologies.  For example, Intel's Control-flow Enforcement Technology (CET)
+provides a shadow stack and indirect branch tracking.
+
+To enable the return commmand for CET enabled targets, the functions
+get_shstk_pointer and set_shstk_pointer have to be provided to udpate the
+shadow stack pointer to match with the new frame.  If one of the functions or
+all of them are not available GDB assumes that no fixup is required.
+""",
+    type="void",
+    name="set_shstk_pointer",
+    params=[("const CORE_ADDR *", "ssp")],
+    predicate=True,
+    invalid=True,
+)
+
+Method(
+    type="void",
+    name="get_shstk_pointer",
+    params=[("CORE_ADDR *", "ssp")],
+    predicate=True,
+    invalid=True,
+)

@@ -1651,3 +1651,24 @@ extern void set_gdbarch_is_inferior_device (struct gdbarch *gdbarch, bool is_inf
 
 extern int gdbarch_shstk_addr_byte_align (struct gdbarch *gdbarch);
 extern void set_gdbarch_shstk_addr_byte_align (struct gdbarch *gdbarch, int shstk_addr_byte_align);
+
+/* Some targets support special hardware-assisted control-flow protection
+   technologies.  For example, Intel's Control-flow Enforcement Technology (CET)
+   provides a shadow stack and indirect branch tracking.
+
+   To enable the return commmand for CET enabled targets, the functions
+   get_shstk_pointer and set_shstk_pointer have to be provided to udpate the
+   shadow stack pointer to match with the new frame.  If one of the functions or
+   all of them are not available GDB assumes that no fixup is required. */
+
+extern bool gdbarch_set_shstk_pointer_p (struct gdbarch *gdbarch);
+
+typedef void (gdbarch_set_shstk_pointer_ftype) (struct gdbarch *gdbarch, const CORE_ADDR *ssp);
+extern void gdbarch_set_shstk_pointer (struct gdbarch *gdbarch, const CORE_ADDR *ssp);
+extern void set_gdbarch_set_shstk_pointer (struct gdbarch *gdbarch, gdbarch_set_shstk_pointer_ftype *set_shstk_pointer);
+
+extern bool gdbarch_get_shstk_pointer_p (struct gdbarch *gdbarch);
+
+typedef void (gdbarch_get_shstk_pointer_ftype) (struct gdbarch *gdbarch, CORE_ADDR *ssp);
+extern void gdbarch_get_shstk_pointer (struct gdbarch *gdbarch, CORE_ADDR *ssp);
+extern void set_gdbarch_get_shstk_pointer (struct gdbarch *gdbarch, gdbarch_get_shstk_pointer_ftype *get_shstk_pointer);

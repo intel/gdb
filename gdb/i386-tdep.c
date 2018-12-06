@@ -4756,6 +4756,9 @@ i386_elf_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_in_indirect_branch_thunk (gdbarch,
 					i386_in_indirect_branch_thunk);
 
+  /* Shadow stack.  */
+  set_gdbarch_set_shstk_pointer (gdbarch, i386_cet_set_shstk_pointer);
+  set_gdbarch_get_shstk_pointer (gdbarch, i386_cet_get_shstk_pointer);
   /* For 32 bit, shadow stack adresses are 4-byte aligned.  */
   set_gdbarch_shstk_addr_byte_align (gdbarch, 4);
 }
@@ -9515,6 +9518,19 @@ i386_cet_get_shstk_pointer (struct gdbarch *gdbarch, CORE_ADDR *ssp)
   if (regcache_raw_read_unsigned (regcache, tdep->ssp_regnum, ssp)
       != REG_VALID)
     error (_("Could not read CET shadow stack pointer."));
+}
+
+void
+i386_cet_set_shstk_pointer (struct gdbarch *gdbarch, const CORE_ADDR *ssp)
+{
+  if (!(i386_cet_shstk_state () == SHSTK_ENABLED))
+    return;
+
+  regcache *regcache = get_current_regcache ();
+  i386_gdbarch_tdep *tdep
+    = (i386_gdbarch_tdep *) gdbarch_tdep (regcache->arch ());
+
+  regcache_raw_write_unsigned (regcache, tdep->ssp_regnum, *ssp);
 }
 
 static struct cmd_list_element *mpx_set_cmdlist, *mpx_show_cmdlist;

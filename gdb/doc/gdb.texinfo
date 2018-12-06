@@ -25995,6 +25995,13 @@ the stack frame corresponding to the function @code{func2 ()} will display:
 @end smallexample
 @end table
 
+Impact on the return command:
+The command resets the current PC and discards the current stack frame (and all
+frames within).  Thus, the ret instruction of the current frame is not executed
+and the return address is not popped from the shadow stack.  To avoid a control
+protection exception, @value{GDBN} decrements the shadow stack pointer to match
+with the new current frame.
+
 @subsubsection Intel @dfn{Advanced Matrix Extensions} (AMX).
 @cindex Advanced Matrix Extensions (AMX).
 

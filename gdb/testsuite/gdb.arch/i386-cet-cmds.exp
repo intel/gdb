@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Test the info cet commands.
+# Test the info cet commands, as well as CET enabling for the return command.
 
 if {[skip_cet_tests]} {
     unsupported "target does not support CET"
@@ -60,3 +60,42 @@ gdb_test "info cet backtrace" [multi_line \
 	"#0.*$hex.*call1.*" \
 	"#1.*$hex.*main.*"
   ]
+
+# Test return from current frame.
+gdb_test "return (int) 1" \
+	"#0.*call1.*" \
+	"Test CET return from current frame" \
+	"Make.*return now\\? \\(y or n\\) " "y"
+
+gdb_test "continue" \
+	".*exited normally.*" \
+	"continue (return from current frame)"
+
+# Test return from past frame.
+clean_restart ${binfile}
+
+if ![runto_main] {
+    untested "could not run to main"
+    return -1
+}
+
+with_test_prefix "return testing" {
+    gdb_test "break call2" \
+	"Breakpoint \[0-9\]* at $hex.*"
+
+    gdb_test "continue" \
+	"Breakpoint \[0-9\]*.*call2.*"
+}
+
+gdb_test "frame 1" \
+	".*in call1.*"
+
+gdb_test "return (int) 1" \
+	"#0.*main.*" \
+	"Test CET return from past frame" \
+	"Make.*return now\\? \\(y or n\\) " "y"
+
+# Potential CET violations often only occur after resuming normal execution.
+# Therefore, it is important to test normal program continuation after each of
+# these commands in this test.
+gdb_continue_to_end

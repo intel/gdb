@@ -716,6 +716,9 @@ extern struct gdbarch *frame_unwind_arch (frame_info *next_frame);
 /* Return the previous frame's architecture, skipping inline functions.  */
 extern struct gdbarch *frame_unwind_caller_arch (struct frame_info *frame);
 
+/* Return this frame's level.  */
+extern int get_frame_level (const struct frame_info *this_frame);
+
 
 /* Values for the source flag to be used in print_frame_info ().
    For all the cases below, the address is never printed if

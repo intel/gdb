@@ -2932,6 +2932,14 @@ get_frame_language (struct frame_info *frame)
   return language_unknown;
 }
 
+/* Return this frame's level.  */
+
+int
+get_frame_level (const struct frame_info *this_frame)
+{
+  return this_frame->level;
+}
+
 /* Stack pointer methods.  */
 
 CORE_ADDR

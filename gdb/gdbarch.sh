@@ -1219,6 +1219,16 @@ f;std::string;get_pc_address_flags;frame_info *frame, CORE_ADDR pc;frame, pc;;de
 # Read core file mappings
 m;void;read_core_file_mappings;struct bfd *cbfd, gdb::function_view<void (ULONGEST count)> pre_loop_cb, gdb::function_view<void (int num, ULONGEST start, ULONGEST end, ULONGEST file_ofs, const char *filename)> loop_cb;cbfd, pre_loop_cb, loop_cb;;default_read_core_file_mappings;;0
 
+# Functions for shadow stack manipulation. If a target implements a shadow
+# stack, both functions have to be provided to correctly handle the return
+# command. If one or all of them are not available, GDB assumes that no fixup
+# is needed for the shadow stack.
+#
+# Get shadow stack pointer
+M;void;get_shstk_pointer;CORE_ADDR *ssp;ssp
+# Set shadow stack pointer to ssp
+M;void;set_shstk_pointer;const CORE_ADDR *ssp;ssp
+
 # shstk_addr_byte_align is the shadow stack address alignment in bytes.
 v;int;shstk_addr_byte_align;;;sizeof (void*);gdbarch->ptr_bit / TARGET_CHAR_BIT;;0
 

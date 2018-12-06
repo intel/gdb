@@ -1728,6 +1728,27 @@ typedef void (gdbarch_read_core_file_mappings_ftype) (struct gdbarch *gdbarch, s
 extern void gdbarch_read_core_file_mappings (struct gdbarch *gdbarch, struct bfd *cbfd, gdb::function_view<void (ULONGEST count)> pre_loop_cb, gdb::function_view<void (int num, ULONGEST start, ULONGEST end, ULONGEST file_ofs, const char *filename)> loop_cb);
 extern void set_gdbarch_read_core_file_mappings (struct gdbarch *gdbarch, gdbarch_read_core_file_mappings_ftype *read_core_file_mappings);
 
+/* Functions for shadow stack manipulation. If a target implements a shadow
+   stack, both functions have to be provided to correctly handle the return
+   command. If one or all of them are not available, GDB assumes that no fixup
+   is needed for the shadow stack.
+  
+   Get shadow stack pointer */
+
+extern bool gdbarch_get_shstk_pointer_p (struct gdbarch *gdbarch);
+
+typedef void (gdbarch_get_shstk_pointer_ftype) (struct gdbarch *gdbarch, CORE_ADDR *ssp);
+extern void gdbarch_get_shstk_pointer (struct gdbarch *gdbarch, CORE_ADDR *ssp);
+extern void set_gdbarch_get_shstk_pointer (struct gdbarch *gdbarch, gdbarch_get_shstk_pointer_ftype *get_shstk_pointer);
+
+/* Set shadow stack pointer to ssp */
+
+extern bool gdbarch_set_shstk_pointer_p (struct gdbarch *gdbarch);
+
+typedef void (gdbarch_set_shstk_pointer_ftype) (struct gdbarch *gdbarch, const CORE_ADDR *ssp);
+extern void gdbarch_set_shstk_pointer (struct gdbarch *gdbarch, const CORE_ADDR *ssp);
+extern void set_gdbarch_set_shstk_pointer (struct gdbarch *gdbarch, gdbarch_set_shstk_pointer_ftype *set_shstk_pointer);
+
 /* shstk_addr_byte_align is the shadow stack address alignment in bytes. */
 
 extern int gdbarch_shstk_addr_byte_align (struct gdbarch *gdbarch);

@@ -500,4 +500,12 @@ extern int i386_stap_is_single_operand (struct gdbarch *gdbarch,
 extern expr::operation_up i386_stap_parse_special_token
      (struct gdbarch *gdbarch, struct stap_parse_info *p);
 
+/* Get shadow stack pointer ssp from register cache.  */
+extern void
+i386_cet_get_shstk_pointer (struct gdbarch *gdbarch, CORE_ADDR *ssp);
+
+/* Write shadow stack pointer ssp to register cache.  */
+extern void
+i386_cet_set_shstk_pointer (struct gdbarch *gdbarch, const CORE_ADDR *ssp);
+
 #endif /* i386-tdep.h */

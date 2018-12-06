@@ -362,6 +362,8 @@ struct gdbarch
   gdbarch_type_align_ftype *type_align;
   gdbarch_get_pc_address_flags_ftype *get_pc_address_flags;
   gdbarch_read_core_file_mappings_ftype *read_core_file_mappings;
+  gdbarch_get_shstk_pointer_ftype *get_shstk_pointer;
+  gdbarch_set_shstk_pointer_ftype *set_shstk_pointer;
   int shstk_addr_byte_align;
 };
 
@@ -749,6 +751,8 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of type_align, invalid_p == 0 */
   /* Skip verify of get_pc_address_flags, invalid_p == 0 */
   /* Skip verify of read_core_file_mappings, invalid_p == 0 */
+  /* Skip verify of get_shstk_pointer, has predicate.  */
+  /* Skip verify of set_shstk_pointer, has predicate.  */
   /* Skip verify of shstk_addr_byte_align, invalid_p == 0 */
   if (!log.empty ())
     internal_error (__FILE__, __LINE__,
@@ -1128,6 +1132,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
                       "gdbarch_dump: get_pc_address_flags = <%s>\n",
                       host_address_to_string (gdbarch->get_pc_address_flags));
   fprintf_unfiltered (file,
+                      "gdbarch_dump: gdbarch_get_shstk_pointer_p() = %d\n",
+                      gdbarch_get_shstk_pointer_p (gdbarch));
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: get_shstk_pointer = <%s>\n",
+                      host_address_to_string (gdbarch->get_shstk_pointer));
+  fprintf_unfiltered (file,
                       "gdbarch_dump: gdbarch_get_siginfo_type_p() = %d\n",
                       gdbarch_get_siginfo_type_p (gdbarch));
   fprintf_unfiltered (file,
@@ -1418,6 +1428,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   fprintf_unfiltered (file,
                       "gdbarch_dump: set_memtags = <%s>\n",
                       host_address_to_string (gdbarch->set_memtags));
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: gdbarch_set_shstk_pointer_p() = %d\n",
+                      gdbarch_set_shstk_pointer_p (gdbarch));
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: set_shstk_pointer = <%s>\n",
+                      host_address_to_string (gdbarch->set_shstk_pointer));
   fprintf_unfiltered (file,
                       "gdbarch_dump: short_bit = %s\n",
                       plongest (gdbarch->short_bit));
@@ -5485,6 +5501,54 @@ set_gdbarch_read_core_file_mappings (struct gdbarch *gdbarch,
                                      gdbarch_read_core_file_mappings_ftype read_core_file_mappings)
 {
   gdbarch->read_core_file_mappings = read_core_file_mappings;
+}
+
+bool
+gdbarch_get_shstk_pointer_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->get_shstk_pointer != NULL;
+}
+
+void
+gdbarch_get_shstk_pointer (struct gdbarch *gdbarch, CORE_ADDR *ssp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->get_shstk_pointer != NULL);
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_get_shstk_pointer called\n");
+  gdbarch->get_shstk_pointer (gdbarch, ssp);
+}
+
+void
+set_gdbarch_get_shstk_pointer (struct gdbarch *gdbarch,
+                               gdbarch_get_shstk_pointer_ftype get_shstk_pointer)
+{
+  gdbarch->get_shstk_pointer = get_shstk_pointer;
+}
+
+bool
+gdbarch_set_shstk_pointer_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->set_shstk_pointer != NULL;
+}
+
+void
+gdbarch_set_shstk_pointer (struct gdbarch *gdbarch, const CORE_ADDR *ssp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->set_shstk_pointer != NULL);
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_set_shstk_pointer called\n");
+  gdbarch->set_shstk_pointer (gdbarch, ssp);
+}
+
+void
+set_gdbarch_set_shstk_pointer (struct gdbarch *gdbarch,
+                               gdbarch_set_shstk_pointer_ftype set_shstk_pointer)
+{
+  gdbarch->set_shstk_pointer = set_shstk_pointer;
 }
 
 int

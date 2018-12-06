@@ -102,6 +102,29 @@ cet_get_registers (const ptid_t tid, CORE_ADDR *ssp, uint64_t *cet_msr)
   return true;
 }
 
+/* See x86-cet.h.  */
+
+bool
+shstk_is_enabled ()
+{
+  regcache *regcache = get_current_regcache ();
+  const struct gdbarch_tdep *tdep = gdbarch_tdep (regcache->arch ());
+
+  if (tdep == nullptr)
+    return false;
+
+  int regnum = tdep->cet_regnum;
+  if (regnum < 0)
+    return false;
+
+  uint64_t cet_msr;
+  if (regcache_raw_read_unsigned (regcache, regnum, (ULONGEST *) &cet_msr)
+      != REG_VALID)
+    return false;
+
+  return (cet_msr & MSR_CET_SHSTK_EN);
+}
+
 /* Print the information from the CET MSR and the SSP.  */
 
 static void

@@ -25941,6 +25941,42 @@ At this last step the value of bnd0 can be changed for investigation of bound
 violations caused along the execution of the call.  In order to know how to
 set the bound registers or bound table for the call consult the ABI.
 
+@subsubsection Intel @dfn{Control-flow Enforcement Technology} (CET).
+@cindex Intel Control-flow Enforcement Technology (CET).
+
+Control-flow Enforcement Technology (CET) provides two capabilities to defend
+against ``Return-oriented Programming'' and ``call/jmp-oriented
+programming'' style control-flow attacks:
+
+@itemize @bullet
+@item Shadow Stack:
+A shadow stack is a second stack for the program which holds the return
+addresses pushed by the call instruction.  The ret instruction pops the return
+addresses from both call and shadow stack.  If the return addresses from the two
+stacks do not match, the processor signals a control protection exception.
+@item Indirect Branch Tracking (IBT):
+When IBT is enabled, the CPU implements a state machine that tracks indirect
+jmp and call instructions.  The state machine can be either ``IDLE'' or
+``WAIT_FOR_ENDBRANCH''.  In WAIT_FOR_ENDBRANCH state the next
+instruction in the program stream must be an ENDBRANCH, otherwise the processor
+signals a control protection exception.
+@end itemize
+
+@value{GDBN} provides a command to show the shadow stack backtrace:
+@table @code
+@item info cet backtrace
+This command prints the backtrace of the shadow stack for the current process.
+For example, using the command @code{info cet backtrace} while stopped at
+the stack frame corresponding to the function @code{func2 ()} will display:
+@smallexample
+   Address              Symbol
+#0 0x000000000040141f   func1 ()
+#1 0x0000000000401578   main (int, char const**)
+#2 0x00007ffff72aa393   __libc_start_main
+#3 0x000000000040125e   _start
+@end smallexample
+@end table
+
 @subsubsection Intel @dfn{Advanced Matrix Extensions} (AMX).
 @cindex Advanced Matrix Extensions (AMX).
 

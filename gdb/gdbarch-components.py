@@ -2687,3 +2687,12 @@ information about it is available via the 'info devices' command.
     predefault="false",
     invalid=False,
 )
+
+Value(
+    comment="""
+shstk_addr_byte_align is the shadow stack address alignment in bytes.
+""",
+    type="int",
+    name="shstk_addr_byte_align",
+    invalid=False,
+)

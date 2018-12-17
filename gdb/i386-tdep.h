@@ -23,6 +23,7 @@
 #include "gdbarch.h"
 #include "infrun.h"
 #include "expression.h"
+#include "memrange.h"
 #include <vector>
 #include <utility>
 
@@ -520,6 +521,40 @@ extern int i386_stap_is_single_operand (struct gdbarch *gdbarch,
 
 extern expr::operation_up i386_stap_parse_special_token
      (struct gdbarch *gdbarch, struct stap_parse_info *p);
+
+/* MSR_CET_SHSTK_EN bit.  */
+#define MSR_CET_SHSTK_EN		(0x1 << 0)
+
+/* Retrieve the mapped memory regions[ADDR_LOW, ADDR_HIGH] for a given
+   address ADDR in memory space of process TID by reading the process
+   information from its pseudo-file systema.  Return true if addr is in that
+   range.  */
+extern bool
+i386_cet_get_shstk_mem_range (const CORE_ADDR addr, mem_range *range);
+
+/* Enum for the enablement state of the feature org.gnu.gdb.i386.pl3_ssp.  */
+enum shstk_status
+{
+  /* Shadow stack is enabled for the current process.  */
+  SHSTK_ENABLED = 1,
+
+  /* Shadow stack is disabled by software for the current process.  */
+  SHSTK_DISABLED_SW = 0,
+
+  /* Shadow stack is disabled by the kernel.  */
+  SHSTK_DISABLED_KERNEL = -1,
+
+  /* Shadow stack is disabled by hardware.  */
+  SHSTK_DISABLED_HW = -2,
+};
+
+/* Check if the shadow stack is enabled.  */
+extern shstk_status
+i386_cet_shstk_state ();
+
+/* Get shadow stack pointer ssp from register cache.  */
+extern void
+i386_cet_get_shstk_pointer (struct gdbarch *gdbarch, CORE_ADDR *ssp);
 
 /* AMX utilities.  */
 

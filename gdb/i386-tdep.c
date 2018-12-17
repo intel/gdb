@@ -69,6 +69,7 @@
 #include "producer.h"
 #include "infcall.h"
 #include "maint.h"
+#include <sstream>
 
 /* Register names.  */
 
@@ -4754,6 +4755,9 @@ i386_elf_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   set_gdbarch_in_indirect_branch_thunk (gdbarch,
 					i386_in_indirect_branch_thunk);
+
+  /* For 32 bit, shadow stack adresses are 4-byte aligned.  */
+  set_gdbarch_shstk_addr_byte_align (gdbarch, 4);
 }
 
 /* System V Release 4 (SVR4).  */
@@ -9421,6 +9425,96 @@ i386_mpx_set_bounds (const char *args, int from_tty)
 				   + i * TYPE_LENGTH (data_ptr_type),
 				   TYPE_LENGTH (data_ptr_type), byte_order,
 				   bt_entry[i]);
+}
+
+bool
+i386_cet_get_shstk_mem_range (const CORE_ADDR addr, mem_range *range)
+{
+  if (current_inferior ()->fake_pid_p)
+    error (_("Can't determine the current process's PID."));
+
+  const int pid = current_inferior ()->pid;
+
+  /* Construct the memory-map file's name and read the file's content.  */
+  std::string filename{ "/proc/" + std::to_string (pid) + "/maps" };
+  gdb::unique_xmalloc_ptr<char> map
+    = target_fileio_read_stralloc (nullptr, filename.c_str ());
+  if (map == nullptr)
+    {
+      warning (_("Unable to open file '%s'"), filename.c_str ());
+      return false;
+    }
+
+  /* Parse the memory-map file line-by-line and look for the memory range which
+     ADDR belongs to.  Each line of the memory-map file starts with the format
+     "<map_low>-<map_high>".  */
+  std::istringstream map_file_strm (map.get ());
+  std::string line;
+  while (std::getline (map_file_strm, line))
+    {
+      CORE_ADDR map_low, map_high;
+      const char *p = line.c_str ();
+      map_low = strtoulst (p, &p, 16);
+      if (*p == '-')
+	p++;
+      map_high = strtoulst (p, &p, 16);
+
+      mem_range tmp_range
+      {
+	map_low, static_cast<int> (map_high - map_low)
+      };
+      if (address_in_mem_range (addr, &tmp_range))
+	{
+	  *range = tmp_range;
+	  return true;
+	}
+    }
+
+  return false;
+}
+
+shstk_status
+i386_cet_shstk_state ()
+{
+  if (!target_has_execution ())
+    error (_("No current process: you must name one."));
+
+  regcache *regcache = get_current_regcache ();
+  const i386_gdbarch_tdep *tdep
+    = (i386_gdbarch_tdep *) gdbarch_tdep (regcache->arch ());
+
+  if (tdep == nullptr || tdep->cet_msr_regnum < 0 || tdep->ssp_regnum < 0)
+    return SHSTK_DISABLED_HW;
+
+  uint64_t cet_msr;
+  if (regcache_raw_read_unsigned
+       (regcache, tdep->cet_msr_regnum, (ULONGEST *) &cet_msr)
+      != REG_VALID)
+    {
+       /* In case we have HW support and the registers are not available we
+       assume that the kernel does not support CET.  */
+       return SHSTK_DISABLED_KERNEL;
+    }
+
+  if (!(cet_msr & MSR_CET_SHSTK_EN))
+    return SHSTK_DISABLED_SW;
+
+  return SHSTK_ENABLED;
+}
+
+void
+i386_cet_get_shstk_pointer (struct gdbarch *gdbarch, CORE_ADDR *ssp)
+{
+  if (!(i386_cet_shstk_state () == SHSTK_ENABLED))
+    return;
+
+  regcache *regcache = get_current_regcache ();
+  i386_gdbarch_tdep *tdep
+    = (i386_gdbarch_tdep *) gdbarch_tdep (regcache->arch ());
+
+  if (regcache_raw_read_unsigned (regcache, tdep->ssp_regnum, ssp)
+      != REG_VALID)
+    error (_("Could not read CET shadow stack pointer."));
 }
 
 static struct cmd_list_element *mpx_set_cmdlist, *mpx_show_cmdlist;

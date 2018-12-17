@@ -1646,3 +1646,8 @@ extern void set_gdbarch_read_core_file_mappings (struct gdbarch *gdbarch, gdbarc
 
 extern bool gdbarch_is_inferior_device (struct gdbarch *gdbarch);
 extern void set_gdbarch_is_inferior_device (struct gdbarch *gdbarch, bool is_inferior_device);
+
+/* shstk_addr_byte_align is the shadow stack address alignment in bytes. */
+
+extern int gdbarch_shstk_addr_byte_align (struct gdbarch *gdbarch);
+extern void set_gdbarch_shstk_addr_byte_align (struct gdbarch *gdbarch, int shstk_addr_byte_align);

@@ -3276,6 +3276,9 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
 					amd64_in_indirect_branch_thunk);
 
   register_amd64_ravenscar_ops (gdbarch);
+
+  /* For 64 bit and x32 shadow stack adresses are 8-byte aligned.  */
+  set_gdbarch_shstk_addr_byte_align (gdbarch, 8);
 }
 
 /* Initialize ARCH for x86-64, no osabi.  */

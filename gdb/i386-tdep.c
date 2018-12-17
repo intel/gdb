@@ -4443,6 +4443,9 @@ i386_elf_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   set_gdbarch_in_indirect_branch_thunk (gdbarch,
 					i386_in_indirect_branch_thunk);
+
+ /* For 32 bit shadow stack adresses are 4-byte aligned.  */
+  set_gdbarch_shstk_addr_byte_align (gdbarch, 4);
 }
 
 /* System V Release 4 (SVR4).  */

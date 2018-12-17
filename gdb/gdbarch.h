@@ -1728,6 +1728,11 @@ typedef void (gdbarch_read_core_file_mappings_ftype) (struct gdbarch *gdbarch, s
 extern void gdbarch_read_core_file_mappings (struct gdbarch *gdbarch, struct bfd *cbfd, gdb::function_view<void (ULONGEST count)> pre_loop_cb, gdb::function_view<void (int num, ULONGEST start, ULONGEST end, ULONGEST file_ofs, const char *filename)> loop_cb);
 extern void set_gdbarch_read_core_file_mappings (struct gdbarch *gdbarch, gdbarch_read_core_file_mappings_ftype *read_core_file_mappings);
 
+/* shstk_addr_byte_align is the shadow stack address alignment in bytes. */
+
+extern int gdbarch_shstk_addr_byte_align (struct gdbarch *gdbarch);
+extern void set_gdbarch_shstk_addr_byte_align (struct gdbarch *gdbarch, int shstk_addr_byte_align);
+
 extern struct gdbarch_tdep *gdbarch_tdep (struct gdbarch *gdbarch);
 
 

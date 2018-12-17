@@ -14037,8 +14037,48 @@ prints @code{<optimized out>} instead.
 @chapter Debugging on Intel(R) Architecture
 
 @menu
+* CET Debugging::          Debugging Control-flow Enforcement Technology (CET)
 * Decoding Abort Reasons::      Decoding Abort Reasons of a Speculative Execution
 @end menu
+
+@node CET Debugging
+@section Control-flow Enforcement Debugging
+@cindex control-flow enforcement
+@cindex shadow stack, indirect branch tracking
+Control-flow Enforcement Technology (CET) provides two capabilities to defend
+against ``Return-oriented Programming'' and ``call/jmp-oriented
+programming'' style control-flow attacks:
+
+@itemize @bullet
+@item Shadow Stack:
+A shadow stack is a second stack for the program which holds the return
+addresses pushed by the CALL instruction.  The RET instruction pops the return
+address from both call and shadow stacks and if the return address from the two
+stacks do not match, the processor signals a control protection exception.
+@item Indirect Branch Tracking (IBT):
+When IBT is enabled, the CPU implements a state machine that tracks indirect
+jmp and call instructions.  The state machine can be either ``IDLE'' or
+``WAIT_FOR_ENDBRANCH''. In WAIT_FOR_ENDBRANCH state the next
+instruction in the program stream must be an ENDBRANCH, otherwise the processor
+signals control protection exception.
+@end itemize
+
+@subsection Command Description
+@table @code
+@item info cet backtrace
+This command prints backtrace of the shadow stack for the current running
+process.
+For example, using the command @code{info cet backtrace} while stopped at
+the stack frame corresponding to the function @code{func2 ()} will display:
+@smallexample
+   Address              Symbol
+#0 0x000000000040141f   func1 ()
+#1 0x0000000000401578   main (int, char const**)
+#2 0x00007ffff72aa393   __libc_start_main
+#3 0x000000000040125e   _start
+@end smallexample
+@end table
+
 @node Decoding Abort Reasons
 @section Decoding Abort Reasons of a Speculative Execution
 

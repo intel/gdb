@@ -1170,6 +1170,7 @@ COMMON_SFILES = \
 	valprint.c \
 	value.c \
 	varobj.c \
+	x86-cet.c \
 	xml-support.c \
 	xml-syscall.c \
 	xml-tdesc.c

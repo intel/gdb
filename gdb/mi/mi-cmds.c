@@ -284,6 +284,8 @@ add_builtin_mi_commands ()
   add_mi_cmd_cli ("file-symbol-file", "symbol-file", 1);
   add_mi_cmd_mi ("fix-multi-location-breakpoint-output",
 		 mi_cmd_fix_multi_location_breakpoint_output),
+  add_mi_cmd_mi ("function-call-history-length",
+		 mi_cmd_record_function_call_history_length);
   add_mi_cmd_mi ("gdb-exit", mi_cmd_gdb_exit);
   add_mi_cmd_cli ("gdb-set", "set", 1,
 		  &mi_suppress_notification.cmd_param_changed);

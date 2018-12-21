@@ -758,6 +758,17 @@ set_record_call_history_size (const char *args, int from_tty,
 			 &record_call_history_size);
 }
 
+void
+mi_cmd_record_function_call_history_length (const char *command,
+					    char **argv,
+					    int argc)
+{
+  if (argc != 0)
+    error (_("-function-call-history-length: Invalid number of arguments."));
+
+  target_call_history_length ();
+}
+
 void _initialize_record ();
 void
 _initialize_record ()

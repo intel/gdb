@@ -1221,6 +1221,10 @@ struct target_ops
 				     gdb_disassembly_flags flags)
       TARGET_DEFAULT_NORETURN (tcomplain ());
 
+    /* Print the number of functions in the recorded execution trace.  */
+    virtual void call_history_length ()
+      TARGET_DEFAULT_NORETURN (tcomplain ());
+
     /* Print a function trace of the recorded execution trace.
        If SIZE < 0, print abs (SIZE) preceding functions; otherwise, print SIZE
        succeeding functions.  */
@@ -2622,6 +2626,9 @@ extern void target_insn_history_from (ULONGEST from, int size,
 /* See to_insn_history_range.  */
 extern void target_insn_history_range (ULONGEST begin, ULONGEST end,
 				       gdb_disassembly_flags flags);
+
+/* See to_call_history_length.  */
+extern void target_call_history_length (void);
 
 /* See to_call_history.  */
 extern void target_call_history (int size, record_print_flags flags);

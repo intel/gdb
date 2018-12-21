@@ -117,4 +117,10 @@ extern void record_start (const char *method, const char *format,
 /* Stop recording.  Throw on failure.  */
 extern void record_stop (int from_tty);
 
+/* The MI version of the command to get the length of the function call history
+   for record targets.  */
+extern void mi_cmd_record_function_call_history_length (char *command,
+							char **argv,
+							int argc);
+
 #endif /* RECORD_H */

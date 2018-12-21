@@ -85,6 +85,7 @@ public:
 			  gdb_disassembly_flags flags) override;
   void insn_history_range (ULONGEST begin, ULONGEST end,
 			   gdb_disassembly_flags flags) override;
+  void call_history_length () override;
   void call_history (int size, record_print_flags flags) override;
   void call_history_from (ULONGEST begin, int size, record_print_flags flags)
     override;
@@ -1249,6 +1250,29 @@ btrace_call_history (struct ui_out *uiout,
       if (((flags & RECORD_DONT_PRINT_AUX) == 0)
 	  && ((bfun->flags & BFUN_AUX_DECODED) != 0))
 	btrace_print_aux_insn(uiout, bfun, btinfo);
+    }
+}
+
+/* The call_history_length method of target record-btrace.  */
+
+void
+record_btrace_target::call_history_length ()
+{
+  struct btrace_call_iterator end;
+  btrace_call_end (&end, require_btrace ());
+
+  const int length = btrace_call_number (&end) - 1;
+
+  if (current_uiout->is_mi_like_p ())
+    {
+      ui_out_emit_list list_emitter (current_uiout, "func history length");
+      ui_out_emit_tuple tuple_emitter (current_uiout, nullptr);
+      current_uiout->field_unsigned ("end", length);
+    }
+  else
+    {
+      ui_out_emit_tuple tuple_emitter (current_uiout, "func history length");
+      current_uiout->field_unsigned ("end", length);
     }
 }
 

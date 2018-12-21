@@ -1,0 +1,88 @@
+# This testcase is part of GDB, the GNU debugger.
+#
+# Copyright 2013-2018 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+set errorInfo
+
+if [skip_btrace_tests] {
+    return 0
+}
+
+load_lib mi-support.exp
+set MIFLAGS "-i=mi"
+
+gdb_exit
+if [mi_gdb_start] {
+    continue
+}
+
+# start inferior
+standard_testfile mi-function_call_history.c
+
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
+     untested mi-function_call_history.exp
+     return -1
+}
+
+mi_delete_breakpoints
+mi_gdb_reinitialize_dir $srcdir/$subdir
+mi_gdb_load ${binfile}
+
+if ![mi_run_to_main] {
+    return -1
+}
+
+# start btrace
+send_gdb "record btrace\n"
+
+gdb_expect {
+    -re "=record-started,thread-group=\".*\"\r\n\\^done\r\n$mi_gdb_prompt$" {
+	# Done
+    }
+    -re "\\^error,msg=\"Target does not support branch tracing.\"" {
+	perror "Branch tracing not supported"
+	return -1
+    }
+    timeout {
+	perror "Unable to start branch tracing"
+	return -1
+    }
+}
+
+mi_create_breakpoint "-t $testfile.c:41" "insert temp breakpoint at $testfile.c:41" \
+    -number 2 -disp del -func main -file "$srcdir/$subdir/$testfile.c" -line 41
+
+mi_send_resuming_command "exec-continue" "continue to bp.1"
+
+mi_expect_stop "breakpoint-hit" "main" ".*" "$testfile.c" 41 \
+    {"" "disp=\".*\"" } "run to breakpoint bp.1"
+
+mi_gdb_test "125-function-call-history-length" \
+    "125\\^done,func history length=\\\[\{end=\"21\"\}\\\]" \
+    "125 function call history length"
+
+mi_create_breakpoint "-t $testfile.c:42" "insert temp breakpoint at $testfile.c:42" \
+    -number 3 -disp del -func main -file "$srcdir/$subdir/$testfile.c" -line 42
+
+mi_send_resuming_command "exec-continue" "continue to bp.2"
+
+mi_expect_stop "breakpoint-hit" "main" ".*" "$testfile.c" 42 \
+    {"" "disp=\".*\"" } "run to breakpoint bp.2"
+
+mi_gdb_test "225-function-call-history-length" \
+    "225\\^done,func history length=\\\[\{end=\"375\"\}\\\]" \
+    "225 function call history length"
+
+mi_gdb_exit

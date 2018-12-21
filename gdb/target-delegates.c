@@ -165,6 +165,7 @@ struct dummy_target : public target_ops
   void insn_history (int arg0, gdb_disassembly_flags arg1) override;
   void insn_history_from (ULONGEST arg0, int arg1, gdb_disassembly_flags arg2) override;
   void insn_history_range (ULONGEST arg0, ULONGEST arg1, gdb_disassembly_flags arg2) override;
+  void call_history_length () override;
   void call_history (int arg0, record_print_flags arg1) override;
   void call_history_from (ULONGEST arg0, int arg1, record_print_flags arg2) override;
   void call_history_range (ULONGEST arg0, ULONGEST arg1, record_print_flags arg2) override;
@@ -336,6 +337,7 @@ struct debug_target : public target_ops
   void insn_history (int arg0, gdb_disassembly_flags arg1) override;
   void insn_history_from (ULONGEST arg0, int arg1, gdb_disassembly_flags arg2) override;
   void insn_history_range (ULONGEST arg0, ULONGEST arg1, gdb_disassembly_flags arg2) override;
+  void call_history_length () override;
   void call_history (int arg0, record_print_flags arg1) override;
   void call_history_from (ULONGEST arg0, int arg1, record_print_flags arg2) override;
   void call_history_range (ULONGEST arg0, ULONGEST arg1, record_print_flags arg2) override;
@@ -4219,6 +4221,27 @@ debug_target::insn_history_range (ULONGEST arg0, ULONGEST arg1, gdb_disassembly_
   target_debug_print_ULONGEST (arg1);
   fputs_unfiltered (", ", gdb_stdlog);
   target_debug_print_gdb_disassembly_flags (arg2);
+  fputs_unfiltered (")\n", gdb_stdlog);
+}
+
+void
+target_ops::call_history_length ()
+{
+  this->beneath ()->call_history_length ();
+}
+
+void
+dummy_target::call_history_length ()
+{
+  tcomplain ();
+}
+
+void
+debug_target::call_history_length ()
+{
+  fprintf_unfiltered (gdb_stdlog, "-> %s->call_history_length (...)\n", this->beneath ()->shortname ());
+  this->beneath ()->call_history_length ();
+  fprintf_unfiltered (gdb_stdlog, "<- %s->call_history_length (", this->beneath ()->shortname ());
   fputs_unfiltered (")\n", gdb_stdlog);
 }
 

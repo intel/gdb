@@ -3662,6 +3662,14 @@ target_insn_history_range (ULONGEST begin, ULONGEST end,
 /* See target.h.  */
 
 void
+target_call_history_length (void)
+{
+  current_top_target ()->call_history_length ();
+}
+
+/* See target.h.  */
+
+void
 target_call_history (int size, record_print_flags flags)
 {
   current_top_target ()->call_history (size, flags);

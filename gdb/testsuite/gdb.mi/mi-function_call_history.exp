@@ -69,9 +69,56 @@ mi_send_resuming_command "exec-continue" "continue to bp.1"
 mi_expect_stop "breakpoint-hit" "main" ".*" "$testfile.c" 41 \
     {"" "disp=\".*\"" } "run to breakpoint bp.1"
 
+mi_gdb_test "121-function-call-history" \
+    "121\\^done,func history=\\\[\{index=\"12\",function=\"inc\"\},\{index=\"13\",function=\"main\"\},\{index=\"14\",function=\"inc\"\},\{index=\"15\",function=\"main\"\},\{index=\"16\",function=\"inc\"\},\{index=\"17\",function=\"main\"\},\{index=\"18\",function=\"inc\"\},\{index=\"19\",function=\"main\"\},\{index=\"20\",function=\"inc\"\},\{index=\"21\",function=\"main\"\}\\\]" \
+    "121 function call history default without flags"
+
+send_gdb "122-function-call-history\n"
+gdb_expect {
+    -re "\"At the end of the branch trace record..*\\^done,func history=[].*$mi_gdb_prompt$" {
+	#Done
+    }
+    default {
+	perror "122 Function call history failed"
+	return -1
+    }
+}
+
+mi_gdb_test "123-function-call-history 12 16" \
+    "123\\^done,func history=\\\[\{index=\"12\",function=\"inc\"\},\{index=\"13\",function=\"main\"\},\{index=\"14\",function=\"inc\"\},\{index=\"15\",function=\"main\"\},\{index=\"16\",function=\"inc\"\}\\\]" \
+    "123 function call history range without flags"
+
+mi_gdb_test "124-function-call-history 12 13" \
+    "124\\^done,func history=\\\[\{index=\"12\",function=\"inc\"\},\{index=\"13\",function=\"main\"\}\\\]" \
+    "124 function call history range without flags"
+
 mi_gdb_test "125-function-call-history-length" \
     "125\\^done,func history length=\\\[\{end=\"21\"\}\\\]" \
     "125 function call history length"
+
+mi_gdb_test "126-function-call-history 22 23" \
+    "126\\^error,msg=\"Range out of bounds.\"" \
+    "126 function call history range error check"
+
+mi_gdb_test "127-function-call-history /lc" \
+    "127\\^done,func history=\\\[\{index=\"14\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"15\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"16\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"17\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"18\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"19\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"20\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"21\",level=\"0\",function=\"main\",file=\"$srcdir/$subdir/$testfile.c\",.*\}\\\]" \
+    "127 function call history default with flags"
+
+mi_gdb_test "128-function-call-history /lc 14 20" \
+    "128\\^done,func history=\\\[\{index=\"14\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"15\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"16\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"17\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"18\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"19\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"20\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*\}\\\]" \
+    "128 function call history range with flags"
+
+mi_gdb_test "129-function-call-history /lc 1 5" \
+    "129\\^done,func history=\\\[\{index=\"1\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"2\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"3\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"4\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"5\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*\}\\\]" \
+    "129 function call history range with flags"
+
+mi_gdb_test "130-function-call-history /l 1 5" \
+    "130\\^done,func history=\\\[\{index=\"1\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"2\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"3\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"4\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"5\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*\}\\\]" \
+    "130 function call history range with flags"
+
+mi_gdb_test "131-function-call-history /c 1 5" \
+    "131\\^done,func history=\\\[\{index=\"1\",level=\"0\",function=\"main\"\},\{index=\"2\",level=\"1\",function=\"inc\"\},\{index=\"3\",level=\"0\",function=\"main\"\},\{index=\"4\",level=\"1\",function=\"inc\"\},\{index=\"5\",level=\"0\",function=\"main\"\}\\\]" \
+    "131 function call history range with flags"
 
 mi_create_breakpoint "-t $testfile.c:42" "insert temp breakpoint at $testfile.c:42" \
     -number 3 -disp del -func main -file "$srcdir/$subdir/$testfile.c" -line 42
@@ -81,8 +128,56 @@ mi_send_resuming_command "exec-continue" "continue to bp.2"
 mi_expect_stop "breakpoint-hit" "main" ".*" "$testfile.c" 42 \
     {"" "disp=\".*\"" } "run to breakpoint bp.2"
 
+mi_gdb_test "221-function-call-history" \
+    "221\\^done,func history=\\\[\{index=\"366\",function=\"fib\"\},\{index=\"367\",function=\"fib\"\},\{index=\"368\",function=\"fib\"\},\{index=\"369\",function=\"fib\"\},\{index=\"370\",function=\"fib\"\},\{index=\"371\",function=\"fib\"\},\{index=\"372\",function=\"fib\"\},\{index=\"373\",function=\"fib\"\},\{index=\"374\",function=\"fib\"\},\{index=\"375\",function=\"main\"\}\\\]" \
+    "221 function call history default without flags"
+
+send_gdb "222-function-call-history\n"
+#mi_gdb_expect_cli_output "\"At the end of the branch trace record." "222 Function call history failed"
+gdb_expect {
+    -re "\"At the end of the branch trace record..*\\^done,func history=[].*$mi_gdb_prompt$" {
+	#Done
+    }
+    default {
+	perror "222 Function call history failed"
+	return -1
+    }
+}
+
+mi_gdb_test "223-function-call-history 12 16" \
+    "223\\^done,func history=\\\[\{index=\"12\",function=\"inc\"\},\{index=\"13\",function=\"main\"\},\{index=\"14\",function=\"inc\"\},\{index=\"15\",function=\"main\"\},\{index=\"16\",function=\"inc\"\}\\\]" \
+    "223 function call history range without flags"
+
+mi_gdb_test "224-function-call-history 366 368" \
+    "224\\^done,func history=\\\[\{index=\"366\",function=\"fib\"\},\{index=\"367\",function=\"fib\"\},\{index=\"368\",function=\"fib\"\}\\\]" \
+    "224 function call history range without flags"
+
 mi_gdb_test "225-function-call-history-length" \
     "225\\^done,func history length=\\\[\{end=\"375\"\}\\\]" \
     "225 function call history length"
+
+mi_gdb_test "226-function-call-history 376 400" \
+    "226\\^error,msg=\"Range out of bounds.\"" \
+    "226 function call history range error check"
+
+mi_gdb_test "227-function-call-history /lc" \
+    "227\\^done,func history=\\\[\{index=\"369\",level=\"6\",function=\"fib\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"370\",level=\"5\",function=\"fib\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"371\",level=\"4\",function=\"fib\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"372\",level=\"3\",function=\"fib\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"373\",level=\"2\",function=\"fib\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"374\",level=\"1\",function=\"fib\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"375\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*}\\\]" \
+    "227 function call history default with flags"
+
+mi_gdb_test "228-function-call-history /lc 14 20" \
+    "228\\^done,func history=\\\[\{index=\"14\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"15\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"16\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"17\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"18\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"19\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"20\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*\}\\\]" \
+    "228 function call history range with flags"
+
+mi_gdb_test "229-function-call-history /lc 1 5" \
+    "229\\^done,func history=\\\[\{index=\"1\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"2\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"3\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"4\",level=\"1\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"5\",level=\"0\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*\}\\\]" \
+    "229 function call history range with flags"
+
+mi_gdb_test "230-function-call-history /l 1 5" \
+    "230\\^done,func history=\\\[\{index=\"1\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"2\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"3\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"4\",function=\"inc\"\,file=\"$srcdir/$subdir/$testfile.c\",.*},\{index=\"5\",function=\"main\"\,file=\"$srcdir/$subdir/$testfile.c\",.*\}\\\]" \
+    "230 function call history range with flags"
+
+mi_gdb_test "231-function-call-history /c 1 5" \
+    "231\\^done,func history=\\\[\{index=\"1\",level=\"0\",function=\"main\"\},\{index=\"2\",level=\"1\",function=\"inc\"\},\{index=\"3\",level=\"0\",function=\"main\"\},\{index=\"4\",level=\"1\",function=\"inc\"\},\{index=\"5\",level=\"0\",function=\"main\"\}\\\]" \
+    "231 function call history range with flags"
 
 mi_gdb_exit

@@ -129,6 +129,7 @@ static struct mi_cmd mi_cmds[] =
 		 mi_cmd_fix_multi_location_breakpoint_output),
   DEF_MI_CMD_MI ("function-call-history-length",
 		 mi_cmd_record_function_call_history_length),
+  DEF_MI_CMD_MI ("function-call-history", mi_cmd_record_function_call_history),
   DEF_MI_CMD_MI ("gdb-exit", mi_cmd_gdb_exit),
   DEF_MI_CMD_CLI_1 ("gdb-set", "set", 1,
 		    &mi_suppress_notification.cmd_param_changed),

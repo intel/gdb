@@ -1183,6 +1183,7 @@ btrace_call_history (struct ui_out *uiout,
 
   for (it = *begin; btrace_call_cmp (&it, end) < 0; btrace_call_next (&it, 1))
     {
+      ui_out_emit_tuple tuple_emitter (uiout, nullptr);
       const struct btrace_function *bfun;
       struct minimal_symbol *msym;
       struct symbol *sym;
@@ -1212,10 +1213,13 @@ btrace_call_history (struct ui_out *uiout,
 
       if ((flags & RECORD_PRINT_INDENT_CALLS) != 0)
 	{
-	  int level = bfun->level + btinfo->level, i;
+	  const int level = bfun->level + btinfo->level;
 
-	  for (i = 0; i < level; ++i)
-	    uiout->text ("  ");
+	  if (uiout->is_mi_like_p ())
+	    uiout->field_signed ("level", level);
+	  else
+	    for (int i = 0; i < level; ++i)
+	      uiout->text ("  ");
 	}
 
       if (sym != NULL)
@@ -1260,7 +1264,7 @@ record_btrace_target::call_history (int size, record_print_flags flags)
   unsigned int context, covered;
 
   uiout = current_uiout;
-  ui_out_emit_tuple tuple_emitter (uiout, "insn history");
+  ui_out_emit_list list_emitter (uiout, "func history");
   context = abs (size);
   if (context == 0)
     error (_("Bad record function-call-history-size."));
@@ -1347,7 +1351,7 @@ record_btrace_target::call_history_range (ULONGEST from, ULONGEST to,
   int found;
 
   uiout = current_uiout;
-  ui_out_emit_tuple tuple_emitter (uiout, "func history");
+  ui_out_emit_list list_emitter (uiout, "func history");
   low = from;
   high = to;
 

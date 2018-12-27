@@ -123,4 +123,9 @@ extern void mi_cmd_record_function_call_history_length (char *command,
 							char **argv,
 							int argc);
 
+/* The MI version of the command to get the function call history for record
+   targets.  */
+extern void mi_cmd_record_function_call_history (char *command, char **argv,
+						 int argc);
+
 #endif /* RECORD_H */

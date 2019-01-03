@@ -2060,6 +2060,14 @@ do_start_initialization ()
   if (PyImport_ExtendInittab (mods) < 0)
     return false;
 
+  char *intel_pythonhome = getenv ("INTEL_PYTHONHOME");
+  if (!python_ignore_environment && intel_pythonhome != NULL)
+    {
+      auto wintel_pythonhome = Py_DecodeLocale (intel_pythonhome, NULL);
+      if (wintel_pythonhome != NULL)
+	Py_SetPythonHome (wintel_pythonhome);
+    }
+
 #ifdef WITH_PYTHON_PATH
   /* Work around problem where python gets confused about where it is,
      and then can't find its libraries, etc.

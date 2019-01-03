@@ -1863,6 +1863,14 @@ gdbpy_gdb_exiting (int exit_code)
 static bool
 do_start_initialization ()
 {
+  char *intel_pythonhome = getenv ("INTEL_PYTHONHOME");
+  if (intel_pythonhome != NULL)
+    {
+      auto wintel_pythonhome = Py_DecodeLocale (intel_pythonhome, NULL);
+      if (wintel_pythonhome != NULL)
+	Py_SetPythonHome (wintel_pythonhome);
+    }
+
 #ifdef WITH_PYTHON_PATH
   /* Work around problem where python gets confused about where it is,
      and then can't find its libraries, etc.

@@ -4286,6 +4286,9 @@ proc gdb_compile_pthreads {source dest type options} {
                 set why_msg "missing threads include file"
                 break
             }
+            ".*cannot find -lpthread.*" {
+                set why_msg "missing runtime threads library"
+            }
             ".*cannot open -lpthread.*" {
                 set why_msg "missing runtime threads library"
             }

@@ -1,0 +1,50 @@
+# Copyright 2019 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for SYCL, for a parallel_for kernel on a 2D range.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set last_line [gdb_get_line_number "kernel-last-line"]
+gdb_breakpoint $last_line
+
+# Check that we hit the BP for a number of elements.  We do not check
+# for each element because the number of hits received may depend on
+# whether the kernel was vectorized, and if so, the width of vectors.
+# Since the data array in the test program is large, having a small
+# number of trips here should be safe.
+
+for {set i 1} {$i <= 5} {incr i} { with_test_prefix "trip $i" {
+    gdb_continue_to_breakpoint "hit the last line" \
+	".*$srcfile:$last_line.*"
+
+    gdb_test "print in_elem - (dim0 * 64 + dim1)" "= 123" \
+	"thread invariant"
+}}

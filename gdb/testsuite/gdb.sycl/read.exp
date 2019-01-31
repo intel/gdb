@@ -1,0 +1,52 @@
+# Copyright 2019 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for SYCL; in particular, printing values of local
+# vars and data elements.
+
+load_lib sycl.exp
+
+standard_testfile single-task.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Break at the last line of the kernel, then read local vars and data
+# elements.
+set last_line [gdb_get_line_number "kernel-line-4"]
+gdb_breakpoint $last_line
+gdb_continue_to_breakpoint "last line" ".*$srcfile:$last_line.*"
+
+gdb_test "print ten" "= 10"
+gdb_test "print four" "= 4"
+gdb_test "print fourteen" "= 14"
+
+gdb_test "ptype ten" "type = int"
+gdb_test "ptype four" "type = int"
+gdb_test "ptype fourteen" "type = int"
+
+gdb_test "print numbers\[0\]" "= 7"
+gdb_test "print numbers\[1\]" "= 8"
+gdb_test "print numbers\[2\]" "= 9"

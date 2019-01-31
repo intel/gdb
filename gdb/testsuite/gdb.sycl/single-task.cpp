@@ -46,5 +46,5 @@ main (int argc, char *argv[])
   std::cout << "Result is " << data[0] << std::endl;  /* line-after-kernel */
 #endif
 
-  return 0; /* return-stmt */
+  return data[0] == 42 ? 0 : 1; /* return-stmt */
 }

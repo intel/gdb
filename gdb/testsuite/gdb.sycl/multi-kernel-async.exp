@@ -1,0 +1,57 @@
+# Copyright 2019 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for SYCL, for a program that has asynchronous
+# kernels.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set kernel_1 [gdb_get_line_number "kernel-1-line"]
+set kernel_2 [gdb_get_line_number "kernel-2-line"]
+set post_kernel [gdb_get_line_number "post-kernel-line"]
+gdb_breakpoint $kernel_1 {temporary}
+gdb_breakpoint $kernel_2 {temporary}
+gdb_breakpoint $post_kernel {temporary}
+
+# Check that we stop inside the kernels and the host, regardless of
+# the order.
+for {set i 1} {$i <= 3} {incr i} {
+    gdb_test_multiple "continue" "continue $i" {
+	-re "breakpoint .*$srcfile:$kernel_1.*$gdb_prompt" {
+	    pass $gdb_test_name
+	}
+	-re "breakpoint .*$srcfile:$kernel_2.*$gdb_prompt" {
+	    pass $gdb_test_name
+	}
+	-re "breakpoint .*$srcfile:$post_kernel.*$gdb_prompt" {
+	    pass $gdb_test_name
+	}
+    }
+}

@@ -113,6 +113,9 @@ Documentation License}.
 @page
 List of extended features for @value{GDBN} version @value{GDBVN}:
 @itemize @bullet
+@item
+Decoding Abort Reasons of a Speculative Execution:@*
+@ref{Decoding Abort Reasons, Decoding abort reason}
 @end itemize
 @end titlepage
 @page
@@ -14034,7 +14037,50 @@ prints @code{<optimized out>} instead.
 @chapter Debugging on Intel(R) Architecture
 
 @menu
+* Decoding Abort Reasons::      Decoding Abort Reasons of a Speculative Execution
 @end menu
+@node Decoding Abort Reasons
+@section Decoding Abort Reasons of a Speculative Execution
+
+Intel@registeredsymbol{} Transactional Synchronization Extensions (Intel@registeredsymbol{} TSX) feature for @value{GDBN}
+adds to the concept of speculative execution. When a speculative execution is
+aborted, the abort reason is encoded in the x86 @code{EAX} general register,
+which can also be stored in some user-created variable. However, this
+abort reason is not in a human readable format. The Intel TSX feature
+extension consists of a command that helps you to decode the abort
+reason into human readable language.
+
+Consider the following speculative execution example:
+@smallexample
+8  abort_var = _xbegin ();
+9  if (abort_var == -1)@{
+10   foo ();
+11   _xend();
+12 @} else @{
+13   foo (); /* BP location*/
+14 @}
+@end smallexample
+To verify the abort reason for the above code, you can add a break
+point on the abort handler, as exemplified on line 13, and issue the
+command, @code{info tsx-abort-reason} @var{EXPR}, where @var{EXPR} is any
+expression that you can evaluate.
+
+If you use a variable for @var{EXPR}, then the full command to be
+issued is @code{info tsx-abort-reason} @var{abort_var}. Of course, at
+the first instruction of the abort handler you could also issue the
+following command, @code{info tsx-abort-reason} @var{$eax}.
+
+@subsection Command Description
+@table @code
+@item info tsx-abort-reason @var{EXPR}
+For an aborted speculative execution, this command evaluates/decodes
+the abort reason into human readable format.
+@table @code
+@item EXPR
+is any expression, including variables or a general purpose register
+such as @samp{$EAX}.
+@end table
+@end table
 
 @node Macros
 @chapter C Preprocessor Macros

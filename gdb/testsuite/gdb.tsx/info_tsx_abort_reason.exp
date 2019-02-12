@@ -1,0 +1,116 @@
+# Copyright 2013-2020 Free Software Foundation, Inc.
+
+# This program is free software, you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY, without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This file was written by Walfred Tedeschi (walfred.tedeschi@intel.com)
+
+
+standard_testfile
+
+if {[prepare_for_testing $testfile.exp $testfile $srcfile {debug nowarnings}]} {
+    return -1
+}
+
+if { [skip_python_tests]} {continue}
+
+if { ![runto_main] } then {
+    untested "failed to run to main"
+    return -1
+} 
+
+gdb_breakpoint [ gdb_get_line_number "bp 1." ]
+
+gdb_continue_to_breakpoint "bp 1" ".*bp 1.*"
+
+# Unknown reason.
+gdb_test_no_output {set $rax = 0x0} "unknown 0"
+gdb_test "info tsx-abort-reason \$rax" "unknown, \\\[0x0\\\]." "unknown info 0"
+gdb_test_no_output {set var a = 0}  "unknown 0.1"
+gdb_test "info tsx-abort-reason a" "unknown, \\\[0x0\\\]." "unknown info 0.1"
+
+gdb_test_no_output {set $rax = 0x02}  "unknown 1"
+gdb_test "info tsx-abort-reason \$rax" "unknown, retry possible, \\\[0x2\\\]." "unknown info 1"
+gdb_test_no_output {set var a = 0x02}  "unknown 1.1"
+gdb_test "info tsx-abort-reason a" "unknown, retry possible, \\\[0x2\\\]." "unknown info 1.1"
+
+# Xabort tests
+gdb_test_no_output {set $rax = 0x01} "xabort 0"
+gdb_test "info tsx-abort-reason \$rax" "xabort 0, \\\[0x1\\\]." "xabort info 0"
+gdb_test_no_output {set var a = $rax}  "xabort 0.1"
+gdb_test "info tsx-abort-reason a" "xabort 0, \\\[0x1\\\]." "xabort info 0.1"
+
+gdb_test_no_output {set $rax = 0x030001} "to xabort 1"
+gdb_test "info tsx-abort-reason \$rax" "xabort 3, \\\[0x30001\\\]." "xabort info 1"
+gdb_test_no_output {set var a = $rax}  "xabort 1.1"
+gdb_test "info tsx-abort-reason a" "xabort 3, \\\[0x30001\\\]." "xabort info 1.1"
+
+gdb_test_no_output {set $rax = 0x230001} "to xabort 2"
+gdb_test "info tsx-abort-reason \$rax" "xabort 35, \\\[0x230001\\\]." "xabort info 2"
+gdb_test_no_output {set var a = $rax}  "xabort 2.1"
+gdb_test "info tsx-abort-reason a" "xabort 35, \\\[0x230001\\\]." "xabort info 2.1"
+
+gdb_test_no_output {set $rax = 0x1230001}  "to xabort 3"
+gdb_test "info tsx-abort-reason \$rax" "xabort 35, \\\[0x1230001\\\]." "xabort info 3"
+gdb_test_no_output {set var a = $rax}  "xabort 3.1"
+gdb_test "info tsx-abort-reason a" "xabort 35, \\\[0x1230001\\\]." "xabort info 3.1"
+
+# Race conditions.
+gdb_test_no_output {set $rax = 0x0004}  "to race 0"
+gdb_test "info tsx-abort-reason \$rax" "conflict/race, \\\[0x4\\\]." "race info 0"
+gdb_test_no_output {set var a = $rax}  "race 0.1"
+gdb_test "info tsx-abort-reason a" "conflict/race, \\\[0x4\\\]." "race info 0.1"
+
+gdb_test_no_output {set $rax = 0x0006}  "to race 1"
+gdb_test "info tsx-abort-reason \$rax" "conflict/race, retry possible, \\\[0x6\\\]." "race info 1"
+gdb_test_no_output {set var a = $rax}  "race 1.1"
+gdb_test "info tsx-abort-reason a" "conflict/race, retry possible, \\\[0x6\\\]." "race info 1.1"
+
+# Buffer overflow
+gdb_test_no_output {set $rax = 0x0008} "to buffer 0"
+gdb_test "info tsx-abort-reason \$rax" "buffer overflow, \\\[0x8\\\]." "buffer info 0"
+gdb_test_no_output {set var a = $rax} "buffer 0.1"
+gdb_test "info tsx-abort-reason a" "buffer overflow, \\\[0x8\\\]." "buffer info 0.1"
+
+gdb_test_no_output {set $rax = 0x000a} "to buffer 1"
+gdb_test "info tsx-abort-reason \$rax" "buffer overflow, retry possible, \\\[0xa\\\]." "buffer info 1"
+gdb_test_no_output {set var a = $rax}  "buffer 1.1"
+gdb_test "info tsx-abort-reason a" "buffer overflow, retry possible, \\\[0xa\\\]." "buffer info 1.1"
+
+# Breakpoints
+gdb_test_no_output {set $rax = 0x10} "bp 0"
+gdb_test "info tsx-abort-reason \$rax" "breakpoint hit, \\\[0x10\\\]." "bp info 0"
+gdb_test_no_output {set var a = $rax}  "bp 0.1"
+gdb_test "info tsx-abort-reason a" "breakpoint hit, \\\[0x10\\\]." "bp info 0.1"
+
+# Nested transactions
+gdb_test_no_output {set $rax = 0x20} "nested 0"
+gdb_test "info tsx-abort-reason \$rax" "unknown, on nested transactions, \\\[0x20\\\]." "nested info 0"
+gdb_test_no_output {set var a = $rax}  "nested 0.1"
+gdb_test "info tsx-abort-reason a" "unknown, on nested transactions, \\\[0x20\\\]." "nested info 0.1"
+
+gdb_test_no_output {set $rax = 0x22} "nested 1"
+gdb_test "info tsx-abort-reason \$rax" "unknown, retry possible, on nested transactions, \\\[0x22\\\]." "nested info 1"
+gdb_test_no_output {set var a = $rax}  "nested 1.1"
+gdb_test "info tsx-abort-reason a" "unknown, retry possible, on nested transactions, \\\[0x22\\\]." "nested info 1.1"
+
+# Negative.
+gdb_test "info tsx-abort-reason not_defined" "Python Exception <class 'gdb.error'> No symbol.*" "not defined 0"
+
+gdb_test "info tsx-abort-reason" "\"info tsx-abort-reason\" command takes one argument." "no parameter 0"
+
+gdb_exit
+gdb_start
+
+# Without an inferior
+gdb_test "info tsx-abort-reason 0" "unknown, \\\[0x0\\\]." "no inferior info 0.1"

@@ -78,7 +78,13 @@ prepare_to_access_memory (void)
 	    first = thread;
 
 	  if (current == NULL && prev_general_thread == thread->id)
-	    current = thread;
+	    {
+	      current = thread;
+	      /* If the current thread is also stopped, prefer it over
+		 other stopped threads.  */
+	      if (target_thread_stopped (current))
+		stopped = current;
+	    }
 	}
     });
 

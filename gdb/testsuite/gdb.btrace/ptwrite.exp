@@ -1,0 +1,212 @@
+# This testcase is part of GDB, the GNU debugger.
+#
+# Copyright 2018 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+load_lib gdb-python.exp
+
+if { [skip_btrace_pt_tests] } {
+    unsupported "Target does not support record btrace pt."
+    return -1
+}
+
+if { [skip_btrace_ptw_tests] } {
+    unsupported "Hardware does not support ptwrite instructions."
+    return -1
+}
+
+set comp_flags "additional_flags=-I${srcdir}/.."
+set opts {}
+
+if [info exists COMPILE] {
+    # make check RUNTESTFLAGS="gdb.btrace/ptwrite.exp COMPILE=1"
+    standard_testfile ptwrite.c
+    lappend opts debug comp_flags
+} elseif {[istarget "i?86-*-*"] || [istarget "x86_64-*-*"]} {
+	if {[is_amd64_regs_target]} {
+		standard_testfile x86_64-ptwrite.S
+	} else {
+		unsupported "target architecture not supported"
+		return -1
+	}
+} else {
+    unsupported "target architecture not supported"
+    return -1
+}
+
+if [prepare_for_testing "failed to prepare" $testfile $srcfile $opts] {
+    unsupported "Compiler does not support ptwrite."
+    return -1
+}
+
+
+if { ![runto_main] } {
+    untested "failed to run to main"
+    return -1
+}
+
+# This needs to be after runto_main
+if { [skip_python_tests] } {
+    unsupported "Configuration doesn't support python scripting."
+    return -1
+}
+
+
+### 1. Default testrun
+
+# Setup recording
+gdb_test_no_output "set record instruction-history-size unlimited" "Default: set unlimited"
+gdb_test_no_output "record btrace pt" "Default: record btrace pt"
+gdb_test "next" ".*" "Default: first next"
+gdb_test "next" ".*" "Default: second next"
+
+
+# Test libipt version (must be >= 2.0.0)
+set libipt_supports_ptwrite 0
+
+gdb_test_multiple "maint info btrace" "check libipt version" {
+    -re ".*Version: \[01\]\.\[0-9\]+\.\[0-9\]+.*"
+    {
+	set libipt_supports_ptwrite 0
+    }
+    -re ".*Version: \[0-9\]+\.\[0-9\]+\.\[0-9\]+.*"
+    {
+	set libipt_supports_ptwrite 1
+    }
+    default {
+	set libipt_supports_ptwrite 0
+    }
+}
+
+if { $libipt_supports_ptwrite == 0 } {
+    unsupported "libipt version doesn't support ptwrite decoding."
+    return -1
+}
+
+# Test record instruction-history
+gdb_test "record instruction-history 1" [multi_line \
+  ".*\[0-9\]+\t   $hex <ptwrite64\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
+  "\[0-9\]+\t   \\\[payload: 0x42\\\]" \
+  ".*\[0-9\]+\t   $hex <ptwrite32\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
+  "\[0-9\]+\t   \\\[payload: 0x43\\\].*" \
+  ] "Default: record instruction-history 1"
+
+# Test function call history
+gdb_test "record function-call-history 1,4" [multi_line \
+  "1\tmain" \
+  "2\tptwrite64" \
+  "\t\t\\\[payload: 0x42\\\]" \
+  "3\tmain" \
+  "4\tptwrite32" \
+  "\t\t\\\[payload: 0x43\\\]" \
+  ] "Default: record function-call-history 1,4"
+
+gdb_test "record function-call-history /s 1,4" [multi_line \
+  "1\tmain" \
+  "2\tptwrite64" \
+  "3\tmain" \
+  "4\tptwrite32" \
+  ] "Default: record function-call-history /s 1,4"
+
+# Test payload printing during stepping
+gdb_test "record goto 10" "No such instruction\."
+gdb_test "record goto 9" ".*ptwrite64.* at .*ptwrite.c:23.*"
+gdb_test "stepi" ".*\\\[payload: 0x42\\\].*"
+gdb_test "reverse-stepi" ".*\\\[payload: 0x42\\\].*"
+gdb_test "continue" ".*\\\[payload: 0x42\\\].*\\\[payload: 0x43\\\].*"
+gdb_test "reverse-continue" ".*\\\[payload: 0x43\\\].*\\\[payload: 0x42\\\].*"
+
+# Test auxiliary type in python
+gdb_test_multiline "Default: auxiliary type in python" \
+  "python" "" \
+  "h = gdb.current_recording().instruction_history" "" \
+  "for insn in h: print(insn)" "" \
+  "end" [multi_line \
+  ".*RecordAuxiliary.*" \
+  ".*RecordAuxiliary.*" \
+  ]
+
+
+### 2. Test listener registration
+### 2.1 Custom listener
+
+gdb_test_multiline "Custom: register listener in python" \
+  "python" "" \
+  "def my_listener(payload, ip):" "" \
+  "    if  payload == 66:" "" \
+  "        return \"payload: {0}, ip: {1:#x}\".format(payload, ip)" "" \
+  "    else:" "" \
+  "        return None" "" \
+  "import gdb.ptwrite" "" \
+  "gdb.ptwrite.register_listener(my_listener)" "" \
+  "end" ""
+
+gdb_test "record instruction-history 1" [multi_line \
+  ".*\[0-9\]+\t   $hex <ptwrite64\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
+  "\[0-9\]+\t   \\\[payload: 66, ip: $hex\\\]" \
+  ".*\[0-9\]+\t   $hex <ptwrite32\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
+  "\[0-9\]+\t   $hex <ptwrite32\\+\[0-9\]+>:.*" \
+  ] "Custom: record instruction-history 1"
+
+### 2.2 None as listener
+
+gdb_test_multiline "None: register listener in python" \
+  "python" "" \
+  "import gdb.ptwrite" "" \
+  "gdb.ptwrite.register_listener(None)" "" \
+  "end" ""
+
+gdb_test "record instruction-history 1" [multi_line \
+  ".*\[0-9\]+\t   $hex <ptwrite64\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
+  "\[0-9\]+\t   $hex <ptwrite64\\+\[0-9\]+>:.*" \
+  "\[0-9\]+\t   $hex <ptwrite32\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
+  "\[0-9\]+\t   $hex <ptwrite32\\+\[0-9\]+>:.*" \
+  ] "None: record instruction-history 1"
+
+### 2.3 Lambdas as listener
+
+gdb_test_multiline "Lambdas: register listener in python" \
+  "python" "" \
+  "import gdb.ptwrite" "" \
+  "gdb.ptwrite.register_listener(lambda payload, ip: \"{}\".format(payload + 2))" "" \
+  "end" ""
+
+gdb_test "record instruction-history 1" [multi_line \
+  ".*\[0-9\]+\t   $hex <ptwrite64\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
+  "\[0-9\]+\t   \\\[68\\\]" \
+  ".*\[0-9\]+\t   $hex <ptwrite32\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
+  "\[0-9\]+\t   \\\[69\\\].*" \
+  ] "Lambdas: record instruction-history 1"
+
+### 2.4 Functors as listener
+
+gdb_test_multiline "Functors: register listener in python" \
+  "python" "" \
+  "import gdb.ptwrite" "" \
+  "class foobar(object):" "" \
+  "    def __init__(self):" "" \
+  "        self.variable = 0" "" \
+  "    def __call__(self, payload, ip):" "" \
+  "        self.variable += 1" "" \
+  "        return \"{}, {}\".format(self.variable, payload)" "" \
+  "gdb.ptwrite.register_listener(foobar())" "" \
+  "end" ""
+
+gdb_test "record instruction-history 1" [multi_line \
+  ".*\[0-9\]+\t   $hex <ptwrite64\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
+  "\[0-9\]+\t   \\\[1, 66\\\]" \
+  ".*\[0-9\]+\t   $hex <ptwrite32\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
+  "\[0-9\]+\t   \\\[2, 67\\\].*" \
+  ] "Functors: record instruction-history 1"

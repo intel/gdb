@@ -3216,6 +3216,98 @@ gdb_caching_proc skip_btrace_pt_tests {
     return $skip_btrace_tests
 }
 
+# Run a test on the target to see if it supports ptwrite instructions.
+# Return 0 if so, 1 if it does not.  Based on 'check_vmx_hw_available'
+# from the GCC testsuite.
+
+gdb_caching_proc skip_btrace_ptw_tests {
+    global srcdir subdir gdb_prompt inferior_exited_re
+
+    set me "skip_ptw_tests"
+
+    # Set up, compile, and execute a test program.
+    # Include the current process ID in the file names to prevent conflicts
+    # with invocations for multiple testsuites.
+    set src [standard_temp_file ptw[pid].c]
+    set exe [standard_temp_file ptw[pid].x]
+
+    gdb_produce_source $src {
+	#include <stdbool.h>
+	#include <stdint.h>
+	#include <stdio.h>
+	#include "x86-cpuid.h"
+
+	#define bit_PTW (1 << 4)
+
+	bool
+	have_ptw ()
+	{
+	  unsigned int eax, ebx, ecx, edx;
+
+	  if (!__get_cpuid (1, &eax, &ebx, &ecx, &edx))
+	      return false;
+
+	  if ((ecx & bit_OSXSAVE) != bit_OSXSAVE)
+	      return false;
+
+	  if (__get_cpuid_max (0, NULL) < 0x14)
+	      return false;
+
+	  __cpuid_count (0x14, 0, eax, ebx, ecx, edx);
+
+	  return (ebx & bit_PTW) == bit_PTW;
+	}
+
+	int
+	main ()
+	{
+	  return have_ptw ();
+	}
+
+    }
+
+    verbose "$me:  compiling testfile $src" 2
+
+    set test_flags [list additional_flags=-I${srcdir}/../nat]
+
+    set compile_flags [concat {debug nowarnings quiet} ${test_flags}]
+    set lines [gdb_compile $src $exe executable $compile_flags]
+
+    if ![string match "" $lines] then {
+	verbose "$me:  testfile compilation failed, returning 1" 2
+	file delete $src
+	return 1
+    }
+
+    # No error message, compilation succeeded so now run it via gdb.
+    gdb_exit
+    gdb_start
+    gdb_reinitialize_dir $srcdir/$subdir
+    gdb_load $exe
+    if ![runto_main] {
+	file delete $src
+	return 1
+    }
+    file delete $src
+
+    # In case of an unexpected output, we return 2 as a fail value.
+    set skip_ptw_tests 2
+    gdb_test_multiple "print (int) have_ptw ()" "check ptw support" {
+	-re ".. = 1\r\n$gdb_prompt $" {
+	    set skip_ptw_tests 0
+	}
+	-re ".. = 0\r\n$gdb_prompt $" {
+	    set skip_ptw_tests 1
+	}
+    }
+
+    gdb_exit
+    remote_file build delete $exe
+
+    verbose "$me:  returning $skip_ptw_tests" 2
+    return $skip_ptw_tests
+}
+
 # Run a test on the target to see if it supports Aarch64 SVE hardware.
 # Return 0 if so, 1 if it does not.  Note this causes a restart of GDB.
 

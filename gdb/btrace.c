@@ -1244,6 +1244,58 @@ handle_pt_insn_events (struct btrace_thread_info *btinfo,
 		   bfun->insn_offset - 1, offset);
 
 	  break;
+
+	case ptev_ptwrite:
+	  {
+	    uint64_t *ip = nullptr;
+	    gdb::unique_xmalloc_ptr<char> ptw_string = nullptr;
+	    struct btrace_insn ptw_insn;
+
+	    /* Lookup the ip if available.  */
+	    if (event.ip_suppressed == 0)
+	      ip = &event.variant.ptwrite.ip;
+	    else if (!btinfo->functions.empty ()
+		  && !btinfo->functions.back ().insn.empty ())
+	      ip = &btinfo->functions.back ().insn.back ().pc;
+
+	    try
+	      {
+		if (btinfo->ptw_callback_fun != nullptr)
+		  ptw_string = btinfo->ptw_callback_fun (
+					  &event.variant.ptwrite.payload, ip,
+					  btinfo->ptw_listener);
+	      }
+	    catch (const gdb_exception_error &error)
+	      {
+		warning (_("Failed to call ptwrite listener."));
+	      }
+
+	    if (ptw_string == nullptr)
+	      break;
+
+	    btinfo->aux_data.emplace_back (ptw_string.get ());
+
+	    /* Update insn list with ptw payload insn.  */
+	    ptw_insn.aux_data_index = btinfo->aux_data.size () - 1;
+	    ptw_insn.flags = 0;
+	    ptw_insn.iclass = BTRACE_INSN_AUX;
+	    ptw_insn.size = 0;
+
+	    if (ip != nullptr)
+	      bfun = ftrace_update_function (btinfo, *ip);
+	    else
+	      {
+		if (btinfo->functions.empty ())
+		  bfun = ftrace_new_function (btinfo, NULL, NULL);
+		else
+		  bfun = &btinfo->functions.back ();
+	      }
+
+	    bfun->flags |= BFUN_AUX_DECODED;
+	    ftrace_update_insns (bfun, ptw_insn);
+
+	    break;
+	  }
 	}
     }
 #endif /* defined (HAVE_PT_INSN_EVENT) */

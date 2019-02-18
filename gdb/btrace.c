@@ -42,6 +42,7 @@
 #include <inttypes.h>
 #include <ctype.h>
 #include <algorithm>
+#include <string>
 
 /* Command lists for btrace maintenance commands.  */
 static struct cmd_list_element *maint_btrace_cmdlist;
@@ -1252,6 +1253,57 @@ handle_pt_insn_events (struct btrace_thread_info *btinfo,
 		   bfun->insn_offset - 1, offset);
 
 	  break;
+#if defined (HAVE_STRUCT_PT_EVENT_VARIANT_PTWRITE)
+	case ptev_ptwrite:
+	  {
+	    uint64_t ip = 0;
+	    gdb::optional<std::string> ptw_string;
+	    btrace_insn_flags flags = 0;
+
+	    /* Lookup the ip if available.  */
+	    if (event.ip_suppressed == 0)
+	      ip = event.variant.ptwrite.ip;
+
+	    if (btinfo->ptw_callback_fun != nullptr)
+	      ptw_string
+		= btinfo->ptw_callback_fun (event.variant.ptwrite.payload,
+					    ip, btinfo->ptw_context);
+
+	    if (ptw_string.has_value () && (*ptw_string).empty ())
+	      continue;
+
+	    if (!ptw_string.has_value ())
+	      *ptw_string = hex_string (event.variant.ptwrite.payload);
+
+	    btinfo->aux_data.emplace_back (std::move (*ptw_string));
+
+	    if (!btinfo->functions.empty ()
+		&& !btinfo->functions.back ().insn.empty ())
+	      flags = btinfo->functions.back ().insn.back ().flags;
+
+	    /* Update insn list with ptw payload insn.  */
+	    struct btrace_insn ptw_insn;
+	    ptw_insn.aux_data_index = btinfo->aux_data.size () - 1;
+	    ptw_insn.size = 0;
+	    ptw_insn.iclass = BTRACE_INSN_AUX;
+	    ptw_insn.flags = flags;
+
+	    if (ip != 0)
+	      bfun = ftrace_update_function (btinfo, ip);
+	    else
+	      {
+		if (btinfo->functions.empty ())
+		  bfun = ftrace_new_function (btinfo, NULL, NULL);
+		else
+		  bfun = &btinfo->functions.back ();
+	      }
+
+	    bfun->flags |= BFUN_CONTAINS_AUX;
+	    ftrace_update_insns (bfun, ptw_insn);
+
+	    break;
+	  }
+#endif /* defined (HAVE_STRUCT_PT_EVENT_VARIANT_PTWRITE) */
 	}
     }
 #endif /* defined (HAVE_PT_INSN_EVENT) */

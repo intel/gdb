@@ -1823,6 +1823,8 @@ btrace_clear_history (struct btrace_thread_info *btinfo)
   btinfo->insn_history = NULL;
   btinfo->call_history = NULL;
   btinfo->replay = NULL;
+
+  btinfo->aux_data.clear ();
 }
 
 /* Clear the branch trace maintenance histories in BTINFO.  */

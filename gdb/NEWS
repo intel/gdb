@@ -176,6 +176,12 @@ BPF				bpf-unknown-none
 
 *** Changes in GDB 9
 
+* GDB now supports printing of ptwrite payloads from the Intel Processor
+  Trace during 'record instruction-history', 'record  function-call-history',
+  all stepping commands and in  Python.  Printing is customizable via a
+  ptwrite listener function in  Python.  By default, the raw ptwrite
+  payload is printed for each ptwrite that is encountered.
+
 * 'thread-exited' event is now available in the annotations interface.
 
 * New built-in convenience variables $_gdb_major and $_gdb_minor

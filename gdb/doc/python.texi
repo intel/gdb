@@ -6019,6 +6019,7 @@ registering objfile-specific pretty-printers and frame-filters.
 * gdb.printing::       Building and registering pretty-printers.
 * gdb.types::          Utilities for working with types.
 * gdb.prompt::         Utilities for prompt value substitution.
+* gdb.ptwrite::        Utilities for ptwrite listener registration.
 @end menu
 
 @node gdb.printing
@@ -6209,3 +6210,113 @@ substitute_prompt ("frame: \f, args: \p@{print frame-arguments@}")
 "frame: main, args: scalars"
 @end smallexample
 @end table
+
+@node gdb.ptwrite
+@subsubsection gdb.ptwrite
+@cindex gdb.ptwrite
+
+This module provides additional functionality for recording programs that make
+use of the PTWRITE instruction. PTWRITE is a x86 instruction that allows to
+write values into the Intel Processor Trace (@pxref{Process Record and Replay}).
+The @value{NGCC} built-in functions for it are:
+@smallexample
+void __builtin_ia32_ptwrite32 (unsigned)
+void __builtin_ia32_ptwrite64 (unsigned long long)
+@end smallexample
+
+If an inferior uses the instruction, @value{GDBN} inserts the raw payload value
+as auxiliary information into the execution history.  Auxiliary information
+is by default printed during 'record instruction-history',
+'record function-call-history' and all stepping commands and is accessible
+in Python as a @code{RecordAuxiliary} object. 
+
+@exdent Sample program:
+@smallexample
+void
+ptwrite64 (unsigned long long value)
+@{
+  __builtin_ia32_ptwrite64 (value);
+@}
+
+int
+main (void)
+@{
+  ptwrite64 (0x42);
+  return 0; /* break here.  */
+@}
+@end smallexample
+
+@exdent @value{GDBN} output after recording the sample program in pt format:
+@smallexample
+(gdb) record instruction-history 12,14
+12         0x000000000040074c <ptwrite64+16>:	ptwrite %rbx
+13         [payload: 0x42]
+14         0x0000000000400751 <ptwrite64+21>:	mov    -0x8(%rbp),%rbx
+(gdb) record function-call-history
+1       main
+2       ptwrite64
+                [payload: 0x42]
+3       main
+@end smallexample
+
+The @code{gdb.ptwrite} module allows customizing the default output of ptwrite
+auxiliary information. A custom Python function can be registered via
+@code{gdb.ptwrite.register_listener()} as the @dfn{ptwrite listener function}.
+This function will be called with the ptwrite payload and IP as arguments
+during trace decoding.
+
+@table @code
+
+@item register_listener (@var{listener})
+Used to register the ptwrite listener.  The listener can be any callable
+object that accepts two arguments.   It can return a string, which will be
+printed by @value{GDBN} during the aforementioned commands, or @code{None},
+resulting in no output.  @code{None} can also be registered to deactivate
+printing.
+
+@item get_listener ()
+Returns the currently active ptwrite listener function.
+
+@item default_listener (@var{payload}, @var{ip})
+The listener function active by default.
+@end table
+
+When recording multithreaded programs, @value{GDBN} creates a new copy of the
+listener function for each thread to allow for independent internal states.
+There is currently no support for registering different listeners for different
+threads. The listener can however distinguish between multiple threads
+with the help of @code{gdb.selected_thread().global_num} or similar.
+
+@exdent For example:
+@smallexample
+(gdb) python-interactive
+>>> def my_listener(payload, ip):
+...     if gdb.selected_thread().global_num == 1:
+...         return "payload: @{0@}, ip: @{:#x@}".format(payload, ip)
+...     else:
+...         return None
+...
+>>> import gdb.ptwrite
+>>> gdb.ptwrite.register_listener(my_listener)
+>>>
+(gdb) record instruction-history 127,129
+127	   0x000000000040116c <ptwrite32(unsigned int)+13>:	ptwrite %ebx
+128        [payload: 4919, ip: 0x40074c]
+129	   0x0000000000401170 <ptwrite32(unsigned int)+17>:	nop
+(gdb) info threads 
+* 1    Thread 0x7ffff7fd8740 (LWP 25796) "ptwrite_threads" task (arg=0x0)
+    at bin/ptwrite/ptwrite_threads.c:45
+  2    Thread 0x7ffff6eb8700 (LWP 25797) "ptwrite_threads" task (arg=0x0)
+    at bin/ptwrite/ptwrite_threads.c:45
+(gdb) thread 2
+[Switching to thread 2 (Thread 0x7ffff6eb8700 (LWP 25797))]
+#0  task (arg=0x0) at ptwrite_threads.c:45
+45	  return NULL;
+(gdb) record instruction-history 1753,1755
+1753	   0x000000000040116c <ptwrite32(unsigned int)+13>:	ptwrite %ebx
+1754	   0x0000000000401170 <ptwrite32(unsigned int)+17>:	nop
+1755	   0x0000000000401171 <ptwrite32(unsigned int)+18>:	pop    %rbx
+@end smallexample
+
+This GDB feature is dependent on hardware and operating system support and
+requires the Intel Processor Trace decoder library in version 2.0.0 or newer.

@@ -41,6 +41,7 @@
 #include <inttypes.h>
 #include <ctype.h>
 #include <algorithm>
+#include <string>
 
 /* Command lists for btrace maintenance commands.  */
 static struct cmd_list_element *maint_btrace_cmdlist;
@@ -1205,6 +1206,24 @@ pt_btrace_insn (const struct pt_insn &insn)
 	  pt_btrace_insn_flags (insn)};
 }
 
+#if defined (HAVE_PT_INSN_EVENT)
+/* Helper for events that will result in an aux_insn.  */
+
+static void
+handle_pt_aux_insn (btrace_thread_info *btinfo, btrace_function *bfun,
+		    std::string &aux_str, CORE_ADDR ip)
+{
+  btinfo->aux_data.emplace_back (std::move (aux_str));
+  bfun = ftrace_update_function (btinfo, ip);
+
+  btrace_insn insn {btinfo->aux_data.size () - 1, 0,
+		    BTRACE_INSN_AUX, 0};
+
+  ftrace_update_insns (bfun, insn);
+}
+
+#endif /* defined (HAVE_PT_INSN_EVENT) */
+
 /* Handle instruction decode events (libipt-v2).  */
 
 static int
@@ -1253,6 +1272,32 @@ handle_pt_insn_events (struct btrace_thread_info *btinfo,
 		   bfun->insn_offset - 1, offset);
 
 	  break;
+#if defined (HAVE_STRUCT_PT_EVENT_VARIANT_PTWRITE)
+	case ptev_ptwrite:
+	  {
+	    uint64_t ip = 0;
+	    std::optional<std::string> ptw_string;
+
+	    /* Lookup the ip if available.  */
+	    if (event.ip_suppressed == 0)
+	      ip = event.variant.ptwrite.ip;
+
+	    if (btinfo->ptw_callback_fun != nullptr)
+	      ptw_string
+		= btinfo->ptw_callback_fun (event.variant.ptwrite.payload,
+					    ip, btinfo->ptw_context);
+
+	    if (ptw_string.has_value () && (*ptw_string).empty ())
+	      continue;
+
+	    if (!ptw_string.has_value ())
+	      *ptw_string = hex_string (event.variant.ptwrite.payload);
+
+	    handle_pt_aux_insn (btinfo, bfun, *ptw_string, ip);
+
+	    break;
+	  }
+#endif /* defined (HAVE_STRUCT_PT_EVENT_VARIANT_PTWRITE) */
 	}
     }
 #endif /* defined (HAVE_PT_INSN_EVENT) */

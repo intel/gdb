@@ -151,10 +151,11 @@ btrace_func_from_recpy_func (const PyObject * const pyobject)
 }
 
 /* Looks at the recorded item with the number NUMBER and create a
-   gdb.RecordInstruction or gdb.RecordGap object for it accordingly.  */
+   gdb.RecordInstruction, gdb.RecordGap or gdb.RecordAuxiliary object
+   for it accordingly.  */
 
 static PyObject *
-btpy_insn_or_gap_new (thread_info *tinfo, Py_ssize_t number)
+btpy_item_new (thread_info *tinfo, Py_ssize_t number)
 {
   btrace_insn_iterator iter;
   int err_code;
@@ -172,6 +173,15 @@ btpy_insn_or_gap_new (thread_info *tinfo, Py_ssize_t number)
 
       return recpy_gap_new (err_code, err_string, number);
     }
+
+  const struct btrace_insn *insn = btrace_insn_get (&iter);
+
+  if (insn == nullptr)
+    return nullptr;
+
+  if (insn->iclass == BTRACE_INSN_AUX)
+    return recpy_aux_new (iter.btinfo->aux_data[insn->aux_data_index].c_str (),
+			  number);
 
   return recpy_insn_new (tinfo, RECORD_METHOD_BTRACE, number);
 }
@@ -471,7 +481,7 @@ btpy_list_item (PyObject *self, Py_ssize_t index)
   number = obj->first + (obj->step * index);
 
   if (obj->element_type == &recpy_insn_type)
-    return recpy_insn_new (obj->thread, RECORD_METHOD_BTRACE, number);
+    return btpy_item_new (obj->thread, number);
   else
     return recpy_func_new (obj->thread, RECORD_METHOD_BTRACE, number);
 }
@@ -659,8 +669,7 @@ recpy_bt_replay_position (PyObject *self, void *closure)
   if (tinfo->btrace.replay == NULL)
     Py_RETURN_NONE;
 
-  return btpy_insn_or_gap_new (tinfo,
-			       btrace_insn_number (tinfo->btrace.replay));
+  return btpy_item_new (tinfo, btrace_insn_number (tinfo->btrace.replay));
 }
 
 /* Implementation of
@@ -682,7 +691,7 @@ recpy_bt_begin (PyObject *self, void *closure)
     Py_RETURN_NONE;
 
   btrace_insn_begin (&iterator, &tinfo->btrace);
-  return btpy_insn_or_gap_new (tinfo, btrace_insn_number (&iterator));
+  return btpy_item_new (tinfo, btrace_insn_number (&iterator));
 }
 
 /* Implementation of
@@ -704,7 +713,7 @@ recpy_bt_end (PyObject *self, void *closure)
     Py_RETURN_NONE;
 
   btrace_insn_end (&iterator, &tinfo->btrace);
-  return btpy_insn_or_gap_new (tinfo, btrace_insn_number (&iterator));
+  return btpy_item_new (tinfo, btrace_insn_number (&iterator));
 }
 
 /* Implementation of

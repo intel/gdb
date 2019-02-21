@@ -49,6 +49,12 @@ PyTypeObject recpy_gap_type = {
   PyVarObject_HEAD_INIT (NULL, 0)
 };
 
+/* Python RecordAuxiliary type.  */
+
+PyTypeObject recpy_aux_type = {
+  PyVarObject_HEAD_INIT (NULL, 0)
+};
+
 /* Python RecordGap object.  */
 typedef struct
 {
@@ -63,6 +69,18 @@ typedef struct
   /* Element number.  */
   Py_ssize_t number;
 } recpy_gap_object;
+
+/* Python RecordAuxiliary object.  */
+typedef struct
+{
+  PyObject_HEAD
+
+  /* Auxiliary data.  */
+  const char *data;
+
+  /* Element number.  */
+  Py_ssize_t number;
+} recpy_aux_object;
 
 /* Implementation of record.method.  */
 
@@ -477,6 +495,43 @@ recpy_gap_reason_string (PyObject *self, void *closure)
   return PyString_FromString (obj->reason_string);
 }
 
+/* Create a new gdb.Auxiliary object.  */
+
+PyObject *
+recpy_aux_new (const char *data, Py_ssize_t number)
+{
+  recpy_aux_object * const obj = PyObject_New (recpy_aux_object,
+					       &recpy_aux_type);
+
+  if (obj == NULL)
+   return NULL;
+
+  obj->data = data;
+  obj->number = number;
+
+  return (PyObject *) obj;
+}
+
+/* Implementation of Auxiliary.number [int].  */
+
+static PyObject *
+recpy_aux_number (PyObject *self, void *closure)
+{
+  const recpy_aux_object * const obj = (const recpy_aux_object *) self;
+
+  return PyInt_FromSsize_t (obj->number);
+}
+
+/* Implementation of Auxiliary.data [str].  */
+
+static PyObject *
+recpy_aux_data (PyObject *self, void *closure)
+{
+  const recpy_aux_object * const obj = (const recpy_aux_object *) self;
+
+  return PyString_FromString (obj->data);
+}
+
 /* Record method list.  */
 
 static PyMethodDef recpy_record_methods[] = {
@@ -542,6 +597,14 @@ static gdb_PyGetSetDef recpy_gap_getset[] = {
   { NULL }
 };
 
+/* RecordAuxiliary member list.  */
+
+static gdb_PyGetSetDef recpy_aux_getset[] = {
+  { "number", recpy_aux_number, NULL, "element number", NULL},
+  { "data", recpy_aux_data, NULL, "data", NULL},
+  { NULL }
+};
+
 /* Sets up the record API in the gdb module.  */
 
 int
@@ -581,10 +644,18 @@ gdbpy_initialize_record (void)
   recpy_gap_type.tp_doc = "GDB recorded gap object";
   recpy_gap_type.tp_getset = recpy_gap_getset;
 
+  recpy_aux_type.tp_new = PyType_GenericNew;
+  recpy_aux_type.tp_flags = Py_TPFLAGS_DEFAULT;
+  recpy_aux_type.tp_basicsize = sizeof (recpy_aux_object);
+  recpy_aux_type.tp_name = "gdb.RecordAuxiliary";
+  recpy_aux_type.tp_doc = "GDB recorded auxiliary object";
+  recpy_aux_type.tp_getset = recpy_aux_getset;
+
   if (PyType_Ready (&recpy_record_type) < 0
       || PyType_Ready (&recpy_insn_type) < 0
       || PyType_Ready (&recpy_func_type) < 0
-      || PyType_Ready (&recpy_gap_type) < 0)
+      || PyType_Ready (&recpy_gap_type) < 0
+      || PyType_Ready (&recpy_aux_type) < 0)
     return -1;
   else
     return 0;

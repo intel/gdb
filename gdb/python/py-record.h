@@ -71,4 +71,7 @@ extern PyObject *recpy_func_new (thread_info *thread, enum record_method method,
 extern PyObject *recpy_gap_new (int reason_code, const char *reason_string,
 				Py_ssize_t number);
 
+/* Create a new gdb.RecordGap object.  */
+extern PyObject *recpy_aux_new (const char *data, Py_ssize_t number);
+
 #endif /* PYTHON_PY_RECORD_H */

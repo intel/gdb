@@ -79,20 +79,6 @@ with_test_prefix "replay end" {
     gdb_test "python print(r.replay_position)" "None"
 }
 
-with_test_prefix "instruction " {
-    gdb_test "python print(i.number)" "1"
-    gdb_test "python print(i.sal)" "symbol and line for .*"
-    gdb_test "python print(i.pc)" "$decimal"
-    if { $gdb_py_is_py3k == 0 } {
-	gdb_test "python print(repr(i.data))" "<read-only buffer for $hex,.*>"
-    } else {
-	gdb_test "python print(repr(i.data))" "<memory at $hex>"
-    }
-    gdb_test "python print(i.decoded)" ".*"
-    gdb_test "python print(i.size)" "$decimal"
-    gdb_test "python print(i.is_speculative)" "False"
-}
-
 with_test_prefix "function call" {
     gdb_test "python print(c.number)" "1"
     gdb_test "python print(c.symbol)" "main"
@@ -134,6 +120,25 @@ with_test_prefix "sublist" {
     gdb_test "python print(s4\[-5\].number)" "5"
     gdb_test "python print(s4\[100\].number)" ".*IndexError.*"
     gdb_test "python print(s4\[-101\].number)" ".*IndexError.*"
+}
+
+
+with_test_prefix "instruction " {
+    gdb_test "python print(i.number)" "1"
+    gdb_test "python print(i.sal)" "symbol and line for .*"
+    gdb_test "python print(i.pc)" "$decimal"
+    if { $gdb_py_is_py3k == 0 } {
+	gdb_test "python print(repr(i.data))" "<read-only buffer for $hex,.*>"
+    } else {
+	gdb_test "python print(repr(i.data))" "<memory at $hex>"
+    }
+    gdb_test "python print(i.decoded)" ".*"
+    gdb_test "python print(i.size)" "$decimal" "print first size"
+    gdb_test "python print(i.is_speculative)" "False"
+    gdb_test_no_output "python gdb.current_recording().clear_trace()"
+    gdb_test "python insn = r.instruction_history"
+    gdb_test_no_output "python i = insn\[0\]"
+    gdb_test "python print(i.size)" "$decimal" "print second size"
 }
 
 with_test_prefix "level" {

@@ -8,6 +8,11 @@
 maint jit dump
   Dump an in-memory JIT object into a file.
 
+* Python API
+
+  ** Added gdb.record.clear(). Clears the trace data of the current recording.
+     This forces re-decoding of the trace for successive commands.
+
 *** Changes in GDB 14
 
 * GDB now supports the AArch64 Scalable Matrix Extension 2 (SME2), which

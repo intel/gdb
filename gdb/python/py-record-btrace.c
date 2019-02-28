@@ -774,6 +774,68 @@ recpy_bt_function_call_history (PyObject *self, void *closure)
   return btpy_list_new (tinfo, first, last, 1, &recpy_func_type);
 }
 
+/* Calling the ptwrite listener.  Returns a pointer to the string that will be
+   printed or nullptr if nothing should be printed.  */
+gdb::unique_xmalloc_ptr<char>
+recpy_call_listener (const uint64_t *payload, const uint64_t *ip,
+		     const void *ptw_listener)
+{
+  if ((PyObject *) ptw_listener == Py_None)
+    return nullptr;
+  else if ((PyObject *) ptw_listener == nullptr)
+    error (_("No valid ptwrite listener."));
+
+  /* As Python is started as a seperate thread, we need to
+     acquire the GIL to safely call the listener function.  */
+  PyGILState_STATE gstate = PyGILState_Ensure ();
+
+  PyObject *py_ip = Py_None;
+  PyObject *py_payload = PyLong_FromUnsignedLongLong (*payload);
+  Py_INCREF (Py_None);
+
+  if (ip != nullptr)
+    py_ip = PyLong_FromUnsignedLongLong (*ip);
+
+  PyObject *py_result = PyObject_CallFunctionObjArgs ((PyObject *) ptw_listener,
+						      py_payload, py_ip, NULL);
+
+  if (PyErr_Occurred ())
+    {
+      gdbpy_print_stack ();
+      gdb_Py_DECREF (py_ip);
+      gdb_Py_DECREF (py_payload);
+      gdb_Py_DECREF (py_result);
+      PyGILState_Release (gstate);
+      error (_("Error while executing Python code."));
+    }
+
+  gdb_Py_DECREF (py_ip);
+  gdb_Py_DECREF (py_payload);
+
+  if (py_result == Py_None)
+    {
+      gdb_Py_DECREF (py_result);
+      PyGILState_Release (gstate);
+      return nullptr;
+    }
+
+  gdb::unique_xmalloc_ptr<char> resultstring = gdbpy_obj_to_string (py_result);
+
+  if (PyErr_Occurred ())
+    {
+      gdbpy_print_stack ();
+      gdb_Py_DECREF (py_result);
+      PyGILState_Release (gstate);
+      error (_("Error while executing Python code."));
+    }
+
+  if (py_result != nullptr)
+    gdb_Py_DECREF (py_result);
+  PyGILState_Release (gstate);
+
+  return resultstring;
+}
+
 /* Helper function returning the current ptwrite listener.  Returns nullptr
    in case of errors.  */
 
@@ -808,6 +870,7 @@ recpy_initialize_listener (ptid_t inferior_ptid)
   process_stratum_target *proc_target = current_inferior ()->process_target ();
   struct thread_info * const tinfo = find_thread_ptid (proc_target, inferior_ptid);
 
+  tinfo->btrace.ptw_callback_fun = &recpy_call_listener;
   tinfo->btrace.ptw_listener = get_ptwrite_listener ();
 
   return (PyObject *) tinfo->btrace.ptw_listener;

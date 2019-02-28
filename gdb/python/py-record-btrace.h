@@ -97,4 +97,9 @@ extern PyObject *recpy_initialize_listener (ptid_t inferior_ptid);
 /* Helper function returning the current ptwrite listener.  */
 extern PyObject *get_ptwrite_listener ();
 
+/* Callback function for the ptwrite listener.  */
+extern gdb::unique_xmalloc_ptr<char>
+recpy_call_listener (const uint64_t *payload, const uint64_t *ip,
+                     const void *ptw_listener);
+
 #endif /* PYTHON_PY_RECORD_BTRACE_H */

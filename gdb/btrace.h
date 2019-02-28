@@ -351,6 +351,14 @@ struct btrace_thread_info
      stepping through the execution history.  */
   std::vector<std::string> aux_data;
 
+  /* Function pointer to the ptwrite callback.  Returns the string returned
+     by the ptwrite listener function or nullptr if no string is supposed to
+     be printed.  */
+  gdb::unique_xmalloc_ptr<char> (*ptw_callback_fun) (
+						const uint64_t *payload,
+						const uint64_t *ip,
+						const void *ptw_listener);
+
   /* PyObject pointer to the ptwrite listener function.  */
   void *ptw_listener = nullptr;
 

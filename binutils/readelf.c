@@ -2932,7 +2932,7 @@ get_machine_name (unsigned e_machine)
       /* 180 */
     case EM_L1OM:		return "Intel L1OM";
     case EM_K1OM:		return "Intel K1OM";
-    case EM_INTEL182:		return "Intel (reserved)";
+    case EM_INTEL_GEN:		return "Intel Graphics Technology";
     case EM_AARCH64:		return "AArch64";
     case EM_ARM184:		return "ARM (reserved)";
     case EM_AVR32:		return "Atmel Corporation 32-bit microprocessor";

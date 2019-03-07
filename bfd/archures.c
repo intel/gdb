@@ -403,6 +403,8 @@ DESCRIPTION
 .  bfd_arch_ia64,      {* HP/Intel ia64.  *}
 .#define bfd_mach_ia64_elf64	64
 .#define bfd_mach_ia64_elf32	32
+.  bfd_arch_intelgt,   {* Intel(R) Graphics Technology.  *}
+.#define bfd_mach_intelgt	9
 .  bfd_arch_ip2k,      {* Ubicom IP2K microcontrollers. *}
 .#define bfd_mach_ip2022	1
 .#define bfd_mach_ip2022ext	2
@@ -630,6 +632,7 @@ extern const bfd_arch_info_type bfd_hppa_arch;
 extern const bfd_arch_info_type bfd_i386_arch;
 extern const bfd_arch_info_type bfd_iamcu_arch;
 extern const bfd_arch_info_type bfd_ia64_arch;
+extern const bfd_arch_info_type bfd_intelgt_arch;
 extern const bfd_arch_info_type bfd_ip2k_arch;
 extern const bfd_arch_info_type bfd_iq2000_arch;
 extern const bfd_arch_info_type bfd_k1om_arch;
@@ -719,6 +722,7 @@ static const bfd_arch_info_type * const bfd_archures_list[] =
     &bfd_i386_arch,
     &bfd_iamcu_arch,
     &bfd_ia64_arch,
+    &bfd_intelgt_arch,
     &bfd_ip2k_arch,
     &bfd_iq2000_arch,
     &bfd_k1om_arch,

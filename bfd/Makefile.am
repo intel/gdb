@@ -119,6 +119,7 @@ ALL_MACHINES = \
 	cpu-i386.lo \
 	cpu-ia64.lo \
 	cpu-iamcu.lo \
+	cpu-intelgt.lo \
 	cpu-ip2k.lo \
 	cpu-iq2000.lo \
 	cpu-kvx.lo \
@@ -203,6 +204,7 @@ ALL_MACHINES_CFILES = \
 	cpu-i386.c \
 	cpu-ia64.c \
 	cpu-iamcu.c \
+	cpu-intelgt.c \
 	cpu-ip2k.c \
 	cpu-iq2000.c \
 	cpu-kvx.c \

@@ -1783,6 +1783,8 @@ enum bfd_architecture
   bfd_arch_ia64,      /* HP/Intel ia64.  */
 #define bfd_mach_ia64_elf64    64
 #define bfd_mach_ia64_elf32    32
+  bfd_arch_intelgt,   /* Intel(R) Graphics Technology.  */
+#define bfd_mach_intelgt       9
   bfd_arch_ip2k,      /* Ubicom IP2K microcontrollers. */
 #define bfd_mach_ip2022        1
 #define bfd_mach_ip2022ext     2

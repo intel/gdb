@@ -121,6 +121,7 @@ ALL_MACHINES = \
 	cpu-l1om.lo \
 	cpu-k1om.lo \
 	cpu-ia64.lo \
+	cpu-intelgt.lo \
 	cpu-ip2k.lo \
 	cpu-iq2000.lo \
 	cpu-lm32.lo \
@@ -207,6 +208,7 @@ ALL_MACHINES_CFILES = \
 	cpu-l1om.c \
 	cpu-k1om.c \
 	cpu-ia64.c \
+	cpu-intelgt.c \
 	cpu-ip2k.c \
 	cpu-iq2000.c \
 	cpu-lm32.c \

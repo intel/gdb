@@ -574,6 +574,7 @@ ALL_MACHINES = \
 	cpu-i386.lo \
 	cpu-ia64.lo \
 	cpu-iamcu.lo \
+	cpu-intelgt.lo \
 	cpu-ip2k.lo \
 	cpu-iq2000.lo \
 	cpu-kvx.lo \
@@ -658,6 +659,7 @@ ALL_MACHINES_CFILES = \
 	cpu-i386.c \
 	cpu-ia64.c \
 	cpu-iamcu.c \
+	cpu-intelgt.c \
 	cpu-ip2k.c \
 	cpu-iq2000.c \
 	cpu-kvx.c \
@@ -1017,6 +1019,7 @@ BFD64_BACKENDS = \
 	elf64-hppa.lo \
 	elf64-ia64-vms.lo \
 	elf64-ia64.lo \
+	elf64-intelgt-legacy.lo \
 	elf64-kvx.lo \
 	elf64-loongarch.lo \
 	elf64-mips.lo \
@@ -1488,6 +1491,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cpu-i386.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cpu-ia64.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cpu-iamcu.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cpu-intelgt.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cpu-ip2k.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cpu-iq2000.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cpu-kvx.Plo@am__quote@

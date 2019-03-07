@@ -417,6 +417,8 @@ ia64-*-*vms*)		targ_emul=elf64_ia64_vms
 			;;
 ia64-*-aix*)		targ_emul=elf64_aix
 			;;
+intelgt-*-elf)		targ_emul=elf_x86_64
+			;;
 ip2k-*-elf)		targ_emul=elf32ip2k
 			;;
 iq2000-*-elf)		targ_emul=elf32iq2000

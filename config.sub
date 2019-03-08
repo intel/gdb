@@ -1321,6 +1321,7 @@ case $cpu-$vendor in
 			| i960 \
 			| ia16 \
 			| ia64 \
+			| intelgt \
 			| ip2k \
 			| iq2000 \
 			| javascript \

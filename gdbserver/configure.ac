@@ -381,6 +381,24 @@ if test "$srv_libs" != "" -a "$srv_libs" != "-ldl"; then
   AC_DEFINE(USE_LIBTHREAD_DB_DIRECTLY, 1, [Define if we should use libthread_db directly.])
 fi
 
+# Check for Intel(R) Graphics Technology debug library
+AC_LIB_HAVE_LINKFLAGS([igfxdbg], [], [#include "igfxdbg.h"],
+  [igfxdbg_SetOption ("anOption", "aValue"); ],)
+
+case "${target}" in
+  intelgt-*)
+    if test "$HAVE_LIBIGFXDBG" != yes; then
+      AC_MSG_ERROR([libigfxdbg is missing or unusable])
+    fi
+    ;;
+  *)
+    # Do not link libigfxdbg spuriously
+    HAVE_LIBIGFXDBG=no
+    LIBIGFXDBG=
+    LTLIBIGFXDBG=
+    ;;
+esac
+
 if test "$srv_xmlfiles" != ""; then
   srv_xmlbuiltin="xml-builtin.o"
   AC_DEFINE(USE_XML, 1, [Define if an XML target description is available.])

@@ -143,6 +143,9 @@
 /* Define if you have the ipt library. */
 #undef HAVE_LIBIPT
 
+/* Define if you have the igfxdbg library. */
+#undef HAVE_LIBIGFXDBG
+
 /* Define if the target supports branch tracing. */
 #undef HAVE_LINUX_BTRACE
 

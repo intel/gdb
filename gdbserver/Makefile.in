@@ -111,6 +111,10 @@ GDBSUPPORT = $(GDBSUPPORT_BUILDDIR)/libgdbsupport.a
 ustlibs = @ustlibs@
 ustinc = @ustinc@
 
+# Where is libigfxdbg (i.e.  the debug lib for the intelgt target)?
+# This will be empty if libigfxdbg was not available.
+LIBIGFXDBG = @LIBIGFXDBG@
+
 # gnulib
 GNULIB_BUILDDIR = ../gnulib
 LIBGNU = $(GNULIB_BUILDDIR)/import/libgnu.a
@@ -357,7 +361,7 @@ gdbserver$(EXEEXT): $(sort $(OBS)) ${CDEPS} $(LIBGNU) $(LIBIBERTY) \
 	$(ECHO_CXXLD) $(CC_LD) $(INTERNAL_CFLAGS) $(INTERNAL_LDFLAGS) \
 		-o gdbserver$(EXEEXT) $(OBS) $(GDBSUPPORT) $(LIBGNU) \
 		$(LIBIBERTY) $(INTL) $(GDBSERVER_LIBS) $(XM_CLIBS) \
-		$(WIN32APILIBS)
+		$(WIN32APILIBS) $(LIBIGFXDBG)
 
 gdbreplay$(EXEEXT): $(sort $(GDBREPLAY_OBS)) $(LIBGNU) $(LIBIBERTY) \
 		$(INTL_DEPS) $(GDBSUPPORT)

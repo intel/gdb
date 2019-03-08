@@ -120,6 +120,10 @@ case "${gdbserver_host}" in
 			srv_tgtobj="$srv_linux_obj linux-ia64-low.o"
 			srv_linux_usrregs=yes
 			;;
+  intelgt-*-elf)	srv_regobj=""
+			srv_xmlfiles="intelgt-grf.xml intelgt-arf9.xml"
+			srv_tgtobj="intelgt-low.o"
+			;;
   m68*-*-linux*)	if test "$gdb_cv_m68k_is_coldfire" = yes; then
                           srv_regobj=reg-cf.o
                         else

@@ -13,6 +13,9 @@ show suppress-cli-notifications
   the program being debugged stops (e.g., because of hitting a
   breakpoint, completing source-stepping, an interrupt, etc.).
 
+maint jit dump
+  Dump an in-memory JIT object into a file.
+
 *** Changes in GDB 11
 
 * The 'set disassembler-options' command now supports specifying options

@@ -124,7 +124,8 @@ selftest_skip_warning_arch (struct gdbarch *gdbarch)
      that seems more trouble than it's worth.  */
   return (strcmp (name, "m68hc11") == 0
 	  || strcmp (name, "m68hc12") == 0
-	  || strcmp (name, "m68hc12:HCS12") == 0);
+	  || strcmp (name, "m68hc12:HCS12") == 0
+	  || strcmp (name, "intelgt") == 0);
 }
 
 } /* namespace selftests */

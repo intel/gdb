@@ -1,6 +1,13 @@
 		What has changed in GDB?
 	     (Organized release by release)
 
+*** Changes since GDB 17
+
+* New commands
+
+maint jit dump
+  Dump an in-memory JIT object into a file.
+
 *** Changes in GDB 17
 
 * Debugging Linux programs that use x86-64 or x86-64 with 32-bit pointer

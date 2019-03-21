@@ -111,6 +111,9 @@ maintenance print core-file-backed-mappings
   Prints file-backed mappings loaded from a core file's note section.
   Output is expected to be similar to that of "info proc mappings".
 
+maint jit dump
+  Dump an in-memory JIT object into a file.
+
 * Changed commands
 
 alias [-a] [--] ALIAS = COMMAND [DEFAULT-ARGS...]

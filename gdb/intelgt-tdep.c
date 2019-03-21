@@ -1,0 +1,1037 @@
+/* Target-dependent code for the Intel(R) Graphics Technology architecture.
+
+   Copyright (C) 2019-2020 Free Software Foundation, Inc.
+
+   This file is part of GDB.
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+
+#include "defs.h"
+#include "arch-utils.h"
+#include "arch/intelgt.h"
+#include "dwarf2/frame.h"
+#include "extract-store-integer.h"
+#include "frame-unwind.h"
+#include "cli/cli-cmds.h"
+#include "gdbsupport/gdb_obstack.h"
+#include "target.h"
+#include "target-descriptions.h"
+#include "value.h"
+#include "disasm.h"
+#if defined (HAVE_LIBIGA64)
+#include "iga/iga.h"
+#endif /* defined (HAVE_LIBIGA64)  */
+#include "gdbthread.h"
+#include "inferior.h"
+#include "user-regs.h"
+#include "objfiles.h"
+#include "block.h"
+#include "elf-bfd.h"
+#include <algorithm>
+
+/* Global debug flag.  */
+static bool intelgt_debug = false;
+
+#define dprintf(...)						\
+  do								\
+    {								\
+      if (intelgt_debug)					\
+	{							\
+	  gdb_printf (gdb_stdlog, "%s: ", __func__);		\
+	  gdb_printf (gdb_stdlog, __VA_ARGS__);			\
+	  gdb_printf (gdb_stdlog, "\n");			\
+	}							\
+    }								\
+  while (0)
+
+/* Regnum pair describing the assigned regnum range for a single
+   regset.  */
+
+struct regnum_range
+{
+  int start;
+  int end;
+};
+
+/* Helper functions to request and translate the device id/version.  */
+
+static uint32_t get_device_id (inferior *inferior);
+static uint32_t get_device_id (gdbarch *gdbarch);
+
+/* The 'gdbarch_data' stuff specific for this architecture.  */
+
+struct intelgt_gdbarch_data
+{
+  /* $r0 GRF register number.  */
+  int r0_regnum = -1;
+  /* $ce register number in the regcache.  */
+  int ce_regnum = -1;
+  /* Register number for the GRF containing function return value.  */
+  int retval_regnum = -1;
+  /* Register number for the control register.  */
+  int cr0_regnum = -1;
+  /* Register number for the state register.  */
+  int sr0_regnum = -1;
+  /* Register number for the instruction base virtual register.  */
+  int isabase_regnum = -1;
+  /* Register number for the general state base SBA register.  */
+  int genstbase_regnum = -1;
+  /* Register number for the DBG0 register.  */
+  int dbg0_regnum = -1;
+  /* Assigned regnum ranges for DWARF regsets.  */
+  regnum_range regset_ranges[intelgt::regset_count];
+  /* Enabled pseudo-register for the current target description.  */
+  std::vector<std::string> enabled_pseudo_regs;
+  /* Cached $framedesc pseudo-register type.  */
+  type *framedesc_type = nullptr;
+
+  /* Initialize ranges to -1 as "not-yet-set" indicator.  */
+  intelgt_gdbarch_data ()
+  {
+    memset (&regset_ranges, -1, sizeof regset_ranges);
+  }
+
+  /* Return regnum where frame descriptors are stored.  */
+
+  int
+  framedesc_base_regnum ()
+  {
+    /* For EM_INTELGT frame descriptors are stored at MAX_GRF - 1.  */
+    gdb_assert (regset_ranges[intelgt::regset_grf].end > 1);
+    return regset_ranges[intelgt::regset_grf].end - 1;
+  }
+
+#if defined (HAVE_LIBIGA64)
+  /* libiga context for disassembly.  */
+  iga_context_t iga_ctx = nullptr;
+#endif
+};
+
+static const registry<gdbarch>::key<intelgt_gdbarch_data>
+    intelgt_gdbarch_data_handle;
+
+static intelgt_gdbarch_data *
+get_intelgt_gdbarch_data (gdbarch *gdbarch)
+{
+  intelgt_gdbarch_data *result = intelgt_gdbarch_data_handle.get (gdbarch);
+  if (result == nullptr)
+    result = intelgt_gdbarch_data_handle.emplace (gdbarch);
+  return result;
+}
+
+/* Per-inferior cached data for the Intelgt target.  */
+
+struct intelgt_inferior_data
+{
+  /* Device target id.  */
+  uint32_t device_id = 0u;
+};
+
+static const registry<inferior>::key<intelgt_inferior_data>
+  intelgt_inferior_data_handle;
+
+/* Fetch the per-inferior data.  */
+
+static intelgt_inferior_data *
+get_intelgt_inferior_data (inferior *inf)
+{
+  intelgt_inferior_data *inf_data = intelgt_inferior_data_handle.get (inf);
+  if (inf_data == nullptr)
+    inf_data = intelgt_inferior_data_handle.emplace (inf);
+
+  return inf_data;
+}
+
+/* The 'register_type' gdbarch method.  */
+
+static type *
+intelgt_register_type (gdbarch *gdbarch, int regno)
+{
+  type *typ = tdesc_register_type (gdbarch, regno);
+  return typ;
+}
+
+/* Read part of REGNUM at OFFSET into BUFFER.  The length of data to
+   read is SIZE.  Consider using this helper function when reading
+   subregisters of CR0, SR0, and R0.  */
+
+static void
+intelgt_read_register_part (readable_regcache *regcache, int regnum,
+			    size_t offset, size_t size, gdb_byte *buffer,
+			    const char *error_message)
+{
+  if (regnum == -1)
+    error (_("%s  Unexpected reg num '-1'."), error_message);
+
+  gdbarch *arch = regcache->arch ();
+  const char *regname = gdbarch_register_name (arch, regnum);
+  int regsize = register_size (arch, regnum);
+
+  if (offset + size > regsize)
+    error (_("%s[%ld:%ld] is outside the range of %s[%d:0]."),
+	   regname, (offset + size - 1), offset, regname, (regsize - 1));
+
+  register_status reg_status
+    = regcache->cooked_read_part (regnum, offset, size, buffer);
+
+  if (reg_status == REG_UNAVAILABLE)
+    throw_error (NOT_AVAILABLE_ERROR,
+		 _("%s  Register %s (%d) is not available."),
+		 error_message, regname, regnum);
+
+  if (reg_status == REG_UNKNOWN)
+    error (_("%s  Register %s (%d) is unknown."), error_message,
+	   regname, regnum);
+}
+
+static int
+intelgt_pseudo_register_num (gdbarch *arch, const char *name);
+
+/* Convert a DWARF register number to a GDB register number.  This
+   function requires for the register listing in the target
+   description to be in the same order in each regeset as the
+   intended DWARF numbering order.  Currently this is always
+   holds true when gdbserver generates the target description.  */
+
+static int
+intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
+{
+  constexpr int ip = 0;
+  constexpr int ce = 1;
+
+  /* Register sets follow this format: [BEGIN, END), where BEGIN is inclusive
+     and END is exclusive.  */
+  constexpr regnum_range dwarf_nums[intelgt::regset_count] = {
+    [intelgt::regset_sba] = { 5, 12 },
+    [intelgt::regset_grf] = { 16, 272 },
+    [intelgt::regset_addr] = { 272, 288 },
+    [intelgt::regset_flag] = { 288, 304 },
+    [intelgt::regset_acc] = { 304, 320 },
+    [intelgt::regset_mme] = { 320, 336 },
+  };
+
+  /* Number of SBA registers.  */
+  constexpr size_t sba_dwarf_len = dwarf_nums[intelgt::regset_sba].end
+    - dwarf_nums[intelgt::regset_sba].start;
+
+  /* Map the DWARF register numbers of SBA registers to their names.
+     Base number is dwarf_nums[intelgt::regset_sba].start.  */
+  constexpr const char* sba_dwarf_reg_order[sba_dwarf_len] {
+    "btbase",
+    "scrbase0",
+    "genstbase",
+    "sustbase",
+    "blsustbase",
+    "blsastbase",
+    "scrbase1"
+  };
+
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+  if (num == ip)
+    return intelgt_pseudo_register_num (gdbarch, "ip");
+  if (num == ce)
+    return data->ce_regnum;
+
+  for (int regset = 0; regset < intelgt::regset_count; ++regset)
+    if (num >= dwarf_nums[regset].start && num < dwarf_nums[regset].end)
+      {
+	if (regset == intelgt::regset_sba)
+	  {
+	    /* For SBA registers we first find out the name of the register
+	       out of DWARF register number and then find the register number
+	       corresponding to the name.  */
+	    int sba_num = num - dwarf_nums[intelgt::regset_sba].start;
+	    const char* name = sba_dwarf_reg_order [sba_num];
+
+	    return user_reg_map_name_to_regnum (gdbarch, name, -1);
+	  }
+	else
+	  {
+	    int candidate = data->regset_ranges[regset].start + num
+	      - dwarf_nums[regset].start;
+
+	    if (candidate < data->regset_ranges[regset].end)
+	      return candidate;
+	  }
+      }
+
+  return -1;
+}
+
+/* Return active lanes mask for the specified thread TP.  */
+
+static unsigned int
+intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp,
+			   frame_info_ptr frame)
+{
+  gdb_assert (!tp->executing ());
+
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+  /* Default to zero if the CE register is not available.  This may
+     happen if TP is not available.  */
+  ULONGEST ce = (data->ce_regnum != -1)
+		  ? get_frame_register_unsigned (frame, data->ce_regnum)
+		  : 0ull;
+
+  /* The higher bits of CE are undefined if they are outside the
+     dispatch mask range.  Clear them explicitly using the dispatch
+     mask, which is at SR0.2.  SR0 elements are 4 byte wide.  */
+  uint32_t sr0_2 = 0;
+  thread_regcache->raw_read_part (data->sr0_regnum, sizeof (uint32_t) * 2,
+				  sizeof (sr0_2), (gdb_byte *) &sr0_2);
+
+  dprintf ("ce: %lx, dmask: %x", ce, sr0_2);
+
+  return ce & sr0_2;
+}
+
+/* Return the PC of the first real instruction.  */
+
+static CORE_ADDR
+intelgt_skip_prologue (gdbarch *gdbarch, CORE_ADDR start_pc)
+{
+  dprintf ("start_pc: %lx", start_pc);
+  CORE_ADDR func_addr;
+
+  if (find_pc_partial_function (start_pc, nullptr, &func_addr, nullptr))
+    {
+      CORE_ADDR post_prologue_pc
+       = skip_prologue_using_sal (gdbarch, func_addr);
+
+      dprintf ("post prologue pc: %lx", post_prologue_pc);
+
+      if (post_prologue_pc != 0)
+       return std::max (start_pc, post_prologue_pc);
+    }
+
+  /* Could not find the end of prologue using SAL.  */
+  return start_pc;
+}
+
+/* Implementation of gdbarch's return_value_as_value method.  */
+
+static enum return_value_convention
+intelgt_return_value_as_value (gdbarch *gdbarch, value *function,
+			       type *valtype, regcache *regcache,
+			       value **read_value, const gdb_byte *writebuf)
+{
+  error ("intelgt target does not implement return value yet");
+}
+
+/* Callback function to unwind the $framedesc register.  */
+
+static value *
+intelgt_dwarf2_prev_framedesc (const frame_info_ptr &this_frame,
+			       void **this_cache, int regnum)
+{
+  gdbarch *gdbarch = get_frame_arch (this_frame);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+  int actual_regnum = data->framedesc_base_regnum ();
+
+  /* Unwind the actual GRF register.  */
+  return frame_unwind_register_value (this_frame, actual_regnum);
+}
+
+static void
+intelgt_init_reg (gdbarch *gdbarch, int regnum, dwarf2_frame_state_reg *reg,
+		  const frame_info_ptr &this_frame)
+{
+  int ip_regnum = intelgt_pseudo_register_num (gdbarch, "ip");
+  int framedesc_regnum = intelgt_pseudo_register_num (gdbarch, "framedesc");
+
+  if (regnum == ip_regnum)
+    reg->how = DWARF2_FRAME_REG_RA;
+  else if (regnum == gdbarch_sp_regnum (gdbarch))
+    reg->how = DWARF2_FRAME_REG_CFA;
+  /* We use special functions to unwind the $framedesc register.  */
+  else if (regnum == framedesc_regnum)
+    {
+      reg->how = DWARF2_FRAME_REG_FN;
+      reg->loc.fn = intelgt_dwarf2_prev_framedesc;
+    }
+}
+
+/* A helper function that returns the value of the ISABASE register.  */
+
+static CORE_ADDR
+intelgt_get_isabase (readable_regcache *regcache)
+{
+  gdbarch *gdbarch = regcache->arch ();
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  gdb_assert (data->isabase_regnum != -1);
+
+  uint64_t isabase = 0;
+  if (regcache->cooked_read (data->isabase_regnum, &isabase) != REG_VALID)
+    throw_error (NOT_AVAILABLE_ERROR,
+		 _("Register %d (isabase) is not available"),
+		 data->isabase_regnum);
+  return isabase;
+}
+
+/* The 'unwind_pc' gdbarch method.  */
+
+static CORE_ADDR
+intelgt_unwind_pc (gdbarch *gdbarch, const frame_info_ptr &next_frame)
+{
+  /* Use ip register here, as IGC uses 32bit values (pc is 64bit).  */
+  int ip_regnum = intelgt_pseudo_register_num (gdbarch, "ip");
+  CORE_ADDR prev_ip = frame_unwind_register_unsigned (next_frame,
+                                                      ip_regnum);
+  dprintf ("prev_ip: %lx", prev_ip);
+
+  /* Program counter is $ip + $isabase.  Read directly from the
+     regcache instead of unwinding, as the frame unwind info may
+     simply be unavailable.  The isabase register does not change
+     during kernel execution, so this must be safe.  */
+  regcache *regcache = get_thread_regcache (inferior_thread ());
+  CORE_ADDR isabase = intelgt_get_isabase (regcache);
+
+  return isabase + prev_ip;
+}
+
+/* Frame unwinding.  */
+
+static void
+intelgt_frame_this_id (const frame_info_ptr &this_frame,
+		       void **this_prologue_cache,
+		       frame_id *this_id)
+{
+  /* FIXME: Assembly-level unwinding for intelgt is not available at
+     the moment.  Stop at the first frame.  */
+  *this_id = outer_frame_id;
+}
+
+static const struct frame_unwind intelgt_unwinder =
+  {
+    "intelgt prologue",
+    NORMAL_FRAME,			/* type */
+    default_frame_unwind_stop_reason,	/* stop_reason */
+    intelgt_frame_this_id,		/* this_id */
+    nullptr,				/* prev_register */
+    nullptr,				/* unwind_data */
+    default_frame_sniffer,		/* sniffer */
+    nullptr,				/* dealloc_cache */
+  };
+
+
+/* The memory_insert_breakpoint gdbarch method.  */
+
+static int
+intelgt_memory_insert_breakpoint (gdbarch *gdbarch, struct bp_target_info *bp)
+{
+  dprintf ("req ip: %s", paddress (gdbarch, bp->reqstd_address));
+
+  /* Ensure that we have enough space in the breakpoint.  */
+  static_assert (intelgt::MAX_INST_LENGTH <= BREAKPOINT_MAX);
+
+  gdb_byte inst[intelgt::MAX_INST_LENGTH];
+  int err = target_read_memory (bp->reqstd_address, inst,
+				intelgt::MAX_INST_LENGTH);
+  if (err != 0)
+    {
+      /* We could fall back to reading a full and then a compacted
+	 instruction but I think we should rather allow short reads than
+	 having the caller try smaller and smaller sizes.  */
+      dprintf ("Failed to read memory at %s (%s).",
+	       paddress (gdbarch, bp->reqstd_address), strerror (err));
+      return err;
+    }
+
+  bp->placed_address = bp->reqstd_address;
+  bp->shadow_len = intelgt::inst_length (inst);
+
+  /* Make a copy before we set the breakpoint so we can restore the
+     original instruction when removing the breakpoint again.
+
+     This isn't strictly necessary but it saves one target access.  */
+  memcpy (bp->shadow_contents, inst, bp->shadow_len);
+
+  const bool already = intelgt::set_breakpoint (inst);
+  if (already)
+    {
+      /* Warn if the breakpoint bit is already set.
+
+	 There is still a breakpoint, probably hard-coded, and it should
+	 still trigger and we're still able to step over it.  It's just
+	 not our breakpoint.  */
+      warning (_("Using permanent breakpoint at %s."),
+	       paddress (gdbarch, bp->placed_address));
+
+      /* There's no need to write the unmodified instruction back.  */
+      return 0;
+    }
+
+  err = target_write_raw_memory (bp->placed_address, inst, bp->shadow_len);
+  if (err != 0)
+    dprintf ("Failed to insert breakpoint at %s (%s).",
+	     paddress (gdbarch, bp->placed_address), strerror (err));
+
+  return err;
+}
+
+/* The memory_remove_breakpoint gdbarch method.  */
+
+static int
+intelgt_memory_remove_breakpoint (gdbarch *gdbarch, struct bp_target_info *bp)
+{
+  dprintf ("req ip: %s, placed ip: %s",
+	   paddress (gdbarch, bp->reqstd_address),
+	   paddress (gdbarch, bp->placed_address));
+
+  /* Warn if we're inserting a permanent breakpoint.  */
+  if (intelgt::has_breakpoint (bp->shadow_contents))
+    warning (_("Re-inserting permanent breakpoint at %s."),
+	     paddress (gdbarch, bp->placed_address));
+
+  /* See comment in mem-break.c on write_inferior_memory.  */
+  int err = target_write_raw_memory (bp->placed_address, bp->shadow_contents,
+				     bp->shadow_len);
+  if (err != 0)
+    dprintf ("Failed to remove breakpoint at %s (%s).",
+	     paddress (gdbarch, bp->placed_address), strerror (err));
+
+  return err;
+}
+
+/* The program_breakpoint_here_p gdbarch method.  */
+
+static bool
+intelgt_program_breakpoint_here_p (gdbarch *gdbarch, CORE_ADDR pc)
+{
+  dprintf ("pc: %s", paddress (gdbarch, pc));
+
+  gdb_byte inst[intelgt::MAX_INST_LENGTH];
+  int err = target_read_memory (pc, inst, intelgt::MAX_INST_LENGTH);
+  if (err != 0)
+    {
+      /* We could fall back to reading a full and then a compacted
+	 instruction but I think we should rather allow short reads than
+	 having the caller try smaller and smaller sizes.  */
+      dprintf ("Failed to read memory at %s (%s).",
+	       paddress (gdbarch, pc), strerror (err));
+      return err;
+    }
+
+  const bool is_bkpt = intelgt::has_breakpoint (inst);
+
+  dprintf ("%sbreakpoint found.", is_bkpt ? "" : "no ");
+
+  return is_bkpt;
+}
+
+/* The 'breakpoint_kind_from_pc' gdbarch method.
+   This is a required gdbarch function.  */
+
+static int
+intelgt_breakpoint_kind_from_pc (gdbarch *gdbarch, CORE_ADDR *pcptr)
+{
+  dprintf ("*pcptr: %lx", *pcptr);
+
+  return intelgt::BP_INSTRUCTION;
+}
+
+/* The 'sw_breakpoint_from_kind' gdbarch method.  */
+
+static const gdb_byte *
+intelgt_sw_breakpoint_from_kind (gdbarch *gdbarch, int kind, int *size)
+{
+  dprintf ("kind: %d", kind);
+
+  /* We do not support breakpoint instructions.
+
+     We use breakpoint bits in instructions, instead.  See
+     intelgt_memory_insert_breakpoint.  */
+  *size = 0;
+  return nullptr;
+}
+
+#if defined (HAVE_LIBIGA64)
+/* Map CORE_ADDR to symbol names for jump labels in an IGA disassembly.  */
+
+static const char *
+intelgt_disasm_sym_cb (int addr, void *ctx)
+{
+  disassemble_info *info = (disassemble_info *) ctx;
+  symbol *sym = find_pc_function (addr + (uintptr_t) info->private_data);
+  return sym ? sym->linkage_name () : nullptr;
+}
+#endif /* defined (HAVE_LIBIGA64)  */
+
+/* Print one instruction from MEMADDR on INFO->STREAM.  */
+
+static int
+intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
+{
+  unsigned int full_length = intelgt::inst_length_full ();
+  unsigned int compact_length = intelgt::inst_length_compacted ();
+
+  std::unique_ptr<bfd_byte[]> insn (new bfd_byte[full_length]);
+
+  int status = (*info->read_memory_func) (memaddr, insn.get (),
+					  compact_length, info);
+  if (status != 0)
+    {
+      /* Aborts disassembling with a memory_error exception.  */
+      (*info->memory_error_func) (status, memaddr, info);
+      return -1;
+    }
+  if (!intelgt::is_compacted_inst ((gdb_byte *) insn.get ()))
+    {
+      status = (*info->read_memory_func) (memaddr, insn.get (),
+					  full_length, info);
+      if (status != 0)
+	{
+	  /* Aborts disassembling with a memory_error exception.  */
+	  (*info->memory_error_func) (status, memaddr, info);
+	  return -1;
+	}
+    }
+
+#if defined (HAVE_LIBIGA64)
+  char *dbuf;
+  iga_disassemble_options_t dopts = IGA_DISASSEMBLE_OPTIONS_INIT ();
+  gdb_disassemble_info *di
+    = static_cast<gdb_disassemble_info *>(info->application_data);
+  struct gdbarch *gdbarch = di->arch ();
+
+  iga_context_t iga_ctx
+    = get_intelgt_gdbarch_data (gdbarch)->iga_ctx;
+  iga_status_t iga_status
+    = iga_context_disassemble_instruction (iga_ctx, &dopts, insn.get (),
+					   intelgt_disasm_sym_cb,
+					   info, &dbuf);
+  if (iga_status != IGA_SUCCESS)
+    return -1;
+
+  (*info->fprintf_func) (info->stream, "%s", dbuf);
+
+  if (intelgt::is_compacted_inst ((gdb_byte *) insn.get ()))
+    return compact_length;
+  else
+    return full_length;
+#else
+  gdb_printf (_("\nDisassemble feature not available: libiga64 "
+		"is missing.\n"));
+  return -1;
+#endif /* defined (HAVE_LIBIGA64)  */
+}
+
+/* Utility function to lookup the pseudo-register number by name.  Exact
+   amount of pseudo-registers may differ and thus fixed constants can't be
+   used for this.  */
+
+static int
+intelgt_pseudo_register_num (gdbarch *arch, const char *name)
+{
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  auto iter = std::find (data->enabled_pseudo_regs.begin (),
+			 data->enabled_pseudo_regs.end (), name);
+  gdb_assert (iter != data->enabled_pseudo_regs.end ());
+  return gdbarch_num_regs (arch) + (iter - data->enabled_pseudo_regs.begin ());
+}
+
+static CORE_ADDR
+intelgt_read_pc (readable_regcache *regcache)
+{
+  gdbarch *arch = regcache->arch ();
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+  /* Instruction pointer is stored in CR0.2.  */
+  uint32_t ip;
+  intelgt_read_register_part (regcache, data->cr0_regnum,
+			      sizeof (uint32_t) * 2, sizeof (uint32_t),
+			      (gdb_byte *) &ip, _("Cannot compute PC."));
+
+  /* Program counter is $ip + $isabase.  */
+  CORE_ADDR isabase = intelgt_get_isabase (regcache);
+  return isabase + ip;
+}
+
+static void
+intelgt_write_pc (struct regcache *regcache, CORE_ADDR pc)
+{
+  gdbarch *arch = regcache->arch ();
+  /* Program counter is $ip + $isabase, can only modify $ip.  Need
+     to ensure that the new value fits within $ip modification range
+     and propagate the write accordingly.  */
+  CORE_ADDR isabase = intelgt_get_isabase (regcache);
+  if (pc < isabase || pc > isabase + UINT32_MAX)
+    error ("Can't update $pc to value 0x%lx, out of range", pc);
+
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+  /* Instruction pointer is stored in CR0.2.  */
+  uint32_t ip = pc - isabase;
+  regcache->cooked_write_part (data->cr0_regnum, sizeof (uint32_t) * 2,
+			       sizeof (uint32_t), (gdb_byte *) &ip);
+}
+
+/* Return the name of pseudo-register REGNUM.  */
+
+static const char *
+intelgt_pseudo_register_name (gdbarch *arch, int regnum)
+{
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  int base_num = gdbarch_num_regs (arch);
+  if (regnum < base_num
+      || regnum >= base_num + data->enabled_pseudo_regs.size ())
+    error ("Invalid pseudo-register regnum %d", regnum);
+  return data->enabled_pseudo_regs[regnum - base_num].c_str ();
+}
+
+/* Return the GDB type object for the "standard" data type of data in
+   pseudo-register REGNUM.  */
+
+static type *
+intelgt_pseudo_register_type (gdbarch *arch, int regnum)
+{
+  const char *name = intelgt_pseudo_register_name (arch, regnum);
+  const struct builtin_type *bt = builtin_type (arch);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+  if (strcmp (name, "framedesc") == 0)
+    {
+      if (data->framedesc_type != nullptr)
+	return data->framedesc_type;
+      type *frame = arch_composite_type (arch, "frame_desc", TYPE_CODE_STRUCT);
+      append_composite_type_field (frame, "return_ip", bt->builtin_uint32);
+      append_composite_type_field (frame, "return_callmask",
+				   bt->builtin_uint32);
+      append_composite_type_field (frame, "be_sp", bt->builtin_uint32);
+      append_composite_type_field (frame, "be_fp", bt->builtin_uint32);
+      append_composite_type_field (frame, "fe_fp", bt->builtin_uint64);
+      append_composite_type_field (frame, "fe_sp", bt->builtin_uint64);
+      data->framedesc_type = frame;
+      return frame;
+    }
+  else if (strcmp (name, "ip") == 0)
+    return bt->builtin_uint32;
+
+  return nullptr;
+}
+
+/* Read the value of a pseudo-register REGNUM.  */
+
+static struct value *
+intelgt_pseudo_register_read_value (gdbarch *arch,
+				    const frame_info_ptr &next_frame,
+				    int pseudo_regnum)
+{
+  const char *name = intelgt_pseudo_register_name (arch, pseudo_regnum);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+  if (strcmp (name, "framedesc") == 0)
+    {
+      int grf_num = data->framedesc_base_regnum ();
+      return pseudo_from_raw_part (next_frame, pseudo_regnum, grf_num, 0);
+    }
+  else if (strcmp (name, "ip") == 0)
+    {
+      int regsize = register_size (arch, pseudo_regnum);
+      /* Instruction pointer is stored in CR0.2.  */
+      gdb_assert (data->cr0_regnum != -1);
+      /* CR0 elements are 4 byte wide.  */
+      gdb_assert (regsize + 8 <= register_size (arch, data->cr0_regnum));
+
+      return pseudo_from_raw_part (next_frame, pseudo_regnum,
+				   data->cr0_regnum, 8);
+    }
+
+  return nullptr;
+}
+
+/* Write the value of a pseudo-register REGNUM.  */
+
+static void
+intelgt_pseudo_register_write (gdbarch *arch,
+			       const frame_info_ptr &next_frame,
+			       int pseudo_regnum,
+			       gdb::array_view<const gdb_byte> buf)
+{
+  const char *name = intelgt_pseudo_register_name (arch, pseudo_regnum);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+  if (strcmp (name, "framedesc") == 0)
+    {
+      int grf_num = data->framedesc_base_regnum ();
+      int grf_size = register_size (arch, grf_num);
+      int desc_size = register_size (arch, pseudo_regnum);
+      gdb_assert (grf_size >= desc_size);
+      pseudo_to_raw_part (next_frame, buf, grf_num, 0);
+    }
+  else if (strcmp (name, "ip") == 0)
+    {
+      /* Instruction pointer is stored in CR0.2.  */
+      gdb_assert (data->cr0_regnum != -1);
+      int cr0_size = register_size (arch, data->cr0_regnum);
+
+      /* CR0 elements are 4 byte wide.  */
+      int reg_size = register_size (arch, pseudo_regnum);
+      gdb_assert (reg_size + 8 <= cr0_size);
+      pseudo_to_raw_part (next_frame, buf, data->cr0_regnum, 8);
+    }
+  else
+    error ("Pseudo-register %s is read-only", name);
+}
+
+/* Called by tdesc_use_registers each time a new regnum
+   is assigned.  Used to track down assigned numbers for
+   any important regnums.  */
+
+static int
+intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
+			     const char *reg_name, int possible_regnum)
+{
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+  /* First, check if this a beginning of a not yet tracked regset
+     assignment.  */
+
+  for (int regset = 0; regset < intelgt::regset_count; ++regset)
+    {
+      if (data->regset_ranges[regset].start == -1
+	  && feature->name == intelgt::dwarf_regset_features[regset])
+	{
+	  data->regset_ranges[regset].start = possible_regnum;
+	  data->regset_ranges[regset].end
+	      = feature->registers.size () + possible_regnum;
+	  break;
+	}
+    }
+
+  /* Second, check if it is any specific individual register that
+     needs to be tracked.  */
+
+  if (strcmp ("r0", reg_name) == 0)
+    data->r0_regnum = possible_regnum;
+  else if (strcmp ("r26", reg_name) == 0)
+    data->retval_regnum = possible_regnum;
+  else if (strcmp ("cr0", reg_name) == 0)
+    data->cr0_regnum = possible_regnum;
+  else if (strcmp ("sr0", reg_name) == 0)
+    data->sr0_regnum = possible_regnum;
+  else if (strcmp ("isabase", reg_name) == 0)
+    data->isabase_regnum = possible_regnum;
+  else if (strcmp ("ce", reg_name) == 0)
+    data->ce_regnum = possible_regnum;
+  else if (strcmp ("genstbase", reg_name) == 0)
+    data->genstbase_regnum = possible_regnum;
+  else if (strcmp ("dbg0", reg_name) == 0)
+    data->dbg0_regnum = possible_regnum;
+
+  return possible_regnum;
+}
+
+/* Helper function to return the device id using the inferior.  */
+
+[[maybe_unused]]
+static uint32_t
+get_device_id (inferior *inferior)
+{
+  intelgt_inferior_data *inf_data = get_intelgt_inferior_data (inferior);
+  if (inf_data->device_id == 0u)
+    inf_data->device_id = get_device_id (inferior->arch ());
+
+  return inf_data->device_id;
+}
+
+/* Helper function to return the device id using GDBARCH.  */
+
+static uint32_t
+get_device_id (gdbarch *gdbarch)
+{
+  const target_desc *tdesc = gdbarch_target_desc (gdbarch);
+  const tdesc_device *device_info = tdesc_device_info (tdesc);
+  if (!device_info->target_id.has_value ())
+    error (_("A target id for the device is required."));
+
+  return *device_info->target_id;
+}
+
+/* Architecture initialization.  */
+
+static gdbarch *
+intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
+{
+  /* If there is already a candidate, use it.  */
+  arches = gdbarch_list_lookup_by_info (arches, &info);
+  if (arches != nullptr)
+    return arches->gdbarch;
+
+  const target_desc *tdesc = info.target_desc;
+  gdbarch *gdbarch = gdbarch_alloc (&info, nullptr);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+#if defined (HAVE_LIBIGA64)
+  iga_gen_t iga_version = IGA_GEN_INVALID;
+
+  if (tdesc != nullptr)
+    {
+      const tdesc_device *device_info = tdesc_device_info (tdesc);
+      if (!(device_info->vendor_id.has_value ()
+	    && device_info->target_id.has_value ()))
+	{
+	  warning (_("Device vendor id and target id not found."));
+	  gdbarch_free (gdbarch);
+	  return nullptr;
+	}
+
+      uint32_t vendor_id = *device_info->vendor_id;
+      uint32_t device_id = *device_info->target_id;
+      if (vendor_id != 0x8086)
+	{
+	  warning (_("Device not recognized: vendor id=0x%04x,"
+		     " device id=0x%04x"), vendor_id, device_id);
+	  gdbarch_free (gdbarch);
+	  return nullptr;
+	}
+      else
+	{
+	  iga_version = (iga_gen_t) intelgt::get_xe_version (device_id);
+	  if (iga_version == IGA_GEN_INVALID)
+	    warning (_("Intel GT device id is unrecognized: ID 0x%04x"),
+		     device_id);
+	}
+    }
+
+  /* Take the best guess in case IGA_VERSION is still invalid.  */
+  if (iga_version == IGA_GEN_INVALID)
+    iga_version = IGA_XE_HPC;
+
+  const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);
+  iga_context_create (&options, &data->iga_ctx);
+#endif
+
+  /* Initialize register info.  */
+  set_gdbarch_num_regs (gdbarch, 0);
+  set_gdbarch_register_name (gdbarch, tdesc_register_name);
+
+  if (tdesc_has_registers (tdesc))
+    {
+      tdesc_arch_data_up tdesc_data = tdesc_data_alloc ();
+
+      /* First assign register numbers to all registers.  The
+	 callback function will record any relevant metadata
+	 about it in the intelgt_gdbarch_data instance to be
+	 inspected after.  */
+
+      tdesc_use_registers (gdbarch, tdesc, std::move (tdesc_data),
+			   intelgt_unknown_register_cb);
+
+      /* Now check the collected metadata to ensure that all
+	 mandatory pieces are in place.  */
+
+      if (data->ce_regnum == -1)
+	error ("Debugging requires $ce provided by the target");
+      if (data->retval_regnum == -1)
+	error ("Debugging requires return value register to be provided by "
+	       "the target");
+      if (data->cr0_regnum == -1)
+	error ("Debugging requires control register to be provided by "
+	       "the target");
+      if (data->sr0_regnum == -1)
+	error ("Debugging requires state register to be provided by "
+	       "the target");
+
+      /* Unconditionally enabled pseudo-registers:  */
+      data->enabled_pseudo_regs.push_back ("ip");
+      data->enabled_pseudo_regs.push_back ("framedesc");
+
+      set_gdbarch_num_pseudo_regs (gdbarch, data->enabled_pseudo_regs.size ());
+      set_gdbarch_pseudo_register_read_value (
+	  gdbarch, intelgt_pseudo_register_read_value);
+      set_gdbarch_pseudo_register_write (gdbarch,
+					 intelgt_pseudo_register_write);
+      set_tdesc_pseudo_register_type (gdbarch, intelgt_pseudo_register_type);
+      set_tdesc_pseudo_register_name (gdbarch, intelgt_pseudo_register_name);
+      set_gdbarch_read_pc (gdbarch, intelgt_read_pc);
+      set_gdbarch_write_pc (gdbarch, intelgt_write_pc);
+    }
+
+  /* Populate gdbarch fields.  */
+  set_gdbarch_ptr_bit (gdbarch, 64);
+  set_gdbarch_addr_bit (gdbarch, 64);
+
+  set_gdbarch_register_type (gdbarch, intelgt_register_type);
+  set_gdbarch_dwarf2_reg_to_regnum (gdbarch, intelgt_dwarf_reg_to_regnum);
+
+  set_gdbarch_skip_prologue (gdbarch, intelgt_skip_prologue);
+  set_gdbarch_inner_than (gdbarch, core_addr_greaterthan);
+  set_gdbarch_unwind_pc (gdbarch, intelgt_unwind_pc);
+  dwarf2_append_unwinders (gdbarch);
+  frame_unwind_append_unwinder (gdbarch, &intelgt_unwinder);
+
+  set_gdbarch_return_value_as_value (gdbarch, intelgt_return_value_as_value);
+
+  set_gdbarch_memory_insert_breakpoint (gdbarch,
+					intelgt_memory_insert_breakpoint);
+  set_gdbarch_memory_remove_breakpoint (gdbarch,
+					intelgt_memory_remove_breakpoint);
+  set_gdbarch_program_breakpoint_here_p (gdbarch,
+					 intelgt_program_breakpoint_here_p);
+  set_gdbarch_breakpoint_kind_from_pc (gdbarch,
+				       intelgt_breakpoint_kind_from_pc);
+  set_gdbarch_sw_breakpoint_from_kind (gdbarch,
+				       intelgt_sw_breakpoint_from_kind);
+  dwarf2_frame_set_init_reg (gdbarch, intelgt_init_reg);
+
+  /* Disassembly.  */
+  set_gdbarch_print_insn (gdbarch, intelgt_print_insn);
+
+  set_gdbarch_active_lanes_mask (gdbarch, &intelgt_active_lanes_mask);
+
+#if defined (USE_WIN32API)
+  set_gdbarch_has_dos_based_file_system (gdbarch, 1);
+#endif
+
+  return gdbarch;
+}
+
+/* Dump the target specific data for this architecture.  */
+
+static void
+intelgt_dump_tdep (gdbarch *gdbarch, ui_file *file)
+{
+  /* Implement target-specific print output if and
+     when gdbarch_tdep is defined for this architecture.  */
+}
+
+static void
+show_intelgt_debug (ui_file *file, int from_tty,
+		    cmd_list_element *c, const char *value)
+{
+  gdb_printf (file, _("Intel(R) Graphics Technology debugging is "
+		      "%s.\n"), value);
+}
+
+void _initialize_intelgt_tdep ();
+void
+_initialize_intelgt_tdep ()
+{
+  gdbarch_register (bfd_arch_intelgt, intelgt_gdbarch_init,
+		    intelgt_dump_tdep);
+
+  /* Debugging flag.  */
+  add_setshow_boolean_cmd ("intelgt", class_maintenance, &intelgt_debug,
+			   _("Set Intel(R) Graphics Technology debugging."),
+			   _("Show Intel(R) Graphics Technology debugging."),
+			   _("When on, Intel(R) Graphics Technology debugging"
+			     "is enabled."),
+			   nullptr,
+			   show_intelgt_debug,
+			   &setdebuglist, &showdebuglist);
+}

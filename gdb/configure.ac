@@ -1292,6 +1292,58 @@ fi
 AC_SUBST(SRCHIGH_LIBS)
 AC_SUBST(SRCHIGH_CFLAGS)
 
+# Check for Intel(R) Graphics Technology assembler library
+intelgt_target=false
+
+for targ_alias in `echo $target_alias $enable_targets | sed 's/,/ /g'`
+do
+  if test "$targ_alias" = "all"; then
+    intelgt_target=true
+  else
+    case "$targ_alias" in
+      intelgt-*)
+        intelgt_target=true
+        ;;
+    esac
+  fi
+done
+
+case "${target}" in
+  intelgt-*)
+    intelgt_target=true
+    ;;
+esac
+
+if test "${intelgt_target}" != true; then
+  HAVE_LIBIGA64=no
+else
+  AC_ARG_WITH(libiga64,
+    AS_HELP_STRING([--with-libiga64], [include IntelGT disassembly support (auto/yes/no)]),
+    [], [with_libiga64=auto])
+  AC_MSG_CHECKING([whether to use libiga64])
+  AC_MSG_RESULT([$with_libiga64])
+
+  if test "${with_libiga64}" = no; then
+    AC_MSG_WARN([IntelGT disassembly support disabled; some features may be unavailable.])
+    HAVE_LIBIGA64=no
+  else
+    AC_LANG_PUSH([C++])
+    AC_LIB_HAVE_LINKFLAGS([iga64], [],
+      [#include "assert.h"
+       #include "iga/iga.h"],
+      [iga_version_string();])
+    AC_LANG_POP([C++])
+
+    if test "$HAVE_LIBIGA64" != yes; then
+      if test "$with_libiga64" = yes; then
+        AC_MSG_ERROR([libiga64 is missing or unusable])
+      else
+        AC_MSG_WARN([libiga64 is missing or unusable; some features may be unavailable.])
+      fi
+    fi
+  fi
+fi
+
 # ------------------------- #
 # Checks for header files.  #
 # ------------------------- #

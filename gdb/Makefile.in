@@ -702,9 +702,11 @@ ALL_64_TARGET_OBS = \
 	arch/aarch64-insn.o \
 	arch/aarch64-mte-linux.o \
 	arch/amd64.o \
+	arch/intelgt.o \
 	ia64-linux-tdep.o \
 	ia64-tdep.o \
 	ia64-vms-tdep.o \
+	intelgt-tdep.o \
 	mips64-obsd-tdep.o \
 	sparc64-fbsd-tdep.o \
 	sparc64-linux-tdep.o \

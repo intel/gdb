@@ -335,6 +335,11 @@ ia64-*-*vms*)
 	gdb_target_obs="ia64-vms-tdep.o"
 	;;
 
+intelgt-*-elf)
+	# Target: Intel(R) Graphics Technology graphics processor
+	gdb_target_obs="intelgt-tdep.o arch/intelgt.o"
+	;;
+
 iq2000-*-*)
 	gdb_target_obs="iq2000-tdep.o"
 	gdb_sim=../sim/iq2000/libsim.a

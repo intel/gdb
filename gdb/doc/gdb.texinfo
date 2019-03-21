@@ -42048,6 +42048,11 @@ Ignoring SystemTap probe libc longjmp in /lib64/libc.so.6.^M
 Ignoring SystemTap probe libc longjmp in /lib64/libc.so.6.^M
 Ignoring SystemTap probe libc longjmp in /lib64/libc.so.6.^M
 @end smallexample
+
+@kindex maint jit dump
+@item maint jit dump @var{addr} @var{filename}
+Dump the in-memory JIT object containing  @var{addr} into  @var{filename}.
+
 @end table
 
 The following command is useful for non-interactive invocations of

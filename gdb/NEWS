@@ -10,6 +10,11 @@ qXfer:threads:read
   should print as the target ID of the thread, for example in the
   "info threads" command or when switching to the thread.
 
+* New commands
+
+maint jit dump
+  Dump an in-memory JIT object into a file.
+
 *** Changes in GDB 16
 
 * Support for Nios II targets has been removed as this architecture

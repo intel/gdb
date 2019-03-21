@@ -123,17 +123,11 @@ bool set_inst_bit (gdb_byte inst[], int pos);
 
 bool clear_inst_bit (gdb_byte inst[], int pos);
 
-static inline bool
-is_compacted_inst (const gdb_byte inst[])
-{
-  /* Check the CmptCtrl flag (bit 29).  */
-  return inst[3] & 0x20;
-}
-
 static inline int
 breakpoint_bit_offset (const gdb_byte inst[])
 {
-  return (is_compacted_inst (inst) ? 7 : 30);
+  /* Check the CmptCtrl flag (bit 29).  */
+  return (((inst[3] & 0x20) != 0) ? 7 : 30);
 }
 
 static inline bool
@@ -157,7 +151,8 @@ has_breakpoint (const gdb_byte inst[])
 static inline unsigned int
 inst_length (const gdb_byte inst[])
 {
-  return (is_compacted_inst (inst)
+  /* Check the CmptCtrl flag (bit 29).  */
+  return (((inst[3] & 0x20) != 0)
 	  ? COMPACT_INST_LENGTH
 	  : MAX_INST_LENGTH);
 }

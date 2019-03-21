@@ -476,6 +476,14 @@ more obscure GDB `configure' options are not listed here.
      the overall build.  See the GDB manual instructions on how to do
      this.
 
+`--with-libiga64`
+     Build GDB with Intel Gen Assembler (IGA) library.  If requested and
+     the IntelGT target is enabled but the library cannot be found,
+     configure gives an error.  If not requested explicitly and cannot
+     be found, disassembly feature for the IntelGT target will not be
+     available in GDB.  IGA is available as part of the Intel Graphics
+     Compiler: `https://github.com/intel/intel-graphics-compiler`
+
 `--with-lzma'
      Build GDB with LZMA, a compression library.  (Done by default if
      liblzma is installed and found at configure time.)  LZMA is used

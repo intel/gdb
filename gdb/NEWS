@@ -1,6 +1,13 @@
 		What has changed in GDB?
 	     (Organized release by release)
 
+*** Changes since GDB 15
+
+* New commands
+
+maint jit dump
+  Dump an in-memory JIT object into a file.
+
 *** Changes in GDB 15
 
 * The MPX commands "show/set mpx bound" have been deprecated, as Intel

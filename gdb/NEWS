@@ -1,6 +1,14 @@
 		What has changed in GDB?
 	     (Organized release by release)
 
+
+*** Changes since GDB 12
+
+* New commands
+
+maint jit dump
+  Dump an in-memory JIT object into a file.
+
 *** Changes in GDB 12
 
 * DBX mode is deprecated, and will be removed in GDB 13

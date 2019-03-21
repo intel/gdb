@@ -40036,6 +40036,10 @@ Like the @code{with} command, but works with @code{maintenance set}
 variables.  This is used by the testsuite to exercise the @code{with}
 command's infrastructure.
 
+@kindex maint jit dump
+@item maint jit dump @var{addr} @var{filename}
+Dump the in-memory JIT object containing  @var{addr} into  @var{filename}.
+
 @end table
 
 The following command is useful for non-interactive invocations of

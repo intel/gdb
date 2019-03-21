@@ -24,6 +24,7 @@
 #include "block.h"
 #include "breakpoint.h"
 #include "command.h"
+#include "gdbsupport/filestuff.h"
 #include "dictionary.h"
 #include "filenames.h"
 #include "frame-unwind.h"
@@ -66,6 +67,9 @@ static bool jit_debug = false;
 
 #define jit_debug_printf(fmt, ...) \
   debug_prefixed_printf_cond (jit_debug, "jit", fmt, ##__VA_ARGS__)
+
+/* Command lists for jit maintenance commands.  */
+static struct cmd_list_element *maint_jit_cmdlist;
 
 static void
 show_jit_debug (struct ui_file *file, int from_tty,
@@ -1304,6 +1308,69 @@ jit_gdbarch_data_init (struct obstack *obstack)
   return data;
 }
 
+/* The "maint jit" command.  */
+
+static void
+maint_jit_command (const char *args, int from_tty)
+{
+  help_list (maint_jit_cmdlist, "maint jit ", all_commands,
+	     gdb_stdout);
+}
+
+/* The "maint jit dump" command.  */
+
+static void
+maint_jit_dump_command (const char *args, int from_tty)
+{
+  if ((args == nullptr) || (*args == 0))
+    error (_("No arguments.  See help maint jit dump."));
+
+  while (iswspace (*args))
+    args++;
+
+  std::string expr;
+  while ((*args != 0) && !iswspace (*args))
+    expr += *args++;
+
+  if (expr.empty ())
+    error (_("No address.  See help maint jit dump."));
+
+  while (iswspace (*args))
+    args++;
+
+  const char *filename = args;
+  if (*filename == 0)
+    error (_("No filename.  See help maint jit dump."));
+
+  CORE_ADDR addr = parse_and_eval_address (expr.c_str ());
+
+  const struct block *block = block_for_pc (addr);
+  if (block == nullptr)
+    error (_("No memory block containing %s found."),
+	   core_addr_to_string_nz (addr));
+
+  struct objfile *obj = block_objfile (block);
+  struct jited_objfile_data *data = obj->jited_data.get ();
+  if (data == nullptr)
+    error (_("No in-memory JIT object containing %s found."),
+	   core_addr_to_string_nz (addr));
+
+  struct gdbarch *gdbarch = target_gdbarch ();
+  struct jit_code_entry entry;
+  jit_read_code_entry (gdbarch, data->addr, &entry);
+
+  gdb::byte_vector buffer (entry.symfile_size);
+  read_memory (entry.symfile_addr, buffer.data (), entry.symfile_size);
+
+  gdb_file_up file = gdb_fopen_cloexec (filename, "wb");
+  if (file.get () == nullptr)
+    error (_("Failed to open %s."), filename);
+
+  int status = fwrite (buffer.data (), buffer.size (), 1, file.get ());
+  if (status != 1)
+    error (_("Failed to write in-memory JIT object to %s."), filename);
+}
+
 void _initialize_jit ();
 void
 _initialize_jit ()
@@ -1347,4 +1414,15 @@ Usage: jit-reader-unload\n\n\
 Do \"help jit-reader-load\" for info on loading debug info readers."));
       set_cmd_completer (c, noop_completer);
     }
+
+  add_prefix_cmd ("jit", class_maintenance, maint_jit_command,
+		  _("JIT debug maintenance commands."),
+		  &maint_jit_cmdlist, 0, &maintenancelist);
+
+  add_cmd ("dump", class_maintenance, maint_jit_dump_command, _("\
+Dump an in-memory JIT object into a file.\n\
+Usage: maint jit dump ADDR FILE\n\n\
+ADDR...an expression evaluating to an address inside the JITed code.\n\
+FILE...the name of a file into which the object is dumped."),
+	   &maint_jit_cmdlist);
 }

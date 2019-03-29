@@ -611,6 +611,7 @@ int i386_linux_gregset_reg_offset[] =
   -1, -1, -1, -1, -1, -1, -1, -1, /* k0 ... k7 (AVX512)  */
   -1, -1, -1, -1, -1, -1, -1, -1, /* zmm0 ... zmm7 (AVX512)  */
   -1,				  /* PKRU register  */
+  -1,	 			  /* CET user mode register PL3_SSP.  */
   -1,				  /* AMX register TILECFG.  */
   -1,				  /* AMX TILEDATA registers: tmm0 ... tmm7.  */
   11 * 4,			  /* "orig_eax"  */

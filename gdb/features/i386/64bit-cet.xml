@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2013-2018 Free Software Foundation, Inc.
+
+     Copying and distribution of this file, with or without modification,
+     are permitted in any medium without royalty provided the copyright
+     notice and this notice are preserved.  -->
+
+<!DOCTYPE feature SYSTEM "gdb-target.dtd">
+<feature name="org.gnu.gdb.i386.cet">
+
+  <struct id="cet_u_setting" size="8">
+    <field name="SH_STK_EN" start="0" end="0" type="uint64"/>
+    <field name="WR_SHSTK_EN" start="1" end="1" type="uint64"/>
+    <field name="ENDBR_EN" start="2" end="2" type="uint64"/>
+    <field name="LEG_IW_EN" start="3" end="3" type="uint64"/>
+    <field name="NO_TRACK_EN" start="4" end="4" type="uint64"/>
+    <field name="SUPPRESS_DIS" start="5" end="5" type="uint64"/>
+    <field name="RSVD" start="6" end="9" type="uint64"/>
+    <field name="SUPPRESS" start="10" end="10" type="uint64"/>
+    <field name="TRACKER" start="11" end="11" type="uint64"/>
+    <field name="EB_LEG_BITMAP_BASE" start="12" end="63" type="data_ptr"/>
+  </struct>
+
+  <reg name="cet_u" bitsize="64" type="cet_u_setting"/>
+  <reg name="pl3_ssp" bitsize="64" type="code_ptr"/>
+
+</feature>

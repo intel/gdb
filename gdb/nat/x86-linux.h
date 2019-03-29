@@ -47,4 +47,12 @@ extern void x86_linux_delete_thread (struct arch_lwp_info *arch_lwp);
 
 extern void x86_linux_prepare_to_resume (struct lwp_info *lwp);
 
+/* Check CET hardware support.  */
+
+extern bool x86_check_cet_support ();
+
+/* Check if the current host supports ptrace with NT_X86_CET flag.  */
+
+extern bool x86_check_cet_ptrace_status (const int tid);
+
 #endif /* NAT_X86_LINUX_H */

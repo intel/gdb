@@ -76,7 +76,7 @@ static struct target_desc *i386_tdescs[X86_TDESC_LAST] = { };
 /* Return the target description according to XCR0.  */
 
 const struct target_desc *
-i386_linux_read_description (uint64_t xcr0)
+i386_linux_read_description (uint64_t xcr0, bool cet_enabled)
 {
   enum x86_linux_tdesc idx = xcr0_to_tdesc_idx (xcr0, false);
 
@@ -87,7 +87,7 @@ i386_linux_read_description (uint64_t xcr0)
 
   if (*tdesc == NULL)
     {
-      *tdesc = i386_create_target_description (xcr0, true, false);
+      *tdesc = i386_create_target_description (xcr0, true, false, cet_enabled);
 
       init_target_desc (*tdesc, i386_expedite_regs);
     }
@@ -102,7 +102,7 @@ static target_desc *amd64_tdescs[X86_TDESC_LAST] = { };
 static target_desc *x32_tdescs[X86_TDESC_LAST] = { };
 
 const struct target_desc *
-amd64_linux_read_description (uint64_t xcr0, bool is_x32)
+amd64_linux_read_description (uint64_t xcr0, bool is_x32, bool cet_enabled)
 {
   enum x86_linux_tdesc idx = xcr0_to_tdesc_idx (xcr0, is_x32);
 
@@ -118,7 +118,8 @@ amd64_linux_read_description (uint64_t xcr0, bool is_x32)
 
   if (*tdesc == NULL)
     {
-      *tdesc = amd64_create_target_description (xcr0, is_x32, true, true);
+      *tdesc = amd64_create_target_description (xcr0, is_x32, true, true,
+						cet_enabled);
 
       init_target_desc (*tdesc, amd64_expedite_regs);
     }

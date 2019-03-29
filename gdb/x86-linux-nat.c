@@ -41,6 +41,7 @@
 #include "nat/x86-linux.h"
 #include "nat/x86-linux-dregs.h"
 #include "nat/linux-ptrace.h"
+#include "x86-tdep.h"
 
 /* linux_nat_target::low_new_fork implementation.  */
 
@@ -186,19 +187,25 @@ x86_linux_nat_target::read_description ()
   else
     xcr0_features_bits = 0;
 
+  /* CET_ENABLED is used to decide if the CET feature registers need to be
+     activated.  */
+  bool cet_enabled = (have_ptrace_getregset == TRIBOOL_TRUE
+		      && x86_check_cet_support ());
+
   if (is_64bit)
     {
 #ifdef __x86_64__
-      return amd64_linux_read_description (xcr0_features_bits, is_x32);
+      return amd64_linux_read_description (xcr0_features_bits, is_x32,
+					   cet_enabled);
 #endif
     }
   else
     {
-      const struct target_desc * tdesc
-	= i386_linux_read_description (xcr0_features_bits);
+      const struct target_desc *tdesc
+	  = i386_linux_read_description (xcr0_features_bits, cet_enabled);
 
       if (tdesc == NULL)
-	tdesc = i386_linux_read_description (X86_XSTATE_SSE_MASK);
+	tdesc = i386_linux_read_description (X86_XSTATE_SSE_MASK, cet_enabled);
 
       return tdesc;
     }
@@ -306,6 +313,50 @@ x86_linux_get_thread_area (pid_t pid, void *addr, unsigned int *base_addr)
   return PS_OK;
 }
 
+
+/* Fetch all CET registers covered by the PTRACE_GETREGSET request with
+   NT_X86_CET flag from process/thread TID and store their values in
+   GDB's register cache.  */
+
+void
+x86_linux_fetch_cet_regs (regcache *regcache, const int tid)
+{
+  if ((have_ptrace_getregset != TRIBOOL_TRUE)
+      || !x86_check_cet_ptrace_status (tid))
+    return;
+
+  uint64_t buf[X86_NUM_CET_REGS];
+  iovec iov;
+  iov.iov_base = buf;
+  iov.iov_len = sizeof (buf);
+
+  if (ptrace (PTRACE_GETREGSET, tid, NT_X86_CET, &iov) < 0)
+    perror_with_name (_("Couldn't get CET registers."));
+
+  x86_supply_cet (regcache, buf);
+}
+
+/* Store all CET registers in GDB's register array covered by the
+   PTRACE_SETREGSET request with NT_X86_CET flag into the process/thread
+   specified by TID.  */
+
+void
+x86_linux_store_cet_regs (const regcache *regcache, const int tid)
+{
+  if ((have_ptrace_getregset != TRIBOOL_TRUE)
+      || !x86_check_cet_ptrace_status (tid))
+    return;
+
+  uint64_t buf[X86_NUM_CET_REGS];
+  iovec iov;
+  iov.iov_base = buf;
+  iov.iov_len = sizeof (buf);
+
+  x86_collect_cet (regcache, buf);
+
+  if (ptrace (PTRACE_SETREGSET, tid, NT_X86_CET, &iov) < 0)
+    perror_with_name (_("Couldn't write CET registers"));
+}
 
 void _initialize_x86_linux_nat ();
 void

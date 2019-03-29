@@ -245,7 +245,8 @@ static const int x86_64_regmap[] =
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1,
-  -1					/* pkru  */
+  -1,					/* pkru  */
+  -1, -1				/* CET registers CET_U, PL3_SSP.  */
 };
 
 #define X86_64_NUM_REGS (sizeof (x86_64_regmap) / sizeof (x86_64_regmap[0]))
@@ -398,6 +399,51 @@ x86_target::low_cannot_fetch_register (int regno)
   return regno >= I386_NUM_REGS;
 }
 
+/* Collect all CET registers in GDB's register cache covered by the
+   PTRACE_SETREGSET request with NT_X86_CET flag and store into the
+   process/thread specified by TID.  */
+
+static void
+x86_fill_cet_regs (regcache *regcache, const int tid)
+{
+  if (!have_ptrace_getregset || !x86_check_cet_ptrace_status (tid))
+    return;
+
+  uint64_t buf[2];
+  collect_register_by_name (regcache, "cet_u", &buf[0]);
+  collect_register_by_name (regcache, "pl3_ssp", &buf[1]);
+
+  iovec iov;
+  iov.iov_base = buf;
+  iov.iov_len = sizeof (buf);
+  if (ptrace (PTRACE_SETREGSET, tid, NT_X86_CET, &iov) < 0 )
+    warning (_("Failed to set CET registers."));
+}
+
+/* Fetch all CET registers covered by the PTRACE_GETREGSET request with
+   NT_X86_CET flag from process/thread TID and store their values in
+   GDB's register cache.  */
+
+static void
+x86_store_cet_regs (regcache *regcache, const int tid)
+{
+  if (!have_ptrace_getregset || !x86_check_cet_ptrace_status (tid))
+    return;
+
+  uint64_t buf[2];
+  iovec iov;
+  iov.iov_base = buf;
+  iov.iov_len = sizeof (buf);
+
+  if (ptrace (PTRACE_GETREGSET, tid, NT_X86_CET, &iov) == 0)
+    {
+      supply_register_by_name (regcache, "cet_u", &buf[0]);
+      supply_register_by_name (regcache, "pl3_ssp", &buf[1]);
+    }
+  else
+    warning (_("Failed to get CET registers."));
+}
+
 static void
 collect_register_i386 (struct regcache *regcache, int regno, void *buf)
 {
@@ -430,6 +476,9 @@ collect_register_i386 (struct regcache *regcache, int regno, void *buf)
 static void
 x86_fill_gregset (struct regcache *regcache, void *buf)
 {
+  if (tdesc_contains_feature (regcache->tdesc, "org.gnu.gdb.i386.cet"))
+    x86_fill_cet_regs (regcache, lwpid_of (current_thread));
+
   int i;
 
 #ifdef __x86_64__
@@ -454,6 +503,9 @@ x86_fill_gregset (struct regcache *regcache, void *buf)
 static void
 x86_store_gregset (struct regcache *regcache, const void *buf)
 {
+  if (tdesc_contains_feature (regcache->tdesc, "org.gnu.gdb.i386.cet"))
+    x86_store_cet_regs (regcache, lwpid_of (current_thread));
+
   int i;
 
 #ifdef __x86_64__
@@ -954,6 +1006,11 @@ x86_linux_read_description (void)
   if (xcr0_features)
     x86_xcr0 = xcr0;
 
+  /* CET_ENABLED is used to decide if the CET feature registers need to be
+     activated.  */
+  bool cet_enabled = (have_ptrace_getregset == TRIBOOL_TRUE
+		      && x86_check_cet_support ());
+
   if (machine == EM_X86_64)
     {
 #ifdef __x86_64__
@@ -962,11 +1019,12 @@ x86_linux_read_description (void)
       if (xcr0_features)
 	{
 	  tdesc = amd64_linux_read_description (xcr0 & X86_XSTATE_ALL_MASK,
-						!is_elf64);
+						!is_elf64, cet_enabled);
 	}
 
       if (tdesc == NULL)
-	tdesc = amd64_linux_read_description (X86_XSTATE_SSE_MASK, !is_elf64);
+	tdesc = amd64_linux_read_description (X86_XSTATE_SSE_MASK, !is_elf64,
+					      cet_enabled);
       return tdesc;
 #endif
     }
@@ -975,10 +1033,11 @@ x86_linux_read_description (void)
       const target_desc *tdesc = NULL;
 
       if (xcr0_features)
-	  tdesc = i386_linux_read_description (xcr0 & X86_XSTATE_ALL_MASK);
+	  tdesc = i386_linux_read_description (xcr0 & X86_XSTATE_ALL_MASK,
+					       cet_enabled);
 
       if (tdesc == NULL)
-	tdesc = i386_linux_read_description (X86_XSTATE_SSE);
+	tdesc = i386_linux_read_description (X86_XSTATE_SSE, cet_enabled);
 
       return tdesc;
     }

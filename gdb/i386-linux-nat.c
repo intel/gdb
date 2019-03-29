@@ -31,6 +31,7 @@
 #include "i387-tdep.h"
 #include "i386-tdep.h"
 #include "i386-linux-tdep.h"
+#include "x86-tdep.h"
 #include "gdbsupport/x86-xstate.h"
 
 #include "x86-linux-nat.h"
@@ -492,11 +493,22 @@ i386_linux_nat_target::fetch_registers (struct regcache *regcache, int regno)
 	  return;
 	}
 
+      /* Fetch all CET registers covered by the PTRACE_GETREGSET
+	 request with NT_X86_CET flag.  */
+      x86_linux_fetch_cet_regs (regcache, tid);
+
       if (fetch_xstateregs (regcache, tid))
 	return;
       if (fetch_fpxregs (regcache, tid))
 	return;
       fetch_fpregs (regcache, tid);
+      return;
+    }
+
+  if (x86_is_cet_regnum (regcache->arch (), regno))
+    {
+      /* Fetch all CET registers.  */
+      x86_linux_fetch_cet_regs (regcache, tid);
       return;
     }
 
@@ -560,11 +572,22 @@ i386_linux_nat_target::store_registers (struct regcache *regcache, int regno)
   if (regno == -1)
     {
       store_regs (regcache, tid, regno);
+
+      /* Store all CET registers.  */
+      x86_linux_store_cet_regs (regcache, tid);
+
       if (store_xstateregs (regcache, tid, regno))
 	return;
       if (store_fpxregs (regcache, tid, regno))
 	return;
       store_fpregs (regcache, tid, regno);
+      return;
+    }
+
+  if (x86_is_cet_regnum (regcache->arch (), regno))
+    {
+      /* Store all CET registers.  */
+      x86_linux_store_cet_regs (regcache, tid);
       return;
     }
 

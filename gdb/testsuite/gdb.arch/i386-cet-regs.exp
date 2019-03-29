@@ -1,0 +1,83 @@
+# Copyright 2018 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Please email any bugs, comments, and/or additions to this file to:
+# bug-gdb@gnu.org
+
+# Test CET registers.
+
+proc check_register_access { regname } {
+    global gdb_prompt
+
+    set test "$regname register access"
+    gdb_test_multiple "info reg $regname" "$test" {
+	-re "Invalid register.*\r\n$gdb_prompt $" {
+	    unsupported "$test"
+	    return 0
+	}
+	-re "\r\n$regname.*\r\n$gdb_prompt $" {
+	    pass "$test"
+	    return 1
+	}
+    }
+    return 0
+}
+
+proc check_register_match { regname regval } {
+    global hex
+    gdb_test "print /x \$$regname" "= $hex" "read $regname value"
+    gdb_test "print /x \$$regname = $regval" "= $regval" "set $regname value"
+    gdb_test "print /x \$$regname" "= $regval" \
+	"read $regname value after setting"
+    return 0
+}
+
+if {[skip_cet_tests]} {
+    unsupported "target does not support CET"
+    return 0
+}
+
+standard_testfile i386-cet.c
+if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
+     additional_flags="-fcf-protection=full"] } {
+    return -1
+}
+
+if ![runto_main] {
+    untested "could not run to main"
+    return -1
+}
+
+# read/set CET_U fields.
+check_register_access "cet_u"
+
+set regval "0x1"
+check_register_match "cet_u.SH_STK_EN" $regval
+check_register_match "cet_u.WR_SHSTK_EN" $regval
+check_register_match "cet_u.ENDBR_EN" $regval
+check_register_match "cet_u.LEG_IW_EN" $regval
+check_register_match "cet_u.NO_TRACK_EN" $regval
+check_register_match "cet_u.SUPPRESS_DIS" $regval
+check_register_match "cet_u.SUPPRESS" $regval
+# The state TRACKER=1, SUPPRESS=1, ENDBR_EN=1 is invalid.  The kernel checks
+# for this and ptrace will return with EINVAL if GDB tries to set TRACKER or
+# SUPPRESS to 1 when either of them is already 1.  Hence we reset SUPPRESS.
+gdb_test "print /x \$cet_u.SUPPRESS = 0x0" "= 0x0" "reset SUPPRESS"
+check_register_match "cet_u.TRACKER" $regval
+check_register_match "cet_u.EB_LEG_BITMAP_BASE" "0x12345678"
+
+# read/set PL3_SSP register.
+check_register_access "pl3_ssp"
+check_register_match "pl3_ssp" "0x12345678"

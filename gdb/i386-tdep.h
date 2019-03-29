@@ -209,6 +209,9 @@ struct i386_gdbarch_tdep : gdbarch_tdep_base
   /* PKEYS register names.  */
   const char * const *pkeys_register_names = nullptr;
 
+  /* Shadow stack pointer register.  */
+  int ssp_regnum = 0;
+
   /* Register number for AMX tilecfg register, including pseudo register.  */
   int tilecfg_regnum = 0;
   int tilecfg_raw_regnum = 0;
@@ -338,6 +341,7 @@ enum i386_regnum
   I386_ZMM0H_REGNUM,		/* %zmm0h */
   I386_ZMM7H_REGNUM = I386_ZMM0H_REGNUM + 7,
   I386_PKRU_REGNUM,
+  I386_PL3_SSP_REGNUM,
   I386_AMX_TILECFG_RAW_REGNUM,
   I386_AMX_TILEDATA_REGNUM,
   I386_FSBASE_REGNUM,

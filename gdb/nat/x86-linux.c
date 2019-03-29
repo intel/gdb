@@ -17,7 +17,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+#include "elf/common.h"
 #include "gdbsupport/common-defs.h"
+#include "nat/gdb_ptrace.h"
+#include "nat/linux-ptrace.h"
+#include "nat/x86-cpuid.h"
+#include <sys/uio.h>
 #include "x86-linux.h"
 #include "x86-linux-dregs.h"
 
@@ -79,4 +84,33 @@ void
 x86_linux_prepare_to_resume (struct lwp_info *lwp)
 {
   x86_linux_update_debug_registers (lwp);
+}
+
+/* See nat/x86-linux.h.  */
+
+bool
+x86_check_ssp_support (const int tid)
+{
+  unsigned int eax, ebx, ecx, edx;
+
+  __get_cpuid_count (7, 0, &eax, &ebx, &ecx, &edx);
+
+  if ((ecx & bit_SHSTK) == 0)
+    return false;
+
+  /* Further check for NT_X86_SHSTK kernel support.  */
+  uint64_t ssp;
+  iovec iov;
+  iov.iov_base = &ssp;
+  iov.iov_len = sizeof (ssp);
+
+  int res = ptrace (PTRACE_GETREGSET, tid, NT_X86_SHSTK, &iov);
+  if (res < 0 && errno == EINVAL)
+    {
+      /* The errno EINVAL for a PTRACE_GETREGSET call indicates that
+	 kernel support is not available.  */
+      return false;
+    }
+
+  return true;
 }

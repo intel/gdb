@@ -1,0 +1,35 @@
+# Copyright 2018-2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test accessing the shadow stack pointer register.
+
+require allow_ssp_tests
+
+standard_testfile amd64-shadow-stack.c
+if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
+     additional_flags="-fcf-protection=return"] } {
+    return -1
+}
+
+if {![runto_main]} {
+    return -1
+}
+
+# Read PL3_SSP register.
+gdb_test "print /x \$pl3_ssp" "= $hex" "read pl3_ssp value"
+
+# Restore/write PL3_SSP register.
+gdb_test "print /x \$pl3_ssp = 0x12345678" "= 0x12345678" "set pl3_ssp value"
+gdb_test "print /x \$pl3_ssp" "= 0x12345678" "read pl3_ssp value after setting"

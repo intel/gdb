@@ -42,6 +42,7 @@
 #include "nat/x86-linux.h"
 #include "nat/x86-linux-dregs.h"
 #include "nat/linux-ptrace.h"
+#include "x86-tdep.h"
 
 /* linux_nat_target::low_new_fork implementation.  */
 
@@ -197,7 +198,9 @@ x86_linux_nat_target::read_description ()
   if (is_64bit)
     {
 #ifdef __x86_64__
-      return amd64_linux_read_description (xcr0_features_bits, is_x32);
+      bool ssp_enabled = x86_check_ssp_support (tid);
+      return amd64_linux_read_description (xcr0_features_bits, is_x32,
+					   ssp_enabled);
 #endif
     }
   else
@@ -315,6 +318,47 @@ x86_linux_get_thread_area (pid_t pid, void *addr, unsigned int *base_addr)
   return PS_OK;
 }
 
+
+/* See x86-linux-nat.h.  */
+
+void
+x86_linux_fetch_ssp (regcache *regcache, const int tid)
+{
+  /* The shadow stack may be enabled and disabled at runtime.  Reading the
+     ssp might fail as shadow stack was not activated for the current
+     thread.  We don't want to show a warning but silently return.  The
+     register will be shown as unavailable for the user.  */
+  uint64_t ssp;
+  iovec iov;
+  iov.iov_base = &ssp;
+  iov.iov_len = sizeof (ssp);
+  if (ptrace (PTRACE_GETREGSET, tid, NT_X86_SHSTK, &iov) != 0)
+    return;
+
+  x86_supply_ssp (regcache, ssp);
+}
+
+/* See x86-linux-nat.h.  */
+
+void
+x86_linux_store_ssp (const regcache *regcache, const int tid)
+{
+  uint64_t ssp;
+  iovec iov;
+  iov.iov_base = &ssp;
+  iov.iov_len = sizeof (ssp);
+  x86_collect_ssp (regcache, ssp);
+
+  /* The shadow stack may be enabled and disabled at runtime.  In case
+     shadow stack is not enabled for the current thread the ptrace call
+     with PTRACE_SETREGSET will fail with errno ENODEV.  This can happen
+     in normal operation, so we don't want to throw an error in this case
+     but silently continue.  */
+  int errno;
+  if ((ptrace (PTRACE_SETREGSET, tid, NT_X86_SHSTK, &iov) != 0)
+      && (errno != ENODEV))
+    perror_with_name (_("Failed to write pl3_ssp register"));
+}
 
 void _initialize_x86_linux_nat ();
 void

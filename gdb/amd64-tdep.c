@@ -3388,6 +3388,9 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
       tdep->num_pkeys_regs = 1;
     }
 
+  if (tdesc_find_feature (tdesc, "org.gnu.gdb.i386.pl3_ssp") != nullptr)
+    tdep->ssp_regnum = AMD64_PL3_SSP_REGNUM;
+
   if (tdesc_find_feature (tdesc, "org.gnu.gdb.i386.amx") != nullptr)
     {
       tdep->tilecfg_raw_register_names = amd64_tilecfg_raw_names;

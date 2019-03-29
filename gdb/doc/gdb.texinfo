@@ -50007,6 +50007,10 @@ describe one config user mode register @samp{tilecfg_raw} that has
 64 bytes and one @samp{tiledata} register that has 8192 bytes.
 All AMX registers are valid only for amd64.
 
+The @samp{org.gnu.gdb.i386.pl3_ssp} feature is optional.  It should describe the
+user mode register @samp{pl3_ssp} which has 64 bits on amd64.  Following the
+restriction of the Linux kernel, only amd64 is supported for now.
+
 @node LoongArch Features
 @subsection LoongArch Features
 @cindex target descriptions, LoongArch Features

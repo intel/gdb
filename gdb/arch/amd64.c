@@ -29,17 +29,20 @@
 #include "../features/i386/64bit-segments.c"
 #include "../features/i386/64bit-sse.c"
 #include "../features/i386/pkeys.c"
+#include "../features/i386/64bit-ssp.c"
 
 #include "../features/i386/x32-core.c"
 
 /* Create amd64 target descriptions according to XCR0.  If IS_X32 is
    true, create the x32 ones.  If IS_LINUX is true, create target
    descriptions for Linux.  If SEGMENTS is true, then include
-   the "org.gnu.gdb.i386.segments" feature registers.  */
+   the "org.gnu.gdb.i386.segments" feature registers.  If SSP_ENABLED is
+   true include the "org.gnu.gdb.i386.pl3_ssp" register.
+*/
 
 target_desc *
 amd64_create_target_description (uint64_t xcr0, bool is_x32, bool is_linux,
-				 bool segments)
+				 bool segments, bool ssp_enabled)
 {
   target_desc_up tdesc = allocate_target_description ();
 
@@ -75,6 +78,9 @@ amd64_create_target_description (uint64_t xcr0, bool is_x32, bool is_linux,
 
   if (xcr0 & X86_XSTATE_PKRU)
     regnum = create_feature_i386_pkeys (tdesc.get (), regnum);
+
+  if (ssp_enabled && !is_x32)
+    regnum = create_feature_i386_64bit_ssp (tdesc.get (), regnum);
 
   if (xcr0 & X86_XSTATE_AMX)
     regnum = create_feature_i386_64bit_amx (tdesc.get (), regnum);

@@ -3181,6 +3181,12 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
       tdep->num_pkeys_regs = 1;
     }
 
+  if (tdesc_find_feature (tdesc, "org.gnu.gdb.i386.cet_u") != NULL)
+    tdep->cet_msr_regnum = AMD64_CET_U_REGNUM;
+
+  if (tdesc_find_feature (tdesc, "org.gnu.gdb.i386.pl3_ssp") != NULL)
+    tdep->ssp_regnum = AMD64_CET_PL3_SSP_REGNUM;
+
   tdep->num_byte_regs = 20;
   tdep->num_word_regs = 16;
   tdep->num_dword_regs = 16;

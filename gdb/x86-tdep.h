@@ -20,6 +20,22 @@
 #ifndef X86_TDEP_H
 #define X86_TDEP_H
 
+#define X86_NUM_CET_REGS 2
+
+/* Fill CET user mode registers in REGCACHE with the appropriate
+   values from buffer BUF.  In case indirect branch tracking is enabled only,
+   only cet_msr is filled.  */
+
+extern void x86_supply_cet (regcache *regcache,
+			    const uint64_t buf[X86_NUM_CET_REGS]);
+
+/* Fill CET user mode registers in buffer BUF with the values from REGCACHE.
+   In case indirect branch tracking is enabled only, pl3_ssp in BUF is set
+   to 0.  */
+
+extern void x86_collect_cet (const regcache *regcache,
+			     uint64_t buf[X86_NUM_CET_REGS]);
+
 /* Checks whether PC lies in an indirect branch thunk using registers
    REGISTER_NAMES[LO] (inclusive) to REGISTER_NAMES[HI] (exclusive).  */
 

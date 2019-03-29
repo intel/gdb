@@ -22,6 +22,8 @@
 #include <stdint.h>
 
 target_desc *amd64_create_target_description (uint64_t xcr0, bool is_x32,
-					      bool is_linux, bool segments);
+					      bool is_linux, bool segments,
+					      bool shstk_enabled = false,
+					      bool ibt_enabled = false);
 
 #endif /* ARCH_AMD64_H */

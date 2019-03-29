@@ -611,6 +611,7 @@ int i386_linux_gregset_reg_offset[] =
   -1, -1, -1, -1, -1, -1, -1, -1, /* k0 ... k7 (AVX512)  */
   -1, -1, -1, -1, -1, -1, -1, -1, /* zmm0 ... zmm7 (AVX512)  */
   -1,				  /* PKRU register  */
+  -1, -1,			  /* CET user mode registers  */
   11 * 4,			  /* "orig_eax"  */
 };
 
@@ -678,13 +679,15 @@ i386_linux_core_read_xcr0 (bfd *abfd)
 /* See i386-linux-tdep.h.  */
 
 const struct target_desc *
-i386_linux_read_description (uint64_t xcr0)
+i386_linux_read_description (uint64_t xcr0, bool shstk_enabled,
+			     bool ibt_enabled)
 {
   if (xcr0 == 0)
     return NULL;
 
   static struct target_desc *i386_linux_tdescs \
-    [2/*X87*/][2/*SSE*/][2/*AVX*/][2/*MPX*/][2/*AVX512*/][2/*PKRU*/] = {};
+    [2/*X87*/][2/*SSE*/][2/*AVX*/][2/*MPX*/][2/*AVX512*/][2/*PKRU*/]\
+    [2/*CET_U*/][2/*PL3_SSP*/] = {};
   struct target_desc **tdesc;
 
   tdesc = &i386_linux_tdescs[(xcr0 & X86_XSTATE_X87) ? 1 : 0]
@@ -692,10 +695,13 @@ i386_linux_read_description (uint64_t xcr0)
     [(xcr0 & X86_XSTATE_AVX) ? 1 : 0]
     [(xcr0 & X86_XSTATE_MPX) ? 1 : 0]
     [(xcr0 & X86_XSTATE_AVX512) ? 1 : 0]
-    [(xcr0 & X86_XSTATE_PKRU) ? 1 : 0];
+    [(xcr0 & X86_XSTATE_PKRU) ? 1 : 0]
+    [(shstk_enabled || ibt_enabled) ? 1 : 0]
+    [shstk_enabled ? 1 : 0];
 
   if (*tdesc == NULL)
-    *tdesc = i386_create_target_description (xcr0, true, false);
+    *tdesc = i386_create_target_description (xcr0, true, false, shstk_enabled,
+					     ibt_enabled);
 
   return *tdesc;
 }

@@ -31,6 +31,7 @@
 #include "i387-tdep.h"
 #include "i386-tdep.h"
 #include "i386-linux-tdep.h"
+#include "x86-tdep.h"
 #include "gdbsupport/x86-xstate.h"
 
 #include "x86-linux-nat.h"
@@ -476,6 +477,7 @@ i386_linux_nat_target::fetch_registers (struct regcache *regcache, int regno)
     }
 
   tid = get_ptrace_pid (regcache->ptid ());
+  struct gdbarch_tdep *tdep = gdbarch_tdep (regcache->arch ());
 
   /* Use the PTRACE_GETFPXREGS request whenever possible, since it
      transfers more registers in one system call, and we'll cache the
@@ -492,11 +494,20 @@ i386_linux_nat_target::fetch_registers (struct regcache *regcache, int regno)
 	  return;
 	}
 
+      if (tdep->cet_msr_regnum > 0)
+	x86_linux_fetch_cet_regs (regcache, tid);
+
       if (fetch_xstateregs (regcache, tid))
 	return;
       if (fetch_fpxregs (regcache, tid))
 	return;
       fetch_fpregs (regcache, tid);
+      return;
+    }
+
+  if (regno == tdep->cet_msr_regnum || regno == tdep->ssp_regnum)
+    {
+      x86_linux_fetch_cet_regs (regcache, tid);
       return;
     }
 
@@ -553,6 +564,7 @@ i386_linux_nat_target::store_registers (struct regcache *regcache, int regno)
     }
 
   tid = get_ptrace_pid (regcache->ptid ());
+  struct gdbarch_tdep *tdep = gdbarch_tdep (regcache->arch ());
 
   /* Use the PTRACE_SETFPXREGS requests whenever possible, since it
      transfers more registers in one system call.  But remember that
@@ -560,11 +572,21 @@ i386_linux_nat_target::store_registers (struct regcache *regcache, int regno)
   if (regno == -1)
     {
       store_regs (regcache, tid, regno);
+
+      if (tdep->cet_msr_regnum > 0)
+	x86_linux_store_cet_regs (regcache, tid);
+
       if (store_xstateregs (regcache, tid, regno))
 	return;
       if (store_fpxregs (regcache, tid, regno))
 	return;
       store_fpregs (regcache, tid, regno);
+      return;
+    }
+
+  if (regno == tdep->cet_msr_regnum || regno == tdep->ssp_regnum)
+    {
+      x86_linux_store_cet_regs (regcache, tid);
       return;
     }
 

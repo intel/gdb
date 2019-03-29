@@ -41,6 +41,7 @@
 #include "nat/x86-linux.h"
 #include "nat/x86-linux-dregs.h"
 #include "nat/linux-ptrace.h"
+#include "x86-tdep.h"
 
 /* linux_nat_target::low_new_fork implementation.  */
 
@@ -188,19 +189,30 @@ x86_linux_nat_target::read_description ()
   else
     xcr0_features_bits = 0;
 
+  bool shstk_enabled = false;
+  bool ibt_enabled = false;
+  if (have_ptrace_getregset == TRIBOOL_TRUE)
+    {
+      shstk_enabled = x86_check_shstk_support ();
+      ibt_enabled = x86_check_ibt_support ();
+    }
+
   if (is_64bit)
     {
 #ifdef __x86_64__
-      return amd64_linux_read_description (xcr0_features_bits, is_x32);
+      return amd64_linux_read_description (xcr0_features_bits, is_x32,
+					   shstk_enabled, ibt_enabled);
 #endif
     }
   else
     {
-      const struct target_desc * tdesc
-	= i386_linux_read_description (xcr0_features_bits);
+      const struct target_desc *tdesc
+	= i386_linux_read_description (xcr0_features_bits, shstk_enabled,
+				       ibt_enabled);
 
       if (tdesc == NULL)
-	tdesc = i386_linux_read_description (X86_XSTATE_SSE_MASK);
+	tdesc = i386_linux_read_description (X86_XSTATE_SSE_MASK, shstk_enabled,
+					     ibt_enabled);
 
       return tdesc;
     }
@@ -309,6 +321,54 @@ x86_linux_get_thread_area (pid_t pid, void *addr, unsigned int *base_addr)
   return PS_OK;
 }
 
+
+/* See x86-linux-nat.h.  */
+
+void
+x86_linux_fetch_cet_regs (regcache *regcache, const int tid)
+{
+  /* TODO: Investigate if the x86_check_cet_ptrace_status is required and if so
+  add a proper comment (JIRA/DOQG-3259).  */
+  if ((have_ptrace_getregset != TRIBOOL_TRUE)
+      || !x86_check_cet_ptrace_status (tid))
+    return;
+
+  uint64_t buf[X86_NUM_CET_REGS];
+  iovec iov;
+  iov.iov_base = buf;
+  iov.iov_len = sizeof (buf);
+
+  /* TODO: Test this error with new kernel and add proper comment
+     (JIRA/DOQG-3253).  */
+  if (ptrace (PTRACE_GETREGSET, tid, NT_X86_CET, &iov) < 0)
+    perror_with_name (_("Couldn't get CET registers."));
+
+  x86_supply_cet (regcache, buf);
+}
+
+/* See x86-linux-nat.h.  */
+
+void
+x86_linux_store_cet_regs (const regcache *regcache, const int tid)
+{
+  /* TODO: Investigate if the x86_check_cet_ptrace_status is required and if so
+  add a proper comment (JIRA/DOQG-3259).  */
+  if ((have_ptrace_getregset != TRIBOOL_TRUE)
+      || !x86_check_cet_ptrace_status (tid))
+    return;
+
+  uint64_t buf[X86_NUM_CET_REGS];
+  iovec iov;
+  iov.iov_base = buf;
+  iov.iov_len = sizeof (buf);
+
+  x86_collect_cet (regcache, buf);
+
+  /* TODO: Test this error with new kernel and add proper comment
+     (JIRA/DOQG-3253).  */
+  if (ptrace (PTRACE_SETREGSET, tid, NT_X86_CET, &iov) < 0)
+    perror_with_name (_("Couldn't write CET registers"));
+}
 
 void _initialize_x86_linux_nat ();
 void

@@ -245,7 +245,8 @@ static const int x86_64_regmap[] =
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1,
-  -1					/* pkru  */
+  -1,					/* pkru  */
+  -1, -1				/* CET registers CET_U, PL3_SSP.  */
 };
 
 #define X86_64_NUM_REGS (sizeof (x86_64_regmap) / sizeof (x86_64_regmap[0]))
@@ -398,6 +399,71 @@ x86_target::low_cannot_fetch_register (int regno)
   return regno >= I386_NUM_REGS;
 }
 
+/* Collect all supported CET registers in GDB's register cache covered by the
+   PTRACE_SETREGSET request with NT_X86_CET flag and store into the
+   process/thread specified by TID.  */
+
+static void
+x86_fill_cet_regs (regcache *regcache, const int tid)
+{
+  /* TODO: Investigate if the x86_check_cet_ptrace_status is required and if so
+     add a proper comment (JIRA/DOQG-3259).  */
+  if (!have_ptrace_getregset || !x86_check_cet_ptrace_status (tid))
+    return;
+
+  uint64_t buf[2] = {0};
+
+  /* If CET indirect branch tracking or shadow stack are enabled, the
+     org.gnu.gdb.i386.cet_u feature has to be supported by the current
+     target.  */
+  collect_register_by_name (regcache, "cet_u", &buf[0]);
+
+  if (tdesc_contains_feature (regcache->tdesc, "org.gnu.gdb.i386.pl3_ssp"))
+    collect_register_by_name (regcache, "pl3_ssp", &buf[1]);
+
+  iovec iov;
+  iov.iov_base = buf;
+  iov.iov_len = sizeof (buf);
+  /* TODO: Test this warning with new kernel and add proper comment
+     (JIRA/DOQG-3253).  */
+  if (ptrace (PTRACE_SETREGSET, tid, NT_X86_CET, &iov) < 0 )
+    perror_warning_with_name (_("Couldn't write CET registers."));
+}
+
+/* Fetch all supported CET registers covered by the PTRACE_GETREGSET request
+   with NT_X86_CET flag from process/thread TID and store their values in GDB's
+   register cache.  */
+
+static void
+x86_store_cet_regs (regcache *regcache, const int tid)
+{
+  /* TODO: Investigate if the x86_check_cet_ptrace_status is required and if so
+  add a proper comment (JIRA/DOQG-3259).  */
+  if (!have_ptrace_getregset || !x86_check_cet_ptrace_status (tid))
+    return;
+
+  uint64_t buf[2] = {0};
+  iovec iov;
+  iov.iov_base = buf;
+  iov.iov_len = sizeof (buf);
+
+  if (ptrace (PTRACE_GETREGSET, tid, NT_X86_CET, &iov) == 0)
+    {
+      /* If CET indirect branch tracking or shadow stack are enabled, the
+	 org.gnu.gdb.i386.cet_u feature has to be supported by the current
+	 target.  */
+      supply_register_by_name (regcache, "cet_u", &buf[0]);
+      if (tdesc_contains_feature (regcache->tdesc, "org.gnu.gdb.i386.pl3_ssp"))
+	supply_register_by_name (regcache, "pl3_ssp", &buf[1]);
+    }
+  else
+    {
+      /* TODO: Test this warning with new kernel and add proper comment
+	 (JIRA/DOQG-3253).  */
+      perror_warning_with_name (_("Failed to get CET registers."));
+    }
+}
+
 static void
 collect_register_i386 (struct regcache *regcache, int regno, void *buf)
 {
@@ -430,6 +496,9 @@ collect_register_i386 (struct regcache *regcache, int regno, void *buf)
 static void
 x86_fill_gregset (struct regcache *regcache, void *buf)
 {
+  if (tdesc_contains_feature (regcache->tdesc, "org.gnu.gdb.i386.cet_u"))
+    x86_fill_cet_regs (regcache, lwpid_of (current_thread));
+
   int i;
 
 #ifdef __x86_64__
@@ -454,6 +523,9 @@ x86_fill_gregset (struct regcache *regcache, void *buf)
 static void
 x86_store_gregset (struct regcache *regcache, const void *buf)
 {
+  if (tdesc_contains_feature (regcache->tdesc, "org.gnu.gdb.i386.cet_u"))
+    x86_store_cet_regs (regcache, lwpid_of (current_thread));
+
   int i;
 
 #ifdef __x86_64__
@@ -954,6 +1026,14 @@ x86_linux_read_description (void)
   if (xcr0_features)
     x86_xcr0 = xcr0;
 
+  bool shstk_enabled = false;
+  bool ibt_enabled = false;
+  if (have_ptrace_getregset == TRIBOOL_TRUE)
+    {
+      shstk_enabled = x86_check_shstk_support ();
+      ibt_enabled = x86_check_ibt_support ();
+    }
+
   if (machine == EM_X86_64)
     {
 #ifdef __x86_64__
@@ -962,11 +1042,13 @@ x86_linux_read_description (void)
       if (xcr0_features)
 	{
 	  tdesc = amd64_linux_read_description (xcr0 & X86_XSTATE_ALL_MASK,
-						!is_elf64);
+						!is_elf64, shstk_enabled,
+						ibt_enabled);
 	}
 
       if (tdesc == NULL)
-	tdesc = amd64_linux_read_description (X86_XSTATE_SSE_MASK, !is_elf64);
+	tdesc = amd64_linux_read_description (X86_XSTATE_SSE_MASK, !is_elf64,
+					      shstk_enabled, ibt_enabled);
       return tdesc;
 #endif
     }
@@ -975,10 +1057,12 @@ x86_linux_read_description (void)
       const target_desc *tdesc = NULL;
 
       if (xcr0_features)
-	  tdesc = i386_linux_read_description (xcr0 & X86_XSTATE_ALL_MASK);
+	  tdesc = i386_linux_read_description (xcr0 & X86_XSTATE_ALL_MASK,
+					       shstk_enabled, ibt_enabled);
 
       if (tdesc == NULL)
-	tdesc = i386_linux_read_description (X86_XSTATE_SSE);
+	tdesc = i386_linux_read_description (X86_XSTATE_SSE, shstk_enabled,
+					     ibt_enabled);
 
       return tdesc;
     }

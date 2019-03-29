@@ -206,6 +206,10 @@ struct i386_gdbarch_tdep : gdbarch_tdep
      absence of segment base registers.  */
   int fsbase_regnum = 0;
 
+  /* CET registers.  */
+  int ssp_regnum;
+  int cet_msr_regnum;
+
   /* Target description.  */
   const struct target_desc *tdesc = nullptr;
 
@@ -303,6 +307,8 @@ enum i386_regnum
   I386_ZMM0H_REGNUM,		/* %zmm0h */
   I386_ZMM7H_REGNUM = I386_ZMM0H_REGNUM + 7,
   I386_PKRU_REGNUM,
+  I386_CET_U_REGNUM,
+  I386_CET_PL3_SSP_REGNUM,
   I386_FSBASE_REGNUM,
   I386_GSBASE_REGNUM
 };

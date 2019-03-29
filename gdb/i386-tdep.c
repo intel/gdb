@@ -8256,7 +8256,8 @@ i386_validate_tdesc_p (i386_gdbarch_tdep *tdep,
   const struct tdesc_feature *feature_core;
 
   const struct tdesc_feature *feature_sse, *feature_avx, *feature_mpx,
-			     *feature_avx512, *feature_pkeys, *feature_segments;
+			     *feature_avx512, *feature_pkeys, *feature_segments,
+			     *feature_cet_u, *feature_pl3_ssp;
   int i, num_regs, valid_p;
 
   if (! tdesc_has_registers (tdesc))
@@ -8284,6 +8285,12 @@ i386_validate_tdesc_p (i386_gdbarch_tdep *tdep,
 
   /* Try PKEYS  */
   feature_pkeys = tdesc_find_feature (tdesc, "org.gnu.gdb.i386.pkeys");
+
+  /* Try CET.  */
+  feature_cet_u = tdesc_find_feature (tdesc, "org.gnu.gdb.i386.cet_u");
+
+  /* Try SHSTK.  */
+  feature_pl3_ssp = tdesc_find_feature (tdesc, "org.gnu.gdb.i386.pl3_ssp");
 
   valid_p = 1;
 
@@ -8415,6 +8422,24 @@ i386_validate_tdesc_p (i386_gdbarch_tdep *tdep,
 	valid_p &= tdesc_numbered_register (feature_pkeys, tdesc_data,
 					    I387_PKRU_REGNUM (tdep) + i,
 					    tdep->pkeys_register_names[i]);
+    }
+
+  if (feature_cet_u)
+    {
+      if (tdep->cet_msr_regnum < 0)
+	tdep->cet_msr_regnum = I386_CET_U_REGNUM;
+
+      valid_p &= tdesc_numbered_register (feature_cet_u, tdesc_data,
+					  tdep->cet_msr_regnum, "cet_u");
+    }
+
+  if (feature_pl3_ssp)
+    {
+      if (tdep->ssp_regnum < 0)
+	tdep->ssp_regnum = I386_CET_PL3_SSP_REGNUM;
+
+      valid_p &= tdesc_numbered_register (feature_pl3_ssp, tdesc_data,
+					  tdep->ssp_regnum, "pl3_ssp");
     }
 
   return valid_p;
@@ -8689,6 +8714,10 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* No segment base registers.  */
   tdep->fsbase_regnum = -1;
+
+  /* No CET registers.  */
+  tdep->cet_msr_regnum = -1;
+  tdep->ssp_regnum = -1;
 
   tdesc_arch_data_up tdesc_data = tdesc_data_alloc ();
 

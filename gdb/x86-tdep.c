@@ -18,9 +18,47 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include "i386-tdep.h"
 #include "x86-tdep.h"
 #include "symtab.h"
 
+
+/* See x86-tdep.h.  */
+
+void
+x86_supply_cet (regcache *regcache, const uint64_t buf[X86_NUM_CET_REGS])
+{
+  i386_gdbarch_tdep *tdep
+    = (i386_gdbarch_tdep *) gdbarch_tdep(regcache->arch ());
+  gdb_assert (tdep != nullptr);
+
+  if (tdep->cet_msr_regnum < 0)
+    return;
+
+  regcache->raw_supply (tdep->cet_msr_regnum, &buf[0]);
+  if (tdep->ssp_regnum > 0)
+    regcache->raw_supply (tdep->ssp_regnum, &buf[1]);
+}
+
+/* See x86-tdep.h.  */
+
+void
+x86_collect_cet (const regcache *regcache, uint64_t buf[X86_NUM_CET_REGS])
+{
+  i386_gdbarch_tdep *tdep
+    = (i386_gdbarch_tdep *) gdbarch_tdep (regcache->arch ());
+  gdb_assert (tdep != nullptr);
+
+  if (tdep->cet_msr_regnum < 0)
+    return;
+
+  regcache->raw_collect (tdep->cet_msr_regnum, &buf[0]);
+
+  if (tdep->ssp_regnum > 0)
+    regcache->raw_collect (tdep->ssp_regnum, &buf[1]);
+  else
+    buf[1] = 0x0;
+}
 
 /* Check whether NAME is included in NAMES[LO] (inclusive) to NAMES[HI]
    (exclusive).  */

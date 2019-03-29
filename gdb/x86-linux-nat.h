@@ -85,4 +85,16 @@ protected:
 extern ps_err_e x86_linux_get_thread_area (pid_t pid, void *addr,
 					   unsigned int *base_addr);
 
+/* Fetch all supported CET registers covered by the PTRACE_GETREGSET request
+   with NT_X86_CET flag from process/thread TID and store their values in GDB's
+   register cache.  */
+
+extern void x86_linux_fetch_cet_regs (regcache *regcache, const int tid);
+
+/* Store all supported CET registers in GDB's register cache covered by the
+   PTRACE_SETREGSET request with NT_X86_CET flag into the process/thread
+   specified by TID.  */
+
+extern void x86_linux_store_cet_regs (const regcache *regcache, const int tid);
+
 #endif

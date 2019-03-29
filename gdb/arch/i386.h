@@ -22,6 +22,8 @@
 #include <stdint.h>
 
 target_desc *i386_create_target_description (uint64_t xcr0, bool is_linux,
-					     bool segments);
+					     bool segments,
+					     bool ibt_enabled = false,
+					     bool shstk_enabled = false);
 
 #endif /* ARCH_I386_H */

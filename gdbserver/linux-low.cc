@@ -140,6 +140,9 @@ typedef struct
 /* Does the current host support PTRACE_GETREGSET?  */
 int have_ptrace_getregset = -1;
 
+/* Does the current host support PTRACE_GETREGSET with NT_X86_CET flag?  */
+enum tribool have_ptrace_getregset_cet = TRIBOOL_UNKNOWN;
+
 /* LWP accessors.  */
 
 /* See nat/linux-nat.h.  */

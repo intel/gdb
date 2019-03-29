@@ -220,6 +220,7 @@ FEATURE_XMLFILES = aarch64-core.xml \
 	i386/32bit-mpx.xml \
 	i386/32bit-avx512.xml \
 	i386/32bit-pkeys.xml \
+	i386/32bit-cet.xml \
 	i386/64bit-avx512.xml \
 	i386/64bit-core.xml \
 	i386/64bit-mpx.xml \
@@ -228,6 +229,7 @@ FEATURE_XMLFILES = aarch64-core.xml \
 	i386/64bit-linux.xml \
 	i386/64bit-pkeys.xml \
 	i386/64bit-sse.xml \
+	i386/64bit-cet.xml \
 	i386/x32-core.xml \
 	intelgt-grf.xml \
 	intelgt-arf9.xml \

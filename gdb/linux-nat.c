@@ -190,6 +190,9 @@ struct linux_nat_target *linux_target;
 /* Does the current host support PTRACE_GETREGSET?  */
 enum tribool have_ptrace_getregset = TRIBOOL_UNKNOWN;
 
+/* Does the current host support PTRACE_GETREGSET with NT_X86_CET flag?  */
+enum tribool have_ptrace_getregset_cet = TRIBOOL_UNKNOWN;
+
 static unsigned int debug_linux_nat;
 static void
 show_debug_linux_nat (struct ui_file *file, int from_tty,

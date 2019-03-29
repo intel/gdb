@@ -4574,7 +4574,7 @@ i386_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
       ymm_regnum_p, ymmh_regnum_p, ymm_avx512_regnum_p, ymmh_avx512_regnum_p,
       bndr_regnum_p, bnd_regnum_p, zmm_regnum_p, zmmh_regnum_p,
       mpx_ctrl_regnum_p, xmm_avx512_regnum_p,
-      avx512_p, avx_p, sse_p, pkru_regnum_p;
+      avx512_p, avx_p, sse_p, pkru_regnum_p, cet_regnum_p;
 
   /* Don't include pseudo registers, except for MMX, in any register
      groups.  */
@@ -4591,6 +4591,7 @@ i386_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   if (group == i386_mmx_reggroup)
     return mmx_regnum_p;
 
+  cet_regnum_p = (int) x86_is_cet_regnum (gdbarch, regnum);
   pkru_regnum_p = i386_pkru_regnum_p(gdbarch, regnum);
   xmm_regnum_p = i386_xmm_regnum_p (gdbarch, regnum);
   xmm_avx512_regnum_p = i386_xmm_avx512_regnum_p (gdbarch, regnum);
@@ -4664,7 +4665,8 @@ i386_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 	    && !mpx_ctrl_regnum_p
 	    && !zmm_regnum_p
 	    && !zmmh_regnum_p
-	    && !pkru_regnum_p);
+	    && !pkru_regnum_p
+	    && !cet_regnum_p);
 
   return default_register_reggroup_p (gdbarch, regnum, group);
 }
@@ -8253,7 +8255,8 @@ i386_validate_tdesc_p (struct gdbarch_tdep *tdep,
   const struct tdesc_feature *feature_core;
 
   const struct tdesc_feature *feature_sse, *feature_avx, *feature_mpx,
-			     *feature_avx512, *feature_pkeys, *feature_segments;
+			     *feature_avx512, *feature_pkeys, *feature_segments,
+			     *feature_cet;
   int i, num_regs, valid_p;
 
   if (! tdesc_has_registers (tdesc))
@@ -8281,6 +8284,9 @@ i386_validate_tdesc_p (struct gdbarch_tdep *tdep,
 
   /* Try PKEYS  */
   feature_pkeys = tdesc_find_feature (tdesc, "org.gnu.gdb.i386.pkeys");
+
+  /* Try CET.  */
+  feature_cet = tdesc_find_feature (tdesc, "org.gnu.gdb.i386.cet");
 
   valid_p = 1;
 
@@ -8412,6 +8418,21 @@ i386_validate_tdesc_p (struct gdbarch_tdep *tdep,
 	valid_p &= tdesc_numbered_register (feature_pkeys, tdesc_data,
 					    I387_PKRU_REGNUM (tdep) + i,
 					    tdep->pkeys_register_names[i]);
+    }
+
+  if (feature_cet)
+    {
+      if (tdep->cet_regnum < 0)
+	{
+	  tdep->cet_register_names = x86_cet_names;
+	  tdep->cet_regnum = I386_CET_U_REGNUM;
+	  tdep->num_cet_regs = X86_NUM_CET_REGS;
+	}
+
+      for (i = 0; i < tdep->num_cet_regs; ++i)
+	valid_p &= tdesc_numbered_register (feature_cet, tdesc_data,
+					    tdep->cet_regnum + i,
+					    tdep->cet_register_names[i]);
     }
 
   return valid_p;
@@ -8688,6 +8709,10 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* No segment base registers.  */
   tdep->fsbase_regnum = -1;
+
+  /* No CET registers.  */
+  tdep->cet_regnum = -1;
+  tdep->num_cet_regs = 0;
 
   tdesc_data = tdesc_data_alloc ();
 

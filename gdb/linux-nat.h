@@ -288,6 +288,9 @@ extern struct lwp_info *lwp_list;
 /* Does the current host support PTRACE_GETREGSET?  */
 extern enum tribool have_ptrace_getregset;
 
+/* Does the current host support PTRACE_GETREGSET with NT_X86_CET flag?  */
+extern enum tribool have_ptrace_getregset_cet;
+
 /* Iterate over each active thread (light-weight process).  */
 #define ALL_LWPS(LP)							\
   for ((LP) = lwp_list;							\

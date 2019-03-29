@@ -20,6 +20,27 @@
 #ifndef X86_TDEP_H
 #define X86_TDEP_H
 
+constexpr int X86_NUM_CET_REGS = 2;
+
+/* User mode CET registers' names.  */
+
+extern const char *x86_cet_names[X86_NUM_CET_REGS];
+
+/* Return TRUE if register number REGNUM is a CET user mode register.  */
+
+extern bool x86_is_cet_regnum (struct gdbarch *gdbarch, const int regnum);
+
+/* Fill CET user mode registers in REGCACHE with the appropriate
+   values from buffer BUF.  */
+
+extern void x86_supply_cet (struct regcache *regcache,
+			    const uint64_t buf[X86_NUM_CET_REGS]);
+
+/* Fill CET user mode registers in buffer BUF with the values from REGCACHE.  */
+
+extern void x86_collect_cet (const struct regcache *regcache,
+			     uint64_t buf[X86_NUM_CET_REGS]);
+
 /* Checks whether PC lies in an indirect branch thunk using registers
    REGISTER_NAMES[LO] (inclusive) to REGISTER_NAMES[HI] (exclusive).  */
 

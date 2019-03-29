@@ -808,6 +808,9 @@ bool thread_db_thread_handle (ptid_t ptid, gdb_byte **handle, int *handle_len);
 
 extern int have_ptrace_getregset;
 
+/* Does the current host support PTRACE_GETREGSET with NT_X86_CET flag?  */
+extern enum tribool have_ptrace_getregset_cet;
+
 /* Search for the value with type MATCH in the auxv vector with
    entries of length WORDSIZE bytes.  If found, store the value in
    *VALP and return 1.  If not found or if there is an error, return

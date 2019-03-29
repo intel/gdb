@@ -18,9 +18,66 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include "i386-tdep.h"
 #include "x86-tdep.h"
 #include "symtab.h"
 
+const char *x86_cet_names[X86_NUM_CET_REGS] = { "cet_u", "pl3_ssp" };
+
+/* See x86-tdep.h.  */
+
+bool
+x86_is_cet_regnum (struct gdbarch *gdbarch, const int regnum)
+{
+  if (gdbarch == nullptr)
+    return false;
+
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  gdb_assert (tdep != nullptr);
+
+  if (tdep->cet_regnum < 0)
+    return false;
+
+  return (regnum >= tdep->cet_regnum
+	  && regnum < (tdep->cet_regnum + tdep->num_cet_regs));
+}
+
+/* See x86-tdep.h.  */
+
+void
+x86_supply_cet (struct regcache *regcache, const uint64_t buf[X86_NUM_CET_REGS])
+{
+  if (buf == nullptr)
+    return;
+
+  const struct gdbarch_tdep *tdep = gdbarch_tdep (regcache->arch ());
+  gdb_assert (tdep != nullptr);
+
+  if (tdep->cet_regnum < 0)
+    return;
+
+  for (int i = 0; i < X86_NUM_CET_REGS; ++i)
+    regcache->raw_supply (tdep->cet_regnum + i, &buf[i]);
+}
+
+/* See x86-tdep.h.  */
+
+void
+x86_collect_cet (const struct regcache *regcache,
+		 uint64_t buf[X86_NUM_CET_REGS])
+{
+  if (buf == nullptr)
+    return;
+
+  const struct gdbarch_tdep *tdep = gdbarch_tdep (regcache->arch ());
+  gdb_assert (tdep != nullptr);
+
+  if (tdep->cet_regnum < 0)
+    return;
+
+  for (int i = 0; i < X86_NUM_CET_REGS; ++i)
+    regcache->raw_collect (tdep->cet_regnum + i, &buf[i]);
+}
 
 /* Check whether NAME is included in NAMES[LO] (inclusive) to NAMES[HI]
    (exclusive).  */

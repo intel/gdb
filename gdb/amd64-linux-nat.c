@@ -33,6 +33,7 @@
 #include "amd64-tdep.h"
 #include "amd64-linux-tdep.h"
 #include "i386-linux-tdep.h"
+#include "x86-tdep.h"
 #include "gdbsupport/x86-xstate.h"
 
 #include "x86-linux-nat.h"
@@ -85,6 +86,7 @@ static int amd64_linux_gregset32_reg_offset[] =
   -1, -1, -1, -1, -1, -1, -1, -1, /* k0 ... k7 (AVX512)  */
   -1, -1, -1, -1, -1, -1, -1, -1, /* zmm0 ... zmm7 (AVX512)  */
   -1,				  /* PKEYS register PKRU  */
+  -1,	 			  /* CET user mode register PL3_SSP.  */
   -1,				  /* TILECFG register (AMX).  */
   -1,	 			  /* TILEDATA registers tmm0 ... tmm7 (AMX).  */
   ORIG_RAX * 8			  /* "orig_eax"  */
@@ -238,6 +240,14 @@ amd64_linux_nat_target::fetch_registers (struct regcache *regcache, int regnum)
 
       if (have_ptrace_getregset == TRIBOOL_TRUE)
 	{
+	  if ((regnum == -1 && tdep->ssp_regnum > 0)
+	      || (regnum != -1 && regnum == tdep->ssp_regnum))
+	    {
+	      x86_linux_fetch_ssp (regcache, tid);
+	      if (regnum != -1)
+		return;
+	    }
+
 	  char xstateregs[tdep->xsave_layout.sizeof_xsave];
 	  struct iovec iov;
 
@@ -303,6 +313,14 @@ amd64_linux_nat_target::store_registers (struct regcache *regcache, int regnum)
 
       if (have_ptrace_getregset == TRIBOOL_TRUE)
 	{
+	  if ((regnum == -1 && tdep->ssp_regnum > 0)
+	      || (regnum != -1 && regnum == tdep->ssp_regnum))
+	    {
+	      x86_linux_store_ssp (regcache, tid);
+	      if (regnum != -1)
+		return;
+	    }
+
 	  char xstateregs[tdep->xsave_layout.sizeof_xsave];
 	  struct iovec iov;
 

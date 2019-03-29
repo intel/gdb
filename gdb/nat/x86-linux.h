@@ -47,4 +47,8 @@ extern void x86_linux_delete_thread (struct arch_lwp_info *arch_lwp);
 
 extern void x86_linux_prepare_to_resume (struct lwp_info *lwp);
 
+/* Check shadow stack hardware and kernel support.  */
+
+extern bool x86_check_ssp_support (const int tid);
+
 #endif /* NAT_X86_LINUX_H */

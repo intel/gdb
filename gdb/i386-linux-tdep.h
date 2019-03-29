@@ -29,7 +29,7 @@
 /* Register number for the "orig_eax" pseudo-register.  If this
    pseudo-register contains a value >= 0 it is interpreted as the
    system call number that the kernel is supposed to restart.  */
-#define I386_LINUX_ORIG_EAX_REGNUM (I386_PKRU_REGNUM + 1)
+#define I386_LINUX_ORIG_EAX_REGNUM (I386_CET_PL3_SSP_REGNUM + 1)
 
 /* Total number of registers for GNU/Linux.  */
 #define I386_LINUX_NUM_REGS (I386_LINUX_ORIG_EAX_REGNUM + 1)
@@ -44,7 +44,8 @@ extern void i386_linux_report_signal_info (struct gdbarch *gdbarch,
 					   enum gdb_signal siggnal);
 
 /* Return the target description according to XCR0.  */
-extern const struct target_desc *i386_linux_read_description (uint64_t xcr0);
+extern const struct target_desc *
+i386_linux_read_description (uint64_t xcr0, bool cet_enabled = false);
 
 /* Format of XSAVE extended state is:
 	struct

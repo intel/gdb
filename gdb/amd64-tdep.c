@@ -3168,6 +3168,13 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
       tdep->num_pkeys_regs = 1;
     }
 
+  if (tdesc_find_feature (tdesc, "org.gnu.gdb.i386.cet") != NULL)
+    {
+      tdep->cet_register_names = x86_cet_names;
+      tdep->cet_regnum = AMD64_CET_U_REGNUM;
+      tdep->num_cet_regs = X86_NUM_CET_REGS;
+    }
+
   tdep->num_byte_regs = 20;
   tdep->num_word_regs = 16;
   tdep->num_dword_regs = 16;

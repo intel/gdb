@@ -17,7 +17,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+#include "elf/common.h"
 #include "gdbsupport/common-defs.h"
+#include "nat/gdb_ptrace.h"
+#include "nat/linux-ptrace.h"
+#include "nat/x86-cpuid.h"
+#include <sys/uio.h>
 #include "x86-linux.h"
 #include "x86-linux-dregs.h"
 
@@ -79,4 +84,40 @@ void
 x86_linux_prepare_to_resume (struct lwp_info *lwp)
 {
   x86_linux_update_debug_registers (lwp);
+}
+
+/* See nat/x86-linux.h.  */
+
+bool
+x86_check_cet_support ()
+{
+  unsigned int eax, ebx, ecx, edx;
+
+  if (__get_cpuid_max (0, NULL) < 7)
+    return false;
+
+  __cpuid (1, eax, ebx, ecx, edx);
+
+  /* Check if OS provides processor extended state management.
+     Implied HW support for XSAVE, XGETBV, XGETBV, XCR0....   */
+  if ((ecx & bit_OSXSAVE) == 0)
+    return false;
+
+  __cpuid_count (7, 0, eax, ebx, ecx, edx);
+
+  return (edx & bit_IBT) != 0 || (ecx & bit_SHSTK) != 0;
+}
+
+/* See nat/x86-linux.h.  */
+
+bool
+x86_check_cet_ptrace_status (const int tid)
+{
+  uint64_t buf[2];
+  iovec iov;
+  iov.iov_base = buf;
+  iov.iov_len = sizeof (buf);
+
+  /* Check if PTRACE_GETREGSET with NT_X86_CET flag works.  */
+  return ptrace (PTRACE_GETREGSET, tid, NT_X86_CET, &iov) == 0;
 }

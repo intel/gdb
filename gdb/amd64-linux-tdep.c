@@ -97,6 +97,7 @@ int amd64_linux_gregset_reg_offset[] =
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1,				/* PKEYS register pkru  */
+  -1, -1,			/* CET user mode registers CET_U, PL3_SSP.  */
 
   /* End of hardware registers */
   21 * 8, 22 * 8,		      /* fs_base and gs_base.  */
@@ -1573,7 +1574,8 @@ amd64_linux_record_signal (struct gdbarch *gdbarch,
 }
 
 const target_desc *
-amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32)
+amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32,
+			      bool cet_enabled)
 {
   static target_desc *amd64_linux_tdescs \
     [2/*AVX*/][2/*MPX*/][2/*AVX512*/][2/*PKRU*/] = {};
@@ -1595,8 +1597,8 @@ amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32)
     }
 
   if (*tdesc == NULL)
-    *tdesc = amd64_create_target_description (xcr0_features_bit, is_x32,
-					      true, true);
+    *tdesc = amd64_create_target_description (xcr0_features_bit, is_x32, true,
+					      true, cet_enabled);
 
   return *tdesc;
 }

@@ -22,6 +22,7 @@
 
 #include "../features/i386/64bit-avx.c"
 #include "../features/i386/64bit-avx512.c"
+#include "../features/i386/64bit-cet.c"
 #include "../features/i386/64bit-core.c"
 #include "../features/i386/64bit-linux.c"
 #include "../features/i386/64bit-mpx.c"
@@ -34,11 +35,13 @@
 /* Create amd64 target descriptions according to XCR0.  If IS_X32 is
    true, create the x32 ones.  If IS_LINUX is true, create target
    descriptions for Linux.  If SEGMENTS is true, then include
-   the "org.gnu.gdb.i386.segments" feature registers.  */
+   the "org.gnu.gdb.i386.segments" feature registers.  if CET_ENABLED
+   is true, then include the "org.gnu.gdb.i386.cet" feature registers.
+*/
 
 target_desc *
 amd64_create_target_description (uint64_t xcr0, bool is_x32, bool is_linux,
-				 bool segments)
+				 bool segments, bool cet_enabled)
 {
   target_desc_up tdesc = allocate_target_description ();
 
@@ -74,6 +77,9 @@ amd64_create_target_description (uint64_t xcr0, bool is_x32, bool is_linux,
 
   if ((xcr0 & X86_XSTATE_PKRU) && !is_x32)
     regnum = create_feature_i386_64bit_pkeys (tdesc.get (), regnum);
+
+  if (cet_enabled)
+    regnum = create_feature_i386_64bit_cet (tdesc.get (), regnum);
 
   return tdesc.release ();
 }

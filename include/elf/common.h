@@ -619,6 +619,8 @@
 					/*   note name must be "LINUX".  */
 #define NT_X86_XSTATE	0x202		/* x86 XSAVE extended state */
 					/*   note name must be "LINUX".  */
+/* TODO: The following definition should be double-checked once the linux kernel
+   CET patches are upstreamed.  */
 #define NT_X86_CET	0x203		/* x86 CET state.  */
 					/*   note name must be "LINUX".  */
 #define NT_S390_HIGH_GPRS 0x300		/* S/390 upper halves of GPRs  */

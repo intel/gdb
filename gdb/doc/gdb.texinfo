@@ -45758,6 +45758,10 @@ The @samp{org.gnu.gdb.i386.pkeys} feature is optional.  It should
 describe a single register, @samp{pkru}.  It is a 32-bit register
 valid for i386 and amd64.
 
+The @samp{org.gnu.gdb.i386.cet} feature is optional.  It should
+describe two user mode registers: @samp{cet_u} and @samp{pl3_ssp}.
+These are two 64-bit registers valid for i386 and amd64.
+
 @node MicroBlaze Features
 @subsection MicroBlaze Features
 @cindex target descriptions, MicroBlaze features

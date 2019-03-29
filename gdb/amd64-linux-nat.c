@@ -33,6 +33,7 @@
 #include "amd64-tdep.h"
 #include "amd64-linux-tdep.h"
 #include "i386-linux-tdep.h"
+#include "x86-tdep.h"
 #include "gdbsupport/x86-xstate.h"
 
 #include "x86-linux-nat.h"
@@ -85,6 +86,7 @@ static int amd64_linux_gregset32_reg_offset[] =
   -1, -1, -1, -1, -1, -1, -1, -1, /* k0 ... k7 (AVX512)  */
   -1, -1, -1, -1, -1, -1, -1, -1, /* zmm0 ... zmm7 (AVX512)  */
   -1,				  /* PKEYS register PKRU  */
+  -1, -1,			  /* CET user mode registers CET_U, PL3_SSP.  */
   ORIG_RAX * 8			  /* "orig_eax"  */
 };
 
@@ -233,6 +235,14 @@ amd64_linux_nat_target::fetch_registers (struct regcache *regcache, int regnum)
     {
       elf_fpregset_t fpregs;
 
+      /* Fetch CET user mode MSRs.  */
+      if (regnum == -1 || x86_is_cet_regnum (gdbarch, regnum))
+	{
+	  x86_linux_fetch_cet_regs (regcache, tid);
+	  if (regnum != -1)
+	    return;
+	}
+
       if (have_ptrace_getregset == TRIBOOL_TRUE)
 	{
 	  char xstateregs[X86_XSTATE_MAX_SIZE];
@@ -296,6 +306,14 @@ amd64_linux_nat_target::store_registers (struct regcache *regcache, int regnum)
   if (regnum == -1 || !amd64_native_gregset_supplies_p (gdbarch, regnum))
     {
       elf_fpregset_t fpregs;
+
+      /* Store CET user mode MSRs.  */
+      if (regnum == -1 || x86_is_cet_regnum (gdbarch, regnum))
+	{
+	  x86_linux_store_cet_regs (regcache, tid);
+	  if (regnum != -1)
+	    return;
+	}
 
       if (have_ptrace_getregset == TRIBOOL_TRUE)
 	{

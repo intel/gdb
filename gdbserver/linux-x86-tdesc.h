@@ -48,8 +48,9 @@ int amd64_get_ipa_tdesc_idx (const struct target_desc *tdesc);
 const struct target_desc *i386_get_ipa_tdesc (int idx);
 
 #ifdef __x86_64__
-const struct target_desc *amd64_linux_read_description (uint64_t xcr0,
-							bool is_x32);
+const target_desc *amd64_linux_read_description (uint64_t xcr0,
+						 bool is_x32,
+						 bool ssp_enabled = false);
 #endif
 
 const struct target_desc *i386_linux_read_description (uint64_t xcr0);

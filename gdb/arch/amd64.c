@@ -29,6 +29,8 @@
 #include "../features/i386/64bit-sse.c"
 #include "../features/i386/pkeys.c"
 
+#include "../features/i386/64bit-ssp.c"
+#include "../features/i386/32bit-ssp.c"
 #include "../features/i386/x32-core.c"
 
 /* See amd64.h.  */
@@ -71,6 +73,14 @@ amd64_create_target_description (uint64_t xstate_bv_mask, bool is_x32,
 
   if (xstate_bv_mask & X86_XSTATE_AMX)
     regnum = create_feature_i386_64bit_amx (tdesc.get (), regnum);
+
+  if (xstate_bv_mask & X86_XSTATE_CET_U)
+    {
+      if (!is_x32)
+	regnum = create_feature_i386_64bit_ssp (tdesc.get (), regnum);
+      else
+	regnum = create_feature_i386_32bit_ssp (tdesc.get (), regnum);
+    }
 
   return tdesc.release ();
 }

@@ -2,6 +2,10 @@
 	     (Organized release by release)
 
 *** Changes since GDB 16
+
+* Support for the shadow stack pointer register on x86-64 or x86-64 with
+  32-bit pointer size (X32) GNU/Linux.
+
 * Changed remote packets
 
 qXfer:threads:read

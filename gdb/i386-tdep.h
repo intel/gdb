@@ -215,6 +215,9 @@ struct i386_gdbarch_tdep : gdbarch_tdep_base
   const char * const *tmm_register_names;
   const char * const *tiledata_register_names;
 
+  /* Shadow stack pointer register.  */
+  int ssp_regnum = 0;
+
   /* Register number for %fsbase.  Set this to -1 to indicate the
      absence of segment base registers.  */
   int fsbase_regnum = 0;
@@ -325,6 +328,7 @@ enum i386_regnum
   I386_PKRU_REGNUM,
   I386_AMX_TILECFG_RAW_REGNUM,
   I386_AMX_TILEDATA_REGNUM,
+  I386_PL3_SSP_REGNUM,
   I386_FSBASE_REGNUM,
   I386_GSBASE_REGNUM
 };

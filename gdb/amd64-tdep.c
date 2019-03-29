@@ -3369,6 +3369,9 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
       tdep->num_tmm_regs = 8;
     }
 
+  if (tdesc_find_feature (tdesc, "org.gnu.gdb.i386.pl3_ssp") != nullptr)
+    tdep->ssp_regnum = AMD64_PL3_SSP_REGNUM;
+
   tdep->num_byte_regs = 20;
   tdep->num_word_regs = 16;
   tdep->num_dword_regs = 16;
@@ -3531,13 +3534,15 @@ const struct target_desc *
 amd64_target_description (uint64_t xstate_bv_mask, bool segments)
 {
   static target_desc *amd64_tdescs \
-    [2/*AVX*/][2/*AVX512*/][2/*PKRU*/][2/*AMX*/][2/*segments*/] = {};
+    [2/*AVX*/][2/*AVX512*/][2/*PKRU*/][2/*AMX*/][2/*CET_U*/] \
+    [2/*segments*/] = {};
   target_desc **tdesc;
 
   tdesc = &amd64_tdescs[(xstate_bv_mask & X86_XSTATE_AVX) ? 1 : 0]
     [(xstate_bv_mask & X86_XSTATE_AVX512) ? 1 : 0]
     [(xstate_bv_mask & X86_XSTATE_PKRU) ? 1 : 0]
     [(xstate_bv_mask & X86_XSTATE_AMX) ? 1 : 0]
+    [(xstate_bv_mask & X86_XSTATE_CET_U) ? 1 : 0]
     [segments ? 1 : 0];
 
   if (*tdesc == NULL)

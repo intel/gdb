@@ -28,6 +28,7 @@
 #define X86_XSTATE_ZMM_H_ID	6
 #define X86_XSTATE_ZMM_ID	7
 #define X86_XSTATE_PKRU_ID	9
+#define X86_XSTATE_CET_U_ID	11
 #define X86_XSTATE_TILECFG_ID	17
 #define X86_XSTATE_TILEDATA_ID	18
 
@@ -44,6 +45,7 @@
 				 | X86_XSTATE_ZMM)
 
 #define X86_XSTATE_PKRU		(1ULL << X86_XSTATE_PKRU_ID)
+#define X86_XSTATE_CET_U	(1ULL << X86_XSTATE_CET_U_ID)
 
 /* AMX adds two feature bits.  Both must be enabled.  */
 #define X86_XSTATE_TILECFG	(1ULL << 17)
@@ -99,7 +101,8 @@ constexpr bool operator!= (const x86_xsave_layout &lhs,
 /* Supported mask of state-component bitmap xstate_bv.  The SDM defines
    xstate_bv as XCR0 | IA32_XSS.  */
 
-#define X86_XSTATE_ALL_MASK		(X86_XSTATE_AVX_AVX512_PKU_AMX_MASK)
+#define X86_XSTATE_ALL_MASK		(X86_XSTATE_AVX_AVX512_PKU_AMX_MASK\
+					| X86_XSTATE_CET_U)
 
 
 #define X86_XSTATE_SSE_SIZE	576

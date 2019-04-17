@@ -1,0 +1,108 @@
+# Copyright 2019 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test schedule-multiple setting with the multi-target feature in the
+# all-stop mode.  Create two inferiors with separate targets.  The
+# second one is a remote target, to deliberately create a combination
+# of non-stop + all-stop targets.
+
+load_lib gdbserver-support.exp
+
+if {[skip_gdbserver_tests]} {
+    unsupported "target does not support gdbserver"
+    return -1
+}
+
+standard_testfile
+
+# We specifically want non-stop + all-stop combination of targets.
+if {[target_info gdb_protocol] != ""} {
+    unsupported "the test is designed for the native target"
+    return -1
+}
+
+if {[build_executable "failed to build" $testfile $srcfile {debug}]} {
+    return -1
+}
+
+proc do_test {selected_inf} {
+    global binfile gdb_prompt decimal
+
+    if {$selected_inf == 1} {
+	set other_inf 2
+    } else {
+	set other_inf 1
+    }
+
+    clean_restart $binfile
+
+    # Start inferior 1.
+    if {![runto_main]} {
+	untested "failed to run to main in inferior 1"
+	return -1
+    }
+
+    delete_breakpoints
+
+    # Add and start inferior 2.
+    gdb_test "add-inferior -no-connection" "Added inferior 2.*"\
+	"add empty inferior 2"
+    gdb_test "inferior 2" "Switching to inferior 2.*" \
+	"switch to inferior 2"
+    set gdbserver [gdbserver_start "" [standard_output_file $binfile]]
+    set gdbserver_gdbport [lindex $gdbserver 1]
+    gdb_target_cmd "remote" $gdbserver_gdbport
+
+    set stuff "\[^\r\n\]+"
+    # Check we do have two inferiors loaded.
+    gdb_test "info inferiors" [multi_line \
+	"  Num${stuff}"\
+	"  1${stuff}${binfile} "\
+	". 2${stuff}${binfile} "]
+
+    # Select the desired inferior as the current context.
+    gdb_test "inferior $selected_inf" \
+	"Switching to inferior $selected_inf.*" \
+	"select the inferior"
+
+    # Make the current inferior the "slow" process.
+    gdb_test "print duration = 100" " = 100"
+
+    # Continue, and expect to receive the termination event from the
+    # "fast" inferior, because schedule-multiple is enabled.
+    gdb_test_no_output "set schedule-multiple on"
+
+    gdb_test_multiple "continue" "continue" {
+	-re "Inferior ${other_inf} ${stuff}exited normally${stuff}\r\n${gdb_prompt} $" {
+	    pass $gdb_test_name
+	}
+	-re "$gdb_prompt $" {
+	    fail $gdb_test_name
+	}
+    }
+
+    # Clean up the gdbserver.
+    gdb_test "inferior 2" "Switching to inferior 2.*" \
+	"switch to gdbserver for clean up"
+    gdbserver_exit 0
+}
+
+with_test_prefix "selected inf is native" {
+    do_test 1
+}
+
+with_test_prefix "selected inf is remote" {
+    do_test 2
+}

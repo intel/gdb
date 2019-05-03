@@ -370,6 +370,25 @@ objfile::objfile (bfd *abfd, const char *name, objfile_flags flags_)
 int
 entry_point_address_query (CORE_ADDR *entry_p)
 {
+  /* FIXME: On Intel(R) Graphics Technology, there is no main function.
+     To find the entry point address, we apply a *HEURISTIC*: we use
+     the starting address (i.e.  the low address) of the current
+     object file.  This approach shall be replaced with a proper
+     solution when more details about the target become available.  */
+  frame_info *this_frame = get_current_frame ();
+  gdbarch *gdbarch = get_frame_arch (this_frame);
+  if (gdbarch_bfd_arch_info (gdbarch)->arch == bfd_arch_intelgt)
+    {
+      symbol *fun = get_frame_function (this_frame);
+      if (fun == nullptr)
+	return 0;
+
+      objfile *obj = symbol_objfile (fun);
+      *entry_p = obj->addr_low;
+
+      return 1;
+    }
+
   objfile *objf = current_program_space->symfile_object_file;
   if (objf == NULL || !objf->per_bfd->ei.entry_point_p)
     return 0;

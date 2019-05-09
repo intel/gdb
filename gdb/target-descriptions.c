@@ -89,6 +89,9 @@ make_gdb_type (struct gdbarch *gdbarch, struct tdesc_type *ttype)
 	case TDESC_TYPE_INT128:
 	  m_type = builtin_type (m_gdbarch)->builtin_int128;
 	  return;
+	case TDESC_TYPE_INT256:
+	  m_type = builtin_type (m_gdbarch)->builtin_int256;
+	  return;
 	case TDESC_TYPE_UINT8:
 	  m_type = builtin_type (m_gdbarch)->builtin_uint8;
 	  return;
@@ -103,6 +106,9 @@ make_gdb_type (struct gdbarch *gdbarch, struct tdesc_type *ttype)
 	  return;
 	case TDESC_TYPE_UINT128:
 	  m_type = builtin_type (m_gdbarch)->builtin_uint128;
+	  return;
+	case TDESC_TYPE_UINT256:
+	  m_type = builtin_type (m_gdbarch)->builtin_uint256;
 	  return;
 	case TDESC_TYPE_CODE_PTR:
 	  m_type = builtin_type (m_gdbarch)->builtin_func_ptr;

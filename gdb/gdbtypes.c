@@ -6076,6 +6076,10 @@ create_gdbtypes_data (struct gdbarch *gdbarch)
     = init_integer_type (alloc, 128, 0, "int128_t");
   builtin_type->builtin_uint128
     = init_integer_type (alloc, 128, 1, "uint128_t");
+  builtin_type->builtin_int256
+    = init_integer_type (alloc, 256, 0, "int256_t");
+  builtin_type->builtin_uint256
+    = init_integer_type (alloc, 256, 1, "uint256_t");
 
   builtin_type->builtin_int8->set_instance_flags
     (builtin_type->builtin_int8->instance_flags ()

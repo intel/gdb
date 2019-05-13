@@ -52,6 +52,9 @@ gdb_test "continue" \
 # We want the main thread (hand_call_with_signal) and
 # thread 1 (sigabrt_handler) to both run.
 
+# Turn off scheduler locking during function calls
+gdb_test "set scheduler-locking-eval off"
+
 gdb_test "call hand_call_with_signal()" \
     ".*in another thread.*" \
     "hand-call interrupted by signal in another thread"

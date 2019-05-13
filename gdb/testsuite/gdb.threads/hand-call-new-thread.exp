@@ -31,6 +31,9 @@ if ![runto_main] {
 # "running" state once the call finishes.
 gdb_test "b foo thread 1" "Breakpoint .*$srcfile.*"
 
+# Turn off scheduler locking during function calls
+gdb_test "set scheduler-locking-eval off"
+
 for {set i 0} {$i < 3} {incr i} {
     with_test_prefix "iter $i" {
 	gdb_test "p new_thread ()" " = void"

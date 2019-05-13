@@ -52,6 +52,9 @@ gdb_test "continue" \
 # We want the main thread (hand_call_with_signal) and
 # thread 1 (sigabrt_handler) to both run.
 
+# Turn off scheduler locking during function calls
+gdb_test "set scheduler-locking-eval off"
+
 # Do turn on unwindonsignal.
 # We want to test gdb handling of the current thread changing when
 # unwindonsignal is in effect.

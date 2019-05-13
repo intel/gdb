@@ -435,6 +435,10 @@ alias [-a] [--] ALIAS = COMMAND [DEFAULT-ARGS...]
   defines the alias pp10 that will pretty print a maximum of 10 elements
   of the given expression (if the expression is an array).
 
+set|show scheduler-locking-eval (on|off)
+  The new setting allows a user to lock scheduler during inferior calls.
+  It can be set in parallel to scheduler-locking step or replay mode.
+
 * New targets
 
 GNU/Linux/RISC-V (gdbserver)	riscv*-*-linux*

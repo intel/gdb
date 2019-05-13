@@ -146,6 +146,14 @@ proc step_ten_loops { cmd } {
     }
 }
 
+# Run infcall 10 times.
+
+proc infcall_ten_times { } {
+    for {set i 0} {$i < 10} {incr i} {
+	gdb_test "print some_function()" "void" "print some_function () iteration $i"
+    }
+}
+
 # Start with a fresh gdb.
 
 gdb_exit
@@ -209,7 +217,7 @@ if { $bad == 0 } {
 # thread's args before the command was run.  LOCKED indicates whether
 # we expect threads other than the selected thread remained locked.
 
-proc check_result { cmd before_thread before_args locked } {
+proc check_result { cmd before_thread before_args locked advanced } {
     global NUM
 
     # Make sure we're still in the same thread.
@@ -224,7 +232,13 @@ proc check_result { cmd before_thread before_args locked } {
 
     set after_args [get_args "after"]
 
-    set test "current thread advanced"
+    set test "current thread"
+    if { $advanced } {
+	set test "$test advanced"
+    } else {
+	set test "$test did not advance"
+    }
+
     if { $locked } {
 	set test "$test - locked"
     } else {
@@ -235,7 +249,11 @@ proc check_result { cmd before_thread before_args locked } {
     for {set i 0} {$i < $NUM} {incr i} {
 	if {[lindex $before_args $i] == [lindex $after_args $i]} {
 	    if {$i == $before_thread} {
-		fail "$test (didn't run)"
+		if { $advanced } {
+		    fail "$test (didn't run)"
+		} else {
+		    pass "$test (didn't run)"
+		}
 	    }
 	} else {
 	    if {$i == $before_thread} {
@@ -267,11 +285,20 @@ with_test_prefix "schedlock=on: cmd=continue" {
 
     my_continue "with lock"
 
-    check_result "continue" $curthread $cont_args 1
+    check_result "continue" $curthread $cont_args true true
+}
+
+proc set_schedlock { schedlock schedlock_eval } {
+    # No need to set to off again.  This avoids a duplicate message.
+    if {$schedlock != "off"} {
+	gdb_test_no_output "set scheduler-locking $schedlock"
+    }
+
+    gdb_test_no_output "set scheduler-locking-eval $schedlock_eval"
 }
 
 # Test stepping/nexting with different modes of scheduler locking.
-proc test_step { schedlock cmd call_function } {
+proc test_step { schedlock schedlock_eval cmd call_function } {
     global NUM
 
     gdb_test_no_output "set scheduler-locking off"
@@ -279,11 +306,7 @@ proc test_step { schedlock cmd call_function } {
 
     set curthread [get_current_thread "before"]
 
-    # No need to set to off again.  This avoids a duplicate message.
-    if {$schedlock != "off"} {
-	gdb_test_no_output "set scheduler-locking $schedlock"
-    }
-
+    set_schedlock $schedlock $schedlock_eval
     gdb_test "print call_function = $call_function" \
 	" = $call_function"
 
@@ -292,28 +315,57 @@ proc test_step { schedlock cmd call_function } {
     step_ten_loops $cmd
 
     if { $schedlock == "on" || $schedlock == "step" } {
-	set locked 1
+	set locked true
     } else {
-	set locked 0
+	set locked false
     }
 
-    check_result $cmd $curthread $before_args $locked
+    check_result $cmd $curthread $before_args $locked true
+}
+
+proc test_infcall { schedlock schedlock_eval } {
+    gdb_test_no_output "set scheduler-locking off"
+    goto_loop ""
+
+    set curthread [get_current_thread "before"]
+    set_schedlock $schedlock $schedlock_eval
+
+    gdb_test "print call_function = 0" " = 0"
+
+    set before_args [get_args "before"]
+
+    infcall_ten_times
+
+    if { $schedlock == "on" || $schedlock_eval == "on" } {
+	set locked true
+    } else {
+	set locked false
+    }
+
+    check_result "infcall" $curthread $before_args $locked false
 }
 
 # Test stepping/nexting with different modes of scheduler locking.
-foreach schedlock {"off" "step" "on"} {
+foreach schedlock { "off" "step" "on" } {
     with_test_prefix "schedlock=$schedlock" {
-	with_test_prefix "cmd=step" {
-	    test_step $schedlock "step" 0
-	}
-	with_test_prefix "cmd=next" {
-	    # In GDB <= 7.9, with schedlock "step", "next" would
-	    # unlock threads when stepping over a function call.  This
-	    # exercises "next" with and without a function call.  WRT
-	    # "schedlock step", "next" should behave just like "step".
-	    foreach call_function {0 1} {
-		with_test_prefix "call_function=$call_function" {
-		    test_step $schedlock "next" $call_function
+	foreach schedlock_eval { "off" "on" } {
+	    with_test_prefix "schedlock-eval=$schedlock_eval" {
+		with_test_prefix "cmd=step" {
+		    test_step $schedlock $schedlock_eval "step" 0
+		}
+		with_test_prefix "cmd=next" {
+		    # In GDB <= 7.9, with schedlock "step", "next" would
+		    # unlock threads when stepping over a function call.  This
+		    # exercises "next" with and without a function call.  WRT
+		    # "schedlock step", "next" should behave just like "step".
+		    foreach call_function {0 1} {
+			with_test_prefix "call_function=$call_function" {
+			    test_step $schedlock $schedlock_eval "next" $call_function
+			}
+		    }
+		}
+		with_test_prefix "cmd=infcall" {
+		    test_infcall $schedlock $schedlock_eval
 		}
 	    }
 	}

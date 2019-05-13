@@ -6873,8 +6873,8 @@ statement, rather than at a clean statement boundary, when the program
 stops.
 
 You might even find your program stopped in another thread after
-continuing or even single-stepping.  This happens whenever some other
-thread runs into a breakpoint, a signal, or an exception before the
+continuing or even single-stepping and inferior calls.  This happens whenever
+some other thread runs into a breakpoint, a signal, or an exception before the
 first thread completes whatever you requested.
 
 @cindex automatic thread selection
@@ -6910,6 +6910,20 @@ current thread away from the thread that you are debugging.  The
 
 @item show scheduler-locking
 Display the current scheduler locking mode.
+@end table
+
+@table @code
+@item set scheduler-locking-eval
+@cindex scheduler locking evaluation mode
+@cindex lock scheduler
+When @code{on}, it prevents thread switching during expression evaluations.
+Thus, if the current thread starts an inferior call, other threads are not
+permitted to run before the call is finished.  This setting can be used
+together with @w{@code{set scheduler-locking step}} mode, so the thread
+focus does not change unexpectedly for a user.
+
+@item show scheduler-locking-eval
+Display the current scheduler locking evaluation setting.
 @end table
 
 @cindex resume threads of multiple processes simultaneously

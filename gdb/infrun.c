@@ -2713,7 +2713,10 @@ clear_proceed_status (int step)
       /* In all-stop mode, delete the per-thread status of all threads
 	 we're about to resume, implicitly and explicitly.  */
       for (thread_info *tp : all_non_exited_threads (resume_target, resume_ptid))
-	clear_proceed_status_thread (tp);
+	{
+	  clear_proceed_status_thread (tp);
+	  tp->inf->control.stop_soon = NO_STOP_QUIETLY;
+	}
     }
 
   if (inferior_ptid != null_ptid)

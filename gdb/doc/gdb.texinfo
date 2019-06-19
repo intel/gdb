@@ -113,6 +113,9 @@ Documentation License}.
 @page
 List of extended features for @value{GDBN} version @value{GDBVN}:
 @itemize @bullet
+@item
+Control-flow Enforcement Debugging:@*
+@ref{CET Debugging}.
 @end itemize
 @end titlepage
 @page

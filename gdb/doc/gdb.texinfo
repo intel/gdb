@@ -114,6 +114,8 @@ Documentation License}.
 List of extended features for @value{GDBN} version @value{GDBVN}:
 @itemize @bullet
 @item
+Control-flow Enforcement Debugging:@*
+@ref{CET Debugging}.
 Decoding Abort Reasons of a Speculative Execution:@*
 @ref{Decoding Abort Reasons, Decoding abort reason}
 @end itemize

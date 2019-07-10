@@ -237,6 +237,10 @@ CODESIGN_CERT = @CODESIGN_CERT@
 # Flags to pass to gdb when invoked with "make run".
 GDBFLAGS =
 
+# Where is libiga (i.e.  the disassembler lib for the intelgt target)?
+# This will be empty if libiga was not available.
+LIBIGA = @LIBIGA64@
+
 # Helper code from gnulib.
 GNULIB_BUILDDIR = ../gnulib
 LIBGNU = $(GNULIB_BUILDDIR)/import/libgnu.a
@@ -628,7 +632,7 @@ CLIBS = $(SIM) $(READLINE) $(OPCODES) $(LIBCTF) $(BFD) $(ZLIB) \
 	$(LIBEXPAT) $(LIBLZMA) $(LIBBABELTRACE) $(LIBIPT) \
 	$(WIN32LIBS) $(LIBGNU) $(LIBICONV) \
 	$(LIBMPFR) $(SRCHIGH_LIBS) $(LIBXXHASH) $(PTHREAD_LIBS) \
-	$(DEBUGINFOD_LIBS)
+	$(DEBUGINFOD_LIBS) $(LIBIGA)
 CDEPS = $(NAT_CDEPS) $(SIM) $(BFD) $(READLINE_DEPS) $(CTF_DEPS) \
 	$(OPCODES) $(INTL_DEPS) $(LIBIBERTY) $(CONFIG_DEPS) $(LIBGNU) \
 	$(LIBSUPPORT)

@@ -238,6 +238,9 @@
 /* Define to 1 if you have the `libiconvlist' function. */
 #undef HAVE_LIBICONVLIST
 
+/* Define if you have the iga64 library. */
+#undef HAVE_LIBIGA64
+
 /* Define if you have the ipt library. */
 #undef HAVE_LIBIPT
 

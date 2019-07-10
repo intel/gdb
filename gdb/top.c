@@ -1532,6 +1532,16 @@ This GDB was configured as follows:\n\
 "));
 #endif
 
+#ifdef HAVE_LIBIGA64
+  gdb_printf (stream, _("\
+	     --with-libiga64\n\
+"));
+#else
+  gdb_printf (stream, _("\
+	     --without-libiga64\n\
+"));
+#endif
+
 #if HAVE_SOURCE_HIGHLIGHT
   gdb_printf (stream, _("\
 	     --enable-source-highlight\n\

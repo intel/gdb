@@ -13,6 +13,11 @@ m4_include(../gdbsupport/compiler-type.m4)
 dnl This gets AM_GDB_WARNINGS.
 m4_include(../gdbsupport/warning.m4)
 
+dnl For AC_LIB_HAVE_LINKFLAGS.
+sinclude(../../config/lib-ld.m4)
+sinclude(../../config/lib-prefix.m4)
+sinclude(../../config/lib-link.m4)
+
 dnl codeset.m4 is needed for common.m4, but not for
 dnl anything else in gdbserver.
 m4_include(../config/codeset.m4)

@@ -7,6 +7,11 @@ m4_include(../gdbsupport/warning.m4)
 dnl This gets autoconf bugfixes
 m4_include(../config/override.m4)
 
+dnl For AC_LIB_HAVE_LINKFLAGS.
+sinclude(../../config/lib-ld.m4)
+sinclude(../../config/lib-prefix.m4)
+sinclude(../../config/lib-link.m4)
+
 dnl For ACX_PKGVERSION and ACX_BUGURL.
 m4_include(../config/acx.m4)
 

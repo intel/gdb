@@ -27,6 +27,9 @@
 #include "target.h"
 #include "target-descriptions.h"
 #include "value.h"
+#if defined (HAVE_LIBIGA64)
+#include "iga.h"
+#endif /* defined (HAVE_LIBIGA64)  */
 
 /* Feature names.  */
 
@@ -55,6 +58,10 @@ static struct gdbarch_data *intelgt_gdbarch_data_handle;
 struct intelgt_gdbarch_data
 {
   intelgt::arch_info *info;
+#if defined (HAVE_LIBIGA64)
+  /* libiga context for disassembly.  */
+  iga_context_t iga_ctx = nullptr;
+#endif
 };
 
 static void *
@@ -263,6 +270,92 @@ intelgt_initialize_gdbarch_data (const target_desc *tdesc,
   intelgt::version gt_version = intelgt_version_from_tdesc (tdesc);
 
   data->info = intelgt::arch_info::get_or_create (gt_version);
+
+#if defined (HAVE_LIBIGA64)
+  iga_gen_t iga_version = IGA_GEN_INVALID;
+  if (gt_version == intelgt::version::Gen9)
+    iga_version = IGA_GEN9;
+
+  if (iga_version != IGA_GEN_INVALID)
+    {
+      const iga_context_options_t options
+        = IGA_CONTEXT_OPTIONS_INIT (iga_version);
+      iga_context_create (&options, &data->iga_ctx);
+    }
+#endif
+}
+
+#if defined (HAVE_LIBIGA64)
+/* Map CORE_ADDR to symbol names for jump labels in an IGA disassembly.  */
+
+static const char *
+intelgt_disasm_sym_cb (int addr, void *ctx)
+{
+  disassemble_info *info = (disassemble_info *) ctx;
+  symbol *sym = find_pc_function (addr + (uintptr_t) info->private_data);
+  return sym ? sym->linkage_name () : nullptr;
+}
+#endif /* defined (HAVE_LIBIGA64)  */
+
+/* Print one instruction from MEMADDR on INFO->STREAM.  */
+
+static int
+intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
+{
+  gdb_disassembler *di
+    = static_cast<gdb_disassembler *>(info->application_data);
+  struct gdbarch *gdbarch = di->arch ();
+  intelgt::arch_info *intelgt_info = get_intelgt_arch_info (gdbarch);
+
+  unsigned int full_length = intelgt_info->inst_length_full ();
+  unsigned int compact_length = intelgt_info->inst_length_compacted ();
+
+  std::unique_ptr<bfd_byte[]> insn (new bfd_byte[full_length]);
+
+  int status = (*info->read_memory_func) (memaddr, insn.get (),
+					  compact_length, info);
+  if (status != 0)
+    {
+      /* Aborts disassembling with a memory_error exception.  */
+      (*info->memory_error_func) (status, memaddr, info);
+      return -1;
+    }
+  if (!intelgt_info->is_compacted_inst ((gdb_byte *) insn.get ()))
+    {
+      status = (*info->read_memory_func) (memaddr, insn.get (),
+					  full_length, info);
+      if (status != 0)
+	{
+	  /* Aborts disassembling with a memory_error exception.  */
+	  (*info->memory_error_func) (status, memaddr, info);
+	  return -1;
+	}
+    }
+
+#if defined (HAVE_LIBIGA64)
+  char *dbuf;
+  iga_disassemble_options_t dopts = IGA_DISASSEMBLE_OPTIONS_INIT();
+
+  iga_context_t iga_ctx
+    = get_intelgt_gdbarch_data (gdbarch)->iga_ctx;
+  iga_status_t iga_status
+    = iga_context_disassemble_instruction (iga_ctx, &dopts, insn.get (),
+					   intelgt_disasm_sym_cb,
+					   info, &dbuf);
+  if (iga_status != IGA_SUCCESS)
+    return -1;
+
+  (*info->fprintf_func) (info->stream, "%s", dbuf);
+
+  if (intelgt_info->is_compacted_inst ((gdb_byte *) insn.get ()))
+    return compact_length;
+  else
+    return full_length;
+#else
+  printf_filtered (_("\nDisassemble feature not available: libiga64 "
+		     "is missing.\n"));
+  return -1;
+#endif /* defined (HAVE_LIBIGA64)  */
 }
 
 /* Architecture initialization.  */
@@ -347,6 +440,9 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 				       intelgt_breakpoint_kind_from_pc);
   set_gdbarch_sw_breakpoint_from_kind (gdbarch,
 				       intelgt_sw_breakpoint_from_kind);
+
+  /* Disassembly */
+  set_gdbarch_print_insn (gdbarch, intelgt_print_insn);
 
   if (tdesc_data != nullptr)
     tdesc_use_registers (gdbarch, tdesc, std::move (tdesc_data));

@@ -1290,6 +1290,44 @@ fi
 AC_SUBST(SRCHIGH_LIBS)
 AC_SUBST(SRCHIGH_CFLAGS)
 
+# Check for Intel(R) Graphics Technology assembler library
+AC_LIB_HAVE_LINKFLAGS([iga64], [],
+  [#include "assert.h"
+   #include "iga.h"],
+  [iga_version_string();])
+
+intelgt_target=false
+
+for targ_alias in `echo $target_alias $enable_targets | sed 's/,/ /g'`
+do
+  if test "$targ_alias" = "all"; then
+    intelgt_target=true
+  else
+    case "$targ_alias" in
+      intelgt-*)
+        intelgt_target=true
+        ;;
+    esac
+  fi
+done
+
+case "${target}" in
+  intelgt-*)
+    intelgt_target=true
+    ;;
+esac
+
+if test x${intelgt_target} = xtrue; then
+  if test "$HAVE_LIBIGA64" != yes; then
+    AC_MSG_WARN([libiga64 is missing or unusable; some features may be unavailable.])
+  fi
+else
+  # Do not link libiga64 spuriously
+  HAVE_LIBIGA64=no
+  LIBIGA64=
+  LTLIBIGA64=
+fi
+
 # ------------------------- #
 # Checks for header files.  #
 # ------------------------- #

@@ -1,0 +1,132 @@
+# Copyright 2019-2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests for Intel(R) Graphics Technology registers via a SYCL program.
+
+load_lib sycl.exp
+
+standard_testfile sycl-simple.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set kernel_line [gdb_get_line_number "inside-kernel"]
+	gdb_breakpoint $kernel_line
+	gdb_continue_to_breakpoint "inside kernel" ".*$srcfile:$kernel_line.*"
+
+	set ws "\[ \t\]+"
+	set fill "\[^\r\n\]+"
+
+	gdb_test "info reg GRF" [multi_line \
+			    "r0${ws}${fill}${hex}${fill}" \
+			    "r1${ws}${fill}${hex}${fill}" \
+			    ".*" \
+			    ]
+
+	# Below we write a value to an arbitrary register, then step one
+	# instruction, then read the register, and expect to see the value we
+	# wrote.  For this, we want to pick a register that is not used in the
+	# instruction pointed by the PC.  So, grab the instruction first.
+	set disassembly_output ""
+	gdb_test_multiple "x /i \$pc" "disassemble the current inst" {
+	    -re "Disassemble feature not available.*$gdb_prompt $" {
+		# Do nothing.
+	    }
+	    -re "(.*)$gdb_prompt $" {
+		set disassembly_output $expect_out(1,string)
+	    }
+	}
+
+	if {$disassembly_output eq ""} {
+	    untested "intelgt register read/write"
+	    return 0
+	}
+
+	# Find a GRF register that does not appear in the instruction.
+	for {set regnum 10} {$regnum < 100} {incr regnum} {
+	    if {[string first "r$regnum" $disassembly_output] == -1} {
+		# Found it.
+		break
+	    }
+	}
+
+	gdb_test "print \$r${regnum}\[0\]" "= $decimal" \
+	    "initial reg value for logging"
+	gdb_test "print/x \$r${regnum}\[0\] = 0xabcd" "= 0xabcd" \
+	    "write to reg"
+	gdb_test "stepi"
+	gdb_test "print/x \$r${regnum}\[0\]" "= 0xabcd" \
+	    "read the written register after stepping"
+
+	# Test casting.
+	gdb_test "print/x ((unsigned char\[\])\$r${regnum})\[0\] = 0xfe" "= 0xfe" \
+	    "write to the first byte"
+	gdb_test "print/x \$r${regnum}\[0\]" "= 0xabfe" \
+	    "read the first word"
+	gdb_test "print/x ((unsigned char\[\])\$r${regnum})\[1\]" "= 0xab" \
+	    "read the second byte"
+
+	gdb_test "print/x \$r${regnum}\[1\] = 0x1234" "= 0x1234" \
+	    "write to the second word"
+	gdb_test "print/x ((double\[\])\$r${regnum})\[0\]" "= 0x12340000abfe" \
+	    "read 8 bytes"
+	gdb_test "print/x ((long long\[\])\$r${regnum})\[0\]= 0x123456789fedcba0" \
+	    " = 0x123456789fedcba0" "write 8 bytes"
+	gdb_test "print/x \$r${regnum}\[0\]" "= 0x9fedcba0" \
+	    "read the first word again"
+	gdb_test "print/x \$r${regnum}\[1\]" "= 0x12345678" \
+	    "read the second word"
+
+	set ws "\[ \t]+"
+	set total_acc 4
+	set total_mme 8
+
+	for {set mme_regnum 0} {$mme_regnum < $total_mme} {incr mme_regnum} {
+	    if {[is_level_zero_debug_api]} {
+		setup_kfail "JIRA XDEPS/5113" "*-*-*"
+	    }
+	    gdb_test "info reg mme$mme_regnum" \
+		"mme$mme_regnum           $hex.*" \
+		"read the mme$mme_regnum register"
+	}
+
+	for {set acc_regnum 0} {$acc_regnum < $total_acc} {incr acc_regnum} {
+	    gdb_test "info reg acc$acc_regnum" \
+		"acc$acc_regnum           $hex.*" \
+		"read the acc$acc_regnum register"
+	}
+    }
+}

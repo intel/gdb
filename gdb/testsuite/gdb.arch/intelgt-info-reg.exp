@@ -1,0 +1,84 @@
+# Copyright 2019 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests for Intel(R) Graphics Technology registers via a SYCL program.
+
+load_lib sycl.exp
+
+standard_testfile sycl-simple.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {![require_sycl_device "gpu" "Intel*"]} {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set kernel_line [gdb_get_line_number "inside-kernel"]
+gdb_breakpoint $kernel_line
+gdb_continue_to_breakpoint "inside kernel" ".*$srcfile:$kernel_line.*"
+
+set ws "\[ \t\]+"
+
+gdb_test "info reg" [multi_line \
+			 "r0${ws}${hex}${ws}${decimal}" \
+			 "r1${ws}${hex}${ws}${decimal}" \
+			 ".*" \
+		     ]
+
+# Below we write a value to an arbitrary register, then step one
+# instruction, then read the register, and expect to see the value we
+# wrote.  For this, we want to pick a register that is not used in the
+# instruction pointed by the PC.  So, grab the instruction first.
+set disassembly_output ""
+gdb_test_multiple "x /i \$pc" "disassemble the current inst" {
+    -re "Disassemble feature not available.*$gdb_prompt $" {
+	# Do nothing.
+    }
+    -re "(.*)$gdb_prompt $" {
+	set disassembly_output $expect_out(1,string)
+    }
+}
+
+if {$disassembly_output eq ""} {
+    untested "intelgt register read/write"
+    return 0
+}
+
+# Find a GRF register that does not appear in the instruction.
+for {set regnum 10} {$regnum < 100} {incr regnum} {
+    if {[string first "r$regnum" $disassembly_output] == -1} {
+	# Found it.
+	break
+    }
+}
+
+gdb_test "print \$r${regnum}" "= $decimal" "initial reg value for logging"
+gdb_test "print \$r${regnum} = 42" "= 42" "write to reg"
+gdb_test "stepi"
+gdb_test "info reg r$regnum" \
+    "r10            0x2a                42" \
+    "read the written register"

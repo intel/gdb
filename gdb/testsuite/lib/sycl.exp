@@ -68,6 +68,26 @@ proc start_sycl_program {} {
     return 0
 }
 
+# Return true if the SYCL device selected via the board file
+# matches the arguments.  Otherwise return false.
+# For the device type, exact match is used.  For the device name,
+# pattern-matching is used.
+
+proc require_sycl_device {type name} {
+    global device_type
+    global device_name
+
+    if {![info exists device_type] || ![info exists device_name]} {
+	verbose "SYCL: test parameters not set; use a SYCL board file" 0
+	return 0
+    }
+
+    set type_match [expr {$device_type eq $type}]
+    set name_match [string match $name $device_name]
+
+    return [expr $type_match && $name_match]
+}
+
 # Run a test on the target to check if it recognizes SYCL.
 # Return 0 if SYCL is supported, 1 otherwise.
 

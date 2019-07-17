@@ -16,6 +16,15 @@
 maint jit dump
   Dump an in-memory JIT object into a file.
 
+* Changed commands
+
+thread apply thread-list|all|all-lanes -unavailable
+  Command now defaults to applying only to available threads.  To
+  restore previous behaviour of applying also to unavailable
+  threads the option "-unavailable" is added.
+
+* Add convenience variable `$_simd_lane`.
+
 * Python API
 
   ** Added gdb.record.clear(). Clears the trace data of the current recording.

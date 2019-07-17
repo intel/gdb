@@ -19,6 +19,12 @@
 #ifndef GDBSUPPORT_COMMON_GDBTHREAD_H
 #define GDBSUPPORT_COMMON_GDBTHREAD_H
 
+#include "inttypes.h"
+
+/* 64-bits is sufficient for all known architectures.  */
+typedef uint64_t lanes_mask_t;
+#define PRI_lanes_mask PRIx64
+
 struct process_stratum_target;
 
 /* Switch from one thread to another.  */

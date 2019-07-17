@@ -128,6 +128,30 @@ info threads [-gid] [-stopped] [-running] [ID]...
      Otherwise, TLS lookup via libthread_db will still be preferred,
      when available.
 
+* New convenience variables
+
+$_thread_workgroup
+  The workgroup coordinates of the current thread.  Unsigned int vector
+  of size 3, when available.  Otherwise, void.
+
+$_workitem_local_id
+  The local ID coordinates of the workitem processed by the current context,
+  within its thread's workgroup.  Unsigned int vector of size 3, when
+  available.  Otherwise, void.
+
+$_workitem_global_id
+  The global ID coordinates of the workitem processed by the current context.
+  Unsigned int vector of size 3, when available.  Otherwise, void.
+
+* Changed commands
+
+info threads [-gid] [-stopped] [ID]...
+  This command now takes an optional flag, '-stopped', that causes only
+  the stopped threads to be printed.  The flag can be useful to get a
+  reduced list when there is a large number of unstopped threads.
+
+* Add convenience variable `$_simd_lane`.
+
 * Python API
 
   ** GDB no longer supports Python versions less than 3.4.

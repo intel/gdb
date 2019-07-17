@@ -134,7 +134,7 @@ foreach bt_cmd { "bt" "bt -no-filters" } {
 	# to back trace.  At one point this triggered an assertion.
 	gdb_test "maint flush register-cache" \
 	    "Register cache flushed\\." ""
-	gdb_test_no_output "set debug frame 1"
+	gdb_test "set debug frame 1"
 	set ok 1
 	gdb_test_multiple "$bt_cmd" "backtrace with debugging on" {
 	    -re "^$gdb_prompt $" {
@@ -148,7 +148,7 @@ foreach bt_cmd { "bt" "bt -no-filters" } {
 		exp_continue
 	    }
 	}
-	gdb_test "p 1 + 2 + 3" " = 6" \
+	gdb_test "p 1 + 2 + 3" " = 6.*" \
 	    "ensure GDB is still alive"
 
 	# Prepare for the next iteration of the test loop

@@ -392,6 +392,64 @@ public:
 
   /* Displaced-step state for this thread.  */
   displaced_step_thread_state displaced_step_state;
+
+  /* Currently selected SIMD lane.
+
+     If SIMD is supported by architecture, changing this attribute switches
+     the focus between different SIMD lanes within a thread.  This field is
+     tigthly bound to active SIMD lanes mask, which indicates lanes, that are
+     currently active.
+
+     This field is private.  Accessor functions should be used for
+     getting/setting the value.
+
+     If SIMD is not supported, leave this field equaled to 0.
+
+     In thread_info simd_lane_num should stay non-negative.  Related fields
+     outside thread_info, such as variable in parse_thread_id or
+     breakpoint.simd_lane_num could be negative.  Value '-1' means,
+     that we do not care about SIMD lane number or do not want to change
+     the currently selected SIMD lane.
+
+     In general, a logic which is specific to SIMD lanes should be guarded
+     either by thread_has_simd_lanes (thread_info *) check or should apply only
+     to active lanes.
+
+     This property is exposed to a user via 'info threads' and 'thread'
+     commands.  The lane is specified in thread ID after ':'.
+
+     E.g.:
+
+     (gdb) info threads
+     Id	       Target Id   Frame
+     * 1.1:2	  Thread A    0x16a09237 in foo () at foo.c:10
+     1.1:[0-1 3-31]   Thread A    0x16a09237 in foo () at foo.c:10
+     1.2:[0-31]       Thread B    0x15ebc6ed in bar () at foo.c:20
+
+     (gdb) thread 1.1:31
+     [Switching to thread 1.1:31 (Thread A lane 31)]  */
+private:
+  int simd_lane_num = 0;
+
+public:
+  /* Return true if this thread has SIMD lanes.  */
+  bool has_simd_lanes ();
+
+  /* Return active lanes mask for this thread.  */
+  unsigned int active_simd_lanes_mask ();
+
+  /* Return the current simd lane.  */
+  int current_simd_lane ();
+
+  /* Set the current simd lane.  */
+  void set_current_simd_lane (int lane);
+
+  /* Set the current SIMD lane as default: leave the lane unchanged if it
+     is active, otherwise switch to the first active SIMD lane.  */
+  void set_default_simd_lane ();
+
+  /* Return true if LANE is active in this thread.  */
+  bool is_simd_lane_active (int lane);
 };
 
 /* A gdb::ref_ptr pointer to a thread_info.  */
@@ -462,8 +520,11 @@ extern int show_inferior_qualified_tids (void);
 /* Return a string version of THR's thread ID.  If there are multiple
    inferiors, then this prints the inferior-qualifier form, otherwise
    it only prints the thread number.  The result is stored in a
-   circular static buffer, NUMCELLS deep.  */
-const char *print_thread_id (struct thread_info *thr);
+   circular static buffer, NUMCELLS deep.  If LANES vector is specified
+   then also append its beautified content to the end.
+   LANES should be sorted.  */
+const char *print_thread_id (struct thread_info *thr,
+			     std::vector<int> *lanes = nullptr);
 
 /* Boolean test for an already-known ptid.  */
 extern bool in_thread_list (process_stratum_target *targ, ptid_t ptid);
@@ -618,7 +679,7 @@ extern bool threads_are_executing (process_stratum_target *targ);
 
    "not executing" -> "stopped"
    "executing"     -> "running"
-   "exited"        -> "exited"
+   "exited"	-> "exited"
 
    If PTID is minus_one_ptid, go over all threads of TARG.
 
@@ -677,6 +738,17 @@ private:
      changes the current language to the frame's language if "set
      language auto".  */
   enum language m_lang;
+};
+
+/* Save/restore current lane.  */
+class scoped_restore_current_simd_lane {
+public:
+  /* TP specifies a thread, which current SIMD lane is restored.  */
+  explicit scoped_restore_current_simd_lane (thread_info *tp);
+  ~scoped_restore_current_simd_lane ();
+private:
+  thread_info * const m_tp;
+  const int m_simd_lane_num;
 };
 
 /* Returns a pointer into the thread_info corresponding to
@@ -802,7 +874,70 @@ extern void print_selected_thread_frame (struct ui_out *uiout,
 /* Helper for the CLI's "thread" command and for MI's -thread-select.
    Selects thread THR.  TIDSTR is the original string the thread ID
    was parsed from.  This is used in the error message if THR is not
-   alive anymore.  */
-extern void thread_select (const char *tidstr, class thread_info *thr);
+   alive anymore.
+
+   If SIMD_LANE_NUM specifies an active lane in THR, set current SIMD lane
+   of THR to SIMD_LANE_NUM.  If SIMD_LANE_NUM is -1 and the current lane
+   of THR is inactive, try to switch THR to the first active lane.  If all
+   lanes are inactive, switches to the first lane.  Do not change the current
+   lane of THR if it is active.  */
+extern void thread_select (const char *tidstr, class thread_info *thr,
+			   int simd_lane_num = -1);
+
+/* Return the number of the first active lane in MASK or -1 if MASK is 0x0.  */
+extern int find_first_active_simd_lane (unsigned int mask);
+
+/* Return true, if LANE is unmasked in MASK.  */
+extern bool is_simd_lane_active (unsigned int mask, int lane);
+
+enum class simd_lane_order {
+  SIMD_LANE_ORDER_ASCENDING,
+  SIMD_LANE_ORDER_DESCENDING,
+};
+
+/* Execute function FUNC for all unmasked lanes in MASK.  FUNC should
+   match the following:
+
+   bool func (int lane_num)
+
+   First integer argument is the lane number, which corresponds
+   to the current call.  If FUNC returns false, the loop breaks.
+   ORDER defines the order of SIMD lane loop: ascending or descending.  */
+template<typename Func>
+void
+for_active_lanes (unsigned int mask, Func func,
+		  simd_lane_order order
+		    = simd_lane_order::SIMD_LANE_ORDER_ASCENDING)
+{
+  if (order == simd_lane_order::SIMD_LANE_ORDER_ASCENDING)
+    {
+      int lane = 0;
+
+      while (mask != 0)
+	{
+	  if ((mask & 0x1) != 0)
+	    {
+	      if (!func (lane))
+		break;
+	    }
+	  ++lane;
+	  mask >>= 1;
+	}
+    }
+  else
+    {
+      int lane = sizeof (unsigned int) * 8 - 1;
+
+      while (lane >= 0)
+	{
+	  if (((mask >> lane) & 0x1) != 0)
+	    {
+	      if (!func (lane))
+		break;
+	    }
+	  --lane;
+	}
+    }
+}
 
 #endif /* GDBTHREAD_H */

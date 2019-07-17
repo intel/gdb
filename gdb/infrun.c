@@ -141,10 +141,16 @@ show_step_stop_if_no_debug (struct ui_file *file, int from_tty,
 }
 
 /* proceed and normal_stop use this to notify the user when the
-   inferior stopped in a different thread than it had been running
-   in.  */
+   inferior stopped in a different thread or SIMD lane than it had been
+   running in.  */
 
-static ptid_t previous_inferior_ptid;
+struct previous_thread_ptid_simd_lane
+{
+  ptid_t ptid;
+  int simd_lane;
+};
+
+static previous_thread_ptid_simd_lane previous_thread_focus;
 
 /* If set (default for legacy reasons), when following a fork, GDB
    will detach from one of the fork branches, child or parent.
@@ -3030,16 +3036,16 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
       return;
     }
 
+  thread_info *cur_thr = inferior_thread ();
   /* We'll update this if & when we switch to a new thread.  */
-  previous_inferior_ptid = inferior_ptid;
+  previous_thread_focus.ptid = cur_thr->ptid;
+  previous_thread_focus.simd_lane = cur_thr->current_simd_lane ();
 
   regcache = get_current_regcache ();
   gdbarch = regcache->arch ();
   const address_space *aspace = regcache->aspace ();
 
   pc = regcache_read_pc_protected (regcache);
-
-  thread_info *cur_thr = inferior_thread ();
 
   /* Fill in with reasonable starting values.  */
   init_thread_stepping_state (cur_thr);
@@ -3296,7 +3302,15 @@ init_wait_for_inferior (void)
 
   nullify_last_target_wait_ptid ();
 
-  previous_inferior_ptid = inferior_ptid;
+  previous_thread_focus.ptid = inferior_ptid;
+  if (inferior_ptid == null_ptid)
+    previous_thread_focus.simd_lane = -1;
+  else
+    {
+      thread_info *current_thread = inferior_thread ();
+
+      previous_thread_focus.simd_lane = current_thread->current_simd_lane ();
+    }
 }
 
 
@@ -6638,7 +6652,6 @@ process_event_stop_test (struct execution_control_state *ecs)
 	 whether a/the breakpoint is there when the thread is next
 	 resumed.  */
       ecs->event_thread->stepping_over_breakpoint = 1;
-
       stop_waiting (ecs);
       return;
 
@@ -8511,31 +8524,76 @@ normal_stop (void)
 
      There's no point in saying anything if the inferior has exited.
      Note that SIGNALLED here means "exited with a signal", not
-     "received a signal".
+     "received a signal".  */
 
-     Also skip saying anything in non-stop mode.  In that mode, as we
-     don't want GDB to switch threads behind the user's back, to avoid
-     races where the user is typing a command to apply to thread x,
-     but GDB switches to thread y before the user finishes entering
-     the command, fetch_inferior_event installs a cleanup to restore
-     the current thread back to the thread the user had selected right
-     after this event is handled, so we're not really switching, only
-     informing of a stop.  */
-  if (!non_stop
-      && previous_inferior_ptid != inferior_ptid
-      && target_has_execution ()
+  if (target_has_execution ()
       && last.kind != TARGET_WAITKIND_SIGNALLED
       && last.kind != TARGET_WAITKIND_EXITED
       && last.kind != TARGET_WAITKIND_NO_RESUMED)
     {
-      SWITCH_THRU_ALL_UIS ()
+      thread_info *current_thread = inferior_thread ();
+
+      /* As the current SIMD lane in the inferior thread might become
+	 inactive (e.g. while stepping), set the default lane.  */
+      current_thread->set_default_simd_lane ();
+      bool has_simd_lanes = current_thread->has_simd_lanes ();
+      int current_simd_lane = current_thread->current_simd_lane ();
+
+      /* Do not notify a user about thread switching in non-stop mode.
+	 In that mode, as we don't want GDB to switch threads behind
+	 the user's back, to avoid races where the user is typing
+	 a command to apply to thread x, but GDB switches to thread y
+	 before the user finishes entering the command,
+	 fetch_inferior_event installs a cleanup to restore the current
+	 thread back to the thread the user had selected right after
+	 this event is handled, so we're not really switching, only
+	 informing of a stop.  */
+      if (!non_stop
+	  && previous_thread_focus.ptid != current_thread->ptid)
 	{
-	  target_terminal::ours_for_output ();
-	  printf_filtered (_("[Switching to %s]\n"),
-			   target_pid_to_str (inferior_ptid).c_str ());
-	  annotate_thread_changed ();
+	  /* Current thread has changed.  */
+	  SWITCH_THRU_ALL_UIS ()
+	    {
+	      target_terminal::ours_for_output ();
+	      std::string lane_info = "";
+
+	      if (current_thread->has_simd_lanes ())
+		lane_info = " lane "
+		  + std::to_string (current_thread->current_simd_lane ());
+
+	      printf_filtered (_("[Switching to %s%s]\n"),
+			       target_pid_to_str (inferior_ptid).c_str (),
+			       lane_info.c_str ());
+	      annotate_thread_changed ();
+	    }
+
+	  /* Update previous_thread focus with the current ptid and currently
+	     selected SIMD lane.  */
+	  previous_thread_focus.ptid = current_thread->ptid;
+	  previous_thread_focus.simd_lane = current_simd_lane;
 	}
-      previous_inferior_ptid = inferior_ptid;
+      else if (has_simd_lanes)
+	{
+	  /* If the current thread has SIMD lanes, it cannot have current SIMD
+	     lane set to -1.  */
+	  gdb_assert (current_simd_lane != -1);
+
+	  /* If the thread did not change, but SIMD lane has changed, notify
+	     a user.  In non-stop mode, too.  */
+	  if (previous_thread_focus.ptid == current_thread->ptid
+	      && previous_thread_focus.simd_lane != current_simd_lane)
+	    {
+	      /* Current thread is the same, but SIMD lane has changed.  */
+	      SWITCH_THRU_ALL_UIS ()
+		{
+		  target_terminal::ours_for_output ();
+
+		  printf_filtered (_("[Switching to SIMD lane %d]\n"),
+				   current_simd_lane);
+		}
+	      previous_thread_focus.simd_lane = current_simd_lane;
+	    }
+	}
     }
 
   if (last.kind == TARGET_WAITKIND_NO_RESUMED)

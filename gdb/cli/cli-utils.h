@@ -19,6 +19,7 @@
 
 #ifndef CLI_CLI_UTILS_H
 #define CLI_CLI_UTILS_H
+#include <vector>
 
 #include "completer.h"
 
@@ -224,5 +225,16 @@ struct qcs_flags
    FLAGS->SILENT are true.  WHICH_COMMAND is included in the error
    message.  */
 extern void validate_flags_qcs (const char *which_command, qcs_flags *flags);
+
+/* A helper function to create a string of ranges out of sorted vector
+   of integers NUMBERS.  Duplicated values are ignored. If the result contains
+   more than one number, it is enclosed in square brackets
+   Example:
+   For the vector {} the result is "".
+   For the vector {1} the result is "1".
+   For the vector {1,1,1,1} the result is "1".
+   For the vector {0,1,1,2,4,6,7,8} the result is "[0-2 4 6-8]".  */
+extern std::string
+make_ranges_from_sorted_vector (const std::vector<int> &numbers);
 
 #endif /* CLI_CLI_UTILS_H */

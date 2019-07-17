@@ -3488,12 +3488,19 @@ that they share one address space (that is, they can all examine and
 modify the same variables).  On the other hand, each thread has its own
 registers and execution stack, and perhaps private memory.
 
+Additionally, some instructions can be performed on several data elements
+simultaneously (SIMD: Single Instruction Multiple Data), so a thread
+computes a vector of data elements in parallel.  There is a 1-to-1
+relation between active SIMD lanes in a thread and data elements
+that are being processed by the thread at a moment.
+
 @value{GDBN} provides these facilities for debugging multi-thread
 programs:
 
 @itemize @bullet
 @item automatic notification of new threads
-@item @samp{thread @var{thread-id}}, a command to switch among threads
+@item @samp{thread @var{thread-id}}, a command to switch among threads,
+and if available, among SIMD lanes within a thread
 @item @samp{info threads}, a command to inquire about existing threads
 @item @samp{thread apply [@var{thread-id-list} | all] @var{args}},
 a command to apply a command to a list of threads
@@ -3510,8 +3517,11 @@ isn't compatible with the program.
 The @value{GDBN} thread debugging facility allows you to observe all
 threads while your program runs---but whenever @value{GDBN} takes
 control, one thread in particular is always the focus of debugging.
-This thread is called the @dfn{current thread}.  Debugging commands show
-program information from the perspective of the current thread.
+This thread is called the @dfn{current thread}.  If SIMD lanes are
+available, you can switch the focus between different active SIMD
+lanes within a thread.  Debugging commands show program information
+from the perspective of the current thread and, if applicable,
+of the current SIMD lane within this thread.
 
 @cindex @code{New} @var{systag} message
 @cindex thread identifier (system)
@@ -3563,6 +3573,14 @@ Until you create a second inferior, @value{GDBN} does not show the
 @var{inferior-num} part of thread IDs, even though you can always use
 the full @var{inferior-num}.@var{thread-num} form to refer to threads
 of inferior 1, the initial inferior.
+
+If target supports SIMD lanes, qualified thread ID is extended with
+@var{inferior-num}.@var{thread-num}:@var{simd-lane-num} syntax,
+where @var{simd-lane-num} stands for a specific SIMD lane number within
+the thread.  For example, thread @code{1.2:3} refers to the SIMD lane
+number 3 in thread 2 of the inferior 1.  If @var{simd-lane-num} is
+omitted, it is treated as if you refer to the first active SIMD lane
+of the thread.
 
 @anchor{thread ID lists}
 @cindex thread ID lists
@@ -3698,6 +3716,24 @@ indicating each thread's global thread ID:
 * 2.1  2    process 65 thread 1   main (argc=1, argv=0x7ffffff8)
 @end smallexample
 
+If SIMD lanes are supported, the list of currently active SIMD lanes is
+added to the Id column.  Only active SIMD lanes are shown.  If thread
+does not have any active SIMD lanes, it is marked as @var{inactive}.
+The currently selected SIMD lane of the current thread resides
+in a separate row marked with @samp{*}.  Note that the frame is shared
+between all SIMD lanes within a thread, however, values of function
+arguments might vary.
+
+@smallexample
+(@value{GDBP}) info threads
+  Id        GId  Target Id             Frame
+* 1.1:0     1    process 35 thread 13  main (argc=1, argv=0x7ffffff8)
+  1.1:[1-7] 1    process 35 thread 13  main (argc=1, argv=0x7ffffff8)
+  1.2:[0-7] 3    process 35 thread 23  0x34e5 in sigpause ()
+  1.3:[0-7] 4    process 35 thread 27  0x34e5 in sigpause ()
+  2.1:[0-7] 2    process 65 thread 1   main (argc=1, argv=0x7ffffff8)
+@end smallexample
+
 On Solaris, you can display more information about user threads with a
 Solaris-specific command:
 
@@ -3726,6 +3762,25 @@ thread you selected, and its current stack frame summary:
 8	    printf ("hello\n");
 @end smallexample
 
+When SIMD lanes are supported, with this command you can switch
+the thread's focus from one SIMD lane to another:
+
+@smallexample
+(@value{GDBP}) thread 2:3
+[Switching to thread 2:3 (Thread 0xb7fdab70 (LWP 12747) lane 3)]
+#0  some_function (ignore=0x0) at example.c:8
+8	    printf ("hello\n");
+@end smallexample
+
+If @var{thread-num} is omitted, the command switches lanes within
+the current thread:
+@smallexample
+(@value{GDBP}) thread :5
+[Switching to thread 2:5 (Thread 0xb7fdab70 (LWP 12747) lane 5)]
+#0  some_function (ignore=0x0) at example.c:8
+8	    printf ("hello\n");
+@end smallexample
+
 @noindent
 As with the @samp{[New @dots{}]} message, the form of the text after
 @samp{Switching to} depends on your system's conventions for identifying
@@ -3736,12 +3791,14 @@ threads.
 @cindex apply command to several threads
 @item thread apply [@var{thread-id-list} | all [-ascending]] [@var{flag}]@dots{} @var{command}
 The @code{thread apply} command allows you to apply the named
-@var{command} to one or more threads.  Specify the threads that you
-want affected using the thread ID list syntax (@pxref{thread ID
-lists}), or specify @code{all} to apply to all threads.  To apply a
-command to all threads in descending order, type @kbd{thread apply all
-@var{command}}.  To apply a command to all threads in ascending order,
-type @kbd{thread apply all -ascending @var{command}}.
+@var{command} to one or more threads.  If SIMD lanes are supported,
+the command is applied to all active SIMD lanes within a thread.
+Specify the threads that you want affected using the thread ID list
+syntax (@pxref{thread ID lists}), or specify @code{all} to apply
+to all threads.  To apply a command to all threads in descending
+order, type @kbd{thread apply all @var{command}}.  To apply a command
+to all threads in ascending order, type
+@kbd{thread apply all -ascending @var{command}}.
 
 The @var{flag} arguments control what output to produce and how to handle
 errors raised when applying @var{command} to a thread.  @var{flag}

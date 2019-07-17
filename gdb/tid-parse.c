@@ -51,12 +51,14 @@ get_positive_number_trailer (const char **pp, int trailer, const char *string)
 /* See tid-parse.h.  */
 
 struct thread_info *
-parse_thread_id (const char *tidstr, const char **end)
+parse_thread_id (const char *tidstr, const char **end, int *simd_lane_num)
 {
   const char *number = tidstr;
   const char *dot, *p1;
+  struct thread_info *tp = nullptr;
   struct inferior *inf;
   int thr_num;
+  int lane_num = -1;
   int explicit_inf_id = 0;
 
   dot = strchr (number, '.');
@@ -85,24 +87,62 @@ parse_thread_id (const char *tidstr, const char **end)
       p1 = number;
     }
 
-  thr_num = get_positive_number_trailer (&p1, 0, number);
-  if (thr_num == 0)
-    invalid_thread_id_error (number);
+  dot = strchr (p1, ':');
 
-  thread_info *tp = nullptr;
-  for (thread_info *it : inf->threads ())
-    if (it->per_inf_num == thr_num)
-      {
-	tp = it;
-	break;
-      }
+  bool lane_specified = (dot != NULL);
+  int trailer = lane_specified ? ':' : 0;
 
-  if (tp == NULL)
+  if (p1[0] != ':')
     {
-      if (show_inferior_qualified_tids () || explicit_inf_id)
-	error (_("Unknown thread %d.%d."), inf->num, thr_num);
+      /* Thread number is presented.  */
+      thr_num = get_positive_number_trailer (&p1, trailer, number);
+
+      if (thr_num == 0)
+	invalid_thread_id_error (number);
+
+      for (thread_info *it : inf->threads ())
+	if (it->per_inf_num == thr_num)
+	  {
+	    tp = it;
+	    break;
+	  }
+
+      if (tp == nullptr)
+	{
+	  if (show_inferior_qualified_tids () || explicit_inf_id)
+	    error (_("Unknown thread %d.%d."), inf->num, thr_num);
+	  else
+	    error (_("Unknown thread %d."), thr_num);
+	}
+    }
+  else
+    {
+      /* Only lane number is specified.  Take the current thread.  */
+      tp = find_thread_ptid (current_inferior (), inferior_ptid);
+      if (tp == nullptr)
+	error (_("No thread selected."));
+    }
+
+  if (lane_specified)
+    {
+      if (!tp->has_simd_lanes ())
+	error (_("Thread %s does not have SIMD lanes."), print_thread_id (tp));
+
+      p1 = dot + 1;
+      lane_num = get_positive_number_trailer (&p1, 0, number);
+
+      if (lane_num >= (sizeof (unsigned int)) * 8)
+	error (_("Incorrect SIMD lane number: %d."), lane_num);
+
+      if (simd_lane_num != nullptr)
+	*simd_lane_num = lane_num;
       else
-	error (_("Unknown thread %d."), thr_num);
+	error (_("SIMD lane is not supported."));
+    }
+  else
+    {
+      if (simd_lane_num != nullptr)
+	*simd_lane_num = -1;
     }
 
   if (end != NULL)

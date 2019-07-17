@@ -22,6 +22,31 @@ qXfer:libraries:read's response
   This notification informs about asynchronous changes in the loaded
   libraries of a process.
 
+* New convenience variables
+
+$_thread_workgroup
+  The workgroup coordinates of the current thread.  Unsigned int vector
+  of size 3, when available.  Otherwise, void.
+
+$_workitem_local_id
+  The local ID coordinates of the workitem processed by the current context,
+  within its thread's workgroup.  Unsigned int vector of size 3, when
+  available.  Otherwise, void.
+
+$_workitem_global_id
+  The global ID coordinates of the workitem processed by the current context.
+  Unsigned int vector of size 3, when available.  Otherwise, void.
+
+$_simd_lane
+  The current SIMD lane if the current thread has lanes.  Otherwise, 0.
+
+* Changed commands
+
+info threads [-gid] [-stopped] [ID]...
+  This command now takes an optional flag, '-stopped', that causes only
+  the stopped threads to be printed.  The flag can be useful to get a
+  reduced list when there is a large number of unstopped threads.
+
 *** Changes in GDB 18
 
 * Support for the Common Trace Format (CTF) has been removed.  GDB now

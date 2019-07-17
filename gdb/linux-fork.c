@@ -293,7 +293,9 @@ parse_checkpoint_id (const char *ckptstr)
       int inf_num;
 
       p1 = number;
-      inf_num = get_number_trailer (&p1, '.');
+      if (!get_number_trailer (&p1, &inf_num, '.'))
+	error (_("Invalid inferior number %s."), p1);
+
       if (inf_num <= 0)
 	error (_("Inferior number must be a positive integer"));
 
@@ -309,7 +311,10 @@ parse_checkpoint_id (const char *ckptstr)
       p1 = number;
     }
 
-  int fork_num = get_number_trailer (&p1, 0);
+  int fork_num;
+  if (!get_number_trailer (&p1, &fork_num, 0))
+    error (_("Invalid checkpoint number %s."), p1);
+
   if (fork_num < 0)
     error (_("Checkpoint number must be a non-negative integer"));
 

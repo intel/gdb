@@ -77,6 +77,7 @@ struct mi_parse
   int all = 0;
   int thread_group = -1; /* At present, the same as inferior number.  */
   int thread = -1;
+  int simd_lane = -1;
   int frame = -1;
 
   /* The language that should be used to evaluate the MI command.
@@ -91,6 +92,7 @@ private:
      will be updated to just after the argument text.  */
   void set_thread_group (const char *arg, char **endp);
   void set_thread (const char *arg, char **endp);
+  void set_simd_lane (const char *arg, char **endp);
   void set_frame (const char *arg, char **endp);
   void set_language (const char *arg, const char **endp);
 

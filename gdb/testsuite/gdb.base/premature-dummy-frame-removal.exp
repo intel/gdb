@@ -64,7 +64,7 @@ gdb_test "p some_func ()" " = 0"
 # All of the debug output makes this really slow when testing with the
 # special read1 version of expect, hence the timeout factor.
 with_read1_timeout_factor 10 {
-    gdb_test_no_output "set debug frame on"
+    gdb_test "set debug frame on"
     gdb_test "p some_func ()" ".*" \
 	"repeat p some_func () with frame debug on"
     gdb_test_no_output "set debug frame off"

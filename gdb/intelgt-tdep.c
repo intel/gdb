@@ -35,6 +35,7 @@
 #if defined (HAVE_LIBIGA64)
 #include "iga/iga.h"
 #endif /* defined (HAVE_LIBIGA64)  */
+#include "gdbthread.h"
 
 /* Global debug flag.  */
 static bool intelgt_debug = false;
@@ -248,6 +249,34 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
       }
 
   return -1;
+}
+
+/* Return active lanes mask for the specified thread TP.  */
+
+static unsigned int
+intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
+{
+  intelgt_gdbarch_tdep *data
+    = gdbarch_tdep<intelgt_gdbarch_tdep> (gdbarch);
+  regcache *thread_regcache = get_thread_regcache (tp);
+
+  /* Default to zero if the CE register is not available.  This may
+     happen if TP is not available.  */
+  ULONGEST ce = 0ull;
+  regcache_cooked_read_unsigned (thread_regcache, data->ce_regnum,
+				 &ce);
+
+  /* The higher bits of CE are undefined if they are outside the
+     dispatch mask range.  Clear them explicitly using the dispatch
+     mask, which is at SR0.2.  SR0 elements are 4 byte wide.  */
+  uint32_t sr0_2 = 0;
+  thread_regcache->raw_read_part (data->sr0_regnum, sizeof (uint32_t) * 2,
+				  sizeof (sr0_2), (gdb_byte *) &sr0_2);
+
+  intelgt_debug_printf ("ce: %s, dmask: %x", phex (ce, sizeof (ce)),
+			sr0_2);
+
+  return ce & sr0_2;
 }
 
 /* Return the PC of the first real instruction.  */
@@ -1053,6 +1082,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
   /* Disassembly.  */
   set_gdbarch_print_insn (gdbarch, intelgt_print_insn);
+
+  set_gdbarch_active_lanes_mask (gdbarch, &intelgt_active_lanes_mask);
 
   return gdbarch;
 }

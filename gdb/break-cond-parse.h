@@ -46,7 +46,7 @@
 
 extern void create_breakpoint_parse_arg_string
   (const char *tok, gdb::unique_xmalloc_ptr<char> *cond_string,
-   int *thread, int *inferior, int *task,
+   int *thread, int *simd_lane_num, int *inferior, int *task,
    gdb::unique_xmalloc_ptr<char> *rest, bool *force);
 
 #endif

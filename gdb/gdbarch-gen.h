@@ -339,6 +339,14 @@ typedef struct frame_id (gdbarch_dummy_id_ftype) (struct gdbarch *gdbarch, const
 extern struct frame_id gdbarch_dummy_id (struct gdbarch *gdbarch, const frame_info_ptr &this_frame);
 extern void set_gdbarch_dummy_id (struct gdbarch *gdbarch, gdbarch_dummy_id_ftype *dummy_id);
 
+/* Return the active SIMD lanes mask for a thread TP. */
+
+extern bool gdbarch_active_lanes_mask_p (struct gdbarch *gdbarch);
+
+typedef unsigned int (gdbarch_active_lanes_mask_ftype) (struct gdbarch *gdbarch, thread_info *tp);
+extern unsigned int gdbarch_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp);
+extern void set_gdbarch_active_lanes_mask (struct gdbarch *gdbarch, gdbarch_active_lanes_mask_ftype *active_lanes_mask);
+
 /* Implement DUMMY_ID and PUSH_DUMMY_CALL, then delete
    deprecated_fp_regnum. */
 
@@ -1778,3 +1786,32 @@ extern void set_gdbarch_read_core_file_mappings (struct gdbarch *gdbarch, gdbarc
 typedef bool (gdbarch_use_target_description_from_corefile_notes_ftype) (struct gdbarch *gdbarch, struct bfd *corefile_bfd);
 extern bool gdbarch_use_target_description_from_corefile_notes (struct gdbarch *gdbarch, struct bfd *corefile_bfd);
 extern void set_gdbarch_use_target_description_from_corefile_notes (struct gdbarch *gdbarch, gdbarch_use_target_description_from_corefile_notes_ftype *use_target_description_from_corefile_notes);
+
+/* Return array containing the coordinates of the thread group,
+   to which TP belongs. */
+
+extern bool gdbarch_thread_workgroup_p (struct gdbarch *gdbarch);
+
+typedef std::array<uint32_t, 3> (gdbarch_thread_workgroup_ftype) (struct gdbarch *gdbarch, thread_info *tp);
+extern std::array<uint32_t, 3> gdbarch_thread_workgroup (struct gdbarch *gdbarch, thread_info *tp);
+extern void set_gdbarch_thread_workgroup (struct gdbarch *gdbarch, gdbarch_thread_workgroup_ftype *thread_workgroup);
+
+/* Return an array containing the local coordinates of the work-item that is
+   processed by the thread TP within its thread group.  If the thread processes
+   several work-items, return the one processed by the current SIMD lane. */
+
+extern bool gdbarch_current_workitem_local_id_p (struct gdbarch *gdbarch);
+
+typedef std::array<uint32_t, 3> (gdbarch_current_workitem_local_id_ftype) (struct gdbarch *gdbarch, thread_info *tp);
+extern std::array<uint32_t, 3> gdbarch_current_workitem_local_id (struct gdbarch *gdbarch, thread_info *tp);
+extern void set_gdbarch_current_workitem_local_id (struct gdbarch *gdbarch, gdbarch_current_workitem_local_id_ftype *current_workitem_local_id);
+
+/* Return an array containing the global coordinates of the workitem that is
+   processed by the thread TP.  If the thread processes several work-items,
+   return the one processed by the current SIMD lane. */
+
+extern bool gdbarch_current_workitem_global_id_p (struct gdbarch *gdbarch);
+
+typedef std::array<uint32_t, 3> (gdbarch_current_workitem_global_id_ftype) (struct gdbarch *gdbarch, thread_info *tp);
+extern std::array<uint32_t, 3> gdbarch_current_workitem_global_id (struct gdbarch *gdbarch, thread_info *tp);
+extern void set_gdbarch_current_workitem_global_id (struct gdbarch *gdbarch, gdbarch_current_workitem_global_id_ftype *current_workitem_global_id);

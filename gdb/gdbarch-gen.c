@@ -92,6 +92,7 @@ struct gdbarch
   gdbarch_register_name_ftype *register_name = nullptr;
   gdbarch_register_type_ftype *register_type = nullptr;
   gdbarch_dummy_id_ftype *dummy_id = default_dummy_id;
+  gdbarch_active_lanes_mask_ftype *active_lanes_mask = nullptr;
   int deprecated_fp_regnum = -1;
   gdbarch_push_dummy_call_ftype *push_dummy_call = nullptr;
   enum call_dummy_location_type call_dummy_location = AT_ENTRY_POINT;
@@ -260,6 +261,9 @@ struct gdbarch
   gdbarch_get_pc_address_flags_ftype *get_pc_address_flags = default_get_pc_address_flags;
   gdbarch_read_core_file_mappings_ftype *read_core_file_mappings = default_read_core_file_mappings;
   gdbarch_use_target_description_from_corefile_notes_ftype *use_target_description_from_corefile_notes = default_use_target_description_from_corefile_notes;
+  gdbarch_thread_workgroup_ftype *thread_workgroup = nullptr;
+  gdbarch_current_workitem_local_id_ftype *current_workitem_local_id = nullptr;
+  gdbarch_current_workitem_global_id_ftype *current_workitem_global_id = nullptr;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -354,6 +358,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   if (gdbarch->register_type == 0)
     log.puts ("\n\tregister_type");
   /* Skip verify of dummy_id, invalid_p == 0.  */
+  /* Skip verify of active_lanes_mask, has predicate.  */
   /* Skip verify of deprecated_fp_regnum, invalid_p == 0.  */
   /* Skip verify of push_dummy_call, has predicate.  */
   /* Skip verify of call_dummy_location, invalid_p == 0.  */
@@ -531,6 +536,9 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of get_pc_address_flags, invalid_p == 0.  */
   /* Skip verify of read_core_file_mappings, invalid_p == 0.  */
   /* Skip verify of use_target_description_from_corefile_notes, invalid_p == 0.  */
+  /* Skip verify of thread_workgroup, has predicate.  */
+  /* Skip verify of current_workitem_local_id, has predicate.  */
+  /* Skip verify of current_workitem_global_id, has predicate.  */
   if (!log.empty ())
     internal_error (_("verify_gdbarch: the following are invalid ...%s"),
 		    log.c_str ());
@@ -724,6 +732,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: dummy_id = <%s>\n",
 	      host_address_to_string (gdbarch->dummy_id));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_active_lanes_mask_p() = %d\n",
+	      gdbarch_active_lanes_mask_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: active_lanes_mask = <%s>\n",
+	      host_address_to_string (gdbarch->active_lanes_mask));
   gdb_printf (file,
 	      "gdbarch_dump: deprecated_fp_regnum = %s\n",
 	      plongest (gdbarch->deprecated_fp_regnum));
@@ -1396,6 +1410,24 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: use_target_description_from_corefile_notes = <%s>\n",
 	      host_address_to_string (gdbarch->use_target_description_from_corefile_notes));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_thread_workgroup_p() = %d\n",
+	      gdbarch_thread_workgroup_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: thread_workgroup = <%s>\n",
+	      host_address_to_string (gdbarch->thread_workgroup));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_current_workitem_local_id_p() = %d\n",
+	      gdbarch_current_workitem_local_id_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: current_workitem_local_id = <%s>\n",
+	      host_address_to_string (gdbarch->current_workitem_local_id));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_current_workitem_global_id_p() = %d\n",
+	      gdbarch_current_workitem_global_id_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: current_workitem_global_id = <%s>\n",
+	      host_address_to_string (gdbarch->current_workitem_global_id));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -2264,6 +2296,30 @@ set_gdbarch_dummy_id (struct gdbarch *gdbarch,
 		      gdbarch_dummy_id_ftype dummy_id)
 {
   gdbarch->dummy_id = dummy_id;
+}
+
+bool
+gdbarch_active_lanes_mask_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->active_lanes_mask != NULL;
+}
+
+unsigned int
+gdbarch_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->active_lanes_mask != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_active_lanes_mask called\n");
+  return gdbarch->active_lanes_mask (gdbarch, tp);
+}
+
+void
+set_gdbarch_active_lanes_mask (struct gdbarch *gdbarch,
+			       gdbarch_active_lanes_mask_ftype active_lanes_mask)
+{
+  gdbarch->active_lanes_mask = active_lanes_mask;
 }
 
 int
@@ -5506,4 +5562,76 @@ set_gdbarch_use_target_description_from_corefile_notes (struct gdbarch *gdbarch,
 							gdbarch_use_target_description_from_corefile_notes_ftype use_target_description_from_corefile_notes)
 {
   gdbarch->use_target_description_from_corefile_notes = use_target_description_from_corefile_notes;
+}
+
+bool
+gdbarch_thread_workgroup_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->thread_workgroup != NULL;
+}
+
+std::array<uint32_t, 3>
+gdbarch_thread_workgroup (struct gdbarch *gdbarch, thread_info *tp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->thread_workgroup != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_thread_workgroup called\n");
+  return gdbarch->thread_workgroup (gdbarch, tp);
+}
+
+void
+set_gdbarch_thread_workgroup (struct gdbarch *gdbarch,
+			      gdbarch_thread_workgroup_ftype thread_workgroup)
+{
+  gdbarch->thread_workgroup = thread_workgroup;
+}
+
+bool
+gdbarch_current_workitem_local_id_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->current_workitem_local_id != NULL;
+}
+
+std::array<uint32_t, 3>
+gdbarch_current_workitem_local_id (struct gdbarch *gdbarch, thread_info *tp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->current_workitem_local_id != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_current_workitem_local_id called\n");
+  return gdbarch->current_workitem_local_id (gdbarch, tp);
+}
+
+void
+set_gdbarch_current_workitem_local_id (struct gdbarch *gdbarch,
+				       gdbarch_current_workitem_local_id_ftype current_workitem_local_id)
+{
+  gdbarch->current_workitem_local_id = current_workitem_local_id;
+}
+
+bool
+gdbarch_current_workitem_global_id_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->current_workitem_global_id != NULL;
+}
+
+std::array<uint32_t, 3>
+gdbarch_current_workitem_global_id (struct gdbarch *gdbarch, thread_info *tp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->current_workitem_global_id != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_current_workitem_global_id called\n");
+  return gdbarch->current_workitem_global_id (gdbarch, tp);
+}
+
+void
+set_gdbarch_current_workitem_global_id (struct gdbarch *gdbarch,
+					gdbarch_current_workitem_global_id_ftype current_workitem_global_id)
+{
+  gdbarch->current_workitem_global_id = current_workitem_global_id;
 }

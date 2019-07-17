@@ -633,6 +633,17 @@ frame.
     invalid=False,
 )
 
+Method(
+    comment="""
+Return the active SIMD lanes mask for a thread TP.
+""",
+    type="unsigned int",
+    name="active_lanes_mask",
+    params=[("thread_info *", "tp")],
+    predicate=True,
+    invalid=False,
+)
+
 Value(
     comment="""
 Implement DUMMY_ID and PUSH_DUMMY_CALL, then delete
@@ -2814,4 +2825,39 @@ The corefile's bfd is passed through COREFILE_BFD.
     params=[("struct bfd *", "corefile_bfd")],
     predefault="default_use_target_description_from_corefile_notes",
     invalid=False,
+)
+
+Method(
+    comment="""
+Return array containing the coordinates of the thread group,
+to which TP belongs.
+""",
+    type="std::array<uint32_t, 3>",
+    name="thread_workgroup",
+    params=[("thread_info *", "tp")],
+    predicate=True,
+)
+
+Method(
+    comment="""
+Return an array containing the local coordinates of the work-item that is
+processed by the thread TP within its thread group.  If the thread processes
+several work-items, return the one processed by the current SIMD lane.
+""",
+    type="std::array<uint32_t, 3>",
+    name="current_workitem_local_id",
+    params=[("thread_info *", "tp")],
+    predicate=True,
+)
+
+Method(
+    comment="""
+Return an array containing the global coordinates of the workitem that is
+processed by the thread TP.  If the thread processes several work-items,
+return the one processed by the current SIMD lane.
+""",
+    type="std::array<uint32_t, 3>",
+    name="current_workitem_global_id",
+    params=[("thread_info *", "tp")],
+    predicate=True,
 )

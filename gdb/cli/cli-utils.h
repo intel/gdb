@@ -19,6 +19,7 @@
 
 #ifndef CLI_CLI_UTILS_H
 #define CLI_CLI_UTILS_H
+#include <set>
 
 #include "completer.h"
 
@@ -31,17 +32,21 @@ struct cmd_list_element;
    convenience variable, or ("$" or "$$") followed by digits.
 
    TRAILER is a character which can be found after the number; most
-   commonly this is `-'.  If you don't want a trailer, use \0.  */
+   commonly this is `-'.  If you don't want a trailer, use \0.
 
-extern int get_number_trailer (const char **pp, int trailer);
+   Returns TRUE on success (parsed value is written to PARSED_VALUE).
+   If parsing failed, returns FALSE.  */
+
+extern bool get_number_trailer (const char **pp, int *parsed_value,
+				int trailer);
 
 /* Convenience.  Like get_number_trailer, but with no TRAILER.  */
 
-extern int get_number (const char **);
+extern bool get_number (const char **, int *);
 
 /* Like the above, but takes a non-const "char **".  */
 
-extern int get_number (char **);
+extern bool get_number (char **, int *);
 
 /* Like get_number_trailer, but works with ULONGEST, and throws on
    error instead of returning 0.  */
@@ -79,8 +84,10 @@ public:
   /* Calls init automatically.  */
   number_or_range_parser (const char *string);
 
-  /* STRING is the string to be parsed.  */
-  void init (const char *string);
+  /* STRING is the string to be parsed.  END_TRAILER is optional and
+     specifies an additional symbol which marks the valid end of
+     a number.  */
+  void init (const char *string, int end_trailer = 0);
 
   /* While processing a range, this fuction is called iteratively; At
      each call it will return the next value in the range.
@@ -90,7 +97,7 @@ public:
      pointing at the '-' token.  Subsequent calls will not advance the
      pointer until the range is completed.  The call that completes
      the range will advance the pointer past <number2>.  */
-  int get_number ();
+  bool get_number (int *num);
 
   /* Setup internal state such that get_next() returns numbers in the
      START_VALUE to END_VALUE range.  END_PTR is where the string is
@@ -122,6 +129,10 @@ public:
     m_in_range = false;
   }
 
+  /* Setup the END_PTR, where the string is advanced to when get_next()
+     returns END_VALUE.  */
+  void set_end_ptr (const char*);
+
 private:
   /* No need for these.  They are intentionally not defined anywhere.  */
   number_or_range_parser (const number_or_range_parser &);
@@ -136,6 +147,7 @@ private:
 
   /* When parsing a range, the final value in the range.  */
   int m_end_value;
+  int m_end_trailer;
 
   /* When parsing a range, a pointer past the final token in the
      range.  */
@@ -224,5 +236,26 @@ struct qcs_flags
    FLAGS->SILENT are true.  WHICH_COMMAND is included in the error
    message.  */
 extern void validate_flags_qcs (const char *which_command, qcs_flags *flags);
+
+/* A helper function to create a string of ranges out of sorted set
+   of integers NUMBERS.  Duplicated values are ignored. If the result contains
+   more than one number, it is enclosed in square brackets.  If CURRENT
+   is used and matches one of the numbers in the set, it will be prepended
+   by a * and not be part of any range.
+   Example:
+   For the set {} the result is "".
+   For the set {1} the result is "1".
+   For the set {0,1,2,4,6,7,8} the result is "[0-2 4 6-8]".
+   For the set {0,1,2,3} with current lane 0 the result is "[*0 1-3]".
+   For the set {0,1,2,3} with current lane 1 the result is "[0 *1 2-3]".
+   For the set {0,1,2,3} with current lane 2 the result is "[0-1 *2 3]".
+   For the set {0,1,2,3} with current lane 3 the result is "[0-2 *3]".  */
+extern std::string
+make_ranges_from_set (const std::set<int> &numbers, int current = -1);
+
+/* Helper to directly create number ranges from a mask.  Uses
+   make_ranges_from_set for now but could be implemented more
+   efficiently.  CURRENT is used as in make_ranges_from_set.  */
+extern std::string make_ranges_from_mask (unsigned long mask, int current = -1);
 
 #endif /* CLI_CLI_UTILS_H */

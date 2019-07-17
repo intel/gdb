@@ -587,7 +587,7 @@ struct breakpoint_ops
 				  gdb::unique_xmalloc_ptr<char>,
 				  gdb::unique_xmalloc_ptr<char>,
 				  enum bptype, enum bpdisp, int, int, int,
-				  int, int, int, int, unsigned);
+				  int, int, int, int, int, unsigned);
 };
 
 enum watchpoint_triggered
@@ -830,6 +830,7 @@ struct breakpoint : public intrusive_list_node<breakpoint>
   /* Chain of command lines to execute when this breakpoint is
      hit.  */
   counted_command_line commands;
+  bool is_cmd_for_all_lanes = false;
   /* Stack depth (address of frame).  If nonzero, break only if fp
      equals this.  */
   struct frame_id frame_id = null_frame_id;
@@ -885,6 +886,10 @@ struct breakpoint : public intrusive_list_node<breakpoint>
   /* Thread number for thread-specific breakpoint, or -1 if don't
      care.  */
   int thread = -1;
+
+  /* SIMD lane number for thread specific breakpoint, or -1 if don't
+     care.  It is taken into consideration iff THREAD is specified.  */
+  int simd_lane_num = -1;
 
   /* Inferior number for inferior-specific breakpoint, or -1 if this
      breakpoint is for all inferiors.  */
@@ -948,8 +953,8 @@ struct code_breakpoint : public breakpoint
 		   gdb::unique_xmalloc_ptr<char> cond_string,
 		   gdb::unique_xmalloc_ptr<char> extra_string,
 		   enum bpdisp disposition,
-		   int thread, int task, int inferior, int ignore_count,
-		   int from_tty,
+		   int thread, int simd_lane_num, int task, int inferior,
+		   int ignore_count, int from_tty,
 		   int enabled, unsigned flags,
 		   int display_canonical);
 
@@ -1305,6 +1310,10 @@ struct bpstat_what
        BPSTAT_WHAT_CLEAR_LONGJMP_RESUME.  True if we are handling a
        longjmp, false if we are handling an exception.  */
     bool is_longjmp;
+
+    /* Used for BPSTAT_WHAT_STOP_NOISY.  SIMD lane number for which
+     the breakpoint was hit.  */
+    int simd_lane_num;
   };
 
 /* Tell what to do about this bpstat.  */
@@ -1425,6 +1434,7 @@ struct bpstat
 
     /* The associated command list.  */
     counted_command_line commands;
+    bool is_cmd_for_all_lanes;
 
     /* Old value associated with a watchpoint.  */
     value_ref_ptr old_val;
@@ -1438,6 +1448,9 @@ struct bpstat
     /* Tell bpstat_print and print_bp_stop_message how to print stuff
        associated with this element of the bpstat chain.  */
     enum bp_print_how print_it;
+
+    /* Tell which SIMD lanes are hit the BP.  */
+    unsigned int hit_lane_mask;
   };
 
 enum inf_context

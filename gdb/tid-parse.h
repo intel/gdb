@@ -33,8 +33,10 @@ extern void ATTRIBUTE_NORETURN invalid_thread_id_error (const char *string);
    in from the current inferior.  If ENDPTR is not NULL,
    parse_thread_id stores the address of the first character after the
    thread ID.  Either a valid thread is returned, or an error is
-   thrown.  */
-struct thread_info *parse_thread_id (const char *tidstr, const char **end);
+   thrown.  If SIMD lane number is speciied in TIDSTR and SIMD_LANE_NUM is
+   not a nullptr, then parsed SIMD lane number is stored in SIMD_LANE_NUM.  */
+struct thread_info *parse_thread_id (const char *tidstr, const char **end,
+				     int *simd_lane_num = nullptr);
 
 /* Parse a thread ID or a thread range list.
 

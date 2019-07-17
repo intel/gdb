@@ -158,10 +158,17 @@ show_step_stop_if_no_debug (struct ui_file *file, int from_tty,
 }
 
 /* proceed and normal_stop use this to notify the user when the
-   inferior stopped in a different thread than it had been running in.
+   inferior stopped and there is a notable change in the current focus,
+   e.g. a different thread than it had been running in, a different SIMD
+   lane of the same thread, thread became inactive or unavailable.
    It can also be used to find for which thread normal_stop last
    reported a stop.  */
-static thread_info_ref previous_thread;
+static struct
+{
+  thread_info_ref thread;
+  int simd_lane;
+  unsigned int emask;
+} previous_focus;
 
 /* See infrun.h.  */
 
@@ -169,9 +176,18 @@ void
 update_previous_thread ()
 {
   if (inferior_ptid == null_ptid)
-    previous_thread = nullptr;
+    {
+      previous_focus.thread = nullptr;
+      previous_focus.simd_lane = -1;
+      previous_focus.emask = 0x0;
+    }
   else
-    previous_thread = thread_info_ref::new_reference (inferior_thread ());
+    {
+      thread_info *tp = inferior_thread ();
+      previous_focus.thread = thread_info_ref::new_reference (tp);
+      previous_focus.simd_lane = tp->current_simd_lane ();
+      previous_focus.emask = tp->active_simd_lanes_mask ();
+    }
 }
 
 /* See infrun.h.  */
@@ -179,7 +195,7 @@ update_previous_thread ()
 thread_info *
 get_previous_thread ()
 {
-  return previous_thread.get ();
+  return previous_focus.thread.get ();
 }
 
 /* If set (default for legacy reasons), when following a fork, GDB
@@ -7386,6 +7402,26 @@ process_event_stop_test (struct execution_control_state *ecs)
       stop_stack_dummy = what.call_dummy;
     }
 
+  if (ecs->event_thread->control.stop_bpstat != nullptr)
+    {
+      unsigned int mask
+	= ecs->event_thread->control.stop_bpstat->hit_lane_mask;
+
+      if (mask != 0x0)
+	{
+	  int current_simd_lane = ecs->event_thread->current_simd_lane ();
+	  /* If previous SIMD lane matches the SIMD lane mask, do not
+	     change it.  Otherwise, find a new one.  */
+	  if (!is_simd_lane_active (mask, current_simd_lane))
+	    {
+	      /* If a specific SIMD lane caused the stop, then switch
+		 the thread to this lane.  */
+	      int lane = find_first_active_simd_lane (mask);
+	      ecs->event_thread->set_current_simd_lane (lane);
+	    }
+	}
+    }
+
   /* A few breakpoint types have callbacks associated (e.g.,
      bp_jit_event).  Run them now.  */
   bpstat_run_callbacks (ecs->event_thread->control.stop_bpstat);
@@ -9595,35 +9631,94 @@ normal_stop ()
 
      There's no point in saying anything if the inferior has exited.
      Note that SIGNALLED here means "exited with a signal", not
-     "received a signal".
+     "received a signal".  */
 
-     Also skip saying anything in non-stop mode.  In that mode, as we
-     don't want GDB to switch threads behind the user's back, to avoid
-     races where the user is typing a command to apply to thread x,
-     but GDB switches to thread y before the user finishes entering
-     the command, fetch_inferior_event installs a cleanup to restore
-     the current thread back to the thread the user had selected right
-     after this event is handled, so we're not really switching, only
-     informing of a stop.  */
-  if (!non_stop)
+  if (target_has_execution ()
+      && last.kind () != TARGET_WAITKIND_SIGNALLED
+      && last.kind () != TARGET_WAITKIND_EXITED
+      && last.kind () != TARGET_WAITKIND_NO_RESUMED
+      && last.kind () != TARGET_WAITKIND_THREAD_EXITED)
     {
-      if ((last.kind () != TARGET_WAITKIND_SIGNALLED
-	   && last.kind () != TARGET_WAITKIND_EXITED
-	   && last.kind () != TARGET_WAITKIND_NO_RESUMED
-	   && last.kind () != TARGET_WAITKIND_THREAD_EXITED)
-	  && target_has_execution ()
-	  && previous_thread != inferior_thread ())
+      thread_info *current_thread = inferior_thread ();
+
+      /* As the current SIMD lane in the inferior thread might become
+	 inactive (e.g. while stepping), set the default lane.  */
+      current_thread->set_default_simd_lane ();
+      bool has_simd_lanes = current_thread->has_simd_lanes ();
+      int current_simd_lane = current_thread->current_simd_lane ();
+      unsigned int lanes_mask = current_thread->active_simd_lanes_mask ();
+
+      /* Do not notify a user about thread switching in non-stop mode.
+	 In that mode, as we don't want GDB to switch threads behind
+	 the user's back, to avoid races where the user is typing
+	 a command to apply to thread x, but GDB switches to thread y
+	 before the user finishes entering the command,
+	 fetch_inferior_event installs a cleanup to restore the current
+	 thread back to the thread the user had selected right after
+	 this event is handled, so we're not really switching, only
+	 informing of a stop.  */
+      if (!non_stop
+	  && previous_focus.thread != current_thread)
 	{
+	  /* Current thread has changed.  */
 	  SWITCH_THRU_ALL_UIS ()
 	    {
 	      target_terminal::ours_for_output ();
-	      gdb_printf (_("[Switching to %s]\n"),
-			  target_pid_to_str (inferior_ptid).c_str ());
+	      std::string lane_info = "";
+
+	      if (has_simd_lanes)
+		lane_info
+		  = ((lanes_mask == 0x0)
+		     ? " (inactive)"
+		     : " lane " + std::to_string (current_simd_lane));
+
+	      unsigned int current_lane_mask = 0;
+	      if (has_simd_lanes && (lanes_mask != 0x0))
+		current_lane_mask = 1 << current_simd_lane;
+
+	      gdb_printf (_("[Switching to thread %s (%s%s)]\n"),
+			  print_thread_id (current_thread,
+					   current_lane_mask),
+			  target_pid_to_str (inferior_ptid).c_str (),
+			  lane_info.c_str ());
 	      annotate_thread_changed ();
 	    }
-	}
 
-      update_previous_thread ();
+	  update_previous_thread ();
+	}
+      else if (has_simd_lanes
+	       && previous_focus.thread != current_thread)
+	{
+	  /* If the thread did not change, there could be a change in SIMD
+	     lanes.  */
+	  if (previous_focus.emask != 0x0 && lanes_mask == 0x0)
+	    {
+		/* Thread became inactive.  */
+		SWITCH_THRU_ALL_UIS ()
+		{
+		  target_terminal::ours_for_output ();
+
+		  ptid_t ptid = current_thread->ptid;
+		  gdb_printf (_("[Thread %s (%s) became inactive]\n"),
+			      print_thread_id (current_thread),
+			      target_pid_to_str (ptid).c_str ());
+		}
+	    }
+	  else if ((previous_focus.emask == 0x0 && lanes_mask != 0x0)
+		   || previous_focus.simd_lane != current_simd_lane)
+	    {
+	      /* Current thread is the same, but either became active
+		 or SIMD lane has changed.  */
+	      SWITCH_THRU_ALL_UIS ()
+		{
+		  target_terminal::ours_for_output ();
+
+		  gdb_printf (_("[Switching to SIMD lane %d]\n"),
+			      current_simd_lane);
+		}
+	    }
+	  update_previous_thread ();
+	}
     }
 
   if (last.kind () == TARGET_WAITKIND_NO_RESUMED

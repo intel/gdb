@@ -19,6 +19,7 @@
 
 #include "cli/cli-utils.h"
 #include "value.h"
+#include "algorithm"
 
 #include <ctype.h>
 
@@ -76,10 +77,11 @@ get_ulongest (const char **pp, int trailer)
 
 /* See documentation in cli-utils.h.  */
 
-int
-get_number_trailer (const char **pp, int trailer)
+bool
+get_number_trailer (const char **pp, int *num, int trailer)
 {
-  int retval = 0;	/* default */
+  bool retval = false;	/* Default.  */
+  int parsed_value = 0;
   const char *p = *pp;
   bool negative = false;
 
@@ -96,11 +98,14 @@ get_number_trailer (const char **pp, int trailer)
       if (val)	/* Value history reference */
 	{
 	  if (val->type ()->code () == TYPE_CODE_INT)
-	    retval = value_as_long (val);
+	    {
+	      parsed_value = value_as_long (val);
+	      retval = true;
+	    }
 	  else
 	    {
 	      gdb_printf (_("History value must have integer type.\n"));
-	      retval = 0;
+	      retval = false;
 	    }
 	}
       else	/* Convenience variable */
@@ -118,12 +123,15 @@ get_number_trailer (const char **pp, int trailer)
 	  varname[p - start] = '\0';
 	  if (get_internalvar_integer (lookup_internalvar (varname),
 				       &longest_val))
-	    retval = (int) longest_val;
+	    {
+	      parsed_value = (int) longest_val;
+	      retval = true;
+	    }
 	  else
 	    {
 	      gdb_printf (_("Convenience variable must "
 			    "have integer value.\n"));
-	      retval = 0;
+	      retval = false;
 	    }
 	}
     }
@@ -139,40 +147,47 @@ get_number_trailer (const char **pp, int trailer)
 	  while (*p && !isspace((int) *p))
 	    ++p;
 	  /* Return zero, which caller must interpret as error.  */
-	  retval = 0;
+	  retval = false;
 	}
       else
-	retval = atoi (p1);
+	{
+	  parsed_value = atoi (p1);
+	  retval = true;
+	}
+
     }
   if (!(isspace (*p) || *p == '\0' || *p == trailer))
     {
       /* Trailing junk: return 0 and let caller print error msg.  */
       while (!(isspace (*p) || *p == '\0' || *p == trailer))
 	++p;
-      retval = 0;
+      retval = false;
     }
   p = skip_spaces (p);
   *pp = p;
-  return negative ? -retval : retval;
+
+  if (num != nullptr)
+    *num = negative ? -parsed_value : parsed_value;
+  return retval;
 }
 
 /* See documentation in cli-utils.h.  */
 
-int
-get_number (const char **pp)
+bool
+get_number (const char **pp, int *num)
 {
-  return get_number_trailer (pp, '\0');
+  return get_number_trailer (pp, num, '\0');
 }
 
 /* See documentation in cli-utils.h.  */
 
-int
-get_number (char **pp)
+bool
+get_number (char **pp, int *num)
 {
   int result;
   const char *p = *pp;
 
-  result = get_number_trailer (&p, '\0');
+  result = get_number_trailer (&p, num, '\0');
   *pp = (char *) p;
   return result;
 }
@@ -221,26 +236,31 @@ number_or_range_parser::number_or_range_parser (const char *string)
 /* See documentation in cli-utils.h.  */
 
 void
-number_or_range_parser::init (const char *string)
+number_or_range_parser::init (const char *string, int end_trailer)
 {
   m_cur_tok = string;
   m_last_retval = 0;
   m_end_value = 0;
   m_end_ptr = NULL;
   m_in_range = false;
+  m_end_trailer = end_trailer;
 }
 
 /* See documentation in cli-utils.h.  */
 
-int
-number_or_range_parser::get_number ()
+bool
+number_or_range_parser::get_number (int *num)
 {
+  bool retval = false;
+
   if (m_in_range)
     {
       /* All number-parsing has already been done.  Return the next
 	 integer value (one greater than the saved previous value).
 	 Do not advance the token pointer until the end of range is
 	 reached.  */
+
+      retval = true;
 
       if (++m_last_retval == m_end_value)
 	{
@@ -251,9 +271,22 @@ number_or_range_parser::get_number ()
     }
   else if (*m_cur_tok != '-')
     {
+      const char *restore_tok = m_cur_tok;
       /* Default case: state->m_cur_tok is pointing either to a solo
 	 number, or to the first number of a range.  */
-      m_last_retval = get_number_trailer (&m_cur_tok, '-');
+      if (!get_number_trailer (&m_cur_tok, &m_last_retval, '-'))
+	{
+	  /* Make another attempt only if there is a custom end trailer.  */
+	  if (m_end_trailer == 0)
+	    return false;
+
+	  m_cur_tok = restore_tok;
+	  if (!get_number_trailer (&m_cur_tok, &m_last_retval, m_end_trailer))
+	    return false;
+	}
+
+      retval = true;
+
       /* If get_number_trailer has found a '-' preceded by a space, it
 	 might be the start of a command option.  So, do not parse a
 	 range if the '-' is followed by an alpha or another '-'.  We
@@ -275,7 +308,15 @@ number_or_range_parser::get_number ()
 
 	  temp = &m_end_ptr;
 	  m_end_ptr = skip_spaces (m_cur_tok + 1);
-	  m_end_value = ::get_number (temp);
+
+	  if (!::get_number_trailer (temp, &m_end_value, m_end_trailer))
+	    {
+	      /* Advance the token pointer behind the failed range.  */
+	      m_cur_tok = m_end_ptr;
+
+	      return false;
+	    }
+
 	  if (m_end_value < m_last_retval)
 	    {
 	      error (_("inverted range"));
@@ -298,12 +339,19 @@ number_or_range_parser::get_number ()
       if (*(m_cur_tok + 1) == '$')
 	{
 	  /* Convenience variable.  */
-	  m_last_retval = ::get_number (&m_cur_tok);
+	  if (!::get_number (&m_cur_tok, &m_last_retval))
+	    return false;
+
+	  retval = true;
+
 	  if (m_last_retval < 0)
 	    error (_("negative value"));
 	}
     }
-  return m_last_retval;
+  if (num != nullptr)
+    *num = m_last_retval;
+
+  return retval;
 }
 
 /* See documentation in cli-utils.h.  */
@@ -312,12 +360,18 @@ void
 number_or_range_parser::setup_range (int start_value, int end_value,
 				     const char *end_ptr)
 {
-  gdb_assert (start_value > 0);
+  gdb_assert (start_value >= 0);
 
   m_in_range = true;
   m_end_ptr = end_ptr;
   m_last_retval = start_value - 1;
   m_end_value = end_value;
+}
+
+void
+number_or_range_parser::set_end_ptr (const char *end_ptr)
+{
+  m_end_ptr = end_ptr;
 }
 
 /* See documentation in cli-utils.h.  */
@@ -355,9 +409,9 @@ number_is_in_list (const char *list, int number)
     error (_("Arguments must be numbers or '$' variables."));
   while (!parser.finished ())
     {
-      int gotnum = parser.get_number ();
+      int gotnum = 0;
 
-      if (gotnum == 0)
+      if (!parser.get_number (&gotnum) || gotnum == 0)
 	error (_("Arguments must be numbers or '$' variables."));
       if (gotnum == number)
 	return 1;
@@ -438,3 +492,152 @@ validate_flags_qcs (const char *which_command, qcs_flags *flags)
     error (_("%s: -c and -s are mutually exclusive"), which_command);
 }
 
+/* See documentation in cli-utils.h.  */
+
+std::string
+make_ranges_from_mask (unsigned long mask, int current)
+{
+  std::string result;
+
+  /* Pre-allocate memory for the resulting output.  In worst case,
+     we have a mask with alternating bits set, e.g., 0xAAAA AAAA.  */
+  result.reserve (64);
+  bool has_brackets = false;
+
+  auto print_range = ([&] (const int start, const int end)
+    {
+      if (!result.empty ())
+	{
+	  result += " ";
+	  has_brackets = true;
+	}
+
+      result += std::to_string (start);
+      if (start < end)
+	{
+	  result += "-" + std::to_string (end);
+	  has_brackets = true;
+	}
+    });
+
+  int start = -1;
+  int prev = -1;
+  for (int bitnum = 0; mask != 0; mask >>= 1, bitnum++)
+    {
+      if ((mask & 0x1) == 0x0)
+	continue;
+
+      if (start == -1)
+	{
+	  /* The active lane is the current lane.  */
+	  if (bitnum == current)
+	    {
+	      if (!result.empty ())
+		result += " ";
+	      result += "*" + std::to_string (bitnum);
+	    }
+	  else
+	    start = bitnum;
+	}
+      else if (bitnum == current)
+	{
+	  print_range (start, prev);
+	  result += " *" + std::to_string (bitnum);
+
+	  /* 'print_range' may not update 'has_brackets' if 'start == prev'
+	     and 'lane_mask' does not contain any output yet.  */
+	  has_brackets = true;
+
+	  /* Reset to start a new range.  */
+	  start = -1;
+	}
+      else if ((bitnum - prev) > 1)
+	{
+	  print_range (start, prev);
+	  start = bitnum;
+	}
+
+      prev = bitnum;
+    }
+
+  /* Print last lane.  */
+  if (start != -1)
+    print_range (start, prev);
+
+  if (has_brackets)
+    result = "[" + result + "]";
+
+  return result;
+}
+
+#if GDB_SELF_TEST
+#include "gdbsupport/selftest.h"
+
+namespace selftests {
+
+/* Test 'make_ranges_from_mask'.  */
+
+static void
+test_make_ranges_from_mask ()
+{
+  /* Test with empty mask.  */
+  SELF_CHECK (make_ranges_from_mask (0) == "");
+  SELF_CHECK (make_ranges_from_mask (0, 1) == "");
+
+  /* Test with one bit set in mask.  */
+  SELF_CHECK (make_ranges_from_mask (1, -1) == "0");
+  SELF_CHECK (make_ranges_from_mask (1, 0) == "*0");
+  SELF_CHECK (make_ranges_from_mask (1, 1) == "0");
+  SELF_CHECK (make_ranges_from_mask (2, -1) == "1");
+  SELF_CHECK (make_ranges_from_mask (2, 1) == "*1");
+
+  /* Test with two bits set in mask.  */
+  SELF_CHECK (make_ranges_from_mask (3, -1) == "[0-1]");
+  SELF_CHECK (make_ranges_from_mask (3, 0) == "[*0 1]");
+  SELF_CHECK (make_ranges_from_mask (3, 1) == "[0 *1]");
+  SELF_CHECK (make_ranges_from_mask (3, 2) == "[0-1]");
+
+  /* Test with four alternating bits set.  */
+  SELF_CHECK (make_ranges_from_mask (0xAA) == "[1 3 5 7]");
+  SELF_CHECK (make_ranges_from_mask (0xAA, 0) == "[1 3 5 7]");
+
+  /* Tests with odd bits set.  */
+  SELF_CHECK (make_ranges_from_mask (0xAA, 1) == "[*1 3 5 7]");
+  SELF_CHECK (make_ranges_from_mask (0xAA, 3) == "[1 *3 5 7]");
+  SELF_CHECK (make_ranges_from_mask (0xAA, 7) == "[1 3 5 *7]");
+
+  /* Tests with consecutive blocks of bits set.  */
+  SELF_CHECK (make_ranges_from_mask (0xF0F0) == "[4-7 12-15]");
+  SELF_CHECK (make_ranges_from_mask (0xF0F0, 0) == "[4-7 12-15]");
+  SELF_CHECK (make_ranges_from_mask (0xF0F0, 3) == "[4-7 12-15]");
+  SELF_CHECK (make_ranges_from_mask (0xF0F0, 4) == "[*4 5-7 12-15]");
+  SELF_CHECK (make_ranges_from_mask (0xF0F0, 6) == "[4-5 *6 7 12-15]");
+  SELF_CHECK (make_ranges_from_mask (0xF0F0, 12) == "[4-7 *12 13-15]");
+  SELF_CHECK (make_ranges_from_mask (0xF0F0, 15) == "[4-7 12-14 *15]");
+
+  /* Test some more complicated patterns.  */
+  SELF_CHECK (make_ranges_from_mask (0x3DB3) == "[0-1 4-5 7-8 10-13]");
+  SELF_CHECK (make_ranges_from_mask (0x3DB3, 11)
+	      == "[0-1 4-5 7-8 10 *11 12-13]");
+  SELF_CHECK (make_ranges_from_mask (0x3DB3, 12)
+	      == "[0-1 4-5 7-8 10-11 *12 13]");
+  SELF_CHECK (make_ranges_from_mask (0x3DB3, 7) == "[0-1 4-5 *7 8 10-13]");
+  SELF_CHECK (make_ranges_from_mask (0x3DB3, 2) == "[0-1 4-5 7-8 10-13]");
+  SELF_CHECK (make_ranges_from_mask (0x3DB3, 3) == "[0-1 4-5 7-8 10-13]");
+  SELF_CHECK (make_ranges_from_mask (0x3DB3, 9) == "[0-1 4-5 7-8 10-13]");
+  SELF_CHECK (make_ranges_from_mask (0x3DB3, 20) == "[0-1 4-5 7-8 10-13]");
+}
+
+}
+
+#endif
+
+void _initialize_cli_utils ();
+void
+_initialize_cli_utils ()
+{
+#if GDB_SELF_TEST
+  selftests::register_test ("make_ranges_from_mask",
+			    selftests::test_make_ranges_from_mask);
+#endif
+}

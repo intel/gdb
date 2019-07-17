@@ -30,6 +30,7 @@
 #if defined (HAVE_LIBIGA64)
 #include "iga.h"
 #endif /* defined (HAVE_LIBIGA64)  */
+#include "gdbthread.h"
 
 /* Feature names.  */
 
@@ -122,6 +123,18 @@ intelgt_register_type (gdbarch *gdbarch, int regno)
     default:
       return builtin_type (gdbarch)->builtin_uint256;
     }
+}
+
+/* Return active lanes mask for the specified thread TP.  */
+
+static unsigned int
+intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
+{
+  intelgt::arch_info *intelgt_info = get_intelgt_arch_info (gdbarch);
+  int regnum_emask = intelgt_info->emask_regnum ();
+  regcache *thread_regcache = get_thread_regcache (tp);
+
+  return regcache_raw_get_unsigned (thread_regcache, regnum_emask);
 }
 
 /* Return the PC of the first real instruction.  */
@@ -464,6 +477,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
   /* Disassembly */
   set_gdbarch_print_insn (gdbarch, intelgt_print_insn);
+
+  set_gdbarch_active_lanes_mask (gdbarch, &intelgt_active_lanes_mask);
 
   if (tdesc_data != nullptr)
     tdesc_use_registers (gdbarch, tdesc, std::move (tdesc_data));

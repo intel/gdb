@@ -313,6 +313,14 @@ typedef struct frame_id (gdbarch_dummy_id_ftype) (struct gdbarch *gdbarch, struc
 extern struct frame_id gdbarch_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame);
 extern void set_gdbarch_dummy_id (struct gdbarch *gdbarch, gdbarch_dummy_id_ftype *dummy_id);
 
+/* Return the active SIMD lanes mask for a thread TP. */
+
+extern bool gdbarch_active_lanes_mask_p (struct gdbarch *gdbarch);
+
+typedef unsigned int (gdbarch_active_lanes_mask_ftype) (struct gdbarch *gdbarch, thread_info *tp);
+extern unsigned int gdbarch_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp);
+extern void set_gdbarch_active_lanes_mask (struct gdbarch *gdbarch, gdbarch_active_lanes_mask_ftype *active_lanes_mask);
+
 /* Implement DUMMY_ID and PUSH_DUMMY_CALL, then delete
    deprecated_fp_regnum. */
 

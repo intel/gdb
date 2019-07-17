@@ -595,6 +595,17 @@ frame.
     invalid=False,
 )
 
+Method(
+    comment="""
+Return the active SIMD lanes mask for a thread TP.
+""",
+    type="unsigned int",
+    name="active_lanes_mask",
+    params=[("thread_info *", "tp")],
+    predicate=True,
+    invalid=False,
+)
+
 Value(
     comment="""
 Implement DUMMY_ID and PUSH_DUMMY_CALL, then delete

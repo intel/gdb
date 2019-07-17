@@ -93,6 +93,7 @@ struct gdbarch
   gdbarch_register_name_ftype *register_name;
   gdbarch_register_type_ftype *register_type;
   gdbarch_dummy_id_ftype *dummy_id;
+  gdbarch_active_lanes_mask_ftype *active_lanes_mask;
   int deprecated_fp_regnum;
   gdbarch_push_dummy_call_ftype *push_dummy_call;
   int call_dummy_location;
@@ -447,6 +448,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   if (gdbarch->register_type == 0)
     log.puts ("\n\tregister_type");
   /* Skip verify of dummy_id, invalid_p == 0 */
+  /* Skip verify of active_lanes_mask, invalid_p == 0 */
   /* Skip verify of deprecated_fp_regnum, invalid_p == 0 */
   /* Skip verify of push_dummy_call, has predicate.  */
   /* Skip verify of call_dummy_location, invalid_p == 0 */
@@ -795,6 +797,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   fprintf_filtered (file,
                       "gdbarch_dump: dummy_id = <%s>\n",
                       host_address_to_string (gdbarch->dummy_id));
+  fprintf_filtered (file,
+                      "gdbarch_dump: gdbarch_active_lanes_mask_p() = %d\n",
+                      gdbarch_active_lanes_mask_p (gdbarch));
+  fprintf_filtered (file,
+                      "gdbarch_dump: active_lanes_mask = <%s>\n",
+                      host_address_to_string (gdbarch->active_lanes_mask));
   fprintf_filtered (file,
                       "gdbarch_dump: deprecated_fp_regnum = %s\n",
                       plongest (gdbarch->deprecated_fp_regnum));
@@ -2260,6 +2268,30 @@ set_gdbarch_dummy_id (struct gdbarch *gdbarch,
                       gdbarch_dummy_id_ftype dummy_id)
 {
   gdbarch->dummy_id = dummy_id;
+}
+
+bool
+gdbarch_active_lanes_mask_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->active_lanes_mask != NULL;
+}
+
+unsigned int
+gdbarch_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->active_lanes_mask != NULL);
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_active_lanes_mask called\n");
+  return gdbarch->active_lanes_mask (gdbarch, tp);
+}
+
+void
+set_gdbarch_active_lanes_mask (struct gdbarch *gdbarch,
+                               gdbarch_active_lanes_mask_ftype active_lanes_mask)
+{
+  gdbarch->active_lanes_mask = active_lanes_mask;
 }
 
 int

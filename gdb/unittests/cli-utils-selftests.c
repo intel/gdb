@@ -29,9 +29,10 @@ test_number_or_range_parser ()
   /* Test parsing a simple integer.  */
   {
     number_or_range_parser one ("1");
+    int num = 0;
 
     SELF_CHECK (!one.finished ());
-    SELF_CHECK (one.get_number () == 1);
+    SELF_CHECK (one.get_number (&num) && num == 1);
     SELF_CHECK (one.finished ());
     SELF_CHECK (strcmp (one.cur_tok (), "") == 0);
   }
@@ -39,9 +40,10 @@ test_number_or_range_parser ()
   /* Test parsing an integer followed by a non integer.  */
   {
     number_or_range_parser one_after ("1 after");
+    int num = 0;
 
     SELF_CHECK (!one_after.finished ());
-    SELF_CHECK (one_after.get_number () == 1);
+    SELF_CHECK (one_after.get_number (&num) && num == 1);
     SELF_CHECK (one_after.finished ());
     SELF_CHECK (strcmp (one_after.cur_tok (), "after") == 0);
   }
@@ -52,8 +54,9 @@ test_number_or_range_parser ()
 
     for (int i = 1; i < 4; i++)
       {
+	int num = 0;
 	SELF_CHECK (!one_three.finished ());
-	SELF_CHECK (one_three.get_number () == i);
+	SELF_CHECK (one_three.get_number (&num) && num == i);
       }
     SELF_CHECK (one_three.finished ());
     SELF_CHECK (strcmp (one_three.cur_tok (), "") == 0);
@@ -65,8 +68,9 @@ test_number_or_range_parser ()
 
     for (int i = 1; i < 4; i++)
       {
+	int num = 0;
 	SELF_CHECK (!one_three_after.finished ());
-	SELF_CHECK (one_three_after.get_number () == i);
+	SELF_CHECK (one_three_after.get_number (&num) && num == i);
       }
     SELF_CHECK (one_three_after.finished ());
     SELF_CHECK (strcmp (one_three_after.cur_tok (), "after") == 0);
@@ -79,7 +83,8 @@ test_number_or_range_parser ()
     SELF_CHECK (!minus_one.finished ());
     try
       {
-	minus_one.get_number ();
+	int num = 0;
+	minus_one.get_number (&num);
 	SELF_CHECK (false);
       }
     catch (const gdb_exception_error &ex)

@@ -80,7 +80,7 @@ gdb_test_multiple "p some_func ()" "" {
 # debug, to format of which isn't fixed.  All we care about is that
 # GDB is still running afterwards.
 #
-gdb_test_no_output "set debug frame on"
+gdb_test "set debug frame on"
 gdb_test_lines "p some_func ()" \
     "repeat p some_func () with frame debug on" \
     ".*"

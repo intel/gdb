@@ -131,7 +131,7 @@ with_test_prefix "cycle at level 1" {
 # to back trace.  At one point this triggered an assertion.
 gdb_test "maint flush register-cache" \
     "Register cache flushed\\." ""
-gdb_test_no_output "set debug frame 1"
+gdb_test "set debug frame 1"
 gdb_test_multiple "bt" "backtrace with debugging on" {
     -re "^$gdb_prompt $" {
 	pass $gdb_test_name
@@ -140,5 +140,5 @@ gdb_test_multiple "bt" "backtrace with debugging on" {
 	exp_continue
     }
 }
-gdb_test "p 1 + 2 + 3" " = 6" \
+gdb_test "p 1 + 2 + 3" " = 6.*" \
     "ensure GDB is still alive"

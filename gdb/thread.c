@@ -31,6 +31,7 @@
 #include "gdbcmd.h"
 #include "regcache.h"
 #include "btrace.h"
+#include "gdbarch.h"
 
 #include <ctype.h>
 #include <sys/types.h>
@@ -77,6 +78,102 @@ static bool
 is_current_thread (const thread_info *thr)
 {
   return thr == current_thread_;
+}
+
+/* See gdbthread.h.  */
+
+bool
+thread_info::has_simd_lanes ()
+{
+  if (this->inf == nullptr)
+    return false;
+
+  gdbarch *arch = this->inf->gdbarch;
+  return gdbarch_active_lanes_mask_p (arch) != 0;
+}
+
+/* See gdbthread.h.  */
+
+unsigned int
+thread_info::active_simd_lanes_mask ()
+{
+  gdb_assert (this->inf != nullptr);
+
+  if (has_simd_lanes ())
+    {
+      gdbarch *arch = this->inf->gdbarch;
+      if (gdbarch_active_lanes_mask_p (arch) != 0)
+	return gdbarch_active_lanes_mask (arch, this);
+    }
+
+  /* Default: only one lane is active.  */
+  return 0x1;
+}
+
+/* See gdbthread.h.  */
+
+int
+thread_info::current_simd_lane ()
+{
+  int lane = (simd_lane_num >= 0) ? simd_lane_num : 0;
+
+  return lane;
+}
+
+/* See gdbthread.h.  */
+void
+thread_info::set_default_simd_lane ()
+{
+  if (has_simd_lanes ())
+    {
+      int lane = (simd_lane_num >= 0) ? simd_lane_num : 0;
+
+      if (!is_simd_lane_active (lane))
+	{
+	  unsigned int active_mask = active_simd_lanes_mask ();
+	  lane = find_first_active_simd_lane (active_mask);
+	  if (lane < 0)
+	    lane = 0;
+	  simd_lane_num = lane;
+	}
+    }
+  else
+    simd_lane_num = 0;;
+}
+
+/* See gdbthread.h.  */
+
+void
+thread_info::set_current_simd_lane (int lane)
+{
+  simd_lane_num = lane;
+}
+
+/* See gdbthread.h.  */
+
+bool
+thread_info::is_simd_lane_active (int lane)
+{
+  unsigned int mask = active_simd_lanes_mask ();
+  return (mask & (0x1 << lane)) != 0;
+}
+
+/* See gdbthread.h.  */
+
+int
+find_first_active_simd_lane (unsigned int mask)
+{
+  int result = -1;
+
+  for_active_lanes (mask, [&] (int lane)
+    {
+      result = lane;
+
+      /* We need to call this function only once.  */
+      return false;
+    });
+
+  return result;
 }
 
 struct thread_info*
@@ -1032,6 +1129,113 @@ thread_target_id_str (thread_info *tp)
     return target_id;
 }
 
+/* Print one row in info thread table.
+   TP is the thread related to the printed row.
+   ACTIVE shows whether we print active lanes now.
+   CURRENT shows whether we print the current lane of the current thread.
+   DISPLAY_MASK lanes, which should be printed, have bit 1 in the mask.
+   SHOW_GLOBAL_IDS indicates whther global IDs should be shown.  */
+
+static void
+print_thread_row (struct ui_out *uiout, thread_info *tp,
+		  bool is_active, bool is_current, unsigned int display_mask,
+		  int show_global_ids)
+{
+  /* Vector of lanes to display in this row.  */
+  std::vector<int> lanes;
+
+  if (tp->has_simd_lanes ())
+    for_active_lanes (display_mask, [&] (int lane)
+      {
+	lanes.push_back (lane);
+	return true;
+      });
+
+  ui_out_emit_tuple tuple_emitter (uiout, NULL);
+
+  if (!uiout->is_mi_like_p ())
+    {
+      if (is_current)
+	uiout->field_string ("current", "*");
+      else
+	uiout->field_skip ("current");
+
+      uiout->field_string ("id-in-tg", print_thread_id (tp, &lanes));
+    }
+
+  if (show_global_ids || uiout->is_mi_like_p ())
+    uiout->field_signed ("id", tp->global_num);
+
+  /* For the CLI, we stuff everything into the target-id field.
+     This is a gross hack to make the output come out looking
+     correct.  The underlying problem here is that ui-out has no
+     way to specify that a field's space allocation should be
+     shared by several fields.  For MI, we do the right thing
+     instead.  */
+
+  if (uiout->is_mi_like_p ())
+    {
+      uiout->field_string ("target-id", target_pid_to_str (tp->ptid));
+
+      const char *extra_info = target_extra_thread_info (tp);
+      if (extra_info != nullptr)
+	uiout->field_string ("details", extra_info);
+
+      const char *name = thread_name (tp);
+      if (name != NULL)
+	uiout->field_string ("name", name);
+    }
+  else
+    uiout->field_string ("target-id", thread_target_id_str (tp));
+
+  if (tp->state == THREAD_RUNNING)
+    uiout->text ("(running)\n");
+  else
+    {
+      /* The switch above put us at the top of the stack (leaf
+	 frame).  */
+      bool has_pc
+	= regcache_read_pc_protected (get_thread_regcache (tp)) != 0;
+      /* An inactive thread may still has its PC available, which would
+	 give us a stack frame.  */
+      if (is_active || has_pc)
+	{
+	  scoped_restore_current_simd_lane restore_lane {tp};
+	  if (!lanes.empty ())
+	    {
+	      /* Set lane to the first active lane, so we print the correct
+		 arguments at least for the first one.  The current lane will
+		 be set back by restore_lane.  */
+	      tp->set_current_simd_lane (lanes[0]);
+	    }
+	  print_stack_frame (get_selected_frame (NULL),
+			     /* For MI output, print frame level.  */
+			     uiout->is_mi_like_p (),
+			     LOCATION, 0);
+	}
+      else
+	{
+	  /* Lanes in this row are inactive.  This can happen if the current
+	     thread enters a conditional branch or all lanes in thread are
+	     inactive.  */
+	  uiout->text ("(inactive)\n");
+	}
+    }
+
+  if (uiout->is_mi_like_p ())
+    {
+      const char *state = "stopped";
+
+      if (tp->state == THREAD_RUNNING)
+	state = "running";
+      uiout->field_string ("state", state);
+    }
+
+  int core = target_core_of_thread (tp->ptid);
+  if (uiout->is_mi_like_p () && core != -1)
+    uiout->field_signed ("core", core);
+}
+
 /* Like print_thread_info, but in addition, GLOBAL_IDS indicates
    whether REQUESTED_THREADS is a list of global or per-inferior
    thread ids.  */
@@ -1051,7 +1255,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
   bool current_exited = false;
 
   thread_info *current_thread = (inferior_ptid != null_ptid
-				 ? inferior_thread () : NULL);
+				 ? inferior_thread () : nullptr);
 
   {
     /* For backward compatibility, we make a list for MI.  A table is
@@ -1071,6 +1275,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	/* The width of the "Target Id" column.  Grown below to
 	   accommodate the largest entry.  */
 	size_t target_id_col_width = 17;
+	bool any_thread_with_lanes = false;
 
 	for (thread_info *tp : all_threads ())
 	  {
@@ -1089,6 +1294,9 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 			      thread_target_id_str (tp).size ());
 	      }
 
+	    if (!any_thread_with_lanes)
+	      any_thread_with_lanes = tp->has_simd_lanes ();
+
 	    ++n_threads;
 	  }
 
@@ -1106,7 +1314,8 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 			       n_threads, "threads");
 
 	uiout->table_header (1, ui_left, "current", "");
-	uiout->table_header (4, ui_left, "id-in-tg", "Id");
+	uiout->table_header (any_thread_with_lanes ? 12 : 4, ui_left,
+			     "id-in-tg", "Id");
 	if (show_global_ids)
 	  uiout->table_header (4, ui_left, "id", "GId");
 	uiout->table_header (target_id_col_width, ui_left,
@@ -1115,11 +1324,12 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	uiout->table_body ();
       }
 
+    int selected_lane = ((current_thread != nullptr)
+			 ? current_thread->current_simd_lane () : -1);
+
     for (inferior *inf : all_inferiors ())
       for (thread_info *tp : inf->threads ())
 	{
-	  int core;
-
 	  any_thread = true;
 	  if (tp == current_thread && tp->state == THREAD_EXITED)
 	    current_exited = true;
@@ -1128,72 +1338,57 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 				    global_ids, pid, tp))
 	    continue;
 
-	  ui_out_emit_tuple tuple_emitter (uiout, NULL);
-
-	  if (!uiout->is_mi_like_p ())
-	    {
-	      if (tp == current_thread)
-		uiout->field_string ("current", "*");
-	      else
-		uiout->field_skip ("current");
-
-	      uiout->field_string ("id-in-tg", print_thread_id (tp));
-	    }
-
-	  if (show_global_ids || uiout->is_mi_like_p ())
-	    uiout->field_signed ("id", tp->global_num);
-
 	  /* Switch to the thread (and inferior / target).  */
 	  switch_to_thread (tp);
 
-	  /* For the CLI, we stuff everything into the target-id field.
-	     This is a gross hack to make the output come out looking
-	     correct.  The underlying problem here is that ui-out has no
-	     way to specify that a field's space allocation should be
-	     shared by several fields.  For MI, we do the right thing
-	     instead.  */
+	  unsigned int active_lanes_mask = tp->active_simd_lanes_mask ();
+	  unsigned int selected_lane_mask = 0x0;
+	  bool current = (tp == current_thread);
 
-	  if (uiout->is_mi_like_p ())
+	  if (active_lanes_mask != 0)
 	    {
-	      uiout->field_string ("target-id", target_pid_to_str (tp->ptid));
+	      /* The thread has at least one active lane.  */
 
-	      const char *extra_info = target_extra_thread_info (tp);
-	      if (extra_info != nullptr)
-		uiout->field_string ("details", extra_info);
+	      /* SIMD lanes, which we are going to display are non-zero
+		 in this mask.  */
+	      unsigned int active_lanes_to_display = active_lanes_mask;
 
-	      const char *name = thread_name (tp);
-	      if (name != NULL)
-		uiout->field_string ("name", name);
+	      /* In MI we do not distinguish the current thread and lane.  */
+	      if (current && !uiout->is_mi_like_p ())
+		{
+		  /* If it is the current thread, then we need to print its
+		     current SIMD lane in a separate row.  The current lane
+		     might be inactive.  */
+
+		  gdb_assert (current_thread != nullptr);
+		  current_thread->set_current_simd_lane (selected_lane);
+		  selected_lane_mask = 0x1 << selected_lane;
+
+		  bool is_lane_active
+		    = tp->is_simd_lane_active (tp->current_simd_lane ());
+		  print_thread_row (uiout, tp, is_lane_active, true,
+				    selected_lane_mask, show_global_ids);
+
+		  /* Do not show the current lane of the current thread
+		     for the second time.  */
+		  active_lanes_to_display &= (~selected_lane_mask);
+		}
+
+	      /* Print other active lanes if any.  */
+	      if (active_lanes_to_display != 0)
+		print_thread_row (uiout, tp, true, false,
+				  active_lanes_to_display, show_global_ids);
+
+	      /* We do not print inactive SIMD lanes for threads with non-zero
+		 active mask.  */
 	    }
 	  else
 	    {
-	      uiout->field_string ("target-id", thread_target_id_str (tp));
+	      /* All lanes are inactive.  We print one row for such a thread,
+		 and do not show any SIMD lanes.  */
+	      print_thread_row (uiout, tp, false, current, 0x0,
+				show_global_ids);
 	    }
-
-	  if (tp->state == THREAD_RUNNING)
-	    uiout->text ("(running)\n");
-	  else
-	    {
-	      /* The switch above put us at the top of the stack (leaf
-		 frame).  */
-	      print_stack_frame (get_selected_frame (NULL),
-				 /* For MI output, print frame level.  */
-				 uiout->is_mi_like_p (),
-				 LOCATION, 0);
-	    }
-
-	  if (uiout->is_mi_like_p ())
-	    {
-	      const char *state = "stopped";
-
-	      if (tp->state == THREAD_RUNNING)
-		state = "running";
-	      uiout->field_string ("state", state);
-	    }
-
-	  core = target_core_of_thread (tp->ptid);
-	  if (uiout->is_mi_like_p () && core != -1)
-	    uiout->field_signed ("core", core);
 	}
 
     /* This end scope restores the current thread and the frame
@@ -1396,6 +1591,37 @@ scoped_restore_current_thread::scoped_restore_current_thread ()
     }
 }
 
+scoped_restore_current_simd_lane::scoped_restore_current_simd_lane
+(thread_info *tp) : m_tp (nullptr),
+		    m_simd_lane_num (-1),
+		    m_was_active (false)
+{
+  if (tp == nullptr)
+    {
+      if (has_inferior_thread ())
+	tp = inferior_thread ();
+      else
+	return;
+    }
+  m_tp = thread_info_ref::new_reference (tp);
+  m_simd_lane_num = m_tp->current_simd_lane ();
+  m_was_active = m_tp->is_simd_lane_active (m_simd_lane_num);
+}
+
+scoped_restore_current_simd_lane::~scoped_restore_current_simd_lane ()
+{
+  if (m_tp == nullptr)
+    return;
+
+  if (m_simd_lane_num != -1 && m_tp->has_simd_lanes ())
+    {
+      /* Restore the previous lane if it is active now or
+	 if it was not active at the storing moment.  */
+      if (m_tp->is_simd_lane_active (m_simd_lane_num) || !m_was_active)
+	m_tp->set_current_simd_lane (m_simd_lane_num);
+    }
+}
+
 /* See gdbthread.h.  */
 
 int
@@ -1419,14 +1645,21 @@ show_inferior_qualified_tids (void)
 /* See gdbthread.h.  */
 
 const char *
-print_thread_id (struct thread_info *thr)
+print_thread_id (thread_info *thr, std::vector<int> *lanes)
 {
   char *s = get_print_cell ();
+  std::string lanes_range;
+
+  if (lanes != nullptr && !lanes->empty ())
+    lanes_range = ":" + make_ranges_from_sorted_vector (*lanes);
 
   if (show_inferior_qualified_tids ())
-    xsnprintf (s, PRINT_CELL_SIZE, "%d.%d", thr->inf->num, thr->per_inf_num);
+    xsnprintf (s, PRINT_CELL_SIZE, "%d.%d%s", thr->inf->num,
+	       thr->per_inf_num, lanes_range.c_str ());
   else
-    xsnprintf (s, PRINT_CELL_SIZE, "%d", thr->per_inf_num);
+    xsnprintf (s, PRINT_CELL_SIZE, "%d%s",
+	       thr->per_inf_num, lanes_range.c_str ());
+
   return s;
 }
 
@@ -1472,15 +1705,28 @@ thread_try_catch_cmd (thread_info *thr, gdb::optional<int> ada_task,
   if (ada_task.has_value ())
     thr_header = string_printf (_("\nTask ID %d:\n"), *ada_task);
   else
-    thr_header = string_printf (_("\nThread %s (%s):\n"),
-				print_thread_id (thr),
-				thread_target_id_str (thr).c_str ());
+    {
+      std::string lane_info = "";
+      std::vector<int> lanes;
 
+      if (thr->has_simd_lanes () && thr->active_simd_lanes_mask () != 0x0)
+	{
+	  /* Show lane information only for active threads.  */
+	  int lane = thr->current_simd_lane ();
+	  lane_info = " lane " + std::to_string (lane);
+	  lanes.push_back (lane);
+	}
+
+      thr_header = string_printf (_("\nThread %s (%s%s):\n"),
+				  print_thread_id (thr, &lanes),
+				  thread_target_id_str (thr).c_str (),
+				  lane_info.c_str ());
+    }
   try
     {
       std::string cmd_result;
-      execute_command_to_string
-	(cmd_result, cmd, from_tty, gdb_stdout->term_out ());
+      execute_command_to_string (cmd_result, cmd, from_tty,
+				 gdb_stdout->term_out ());
       if (!flags.silent || cmd_result.length () > 0)
 	{
 	  if (!flags.quiet)
@@ -1493,7 +1739,7 @@ thread_try_catch_cmd (thread_info *thr, gdb::optional<int> ada_task,
       if (!flags.silent)
 	{
 	  if (!flags.quiet)
-	    printf_filtered ("%s", thr_header.c_str ());
+	    printf_filtered (_("%s"), thr_header.c_str ());
 	  if (flags.cont)
 	    printf_filtered ("%s\n", ex.what ());
 	  else
@@ -1809,15 +2055,26 @@ thread_command (const char *tidstr, int from_tty)
       if (target_has_stack ())
 	{
 	  struct thread_info *tp = inferior_thread ();
+	  std::string lane_info = "";
+	  std::vector<int> lanes;
+
+	  if (tp->has_simd_lanes ())
+	    {
+	      int lane = tp->current_simd_lane ();
+	      lane_info = " lane " + std::to_string (lane);
+	      lanes.push_back (lane);
+	    }
 
 	  if (tp->state == THREAD_EXITED)
-	    printf_filtered (_("[Current thread is %s (%s) (exited)]\n"),
-			     print_thread_id (tp),
-			     target_pid_to_str (inferior_ptid).c_str ());
+	    printf_filtered (_("[Current thread is %s (%s%s) (exited)]\n"),
+			     print_thread_id (tp, &lanes),
+			     target_pid_to_str (inferior_ptid).c_str (),
+			     lane_info.c_str ());
 	  else
-	    printf_filtered (_("[Current thread is %s (%s)]\n"),
-			     print_thread_id (tp),
-			     target_pid_to_str (inferior_ptid).c_str ());
+	    printf_filtered (_("[Current thread is %s (%s%s)]\n"),
+			     print_thread_id (tp, &lanes),
+			     target_pid_to_str (inferior_ptid).c_str (),
+			     lane_info.c_str ());
 	}
       else
 	error (_("No stack."));
@@ -1826,7 +2083,10 @@ thread_command (const char *tidstr, int from_tty)
     {
       ptid_t previous_ptid = inferior_ptid;
 
-      thread_select (tidstr, parse_thread_id (tidstr, NULL));
+      int simd_lane_num;
+      thread_info *tp = parse_thread_id (tidstr, NULL, &simd_lane_num);
+
+      thread_select (tidstr, tp, simd_lane_num);
 
       /* Print if the thread has not changed, otherwise an event will
 	 be sent.  */
@@ -1933,10 +2193,23 @@ show_print_thread_events (struct ui_file *file, int from_tty,
 /* See gdbthread.h.  */
 
 void
-thread_select (const char *tidstr, thread_info *tp)
+thread_select (const char *tidstr, thread_info *tp, int simd_lane_num)
 {
   if (!switch_to_thread_if_alive (tp))
     error (_("Thread ID %s has terminated."), tidstr);
+
+  if (simd_lane_num >= 0)
+    {
+      /* SIMD lane number is specified.  We need to check, that the lane is
+	 active.  */
+      if (!tp->is_simd_lane_active (simd_lane_num))
+	error (_("SIMD lane %d is inactive in thread %s."), simd_lane_num,
+	       print_thread_id (tp));
+
+      tp->set_current_simd_lane (simd_lane_num);
+    }
+  else
+    tp->set_default_simd_lane ();
 
   annotate_thread_changed ();
 
@@ -1963,10 +2236,29 @@ print_selected_thread_frame (struct ui_out *uiout,
       else
 	{
 	  uiout->text ("[Switching to thread ");
-	  uiout->field_string ("new-thread-id", print_thread_id (tp));
+	  std::vector<int> lanes;
+	  bool is_active = tp->active_simd_lanes_mask () != 0;
+
+	  if (tp->has_simd_lanes () && is_active)
+	    lanes.push_back (tp->current_simd_lane ());
+
+	  uiout->field_string ("new-thread-id", print_thread_id (tp, &lanes));
 	  uiout->text (" (");
 	  uiout->text (target_pid_to_str (inferior_ptid));
-	  uiout->text (")]");
+	  if (tp->has_simd_lanes ())
+	    {
+	      if (is_active)
+		{
+		  uiout->text (" lane ");
+		  int lane = tp->current_simd_lane ();
+		  uiout->text (std::to_string (lane));
+		  uiout->text (")]");
+		}
+	      else
+		uiout->text (") inactive]");
+	    }
+	  else
+	    uiout->text (")]");
 	}
     }
 

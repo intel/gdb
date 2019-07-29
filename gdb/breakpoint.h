@@ -654,7 +654,7 @@ struct breakpoint_ops
 				  gdb::unique_xmalloc_ptr<char>,
 				  gdb::unique_xmalloc_ptr<char>,
 				  enum bptype, enum bpdisp, int, int,
-				  int, const struct breakpoint_ops *,
+				  int, int, const struct breakpoint_ops *,
 				  int, int, int, unsigned);
 
   /* Given the location (second parameter), this method decodes it and
@@ -800,6 +800,10 @@ struct breakpoint
   /* Thread number for thread-specific breakpoint, or -1 if don't
      care.  */
   int thread = -1;
+
+  /* SIMD lane number for thread specific breakpoint, or -1 if don't
+     care.  It is taken into consideration iff THREAD is specified.  */
+  int simd_lane_num = -1;
 
   /* Ada task number for task-specific breakpoint, or 0 if don't
      care.  */
@@ -1068,6 +1072,10 @@ struct bpstat_what
        BPSTAT_WHAT_CLEAR_LONGJMP_RESUME.  True if we are handling a
        longjmp, false if we are handling an exception.  */
     bool is_longjmp;
+
+    /* Used for BPSTAT_WHAT_STOP_NOISY.  SIMD lane number for which
+     the breakpoint was hit.  */
+    int simd_lane_num;
   };
 
 /* Tell what to do about this bpstat.  */
@@ -1189,6 +1197,9 @@ struct bpstat
     /* Tell bpstat_print and print_bp_stop_message how to print stuff
        associated with this element of the bpstat chain.  */
     enum bp_print_how print_it;
+
+    /* Tell which SIMD lane hit the BP.  */
+    int simd_lane_num;
   };
 
 enum inf_context

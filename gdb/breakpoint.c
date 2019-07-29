@@ -100,7 +100,7 @@ static void create_breakpoints_sal_default (struct gdbarch *,
 					    gdb::unique_xmalloc_ptr<char>,
 					    enum bptype,
 					    enum bpdisp, int, int,
-					    int,
+					    int, int,
 					    const struct breakpoint_ops *,
 					    int, int, int, unsigned);
 
@@ -4327,7 +4327,8 @@ bpstats::bpstats (const bpstats &other)
     commands (other.commands),
     print (other.print),
     stop (other.stop),
-    print_it (other.print_it)
+    print_it (other.print_it),
+    simd_lane_num (other.simd_lane_num)
 {
   if (other.old_val != NULL)
     old_val = release_value (value_copy (other.old_val.get ()));
@@ -4635,9 +4636,13 @@ maybe_print_thread_hit_breakpoint (struct ui_out *uiout)
     {
       const char *name;
       struct thread_info *thr = inferior_thread ();
+      std::vector<int> lanes;
+
+      if (thr->has_simd_lanes ())
+	lanes.push_back (thr->current_simd_lane ());
 
       uiout->text ("Thread ");
-      uiout->field_string ("thread-id", print_thread_id (thr));
+      uiout->field_fmt ("thread-id", "%s", print_thread_id (thr, &lanes));
 
       name = thr->name != NULL ? thr->name : target_thread_name (thr);
       if (name != NULL)
@@ -4820,7 +4825,8 @@ bpstats::bpstats (struct bp_location *bl, bpstat **bs_link_pointer)
     commands (NULL),
     print (0),
     stop (0),
-    print_it (print_it_normal)
+    print_it (print_it_normal),
+    simd_lane_num (-1)
 {
   **bs_link_pointer = this;
   *bs_link_pointer = &next;
@@ -4832,7 +4838,8 @@ bpstats::bpstats ()
     commands (NULL),
     print (0),
     stop (0),
-    print_it (print_it_normal)
+    print_it (print_it_normal),
+    simd_lane_num (-1)
 {
 }
 
@@ -5293,15 +5300,32 @@ bpstat_check_breakpoint_conditions (bpstat bs, thread_info *thread)
       return;
     }
 
+  unsigned int lanes_mask = thread->active_simd_lanes_mask ();
+
+  if (b->thread != -1
+      && b->thread == thread->global_num
+      && b->simd_lane_num >= 0)
+    {
+      /* If the breakpoint is set for a specific lane, mask all other lanes.  */
+      lanes_mask &= (0x1 << b->simd_lane_num);
+    }
+
   /* If this is a thread/task-specific breakpoint, don't waste cpu
      evaluating the condition if this isn't the specified
-     thread/task.  */
+     thread/task.  If it is a thread specific BP, then also check that
+     the thread has active SIMD lanes and if a specific lane should
+     cause the stop, check whether the lane is active.  */
   if ((b->thread != -1 && b->thread != thread->global_num)
-      || (b->task != 0 && b->task != ada_get_task_number (thread)))
+      || (b->task != 0 && b->task != ada_get_task_number (thread))
+      || (lanes_mask == 0))
     {
       bs->stop = 0;
       return;
     }
+
+  /* Remember the SIMD lane: it is either the first active lane in the thread
+     or the lane, which was specified for the BP.  */
+  bs->simd_lane_num = find_first_active_simd_lane (lanes_mask);
 
   /* Evaluate extension language breakpoints that have a "stop" method
      implemented.  */
@@ -5369,7 +5393,24 @@ bpstat_check_breakpoint_conditions (bpstat bs, thread_info *thread)
 	{
 	  try
 	    {
-	      condition_result = breakpoint_cond_eval (cond);
+	      scoped_restore_current_simd_lane restore_lane {thread};
+
+	      /* Start evaluating the condition for all SIMD lanes which might
+		 have cause the stop.  Once the condition is true for a lane,
+		 break the loop.  */
+	      for_active_lanes (lanes_mask, [&] (int lane)
+		{
+		  thread->set_current_simd_lane (lane);
+		  condition_result = breakpoint_cond_eval (cond);
+
+		  /* We stop at the first successfull condition evaluation.  */
+		  return !condition_result;
+		});
+
+	      /* If condition was true for a lane, then in THREAD this lane
+		 is still set as current.  Remember this lane.  */
+	      if (condition_result)
+		bs->simd_lane_num = thread->current_simd_lane ();
 	    }
 	  catch (const gdb_exception &ex)
 	    {
@@ -5636,6 +5677,7 @@ bpstat_what (bpstat bs_head)
   retval.main_action = BPSTAT_WHAT_KEEP_CHECKING;
   retval.call_dummy = STOP_NONE;
   retval.is_longjmp = false;
+  retval.simd_lane_num = -1;
 
   for (bs = bs_head; bs != NULL; bs = bs->next)
     {
@@ -5798,6 +5840,9 @@ bpstat_what (bpstat bs_head)
 	  internal_error (__FILE__, __LINE__,
 			  _("bpstat_what: unhandled bptype %d"), (int) bptype);
 	}
+
+      /* Also, return the number of the SIMD lane, which triggered the hit.  */
+      retval.simd_lane_num = bs->simd_lane_num;
 
       retval.main_action = std::max (retval.main_action, this_action);
     }
@@ -6323,8 +6368,12 @@ print_one_breakpoint_location (struct breakpoint *b,
       else
 	{
 	  struct thread_info *thr = find_thread_global_id (b->thread);
+	  std::vector<int> lanes;
 
-	  uiout->field_string ("thread", print_thread_id (thr));
+	  if (b->simd_lane_num >= 0)
+	    lanes.push_back (b->simd_lane_num);
+
+	  uiout->field_fmt ("thread", "%s", print_thread_id (thr, &lanes));
 	}
       uiout->text ("\n");
     }
@@ -6822,7 +6871,14 @@ describe_other_breakpoints (struct gdbarch *gdbarch,
 	    if (b->thread == -1 && thread != -1)
 	      printf_filtered (" (all threads)");
 	    else if (b->thread != -1)
-	      printf_filtered (" (thread %d)", b->thread);
+	      {
+		printf_filtered (" (thread %d", b->thread);
+		if (b->simd_lane_num >= 0)
+		  printf_filtered (":%d)", b->simd_lane_num);
+		else
+		  printf_filtered (")");
+	      }
+
 	    printf_filtered ("%s%s ",
 			     ((b->enable_state == bp_disabled
 			       || b->enable_state == bp_call_disabled)
@@ -8899,7 +8955,7 @@ init_breakpoint_sal (struct breakpoint *b, struct gdbarch *gdbarch,
 		     gdb::unique_xmalloc_ptr<char> cond_string,
 		     gdb::unique_xmalloc_ptr<char> extra_string,
 		     enum bptype type, enum bpdisp disposition,
-		     int thread, int task, int ignore_count,
+		     int thread, int simd_lane_num, int task, int ignore_count,
 		     const struct breakpoint_ops *ops, int from_tty,
 		     int enabled, int internal, unsigned flags,
 		     int display_canonical)
@@ -8940,6 +8996,7 @@ init_breakpoint_sal (struct breakpoint *b, struct gdbarch *gdbarch,
 	{
 	  init_raw_breakpoint (b, gdbarch, sal, type, ops);
 	  b->thread = thread;
+	  b->simd_lane_num = simd_lane_num;
 	  b->task = task;
 
 	  b->cond_string = cond_string.release ();
@@ -9042,10 +9099,10 @@ create_breakpoint_sal (struct gdbarch *gdbarch,
 		       gdb::unique_xmalloc_ptr<char> cond_string,
 		       gdb::unique_xmalloc_ptr<char> extra_string,
 		       enum bptype type, enum bpdisp disposition,
-		       int thread, int task, int ignore_count,
-		       const struct breakpoint_ops *ops, int from_tty,
-		       int enabled, int internal, unsigned flags,
-		       int display_canonical)
+		       int thread, int simd_lane_num, int task,
+		       int ignore_count, const struct breakpoint_ops *ops,
+		       int from_tty, int enabled, int internal,
+		       unsigned flags, int display_canonical)
 {
   std::unique_ptr<breakpoint> b = new_breakpoint_from_type (type);
 
@@ -9055,7 +9112,7 @@ create_breakpoint_sal (struct gdbarch *gdbarch,
 		       std::move (cond_string),
 		       std::move (extra_string),
 		       type, disposition,
-		       thread, task, ignore_count,
+		       thread, simd_lane_num, task, ignore_count,
 		       ops, from_tty,
 		       enabled, internal, flags,
 		       display_canonical);
@@ -9084,9 +9141,11 @@ create_breakpoints_sal (struct gdbarch *gdbarch,
 			gdb::unique_xmalloc_ptr<char> cond_string,
 			gdb::unique_xmalloc_ptr<char> extra_string,
 			enum bptype type, enum bpdisp disposition,
-			int thread, int task, int ignore_count,
-			const struct breakpoint_ops *ops, int from_tty,
-			int enabled, int internal, unsigned flags)
+			int thread, int simd_lane_num, int task,
+			int ignore_count,
+			const struct breakpoint_ops *ops,
+			int from_tty, int enabled, int internal,
+			unsigned flags)
 {
   if (canonical->pre_expanded)
     gdb_assert (canonical->lsals.size () == 1);
@@ -9107,7 +9166,7 @@ create_breakpoints_sal (struct gdbarch *gdbarch,
 			     std::move (cond_string),
 			     std::move (extra_string),
 			     type, disposition,
-			     thread, task, ignore_count, ops,
+			     thread, simd_lane_num, task, ignore_count, ops,
 			     from_tty, enabled, internal, flags,
 			     canonical->special_display);
     }
@@ -9239,15 +9298,16 @@ check_fast_tracepoint_sals (struct gdbarch *gdbarch,
 
 /* Given TOK, a string specification of condition and thread, as
    accepted by the 'break' command, extract the condition
-   string and thread number and set *COND_STRING and *THREAD.
+   string, thread number, and SIMD lane number, and set *COND_STRING,
+   *THREAD, and *SIMD_LANE_NUM.
    PC identifies the context at which the condition should be parsed.
    If no condition is found, *COND_STRING is set to NULL.
    If no thread is found, *THREAD is set to -1.  */
 
 static void
 find_condition_and_thread (const char *tok, CORE_ADDR pc,
-			   char **cond_string, int *thread, int *task,
-			   char **rest)
+			   char **cond_string, int *thread,
+			   int *simd_lane_num, int *task, char **rest)
 {
   *cond_string = NULL;
   *thread = -1;
@@ -9302,7 +9362,7 @@ find_condition_and_thread (const char *tok, CORE_ADDR pc,
 	  struct thread_info *thr;
 
 	  tok = end_tok + 1;
-	  thr = parse_thread_id (tok, &tmptok);
+	  thr = parse_thread_id (tok, &tmptok, simd_lane_num);
 	  if (tok == tmptok)
 	    error (_("Junk after thread keyword."));
 	  *thread = thr->global_num;
@@ -9338,13 +9398,15 @@ find_condition_and_thread (const char *tok, CORE_ADDR pc,
 static void
 find_condition_and_thread_for_sals (const std::vector<symtab_and_line> &sals,
 				    const char *input, char **cond_string,
-				    int *thread, int *task, char **rest)
+				    int *thread, int *simd_lane_num,
+				    int *task, char **rest)
 {
   int num_failures = 0;
   for (auto &sal : sals)
     {
       char *cond = nullptr;
       int thread_id = 0;
+      int simd_lane = -1;
       int task_id = 0;
       char *remaining = nullptr;
 
@@ -9357,9 +9419,10 @@ find_condition_and_thread_for_sals (const std::vector<symtab_and_line> &sals,
       try
 	{
 	  find_condition_and_thread (input, sal.pc, &cond, &thread_id,
-				     &task_id, &remaining);
+				     &simd_lane, &task_id, &remaining);
 	  *cond_string = cond;
 	  *thread = thread_id;
+	  *simd_lane_num = simd_lane;
 	  *task = task_id;
 	  *rest = remaining;
 	  break;
@@ -9462,6 +9525,7 @@ create_breakpoint (struct gdbarch *gdbarch,
   int pending = 0;
   int task = 0;
   int prev_bkpt_count = breakpoint_count;
+  int simd_lane_num = -1;
 
   gdb_assert (ops != NULL);
 
@@ -9538,7 +9602,8 @@ create_breakpoint (struct gdbarch *gdbarch,
 	  const linespec_sals &lsal = canonical.lsals[0];
 
 	  find_condition_and_thread_for_sals (lsal.sals, extra_string,
-					      &cond, &thread, &task, &rest);
+					      &cond, &thread, &simd_lane_num,
+					      &task, &rest);
 	  cond_string_copy.reset (cond);
 	  extra_string_copy.reset (rest);
 	}
@@ -9588,8 +9653,9 @@ create_breakpoint (struct gdbarch *gdbarch,
 				   std::move (extra_string_copy),
 				   type_wanted,
 				   tempflag ? disp_del : disp_donttouch,
-				   thread, task, ignore_count, ops,
-				   from_tty, enabled, internal, flags);
+				   thread, simd_lane_num, task,
+				   ignore_count, ops, from_tty,
+				   enabled, internal, flags);
     }
   else
     {
@@ -10644,6 +10710,7 @@ watch_command_1 (const char *arg, int accessflag, int from_tty,
   const char *cond_end = NULL;
   enum bptype bp_type;
   int thread = -1;
+  int simd_lane_num = -1;
   /* Flag to indicate whether we are going to use masks for
      the hardware watchpoint.  */
   bool use_mask = false;
@@ -10695,7 +10762,7 @@ watch_command_1 (const char *arg, int accessflag, int from_tty,
 		error(_("You can specify only one thread."));
 
 	      /* Extract the thread ID from the next token.  */
-	      thr = parse_thread_id (value_start, &endp);
+	      thr = parse_thread_id (value_start, &endp, &simd_lane_num);
 
 	      /* Check if the user provided a valid thread ID.  */
 	      if (*endp != ' ' && *endp != '\t' && *endp != '\0')
@@ -10876,6 +10943,7 @@ watch_command_1 (const char *arg, int accessflag, int from_tty,
     init_raw_breakpoint_without_location (w.get (), NULL, bp_type,
 					  &watchpoint_breakpoint_ops);
   w->thread = thread;
+  w->simd_lane_num = simd_lane_num;
   w->disposition = disp_donttouch;
   w->pspace = current_program_space;
   w->exp = std::move (exp);
@@ -12454,7 +12522,7 @@ base_breakpoint_create_breakpoints_sal (struct gdbarch *gdbarch,
 					gdb::unique_xmalloc_ptr<char> extra_string,
 					enum bptype type_wanted,
 					enum bpdisp disposition,
-					int thread,
+					int thread, int simd_lane_num,
 					int task, int ignore_count,
 					const struct breakpoint_ops *o,
 					int from_tty, int enabled,
@@ -12702,7 +12770,7 @@ bkpt_create_breakpoints_sal (struct gdbarch *gdbarch,
 			     gdb::unique_xmalloc_ptr<char> extra_string,
 			     enum bptype type_wanted,
 			     enum bpdisp disposition,
-			     int thread,
+			     int thread, int simd_lane_num,
 			     int task, int ignore_count,
 			     const struct breakpoint_ops *ops,
 			     int from_tty, int enabled,
@@ -12712,7 +12780,8 @@ bkpt_create_breakpoints_sal (struct gdbarch *gdbarch,
 				  std::move (cond_string),
 				  std::move (extra_string),
 				  type_wanted,
-				  disposition, thread, task,
+				  disposition, thread,
+				  simd_lane_num, task,
 				  ignore_count, ops, from_tty,
 				  enabled, internal, flags);
 }
@@ -13014,7 +13083,7 @@ tracepoint_create_breakpoints_sal (struct gdbarch *gdbarch,
 				   gdb::unique_xmalloc_ptr<char> extra_string,
 				   enum bptype type_wanted,
 				   enum bpdisp disposition,
-				   int thread,
+				   int thread, int simd_lane_num,
 				   int task, int ignore_count,
 				   const struct breakpoint_ops *ops,
 				   int from_tty, int enabled,
@@ -13024,7 +13093,7 @@ tracepoint_create_breakpoints_sal (struct gdbarch *gdbarch,
 				  std::move (cond_string),
 				  std::move (extra_string),
 				  type_wanted,
-				  disposition, thread, task,
+				  disposition, thread, simd_lane_num, task,
 				  ignore_count, ops, from_tty,
 				  enabled, internal, flags);
 }
@@ -13161,7 +13230,7 @@ strace_marker_create_breakpoints_sal (struct gdbarch *gdbarch,
 				      gdb::unique_xmalloc_ptr<char> extra_string,
 				      enum bptype type_wanted,
 				      enum bpdisp disposition,
-				      int thread,
+				      int thread, int simd_lane_num,
 				      int task, int ignore_count,
 				      const struct breakpoint_ops *ops,
 				      int from_tty, int enabled,
@@ -13187,7 +13256,8 @@ strace_marker_create_breakpoints_sal (struct gdbarch *gdbarch,
 			   std::move (cond_string),
 			   std::move (extra_string),
 			   type_wanted, disposition,
-			   thread, task, ignore_count, ops,
+			   thread, simd_lane_num,
+			   task, ignore_count, ops,
 			   from_tty, enabled, internal, flags,
 			   canonical->special_display);
       /* Given that its possible to have multiple markers with
@@ -13815,15 +13885,17 @@ location_to_sals (struct breakpoint *b, struct event_location *location,
       if (b->condition_not_parsed && b->extra_string != NULL)
 	{
 	  char *cond_string, *extra_string;
-	  int thread, task;
+	  int thread, task, simd_lane_num;
 
 	  find_condition_and_thread_for_sals (sals, b->extra_string,
 					      &cond_string, &thread,
-					      &task, &extra_string);
+					      &simd_lane_num, &task,
+					      &extra_string);
 	  gdb_assert (b->cond_string == NULL);
 	  if (cond_string)
 	    b->cond_string = cond_string;
 	  b->thread = thread;
+	  b->simd_lane_num = simd_lane_num;
 	  b->task = task;
 	  if (extra_string)
 	    {
@@ -13894,7 +13966,7 @@ create_breakpoints_sal_default (struct gdbarch *gdbarch,
 				gdb::unique_xmalloc_ptr<char> extra_string,
 				enum bptype type_wanted,
 				enum bpdisp disposition,
-				int thread,
+				int thread, int simd_lane_num,
 				int task, int ignore_count,
 				const struct breakpoint_ops *ops,
 				int from_tty, int enabled,
@@ -13904,7 +13976,8 @@ create_breakpoints_sal_default (struct gdbarch *gdbarch,
 			  std::move (cond_string),
 			  std::move (extra_string),
 			  type_wanted, disposition,
-			  thread, task, ignore_count, ops, from_tty,
+			  thread, simd_lane_num, task,
+			  ignore_count, ops, from_tty,
 			  enabled, internal, flags);
 }
 

@@ -1,0 +1,81 @@
+# Copyright 2019 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests conditional breakpoints in SYCL kernels.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-1D.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Define a conditional breakpoint with the condition set on a local
+# variable.  We pick these values:
+#   0: the most obvious one.
+#   256: a value that's divisible by 8, 16, and 32: typical SIMD widths.
+#   533: a value that's not divisible by a typical SIMD width.
+# The values are also chosen far away from each other; we expect them
+# to be covered by different threads even when threads have SIMD lanes
+# (again, assuming typical SIMD widths).
+set last_line [gdb_get_line_number "kernel-last-line"]
+set condition "\(dim0 == 0 || dim0 == 256 || dim0 == 533\)"
+gdb_test "break $last_line if $condition" \
+    "Breakpoint $decimal at .*" "define the bp"
+
+# Also define a breakpoint at the very end of the program.
+# After hitting the conditional breakpoint 3 times, we should
+# hit this breakpoint.
+set end_marker [gdb_get_line_number "end-marker"]
+gdb_breakpoint $end_marker
+
+# Continue and count the hits.
+set count 0
+for {set i 1} {$i <= 3} {incr i} {
+    gdb_continue_to_breakpoint "hit the conditional BP, trip $i" \
+	".*$srcfile:$last_line.*"
+
+    gdb_test_multiple "print dim0" "read dim0, trip $i" {
+	-re " = 0\r\n$gdb_prompt $" {
+	    incr count
+	}
+	-re " = 256\r\n$gdb_prompt $" {
+	    incr count
+	}
+	-re " = 533\r\n$gdb_prompt $" {
+	    incr count
+	}
+    }
+}
+
+if {$count == 3} {
+    pass "hit all three cases"
+} else {
+    fail "hit all three cases"
+}
+
+# Continuing now should hit the end-of-program marker.
+gdb_continue_to_breakpoint "end of program" \
+    ".*$srcfile:$end_marker.*"

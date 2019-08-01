@@ -27,3 +27,4 @@ load_board_description "local-board"
 
 set device_type "gpu"
 set device_name "Intel"
+set gdb_test_timeout 100

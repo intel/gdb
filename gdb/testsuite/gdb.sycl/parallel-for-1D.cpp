@@ -19,6 +19,12 @@
 #include <iostream>
 #include "../lib/sycl-util.cpp"
 
+static int
+get_dim (cl::sycl::id<1> wi, int index)
+{
+  return wi[index];
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -46,7 +52,7 @@ main (int argc, char *argv[])
 
 	cgh.parallel_for<class kernel> (dataRange, [=] (cl::sycl::id<1> wiID)
 	  {
-	    int dim0 = wiID[0]; /* kernel-first-line */
+	    int dim0 = get_dim (wiID, 0); /* kernel-first-line */
 	    int in_elem = accessorIn[wiID];
 	    int in_elem2 = accessorIn[dim0];
 	    accessorOut[wiID] = in_elem + 100; /* kernel-last-line */

@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2019 Free Software Foundation, Inc.
+   Copyright 2019-2022 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -18,6 +18,12 @@
 #include <sycl/sycl.hpp>
 #include <iostream>
 #include "../lib/sycl-util.cpp"
+
+static int
+get_dim (sycl::id<1> wi, int index)
+{
+  return wi[index]; /* inside-kernel-callee */
+}
 
 int
 main (int argc, char *argv[])
@@ -45,7 +51,7 @@ main (int argc, char *argv[])
 
 	cgh.parallel_for<class kernel> (dataRange, [=] (sycl::id<1> wiID)
 	  {
-	    int dim0 = wiID[0]; /* kernel-first-line */
+	    int dim0 = get_dim (wiID, 0); /* kernel-first-line */
 	    int in_elem = accessorIn[wiID];
 	    int in_elem2 = accessorIn[dim0];
 	    accessorOut[wiID] = in_elem + 100; /* kernel-last-line */

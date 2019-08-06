@@ -1,0 +1,88 @@
+# Copyright 2019 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests for the Intel(R) Graphics Technology emask register via a
+# SYCL program.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {![require_sycl_device "gpu" "Intel*"]} {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set then_bp [gdb_get_line_number "then-branch"]
+set else_bp [gdb_get_line_number "else-branch"]
+gdb_breakpoint $then_bp
+gdb_breakpoint $else_bp
+
+set hit_then_branch false
+set hit_else_branch false
+
+# We expect to hit the breakpoints, but the order and the count are
+# arbitrary.
+while {!($hit_then_branch && $hit_else_branch)} {
+    gdb_test_multiple "continue" "hit branch breakpoints" {
+
+	-re "Breakpoint .*$srcfile:$then_bp.*$gdb_prompt $" {
+	    if {!$hit_then_branch} {
+		gdb_test "print/t \$emask" "1010101" \
+		    "print emask in then branch"
+	    }
+	    set hit_then_branch true
+	}
+
+	-re "Breakpoint .*$srcfile:$else_bp.*$gdb_prompt $" {
+	    if {!$hit_else_branch} {
+		gdb_test "print/t \$emask" "10101010" \
+		    "print emask in else branch"
+	    }
+	    set hit_else_branch true
+	}
+
+	-re ".*$gdb_prompt" {
+	    break
+	}
+    }
+}
+
+if {$hit_then_branch && $hit_else_branch} {
+    pass "hit both branches"
+} else {
+    # Explicitly fail an unattempted test to achieve a consistent
+    # number of total tests.
+    if {!$hit_then_branch} {
+	fail "print emask in then branch"
+    }
+    if {!$hit_else_branch} {
+	fail "print emask in else branch"
+    }
+    fail "hit both branches"
+}

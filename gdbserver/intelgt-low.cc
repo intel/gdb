@@ -231,6 +231,8 @@ public:
   int remove_point (enum raw_bkpt_type type, CORE_ADDR addr,
 		    int size, raw_breakpoint *bp) override;
 
+  bool supports_hardware_single_step () override;
+
   CORE_ADDR read_pc (regcache *regcache) override;
 
   void write_pc (regcache *regcache, CORE_ADDR pc) override;
@@ -997,6 +999,12 @@ intelgt_process_target::sw_breakpoint_from_kind (int kind, int *size)
 
   *size = 0;
   return NULL;
+}
+
+bool
+intelgt_process_target::supports_hardware_single_step ()
+{
+  return true;
 }
 
 /* The Intel GT target ops object.  */

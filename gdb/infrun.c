@@ -2998,6 +2998,45 @@ scoped_enable_commit_resumed::~scoped_enable_commit_resumed ()
     }
 }
 
+/* Helper function for `proceed`, does bunch of checks to see
+   if a thread can be resumed right now, switches to that thread
+   and moves on to `keep_going_pass_signal`.  */
+
+static void
+proceed_resume_thread_checked (thread_info *tp, execution_control_state *ecs)
+{
+  if (!tp->inf->has_execution ())
+    {
+      infrun_debug_printf ("[%s] target has no execution",
+			   tp->ptid.to_string ().c_str ());
+      return;
+    }
+
+  if (tp->resumed ())
+    {
+      infrun_debug_printf ("[%s] resumed",
+			   tp->ptid.to_string ().c_str ());
+      gdb_assert (tp->executing () || tp->has_pending_waitstatus ());
+      return;
+    }
+
+  if (thread_is_in_step_over_chain (tp))
+    {
+      infrun_debug_printf ("[%s] needs step-over",
+			   tp->ptid.to_string ().c_str ());
+      return;
+    }
+
+  infrun_debug_printf ("resuming %s",
+		       tp->ptid.to_string ().c_str ());
+
+  reset_ecs (ecs, tp);
+  switch_to_thread (tp);
+  keep_going_pass_signal (ecs);
+  if (!ecs->wait_some_more)
+    error (_("Command aborted."));
+}
+
 /* Basic routine for continuing the program in various fashions.
 
    ADDR is the address to resume at, or -1 for resume where stopped.
@@ -3189,48 +3228,11 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 						       resume_ptid))
 	  {
 	    switch_to_thread_no_regs (tp);
-
-	    if (!tp->inf->has_execution ())
-	      {
-		infrun_debug_printf ("[%s] target has no execution",
-				     tp->ptid.to_string ().c_str ());
-		continue;
-	      }
-
-	    if (tp->resumed ())
-	      {
-		infrun_debug_printf ("[%s] resumed",
-				     tp->ptid.to_string ().c_str ());
-		gdb_assert (tp->executing () || tp->has_pending_waitstatus ());
-		continue;
-	      }
-
-	    if (thread_is_in_step_over_chain (tp))
-	      {
-		infrun_debug_printf ("[%s] needs step-over",
-				     tp->ptid.to_string ().c_str ());
-		continue;
-	      }
-
-	    infrun_debug_printf ("resuming %s",
-				 tp->ptid.to_string ().c_str ());
-
-	    reset_ecs (ecs, tp);
-	    switch_to_thread (tp);
-	    keep_going_pass_signal (ecs);
-	    if (!ecs->wait_some_more)
-	      error (_("Command aborted."));
+	    proceed_resume_thread_checked (tp, ecs);
 	  }
       }
-    else if (!cur_thr->resumed () && !thread_is_in_step_over_chain (cur_thr))
-      {
-	/* The thread wasn't started, and isn't queued, run it now.  */
-	reset_ecs (ecs, cur_thr);
-	switch_to_thread (cur_thr);
-	keep_going_pass_signal (ecs);
-	if (!ecs->wait_some_more)
-	  error (_("Command aborted."));
-      }
+    else
+      proceed_resume_thread_checked (cur_thr, ecs);
 
     disable_commit_resumed.reset_and_commit ();
   }

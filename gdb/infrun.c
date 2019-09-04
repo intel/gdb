@@ -4154,6 +4154,8 @@ do_target_wait (ptid_t wait_ptid, execution_control_state *ecs,
 	  break;
 	}
 
+  gdb_assert (selected);
+
   /* Now poll for events out of each of the matching inferior's
      targets, starting from the selected one.  */
 

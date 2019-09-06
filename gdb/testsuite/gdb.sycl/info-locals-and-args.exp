@@ -1,0 +1,72 @@
+# Copyright 2019 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for SYCL for the "info locals" and "info args"
+# commands inside a kernel.
+
+load_lib sycl.exp
+
+standard_testfile call-stack.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set outer_loc [gdb_get_line_number "ordinary-outer-loc"]
+set inner_loc [gdb_get_line_number "kernel-function-return"]
+gdb_breakpoint "$outer_loc"
+gdb_breakpoint "$inner_loc"
+
+gdb_continue_to_breakpoint "bp 1" ".*$srcfile:$outer_loc.*"
+
+set ten 0
+set four 0
+set fourteen 0
+gdb_test_multiple "info locals" "info locals 1" {
+    -re "ten = 10" {
+	set ten 1
+	exp_continue
+    }
+    -re "four = 4" {
+	set four 1
+	exp_continue
+    }
+    -re "fourteen = 14" {
+	set fourteen 1
+	exp_continue
+    }
+    -re "$gdb_prompt $" {
+	if { $ten == 1 && $four == 1 && $fourteen == 1 } {
+	    pass $gdb_test_name
+	} else {
+	    fail $gdb_test_name
+	}
+    }
+}
+
+gdb_continue_to_breakpoint "bp 2" ".*$srcfile:$inner_loc.*"
+gdb_test "info locals" "result = 180.*" "info locals 2"
+gdb_test "info args"  [multi_line \
+			   "num1 = 15" \
+			   "num2 = 3"]

@@ -447,6 +447,10 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   if (tdesc_data != nullptr)
     tdesc_use_registers (gdbarch, tdesc, std::move (tdesc_data));
 
+#if defined (USE_WIN32API)
+  set_gdbarch_has_dos_based_file_system (gdbarch, 1);
+#endif
+
   return gdbarch;
 }
 

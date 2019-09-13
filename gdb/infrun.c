@@ -3080,7 +3080,6 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
   CORE_ADDR pc;
   struct execution_control_state ecss;
   struct execution_control_state *ecs = &ecss;
-  bool started;
 
   /* If we're stopped at a fork/vfork, follow the branch set by the
      "set follow-fork-mode" command; otherwise, we'll just proceed
@@ -3230,7 +3229,7 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
   {
     scoped_disable_commit_resumed disable_commit_resumed ("proceeding");
 
-    started = start_step_over ();
+    start_step_over ();
 
     if (step_over_info_valid_p ())
       {
@@ -3238,23 +3237,58 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 	   other thread was already doing one.  In either case, don't
 	   resume anything else until the step-over is finished.  */
       }
-    else if (started && !target_is_non_stop_p ())
+    else if (!non_stop)
       {
-	/* A new displaced stepping sequence was started.  In all-stop,
-	   we can't talk to the target anymore until it next stops.  */
-      }
-    else if (!non_stop && target_is_non_stop_p ())
-      {
-	INFRUN_SCOPED_DEBUG_START_END
-	  ("resuming threads, all-stop-on-top-of-non-stop");
-
-	/* In all-stop, but the target is always in non-stop mode.
-	   Start all other threads that are implicitly resumed too.  */
-	for (thread_info *tp : all_non_exited_threads (resume_target,
-						       resume_ptid))
+	/* In all-stop.  Start all other threads that are implicitly
+	   resumed too.  Iterate over targets to be able to handle
+	   non-stop and all-stop targets separately.  */
+	for (process_stratum_target *target
+	       : all_non_exited_process_targets ())
 	  {
-	    switch_to_thread_no_regs (tp);
-	    proceed_resume_thread_checked (tp, ecs);
+	    if (resume_target != nullptr && resume_target != target)
+	      continue;
+
+	    switch_to_target_no_thread (target);
+
+	    if (target_is_non_stop_p ())
+	      {
+		INFRUN_SCOPED_DEBUG_START_END
+		  ("resuming threads, all-stop-on-top-of-non-stop");
+
+		for (thread_info *tp : all_non_exited_threads (target,
+							       resume_ptid))
+		  {
+		    switch_to_thread_no_regs (tp);
+		    proceed_resume_thread_checked (tp, ecs);
+		  }
+	      }
+	    else
+	      {
+		/* Proceed a thread of the target.  Prefer the current
+		   thread, if it belongs to this target.  Otherwise
+		   just pick the first one.  */
+		thread_info *tp;
+		if (target == cur_thr->inf->process_target ())
+		  tp = cur_thr;
+		else
+		  {
+		    inferior *inf = current_inferior ();
+		    tp = first_non_exited_thread_of_inferior (inf);
+		  }
+		gdb_assert (tp != nullptr);
+
+		/* An all-stop target with a running thread cannot
+		   respond anymore.  This may be the case, e.g., if a
+		   step-over was started in this target.  */
+		if (tp->executing)
+		  continue;
+
+		INFRUN_SCOPED_DEBUG_START_END
+		  ("resuming threads, all-stop");
+
+		switch_to_thread_no_regs (tp);
+		proceed_resume_thread_checked (tp, ecs);
+	      }
 	  }
       }
     else

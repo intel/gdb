@@ -2230,29 +2230,44 @@ resume_1 (enum gdb_signal sig)
   gdb_assert (!tp->stop_requested);
   gdb_assert (!thread_is_in_step_over_chain (tp));
 
-  if (tp->suspend.waitstatus_pending_p)
+  process_stratum_target *target = tp->inf->process_target ();
+  ptid_t check_ptid = target_is_non_stop_p () ? tp->ptid : minus_one_ptid;
+  bool any_pending = false;
+  for (thread_info *thread : all_non_exited_threads (target, check_ptid))
     {
-      infrun_debug_printf
-	("thread %s has pending wait "
-	 "status %s (currently_stepping=%d).",
-	 target_pid_to_str (tp->ptid).c_str (),
-	 target_waitstatus_to_string (&tp->suspend.waitstatus).c_str (),
-	 currently_stepping (tp));
-
-      tp->inf->process_target ()->threads_executing = true;
-      tp->resumed = true;
-
-      /* FIXME: What should we do if we are supposed to resume this
-	 thread with a signal?  Maybe we should maintain a queue of
-	 pending signals to deliver.  */
-      if (sig != GDB_SIGNAL_0)
+      if (thread->suspend.waitstatus_pending_p)
 	{
-	  warning (_("Couldn't deliver signal %s to %s."),
-		   gdb_signal_to_name (sig),
-		   target_pid_to_str (tp->ptid).c_str ());
-	}
+	  infrun_debug_printf
+	    ("thread %s has pending wait "
+	     "status %s (currently_stepping=%d).",
+	     target_pid_to_str (thread->ptid).c_str (),
+	     target_waitstatus_to_string (&thread->suspend.waitstatus).c_str (),
+	     currently_stepping (thread));
 
-      tp->suspend.stop_signal = GDB_SIGNAL_0;
+	  any_pending = true;
+	  thread->resumed = true;
+
+	  /* FIXME: What should we do if we are supposed to resume this
+	     thread with a signal?  Maybe we should maintain a queue of
+	     pending signals to deliver.  */
+	  if (sig != GDB_SIGNAL_0)
+	    {
+	      warning (_("Couldn't deliver signal %s to %s."),
+		       gdb_signal_to_name (sig),
+		       target_pid_to_str (thread->ptid).c_str ());
+	    }
+
+	  thread->suspend.stop_signal = GDB_SIGNAL_0;
+	}
+    }
+
+  /* We're not resuming if there is any pending event to report.
+
+     FIXME: we're only marking threads with pending events resumed.  Would
+     we need to set all threads on an all-stop target to resumed?  */
+  if (any_pending)
+    {
+      target->threads_executing = true;
 
       if (target_can_async_p ())
 	{
@@ -3080,7 +3095,6 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
   CORE_ADDR pc;
   struct execution_control_state ecss;
   struct execution_control_state *ecs = &ecss;
-  bool started;
 
   /* If we're stopped at a fork/vfork, follow the branch set by the
      "set follow-fork-mode" command; otherwise, we'll just proceed
@@ -3230,7 +3244,7 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
   {
     scoped_disable_commit_resumed disable_commit_resumed ("proceeding");
 
-    started = start_step_over ();
+    start_step_over ();
 
     if (step_over_info_valid_p ())
       {
@@ -3238,23 +3252,58 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 	   other thread was already doing one.  In either case, don't
 	   resume anything else until the step-over is finished.  */
       }
-    else if (started && !target_is_non_stop_p ())
+    else if (!non_stop)
       {
-	/* A new displaced stepping sequence was started.  In all-stop,
-	   we can't talk to the target anymore until it next stops.  */
-      }
-    else if (!non_stop && target_is_non_stop_p ())
-      {
-	INFRUN_SCOPED_DEBUG_START_END
-	  ("resuming threads, all-stop-on-top-of-non-stop");
-
-	/* In all-stop, but the target is always in non-stop mode.
-	   Start all other threads that are implicitly resumed too.  */
-	for (thread_info *tp : all_non_exited_threads (resume_target,
-						       resume_ptid))
+	/* In all-stop.  Start all other threads that are implicitly
+	   resumed too.  Iterate over targets to be able to handle
+	   non-stop and all-stop targets separately.  */
+	for (process_stratum_target *target
+	       : all_non_exited_process_targets ())
 	  {
-	    switch_to_thread_no_regs (tp);
-	    proceed_resume_thread_checked (tp, ecs);
+	    if (resume_target != nullptr && resume_target != target)
+	      continue;
+
+	    switch_to_target_no_thread (target);
+
+	    if (target_is_non_stop_p ())
+	      {
+		INFRUN_SCOPED_DEBUG_START_END
+		  ("resuming threads, all-stop-on-top-of-non-stop");
+
+		for (thread_info *tp : all_non_exited_threads (target,
+							       resume_ptid))
+		  {
+		    switch_to_thread_no_regs (tp);
+		    proceed_resume_thread_checked (tp, ecs);
+		  }
+	      }
+	    else
+	      {
+		/* Proceed a thread of the target.  Prefer the current
+		   thread, if it belongs to this target.  Otherwise
+		   just pick the first one.  */
+		thread_info *tp;
+		if (target == cur_thr->inf->process_target ())
+		  tp = cur_thr;
+		else
+		  {
+		    inferior *inf = current_inferior ();
+		    tp = first_non_exited_thread_of_inferior (inf);
+		  }
+		gdb_assert (tp != nullptr);
+
+		/* An all-stop target with a running thread cannot
+		   respond anymore.  This may be the case, e.g., if a
+		   step-over was started in this target.  */
+		if (tp->executing)
+		  continue;
+
+		INFRUN_SCOPED_DEBUG_START_END
+		  ("resuming threads, all-stop");
+
+		switch_to_thread_no_regs (tp);
+		proceed_resume_thread_checked (tp, ecs);
+	      }
 	  }
       }
     else

@@ -1,0 +1,44 @@
+# Copyright 2019 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for SYCL, for accessing an element of 1D data
+# using operator[].
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set line [gdb_get_line_number "kernel-line"]
+gdb_breakpoint $line {temporary}
+gdb_continue_to_breakpoint "1d" ".*$srcfile:$line.*"
+
+gdb_test "ptype input\[0\]" "type = int" "1D element type"
+gdb_test "print one == input\[0\]" "true" "1D access via size_t"
+gdb_test "print two == input\[id\]" "true" "1D access via id<1>"
+
+continue_sycl_program_to_termination

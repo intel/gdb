@@ -1,0 +1,118 @@
+# Copyright 2019 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests for SIMD support in 'info thread' command.
+
+# This is a generic test, however, SIMD lanes are not supported by all
+# targets.  For convenience, to test this functionality, a SYCL
+# program with the offload to Intel GPU is used here.
+
+load_lib sycl.exp
+
+standard_testfile simd.cpp
+
+if { [skip_sycl_tests] } {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if { ![require_sycl_device "gpu" "Intel*"] } {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if { [prepare_sycl_for_testing $binfile $srcfile] } {
+    return -1
+}
+
+if { [start_sycl_program] < 0 } {
+    return -1
+}
+
+set first_line [gdb_get_line_number "kernel-first-line"]
+set even_branch [gdb_get_line_number "kernel-even-branch"]
+set odd_branch [gdb_get_line_number "kernel-odd-branch"]
+set function [gdb_get_line_number "add-one-function"]
+gdb_breakpoint "$first_line" {temporary}
+gdb_breakpoint "$even_branch" {temporary}
+gdb_breakpoint "$odd_branch" {temporary}
+gdb_breakpoint "$function" {temporary}
+
+gdb_continue_to_breakpoint "hit the BP in first line" \
+    ".*$srcfile:$first_line.*"
+
+set cur_thread [get_current_thread "first line"]
+
+# Current thread should be presented with 2 lines.
+gdb_test "info thread $cur_thread" \
+    "\\\*.*$cur_thread:0 .* at $srcfile:$first_line.*\[^\r\n\]\
+     $cur_thread:\\\[1-$decimal\\\].* at $srcfile:$first_line.*" \
+    "info about current thread"
+
+if { $cur_thread eq "2.2" } {
+    set second_thread "2.3"
+} else {
+    set second_thread "2.2"
+}
+
+# Other thread should be presented via 1 line.
+gdb_test "info thread $second_thread" \
+    "$second_thread:\\\[0-$decimal\\\].* at $srcfile:$first_line.*" \
+    "info about other thread"
+
+
+set hit_even_branch false
+set hit_odd_branch false
+set hit_function false
+
+set test "info threads"
+while { !($hit_even_branch && $hit_odd_branch && $hit_function) } {
+    gdb_test_multiple "continue" "hit the BP in branch" {
+	-re ".*$srcfile:$even_branch.*\r\n$gdb_prompt" {
+	    # Check that lanes ranges were updated.
+	    set hit_even_branch true
+	    set cur_thread [get_current_thread "even branch"]
+	    gdb_test "$test $cur_thread" \
+		"\\\*.*$cur_thread:0 .* at $srcfile:$even_branch.*\
+		$cur_thread:\\\[2 4 6.*\\\].* at $srcfile:$even_branch.*"\
+		"$test in even branch"
+	}
+	-re ".*$srcfile:$odd_branch.*\r\n$gdb_prompt" {
+	    # Check that lanes ranges were updated.
+	    set hit_odd_branch true
+	    set cur_thread [get_current_thread "odd branch"]
+	    gdb_test "$test $cur_thread" \
+		"\\\*.*$cur_thread:1 .* at $srcfile:$odd_branch.*\
+		$cur_thread:\\\[3 5 7.*\\\].* at $srcfile:$odd_branch.*"\
+		"$test in odd branch"
+	}
+	-re ".*$srcfile:$function.*\r\n$gdb_prompt" {
+	    # Check that SIMD lane in frame is set correctly.
+	    set hit_function true
+	    set cur_thread [get_current_thread "function"]
+	    gdb_test_multiple "$test $cur_thread" "$test in function" {
+		-re "\\\*.*$cur_thread:0.*to_number=($decimal).*at $srcfile:$function.*$cur_thread:\\\[1.*\\\].*to_number=($decimal).* at $srcfile:$function.*\r\n$gdb_prompt" {
+		    set arg_of_current_lane $expect_out(1,string)
+		    set arg_of_next_lane $expect_out(2,string)
+		    gdb_assert {$arg_of_current_lane != $arg_of_next_lane}\
+			"$test in function"
+		}
+	    }
+	}
+	-re "$gdb_prompt" {
+	    break
+	}
+    }
+}

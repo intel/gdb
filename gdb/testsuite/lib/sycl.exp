@@ -176,3 +176,22 @@ proc continue_sycl_program_to_termination {{msg_suffix ""}} {
     gdb_test "continue" "$inferior_exited_re normally].*" \
 	"continue to end $msg_suffix"
 }
+
+# Return the ID of a current thread (<inferior number>.<thread number>).
+# SIMD lane information is omitted.
+# For thread 2.3:0 returns "2.3".
+# For thread 3:5 returns "3".
+proc get_current_thread {location} {
+    global gdb_prompt decimal
+
+    gdb_test_multiple "thread" "get current thread at $location" {
+	-re "Current thread is ($decimal|$decimal\.$decimal).*$gdb_prompt $" {
+	    pass $gdb_test_name
+	    return $expect_out(1,string)
+	}
+	-re "$gdb_prompt $" {
+	    fail $gdb_test_name
+	}
+    }
+    return 0
+}

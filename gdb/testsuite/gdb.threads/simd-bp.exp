@@ -1,0 +1,169 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests for SIMD support in breakpoints, single SIMD lane hit.
+
+# This is a generic test, however, SIMD lanes are not supported by all
+# targets.  For convenience, to test this functionality, a SYCL
+# program with the offload to Intel GPU is used here.
+
+load_lib sycl.exp
+
+standard_testfile simd.cpp
+
+if { [skip_sycl_tests] } {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if { ![require_sycl_device "gpu" "Intel*"] } {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if { [prepare_sycl_for_testing $binfile $srcfile] } {
+    return -1
+}
+
+if { [start_sycl_program] < 0 } {
+    return -1
+}
+
+set first_line [gdb_get_line_number "kernel-first-line"]
+set line_dim0_defined [gdb_get_line_number "kernel-dim0-defined"]
+set third_line [gdb_get_line_number "kernel-third-line"]
+set condition_line [gdb_get_line_number "kernel-condition-line"]
+set fourth_line [gdb_get_line_number "kernel-fourth-line"]
+set fifth_line [gdb_get_line_number "kernel-fifth-line"]
+set even_branch [gdb_get_line_number "kernel-even-branch"]
+set odd_branch [gdb_get_line_number "kernel-odd-branch"]
+
+gdb_breakpoint "$line_dim0_defined if dim0 == 7"
+
+# The SIMD lane have to be 7.
+gdb_test "continue" ".* with SIMD lane 7,.*$srcfile:$line_dim0_defined.*" \
+    "hit the BP after dim0 defined"
+
+# The current SIMD lane has to be 7.
+gdb_test "thread" ".*:7.*" "Check lane at BP with condition."
+
+set first_thread [get_current_thread "$line_dim0_defined"]
+
+if { $first_thread eq "2.2" } {
+    set second_thread "2.3"
+    set third_thread "2.4"
+} else {
+    set second_thread "2.2"
+    if { $first_thread eq "2.5" } {
+	set third_thread "2.6"
+    } else {
+	set third_thread "2.5"
+    }
+}
+
+gdb_breakpoint "$third_line thread $second_thread:3" {temporary}
+gdb_breakpoint "$fourth_line thread $first_thread:5 if dim0 == 5"
+
+# Switch to the third thread, which is not equal neither to the first
+# nor the second.
+gdb_test "thread $third_thread" ".*$third_thread.*"\
+    "Switch to third thread ($third_thread)"
+
+set hit_third_line false
+set hit_fourth_line false
+set i 0
+
+while {!($hit_third_line && $hit_fourth_line) && ($i < 3)} {
+    set i [incr $i]
+    gdb_test_multiple "continue" "continue $i" {
+	-re ".*$srcfile:$third_line.*\r\n$gdb_prompt" {
+	    # Thread should be $second_thread, SIMD lane 3.
+	    gdb_test "thread" ".*$second_thread:3.*"\
+		"second thread ($second_thread) after BP with thread clause"
+	    set hit_third_line true
+	}
+	-re ".*$srcfile:$fourth_line.*\r\n$gdb_prompt" {
+	    # The thread should be first_thread, SIMD lane have to be 5.
+	    gdb_test "thread" ".*$first_thread:5.*"\
+		"first thread ($first_thread) after hit BP with thread clause and condition "
+	    set hit_fourth_line true
+	}
+    }
+}
+
+# Should not stop here, because only odd SIMD lanes are active.
+set test_odd "no stop if condition is true for inactive SIMD lane"
+set hit_odd false
+gdb_breakpoint "$odd_branch if dim0 == 6"
+
+# Should not stop here, since only even SIMD lanes are active.
+set test_even "no stop if thread clause includes inactive SIMD lane"
+set hit_even false
+gdb_breakpoint "$even_branch thread 5:3"
+
+# Should not stop here, the condition and thread do not match.
+set test_condition "no stop if condition does not match SIMD lane"
+set hit_condition false
+gdb_breakpoint "$condition_line thread $first_thread:6 if dim0 == 4"
+
+# No stop for false condition
+set test_false_condition "no stop for false condition"
+set hit_false_condition false
+gdb_breakpoint "$fifth_line if false"
+
+set should_continue true
+while {$should_continue} {
+    gdb_test_multiple "continue" "continue until termination" {
+	-re ".*$srcfile:$odd_branch.*" {
+	    set hit_odd true
+	    fail $test_odd
+	}
+	-re ".*$srcfile:$even_branch.*" {
+	    set hit_even true
+	    fail $test_even
+	}
+	-re ".*$srcfile:$condition_line.*" {
+	    set hit_condition true
+	    fail $test_condition
+	}
+	-re ".*$srcfile:$fifth_line.*" {
+	    set hit_false_condition true
+	    fail $test_false_condition
+	}
+	-re -wrap "$inferior_exited_re normally.*" {
+	    set should_continue false
+	    pass "program terminated normally"
+	}
+	-re -wrap "$inferior_exited_re with code 01.*" {
+	    set should_continue false
+	    fail "program terminated normally"
+	}
+    }
+}
+
+if { !$hit_even } {
+    pass $test_even
+}
+
+if { !$hit_odd } {
+    pass $test_odd
+}
+
+if { !$hit_condition } {
+    pass $test_condition
+}
+if { !$hit_false_condition } {
+    pass $test_false_condition
+}

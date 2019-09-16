@@ -1,0 +1,97 @@
+# Copyright 2019 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests for SIMD support in "thread" command.
+
+# This is a generic test, however, SIMD lanes are not supported by all
+# targets.  For convenience, here the SYCL program with offload to the
+# Intel GPU is used.
+
+load_lib sycl.exp
+
+standard_testfile simd.cpp
+
+if { [skip_sycl_tests] } {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if { ![require_sycl_device "gpu" "Intel*"] } {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if { [prepare_sycl_for_testing $binfile $srcfile] } {
+    return -1
+}
+
+with_test_prefix "no inferior" {
+    gdb_test "thread :0" "No thread selected\."
+}
+
+if { [start_sycl_program] < 0 } {
+    return -1
+}
+
+set odd_branch [gdb_get_line_number "kernel-odd-branch"]
+gdb_breakpoint "$odd_branch" {temporary}
+
+gdb_test "continue" ".*\\\[1 3 5 7.*\\\].*$srcfile:$odd_branch.*" \
+    "hit the BP in odd branch"
+
+set first_thread [get_current_thread "odd branch"]
+set first_thread [lindex [split $first_thread "."] 1]
+
+gdb_test "thread" "Current thread is 2.$first_thread:1 (.*lane 1).*"\
+    "current thread displays lanes"
+
+set first_thread_lane 3
+if {$first_thread != "3"} {
+    set second_thread 3
+} else {
+    set second_thread 4
+}
+
+# thread :3, change lane within a thread
+gdb_test "thread :$first_thread_lane"\
+    "Switching to.*$first_thread:$first_thread_lane.*\
+     (.*lane $first_thread_lane).*"\
+    "explicitly set lane"
+
+# thread 3, first active lane is chosen
+gdb_test "thread $second_thread"\
+    "Switching to.*$second_thread:1.*(.*lane 1).*"\
+    "first active lane is chosen"
+# thread 2, previously selected lane is chosen
+gdb_test "thread $first_thread"\
+    "Switching to.*$first_thread:$first_thread_lane.*(.*lane $first_thread_lane).*"\
+    "previously selected lane is chosen"
+# thread 3:5
+gdb_test "thread $second_thread:5"\
+    "Switching to.*$second_thread:5.*(.*lane 5).*"\
+    "current inferior, explicitly set thread and lane"
+# thread 2.2:1
+gdb_test "thread 2.$first_thread:1"\
+    "Switching to.*2.$first_thread:1.*(.*lane 1).*"\
+    "explicitly set inferior, thread, lane"
+
+gdb_test "thread $second_thread:2"\
+    "SIMD lane 2 is inactive in thread 2.$second_thread."\
+    "inactive SIMD lane not set"
+gdb_test "thread $second_thread:999"\
+    "Incorrect SIMD lane number: 999."\
+    "incorrect SIMD lane not set"
+gdb_test "thread 1.1:1" "Thread 1.1 does not have SIMD lanes."\
+    "Cannot set SIMD lane in thread without lanes"

@@ -176,3 +176,14 @@ proc continue_sycl_program_to_termination {{msg_suffix ""}} {
     gdb_test "continue" "$inferior_exited_re normally].*" \
 	"continue to end $msg_suffix"
 }
+
+# Get the namespace version for the SYCL header corresponding to the compiler
+# used.  Return 0 for older compilers using SYCL without namespace versioning.
+
+proc get_sycl_header_version {} {
+    if {[test_compiler_info {icx-2023-*} c++]} {
+	return 1
+    }
+
+    return 0
+}

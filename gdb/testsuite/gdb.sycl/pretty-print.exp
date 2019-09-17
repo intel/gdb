@@ -1,0 +1,79 @@
+# Copyright 2019-2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests SYCL pretty printers.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    sycl_with_intelgt_lock $device {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	if {[gdb_test "info pretty-printer global libsycl" ".*libsyc.*sycl.*"]} {
+	    return -1
+	}
+
+	set bp_line [gdb_get_line_number "end-of-program"]
+	gdb_breakpoint "$bp_line"
+	gdb_continue_to_breakpoint "end-of-program" ".*$srcfile:$bp_line.*"
+
+	set namespace_version [get_sycl_header_version]
+	if {$namespace_version == 0} {
+	    xfail "Test remaining steps are not supported for compiler {[test_compiler_info]}"
+	} else {
+	    gdb_test "print id_1D" "sycl::id = 11"
+	    gdb_test "print id_2D" \
+		"sycl::id = \\{11, 22\\}"
+	    gdb_test "print id_3D" \
+		"sycl::id = \\{11, 22, 33\\}"
+
+	    gdb_test "print range_1D" \
+		"sycl::range = 3"
+	    gdb_test "print range_2D" \
+		"sycl::range = \\{3, 2\\}"
+	    gdb_test "print range_3D" \
+		"sycl::range = \\{3, 2, 2\\}"
+
+	    gdb_test "print buffer_1D" \
+		"sycl::buffer range 3 = \\{11, 12, 13\\}"
+	    gdb_test "print buffer_2D" \
+		"sycl::buffer range \\{3, 2\\} = \\{\\{21, 22\\}, \\{23, 24\\}, \\{25, 26\\}\\}"
+	    gdb_test "print buffer_3D" \
+		"sycl::buffer range \\{3, 2, 2\\} = \\{\\{\\{30, 30\\}, \\{30, 30\\}\\}, \\{\\{30, 30\\}, \\{30, 30\\}\\}, \\{\\{30, 30\\}, \\{30, 30\\}\\}\\}"
+	    gdb_test "print buffer_1D_ref" \
+		"\\(sycl::_V${namespace_version}::buffer<int, 1> &\\) @$hex: sycl::_V${namespace_version}::buffer<int, 1> = \\{impl=0x.*\\}"
+	    gdb_test "print buffer_2D_ref" \
+		"\\(sycl::_V${namespace_version}::buffer<int, 2> &\\) @$hex: sycl::_V${namespace_version}::buffer<int, 2> = \\{impl=0x.*\\}"
+	    gdb_test "print buffer_3D_ref" \
+		"\\(sycl::_V${namespace_version}::buffer<int, 3> &\\) @$hex: sycl::_V${namespace_version}::buffer<int, 3> = \\{impl=0x.*\\}"
+	}
+    }
+}

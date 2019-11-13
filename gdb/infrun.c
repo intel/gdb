@@ -6047,6 +6047,7 @@ handle_signal_stop (struct execution_control_state *ecs)
 	  || ecs->event_thread->suspend.stop_signal == GDB_SIGNAL_TRAP
 	  || ecs->event_thread->suspend.stop_signal == GDB_SIGNAL_0))
     {
+      context_switch (ecs);
       stop_print_frame = true;
       stop_waiting (ecs);
       ecs->event_thread->suspend.stop_signal = GDB_SIGNAL_0;

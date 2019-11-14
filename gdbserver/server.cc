@@ -4471,7 +4471,7 @@ void
 handle_target_event (int err, gdb_client_data client_data)
 {
   client_state &cs = get_client_state ();
-  if (debug_threads)
+  if (debug_threads && !non_stop)
     debug_printf ("handling possible target event\n");
 
   cs.last_ptid = mywait (minus_one_ptid, &cs.last_status,

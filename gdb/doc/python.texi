@@ -2989,6 +2989,18 @@ Process ID of the inferior, as assigned by the underlying operating
 system.
 @end defvar
 
+@defvar Inferior.connection_shortname
+Shortname of the inferior's connection, as assigned by GDB.
+@end defvar
+
+@defvar Inferior.connection_string
+String of the inferior's connection, as assigned by GDB.
+@end defvar
+
+@defvar Inferior.connection_target
+Target of the inferior's connection, extracted from connection_string.
+@end defvar
+
 @defvar Inferior.was_attached
 Boolean signaling whether the inferior was created using `attach', or
 started by @value{GDBN} itself.

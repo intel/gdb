@@ -21,6 +21,14 @@
 #include "interps.h"
 #include "run-on-main-thread.h"
 
+/* HACK: needed to enable ASLR when compiling with mingw64.
+   Further details:
+   "https://insights.sei.cmu.edu/cert/2018/08/when-aslr-is-not-really-aslr
+   ---the-case-of-incorrect-assumptions-and-bad-defaults.html".  */
+#ifdef _WIN32
+__declspec (dllexport)
+#endif
+
 int
 main (int argc, char **argv)
 {

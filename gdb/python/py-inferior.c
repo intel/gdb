@@ -29,6 +29,16 @@
 #include "gdbsupport/gdb_signals.h"
 #include "py-event.h"
 #include "py-stopevent.h"
+#ifdef HAVE_NETINET_IN_H
+#include <netinet/in.h>
+#endif
+#ifdef HAVE_SYS_SOCKET_H
+#include <sys/socket.h>
+#endif
+#ifdef HAVE_NETDB_H
+#include <netdb.h>
+#endif
+#include "gdbsupport/netstuff.h"
 
 struct threadlist_entry
 {
@@ -434,6 +444,121 @@ infpy_get_pid (PyObject *self, void *closure)
   INFPY_REQUIRE_VALID (inf);
 
   return PyLong_FromLong (inf->inferior->pid);
+}
+
+static PyObject *
+infpy_get_connection_shortname (PyObject *self, void *closure)
+{
+  inferior_object *inf = (inferior_object *) self;
+
+  INFPY_REQUIRE_VALID (inf);
+
+  process_stratum_target *proc_target = inf->inferior->process_target ();
+
+  if (proc_target == nullptr)
+    {
+      PyErr_SetString (PyExc_SystemError,
+		       _("Inferior's process_target is NULL."));
+
+      return nullptr;
+     }
+
+  if (proc_target->shortname () == nullptr)
+   {
+      PyErr_SetString (PyExc_SystemError,
+		       _("process_target's shortname string is NULL."));
+
+      return nullptr;
+    }
+
+  return PyString_FromString (proc_target->shortname ());
+}
+
+static PyObject *
+infpy_get_connection_string (PyObject *self, void *closure)
+{
+  inferior_object *inf = (inferior_object *) self;
+
+  INFPY_REQUIRE_VALID (inf);
+
+  process_stratum_target *proc_target = inf->inferior->process_target ();
+
+  if (proc_target == nullptr)
+    {
+      PyErr_SetString (PyExc_SystemError,
+		       _("Inferior's process_target is NULL."));
+
+      return nullptr;
+    }
+
+  if (proc_target->connection_string () == nullptr)
+    {
+      PyErr_SetString (PyExc_SystemError,
+		       _("process_target's connection string is NULL."));
+
+      return nullptr;
+    }
+
+  return PyString_FromString (proc_target->connection_string ());
+}
+
+static PyObject *
+infpy_get_connection_target (PyObject *self, void *closure)
+{
+  inferior_object *inf = (inferior_object *) self;
+
+  INFPY_REQUIRE_VALID (inf);
+
+  process_stratum_target *proc_target = inf->inferior->process_target ();
+
+  if (proc_target == nullptr)
+    {
+      PyErr_SetString (PyExc_SystemError,
+		       _("Inferior's process_target is NULL."));
+
+      return nullptr;
+    }
+
+  if (proc_target->connection_string () == nullptr)
+    {
+      PyErr_SetString (PyExc_SystemError,
+		       _("Inferior's connection string is NULL."));
+
+      return nullptr;
+    }
+
+#if defined (HAVE_NETINET_IN_H) && defined (HAVE_SYS_SOCKET_H) \
+  && defined (HAVE_NETDB_H)
+
+  addrinfo hint = {};
+
+  /* Assume no prefix will be passed, therefore we should use AF_UNSPEC.  */
+  hint.ai_family = AF_UNSPEC;
+  hint.ai_socktype = SOCK_STREAM;
+  hint.ai_protocol = IPPROTO_TCP;
+
+  parsed_connection_spec parsed
+    = parse_connection_spec (proc_target->connection_string (), &hint);
+
+  addrinfo *ainfo;
+
+  int r = getaddrinfo (parsed.host_str.c_str (), parsed.port_str.c_str (),
+		       &hint, &ainfo);
+
+  if (r != 0)
+    Py_RETURN_NONE;
+
+  freeaddrinfo (ainfo);
+  return PyString_FromString (parsed.host_str.c_str ());
+
+#else
+    {
+      PyErr_SetString (PyExc_SystemError,
+		       _("Linux Net files not included."));
+
+      return nullptr;
+    }
+#endif
 }
 
 static PyObject *
@@ -930,6 +1055,12 @@ static gdb_PyGetSetDef inferior_object_getset[] =
   { "num", infpy_get_num, NULL, "ID of inferior, as assigned by GDB.", NULL },
   { "pid", infpy_get_pid, NULL, "PID of inferior, as assigned by the OS.",
     NULL },
+  { "connection_shortname", infpy_get_connection_shortname, NULL,
+    "Shortname of the connection", NULL },
+  { "connection_string", infpy_get_connection_string, NULL,
+    "String of the connection.",  NULL },
+  { "connection_target", infpy_get_connection_target, NULL,
+    "Target of the connection.", NULL },
   { "was_attached", infpy_get_was_attached, NULL,
     "True if the inferior was created using 'attach'.", NULL },
   { "progspace", infpy_get_progspace, NULL, "Program space of this inferior" },

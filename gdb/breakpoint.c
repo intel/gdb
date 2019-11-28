@@ -2187,7 +2187,10 @@ should_be_inserted (struct bp_location *bl)
 	 We can't fix it unless GDB is able to emulate the instruction
 	 or switch to displaced stepping.  */
       && !(bl->owner->type == bp_single_step
-	   && thread_is_stepping_over_breakpoint (bl->owner->thread)))
+	   && thread_is_stepping_over_breakpoint (bl->owner->thread))
+	/* If the arch is capable of executing a step over breakpoint
+	   without triggering it, no need to remove it.  */
+      && !gdbarch_can_step_over_breakpoint (bl->gdbarch))
     {
       infrun_debug_printf ("skipping breakpoint: stepping past insn at: %s",
 			   paddress (bl->gdbarch, bl->address));

@@ -273,6 +273,7 @@ struct gdbarch
   gdbarch_adjust_dwarf2_addr_ftype *adjust_dwarf2_addr;
   gdbarch_adjust_dwarf2_line_ftype *adjust_dwarf2_line;
   int cannot_step_breakpoint;
+  int can_step_over_breakpoint;
   int have_nonsteppable_watchpoint;
   gdbarch_address_class_type_flags_ftype *address_class_type_flags;
   gdbarch_address_class_type_flags_to_name_ftype *address_class_type_flags_to_name;
@@ -657,6 +658,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of adjust_dwarf2_addr, invalid_p == 0 */
   /* Skip verify of adjust_dwarf2_line, invalid_p == 0 */
   /* Skip verify of cannot_step_breakpoint, invalid_p == 0 */
+  /* Skip verify of can_step_over_breakpoint, invalid_p == 0 */
   /* Skip verify of have_nonsteppable_watchpoint, invalid_p == 0 */
   /* Skip verify of address_class_type_flags, has predicate.  */
   /* Skip verify of address_class_type_flags_to_name, has predicate.  */
@@ -859,6 +861,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   fprintf_unfiltered (file,
                       "gdbarch_dump: call_dummy_location = %s\n",
                       plongest (gdbarch->call_dummy_location));
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: can_step_over_breakpoint = %s\n",
+                      plongest (gdbarch->can_step_over_breakpoint));
   fprintf_unfiltered (file,
                       "gdbarch_dump: cannot_fetch_register = <%s>\n",
                       host_address_to_string (gdbarch->cannot_fetch_register));
@@ -3677,6 +3682,23 @@ set_gdbarch_cannot_step_breakpoint (struct gdbarch *gdbarch,
                                     int cannot_step_breakpoint)
 {
   gdbarch->cannot_step_breakpoint = cannot_step_breakpoint;
+}
+
+int
+gdbarch_can_step_over_breakpoint (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of can_step_over_breakpoint, invalid_p == 0 */
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_can_step_over_breakpoint called\n");
+  return gdbarch->can_step_over_breakpoint;
+}
+
+void
+set_gdbarch_can_step_over_breakpoint (struct gdbarch *gdbarch,
+                                      int can_step_over_breakpoint)
+{
+  gdbarch->can_step_over_breakpoint = can_step_over_breakpoint;
 }
 
 int

@@ -714,6 +714,9 @@ f;CORE_ADDR;adjust_dwarf2_addr;CORE_ADDR pc;pc;;default_adjust_dwarf2_addr;;0
 # stop PC.
 f;CORE_ADDR;adjust_dwarf2_line;CORE_ADDR addr, int rel;addr, rel;;default_adjust_dwarf2_line;;0
 v;int;cannot_step_breakpoint;;;0;0;;0
+# Indicates that the arch can ignore a breakpoint hit while stepping
+# over it
+v;int;can_step_over_breakpoint;;;0;0;;0
 # See comment in target.h about continuable, steppable and
 # non-steppable watchpoints.
 v;int;have_nonsteppable_watchpoint;;;0;0;;0

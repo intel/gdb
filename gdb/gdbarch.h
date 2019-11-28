@@ -903,6 +903,12 @@ extern void set_gdbarch_adjust_dwarf2_line (struct gdbarch *gdbarch, gdbarch_adj
 extern int gdbarch_cannot_step_breakpoint (struct gdbarch *gdbarch);
 extern void set_gdbarch_cannot_step_breakpoint (struct gdbarch *gdbarch, int cannot_step_breakpoint);
 
+/* Indicates that the arch can ignore a breakpoint hit while stepping
+   over it */
+
+extern int gdbarch_can_step_over_breakpoint (struct gdbarch *gdbarch);
+extern void set_gdbarch_can_step_over_breakpoint (struct gdbarch *gdbarch, int can_step_over_breakpoint);
+
 /* See comment in target.h about continuable, steppable and
    non-steppable watchpoints. */
 

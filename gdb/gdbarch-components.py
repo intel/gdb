@@ -1404,6 +1404,17 @@ Value(
 
 Value(
     comment="""
+Indicates that the arch can ignore a breakpoint hit while stepping
+over it.
+""",
+    type="int",
+    name="can_step_over_breakpoint",
+    predefault="0",
+    invalid=False,
+)
+
+Value(
+    comment="""
 See comment in target.h about continuable, steppable and
 non-steppable watchpoints.
 """,

@@ -1558,6 +1558,12 @@ use_displaced_stepping (thread_info *tp)
 
   gdbarch *gdbarch = get_thread_regcache (tp)->arch ();
 
+  /* If the architecture can handle step-over without having to do displaced
+     stepping, don't use it.  */
+  if (can_use_displaced_stepping == AUTO_BOOLEAN_AUTO
+      && gdbarch_can_step_over_breakpoint (gdbarch))
+    return false;
+
   /* If the architecture doesn't implement displaced stepping, don't use
      it.  */
   if (!gdbarch_supports_displaced_stepping (gdbarch))
@@ -7994,11 +8000,17 @@ keep_going_pass_signal (struct execution_control_state *ecs)
 		   || (step_what & STEP_OVER_BREAKPOINT));
       remove_wps = (step_what & STEP_OVER_WATCHPOINT);
 
+      /* If gdbarch supports suppressing breakpoints while stepping, there
+	 is no need to do anything.  Watchpoints may not have the same
+	 underlying implementation though.  */
+      if (gdbarch_can_step_over_breakpoint (regcache->arch ()) && !remove_wps)
+	{
+	}
       /* We can't use displaced stepping if we need to step past a
 	 watchpoint.  The instruction copied to the scratch pad would
 	 still trigger the watchpoint.  */
-      if (remove_bp
-	  && (remove_wps || !use_displaced_stepping (ecs->event_thread)))
+      else if (remove_bp
+	       && (remove_wps || !use_displaced_stepping (ecs->event_thread)))
 	{
 	  set_step_over_info (regcache->aspace (),
 			      regcache_read_pc (regcache), remove_wps,

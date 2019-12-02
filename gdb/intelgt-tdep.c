@@ -460,6 +460,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 				       intelgt_breakpoint_kind_from_pc);
   set_gdbarch_sw_breakpoint_from_kind (gdbarch,
 				       intelgt_sw_breakpoint_from_kind);
+  set_gdbarch_can_step_over_breakpoint (gdbarch, 1);
 
   /* Disassembly */
   set_gdbarch_print_insn (gdbarch, intelgt_print_insn);

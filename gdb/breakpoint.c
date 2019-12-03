@@ -177,6 +177,9 @@ static void decref_bp_location (struct bp_location **loc);
 
 static struct bp_location *allocate_bp_location (struct breakpoint *bpt);
 
+static void print_breakpoint_location (breakpoint *bp, bp_location *loc);
+static std::string breakpoint_location_to_buffer (bp_location *bl);
+
 /* update_global_location_list's modes of operation wrt to whether to
    insert locations now.  */
 enum ugll_insert_mode
@@ -211,6 +214,22 @@ enum ugll_insert_mode
      as no thread is running yet.  */
   UGLL_INSERT
 };
+
+static const char *
+ugll_insert_mode_text (enum ugll_insert_mode insert_mode)
+{
+  switch (insert_mode)
+    {
+    case UGLL_DONT_INSERT:
+      return "UGLL_DONT_INSERT";
+    case UGLL_MAY_INSERT:
+      return "UGLL_MAY_INSERT";
+    case UGLL_INSERT:
+      return "UGLL_INSERT";
+    }
+
+  gdb_assert_not_reached ("must handle all enum values");
+}
 
 static void update_global_location_list (enum ugll_insert_mode);
 
@@ -376,6 +395,15 @@ show_always_inserted_mode (struct ui_file *file, int from_tty,
 {
   fprintf_filtered (file, _("Always inserted breakpoint mode is %s.\n"),
 		    value);
+}
+
+static unsigned int debug_breakpoints = 0;
+
+static void
+show_debug_breakpoints (struct ui_file *file, int from_tty,
+			struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file, _("Breakpoint location debugging is %s.\n"), value);
 }
 
 /* See breakpoint.h.  */
@@ -2540,6 +2568,14 @@ insert_bp_location (struct bp_location *bl,
   if (!should_be_inserted (bl) || (bl->inserted && !bl->needs_update))
     return 0;
 
+  if (debug_breakpoints)
+    {
+      std::string stb = breakpoint_location_to_buffer (bl);
+      fprintf_unfiltered (gdb_stdlog,
+			  "breakpoints: insert_bp_location (%s) %s\n",
+			  host_address_to_string (bl), stb.c_str ());
+    }
+
   /* Note we don't initialize bl->target_info, as that wipes out
      the breakpoint location's shadow_contents if the breakpoint
      is still inserted at that location.  This in turn breaks
@@ -3074,6 +3110,9 @@ remove_breakpoints (void)
 {
   int val = 0;
 
+  if (debug_breakpoints)
+    fprintf_unfiltered (gdb_stdlog, "breakpoints: remove_breakpoints ()\n");
+
   for (bp_location *bl : all_bp_locations ())
     if (bl->inserted && !is_tracepoint (bl->owner))
       val |= remove_breakpoint (bl);
@@ -3109,6 +3148,9 @@ void
 remove_breakpoints_inf (inferior *inf)
 {
   int val;
+
+  if (debug_breakpoints)
+    fprintf_unfiltered (gdb_stdlog, "remove_breakpoints_inf (%d)\n", inf->num);
 
   for (bp_location *bl : all_bp_locations ())
     {
@@ -3752,6 +3794,15 @@ detach_breakpoints (ptid_t ptid)
 static int
 remove_breakpoint_1 (struct bp_location *bl, enum remove_bp_reason reason)
 {
+  if (debug_breakpoints)
+    {
+      std::string stb = breakpoint_location_to_buffer (bl);
+      fprintf_unfiltered (
+	  gdb_stdlog, "breakpoints: remove_breakpoint_1 (%s, %s) %s\n",
+	  host_address_to_string (bl),
+	  reason == REMOVE_BREAKPOINT ? "remove" : "detach", stb.c_str ());
+    }
+
   int val;
 
   /* BL is never in moribund_locations by our callers.  */
@@ -5944,6 +5995,16 @@ print_breakpoint_location (struct breakpoint *b,
 			   bp_location_condition_evaluator (loc));
       uiout->text (")");
     }
+}
+
+static std::string
+breakpoint_location_to_buffer (bp_location *bl)
+{
+  string_file stb;
+  current_uiout->redirect (&stb);
+  print_breakpoint_location (bl->owner, bl);
+  current_uiout->redirect (NULL);
+  return std::move (stb.string ());
 }
 
 static const char *
@@ -11286,6 +11347,13 @@ update_global_location_list (enum ugll_insert_mode insert_mode)
   /* Last breakpoint location program space that was marked for update.  */
   int last_pspace_num = -1;
 
+  if (debug_breakpoints)
+    {
+      fprintf_unfiltered (
+	  gdb_stdlog, "breakpoints: update_global_location_list (%s)\n",
+	  ugll_insert_mode_text (insert_mode));
+    }
+
   /* Used in the duplicates detection below.  When iterating over all
      bp_locations, points to the first bp_location of a given address.
      Breakpoints and watchpoints of different types are never
@@ -15389,6 +15457,15 @@ when execution stops."),
 				&show_always_inserted_mode,
 				&breakpoint_set_cmdlist,
 				&breakpoint_show_cmdlist);
+
+  add_setshow_zuinteger_cmd ("breakpoints", class_maintenance,
+			     &debug_breakpoints, _("\
+Set breakpoint location debugging."), _("\
+Show breakpoint location debugging."), _("\
+When non-zero, breakpoint location specific debugging is enabled."),
+			     NULL,
+			     show_debug_breakpoints,
+			     &setdebuglist, &showdebuglist);
 
   add_setshow_enum_cmd ("condition-evaluation", class_breakpoint,
 			condition_evaluation_enums,

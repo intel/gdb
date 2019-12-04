@@ -279,6 +279,8 @@ notify_inferior_removed (inferior *inf)
 void
 delete_inferior (struct inferior *inf)
 {
+  remove_breakpoints_inf (inf);
+
   inf->clear_thread_list ();
 
   auto it = inferior_list.iterator_to (*inf);

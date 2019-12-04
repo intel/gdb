@@ -447,7 +447,7 @@ proc_with_prefix test_setup { mode } {
 
 	with_spawn_id $mi_spawn_id {
 	    mi_expect_stop "breakpoint-hit" "main" "" "$srcfile" "$decimal" \
-		{"" "disp=\"del\"" "locno=\"[0-9]+\""} "main stop"
+		{"" "disp=\"del\""} "main stop"
 	}
 
 	# Consume CLI output.

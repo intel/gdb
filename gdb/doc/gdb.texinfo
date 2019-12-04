@@ -7354,6 +7354,7 @@ you examine the stopped thread in the debugger.
 * Non-Stop Mode::               Other threads continue to execute
 * Background Execution::        Running your program asynchronously
 * Thread-Specific Breakpoints:: Controlling breakpoints
+* Inferior-Specific Breakpoints::      Controlling breakpoints
 * Interrupted System Calls::    GDB may interfere with system calls
 * Observer Mode::               GDB does not alter program behavior
 @end menu

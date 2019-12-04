@@ -5943,6 +5943,12 @@ thread's global id.  If the breakpoint is not thread-specific, this
 attribute is @code{None}.  This attribute is writable.
 @end defvar
 
+@defvar Breakpoint.inferior
+If the breakpoint is inferior-specific, this attribute holds the inferior
+number.  If the breakpoint is not inferior-specific, this attribute is
+@code{None}.  This attribute is writable.
+@end defvar
+
 @defvar Breakpoint.task
 If the breakpoint is Ada task-specific, this attribute holds the Ada task
 id.  If the breakpoint is not task-specific (or the underlying

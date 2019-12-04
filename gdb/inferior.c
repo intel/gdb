@@ -193,6 +193,8 @@ inferior::clear_thread_list (bool silent)
 void
 delete_inferior (struct inferior *inf)
 {
+  delete_breakpoints_inf (inf);
+
   inf->clear_thread_list (true);
 
   auto it = inferior_list.iterator_to (*inf);

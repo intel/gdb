@@ -4417,8 +4417,9 @@ C@t{++}, a function name may refer to more than one possible place to break.
 that situation.
 
 It is also possible to insert a breakpoint that will stop the program
-only if a specific thread (@pxref{Thread-Specific Breakpoints})
-or a specific task (@pxref{Ada Tasks}) hits that breakpoint.
+only if a specific thread (@pxref{Thread-Specific Breakpoints}),
+a specific task (@pxref{Ada Tasks}) or a specific inferior
+(@pxref{Inferior-Specific Breakpoints}) hits that breakpoint.
 
 @item break
 When called without any arguments, @code{break} sets a breakpoint at
@@ -6918,6 +6919,7 @@ you examine the stopped thread in the debugger.
 * Non-Stop Mode::		Other threads continue to execute
 * Background Execution::	Running your program asynchronously
 * Thread-Specific Breakpoints::	Controlling breakpoints
+* Inferior-Specific Breakpoints::	Controlling breakpoints
 * Interrupted System Calls::	GDB may interfere with system calls
 * Observer Mode::               GDB does not alter program behavior
 @end menu
@@ -7251,6 +7253,44 @@ Process}), or if @value{GDBN} loses the remote connection
 @value{GDBN} is only able to detect a thread has exited when the user
 explictly asks for the thread list with the @code{info threads}
 command.
+
+@node Inferior-Specific Breakpoints
+@subsection Inferior-Specific Breakpoints
+
+It is also possible to limit breakpoints to specific inferior program space,
+which can be especially useful when doing multi-target debugging with some
+source files shared between targets.
+
+@table @code
+@cindex breakpoints and inferiors
+@cindex inferior breakpoints
+@kindex break @dots{} inferior @var{inferior-num}
+@item break @var{location} inferior @var{inferior-num}
+@itemx break @var{location} inferior @var{inferior-num} if @dots{}
+@var{location} specifies source lines; there are several ways of
+writing them (@pxref{Specify Location}), but the effect is always to
+specify some source line.
+
+Use the qualifier @samp{inferior @var{inferior-num}} with a breakpoint command
+to specify that you only want @value{GDBN} to stop the program if execution
+happens in a context of the specified inferior.  The @var{inferior-num} number
+is one of the inferior numbers as shown by @samp{info inferior} command output.
+
+One major difference compared to @pxref{Thread-Specific Breakpoints} is that
+inferior specific breakpoints won't be inserted at all for other inferiors and
+thus won't be shown by the @samp{info break} command.
+
+If inferior gets removed while inferior-specific breakpoint is present, a
+warning will be printed and the breakpoint will never be hit.
+
+You can use the @code{inferior} qualifier with the other qualifiers and
+conditionals too:
+
+@smallexample
+(@value{GDBP}) break frik.c:13 inferior 1 thread 2 if bartab > lim
+@end smallexample
+
+@end table
 
 @node Interrupted System Calls
 @subsection Interrupted System Calls 

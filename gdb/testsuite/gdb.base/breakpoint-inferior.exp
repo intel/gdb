@@ -1,0 +1,78 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+standard_testfile
+
+# Check if start command is supported.
+if {[use_gdb_stub]} {
+    return 0
+}
+
+if {[prepare_for_testing "failed to prepare" $testfile $srcfile debug]} {
+    return -1
+}
+
+# Test pending inferior breakpoint
+
+gdb_test "add-inferior"
+set bp_loc [gdb_get_line_number "break-here"]
+gdb_breakpoint "$bp_loc inferior 2" {allow-pending}
+
+gdb_test "inferior 1" "Switching to inferior 1.*" "inferior 1 (pending)"
+if {[gdb_start_cmd] < 0} {
+    fail "start inferior 1"
+    return
+}
+gdb_test "" ".*reakpoint ., main .*${srcfile}.*" "run inferior 1 to main"
+gdb_continue_to_end "inferior 1"
+
+gdb_test "inferior 2"
+gdb_test "file $binfile" "Reading symbols.*" "inferior 2 symbols (pending)"
+if {[gdb_run_cmd] < 0} {
+    fail "run inferior 2"
+    return
+}
+gdb_test_multiple "" "run inferior 2 until bp" {
+    -re -wrap "Breakpoint .*$srcfile:$bp_loc.*" {
+	pass $gdb_test_name
+	gdb_continue_to_end "run inferior 2 until end"
+    }
+    -re -wrap "exited normally" {
+	fail $gdb_test_name
+    }
+}
+
+gdb_test "inferior 1"
+gdb_test "remove-inferiors 2"
+gdb_test "info b" "No breakpoints or watchpoints."
+
+set main_addr [get_hexadecimal_valueof "&main" 0x0]
+gdb_breakpoint "*$main_addr inferior 1"
+gdb_test "add-inferior -exec $binfile" "Reading symbols.*" "inferior 3 symbols"
+gdb_test_multiple "info b" "only inf 1 after location update" {
+    -re -wrap "inf ($decimal)" {
+	set inf_no $expect_out(1,string)
+	gdb_assert {$inf_no == 1} $gdb_test_name
+    }
+}
+gdb_test "set schedule-multiple on"
+if {[gdb_run_cmd] < 0} {
+    fail "run with addr-based bp"
+} else {
+    gdb_test "" "Breakpoint ., main .*${srcfile}.*" "run with addr-based bp"
+}
+
+gdb_test "print \$_inferior" " = 1"
+gdb_continue_to_end "final run to end"

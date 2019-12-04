@@ -105,6 +105,8 @@ proc_with_prefix test_bkpt_basic { } {
 	"Get Breakpoint List" 0
     gdb_test "python print (blist\[1\].thread)" \
 	"None" "Check breakpoint thread"
+    gdb_test "python print (blist\[1\].inferior)" \
+	"None" "Check breakpoint inferior"
     gdb_test "python print (blist\[1\].type == gdb.BP_BREAKPOINT)" \
 	"True" "Check breakpoint type"
     gdb_test "python print (blist\[0\].number)" \
@@ -164,10 +166,12 @@ proc_with_prefix test_bkpt_cond_and_cmds { } {
 
     # Test conditional setting.
     set bp_location1 [gdb_get_line_number "Break at multiply."]
-    gdb_py_test_silent_cmd "python bp1 = gdb.Breakpoint (\"$bp_location1 thread 1\")" \
+    gdb_py_test_silent_cmd "python bp1 = gdb.Breakpoint (\"$bp_location1 thread 1 inferior 1\")" \
 	"Set breakpoint" 0
     gdb_test "python print (bp1.thread == 1)" "True" \
 	"Extra thread spec has been parsed"
+    gdb_test "python print (bp1.inferior == 1)" "True" \
+        "Extra inferior spec has been parsed"
     gdb_continue_to_breakpoint "Break at multiply" \
 	".*Break at multiply.*"
     gdb_py_test_silent_cmd "python bp1.condition = \"i == 5\"" \

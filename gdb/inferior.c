@@ -177,6 +177,8 @@ delete_inferior (struct inferior *todel)
   if (!inf)
     return;
 
+  delete_breakpoints_inf (todel);
+
   for (thread_info *tp : inf->threads_safe ())
     delete_thread_silent (tp);
 

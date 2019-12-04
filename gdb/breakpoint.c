@@ -6760,7 +6760,9 @@ print_one_breakpoint_location (struct breakpoint *b,
   if (loc != NULL && !header_of_multiple)
     {
       std::vector<int> inf_nums;
-      int mi_only = 1;
+      /* Always print inferiors if this is an inferior-specific
+	 breakpoint.  */
+      int mi_only = b->inferior == -1;
 
       for (inferior *inf : all_inferiors ())
 	{
@@ -9426,6 +9428,8 @@ create_breakpoint (struct gdbarch *gdbarch,
   bool pending = false;
   int task = -1;
   int prev_bkpt_count = breakpoint_count;
+  gdb::unique_xmalloc_ptr<char> cond_string_copy;
+  gdb::unique_xmalloc_ptr<char> extra_string_copy;
 
   gdb_assert (thread == -1 || thread > 0);
   gdb_assert (inferior == -1 || inferior > 0);
@@ -9456,6 +9460,63 @@ create_breakpoint (struct gdbarch *gdbarch,
   try
     {
       ops->create_sals_from_location_spec (locspec, &canonical);
+
+      if (parse_extra)
+	{
+	  gdb_assert (type_wanted != bp_dprintf);
+
+	  gdb::unique_xmalloc_ptr<char> rest;
+	  gdb::unique_xmalloc_ptr<char> cond;
+
+	  const linespec_sals &lsal = canonical.lsals[0];
+
+	  find_condition_and_thread_for_sals (lsal.sals, extra_string,
+					      &cond, &thread, &simd_lane,
+					      &inferior, &task, &rest);
+
+	  if (rest.get () != nullptr && *(rest.get ()) != '\0')
+	    error (_("Garbage '%s' at end of command"), rest.get ());
+
+	  cond_string_copy = std::move (cond);
+	  extra_string_copy = std::move (rest);
+	}
+
+	/* If the breakpoint must only be installed only for a specific
+	   inferior, filter found sals first to only take into account those
+	   with the matching pspace.  If list remains empty after that,
+	   treat this as a pending breakpoint.  */
+
+	if (inferior > 0)
+	  {
+	    using namespace std;
+
+	    struct inferior *inf = find_inferior_id (inferior);
+	    if (inf == nullptr)
+	      throw_error (NOT_FOUND_ERROR, _("No such inferior"));
+
+	    for (auto &lsal : canonical.lsals)
+	      {
+		auto new_end = remove_if (begin (lsal.sals), end (lsal.sals),
+					  [&] (symtab_and_line &sal)
+					    {
+					      return sal.pspace != inf->pspace;
+					    });
+		lsal.sals.erase (new_end, end (lsal.sals));
+	      }
+
+	    auto new_end = remove_if (begin (canonical.lsals),
+		end (canonical.lsals),
+		[] (linespec_sals &lsals)
+		  {
+		    return lsals.sals.empty ();
+		  });
+	    canonical.lsals.erase (new_end, end (canonical.lsals));
+
+	    if (canonical.lsals.empty ())
+	      throw_error (
+		  NOT_FOUND_ERROR,
+		  _ ("No suitable breakpoint locations for the inferior"));
+	  }
     }
   catch (const gdb_exception_error &e)
     {
@@ -9511,29 +9572,7 @@ create_breakpoint (struct gdbarch *gdbarch,
      breakpoint.  */
   if (!pending)
     {
-      gdb::unique_xmalloc_ptr<char> cond_string_copy;
-      gdb::unique_xmalloc_ptr<char> extra_string_copy;
-
-      if (parse_extra)
-	{
-	  gdb_assert (type_wanted != bp_dprintf);
-
-	  gdb::unique_xmalloc_ptr<char> rest;
-	  gdb::unique_xmalloc_ptr<char> cond;
-
-	  const linespec_sals &lsal = canonical.lsals[0];
-
-	  find_condition_and_thread_for_sals (lsal.sals, extra_string,
-					      &cond, &thread, &simd_lane,
-					      &inferior, &task, &rest);
-
-	  if (rest.get () != nullptr && *(rest.get ()) != '\0')
-	    error (_("Garbage '%s' at end of command"), rest.get ());
-
-	  cond_string_copy = std::move (cond);
-	  extra_string_copy = std::move (rest);
-	}
-      else
+      if (!parse_extra)
 	{
 	  /* Check the validity of the condition.  We should error out
 	     if the condition is invalid at all of the locations and
@@ -9584,6 +9623,7 @@ create_breakpoint (struct gdbarch *gdbarch,
       std::unique_ptr <breakpoint> b = new_breakpoint_from_type (gdbarch,
 								 type_wanted);
       b->locspec = locspec->clone ();
+      b->inferior = inferior;
 
       if (parse_extra)
 	b->cond_string = NULL;
@@ -9594,6 +9634,7 @@ create_breakpoint (struct gdbarch *gdbarch,
 				? xstrdup (cond_string)
 				: NULL);
 	  b->thread = thread;
+	  b->inferior = inferior;
 	}
 
       /* Create a private copy of any extra string.  */
@@ -12400,6 +12441,14 @@ code_breakpoint::decode_location_spec (location_spec *locspec,
   if (locspec->type () == PROBE_LOCATION_SPEC)
     return bkpt_probe_decode_location_spec (this, locspec, search_pspace);
 
+  if (inferior > 0)
+    {
+      struct inferior *inf = find_inferior_id (inferior);
+      gdb_assert (inf != nullptr);
+      if (inf->pspace != search_pspace)
+	throw_error (NOT_FOUND_ERROR, "No suitable location for the inferior");
+    }
+
   struct linespec_result canonical;
 
   decode_line_full (locspec, DECODE_LINE_FUNFIRSTLINE, search_pspace,
@@ -13402,6 +13451,7 @@ code_breakpoint::location_spec_to_sals (location_spec *locspec,
 	  thread = local_thread;
 	  simd_lane_num = local_simd_lane_num;
 	  task = local_task;
+	  inferior = local_inferior;
 	  if (local_extra != nullptr)
 	    extra_string = std::move (local_extra);
 	  condition_not_parsed = 0;
@@ -14680,6 +14730,9 @@ breakpoint::print_recreate_thread (struct ui_file *fp) const
   if (task != -1)
     gdb_printf (fp, " task %d", task);
 
+  if (inferior != -1)
+    gdb_printf (fp, " inferior %d", inferior);
+
   gdb_printf (fp, "\n");
 }
 
@@ -14846,7 +14899,7 @@ specified name as a complete fully-qualified name instead."
    command.  */
 
 #define BREAK_ARGS_HELP(command) \
-command" [PROBE_MODIFIER] [LOCATION] [thread THREADNUM]\n\
+command" [PROBE_MODIFIER] [LOCATION] [thread THREADNUM] [inferior INFNUM]\n\
 \t[-force-condition] [if CONDITION]\n\
 PROBE_MODIFIER shall be present if the command is to be placed in a\n\
 probe point.  Accepted values are `-probe' (for a generic, automatically\n\
@@ -14859,6 +14912,7 @@ With no LOCATION, uses current execution address of the selected\n\
 stack frame.  This is useful for breaking on return to a stack frame.\n\
 \n\
 THREADNUM is the number from \"info threads\".\n\
+INFNUM is the number from \"info inferiors\".\n\
 CONDITION is a boolean expression.\n\
 \n\
 With the \"-force-condition\" flag, the condition is defined even when\n\

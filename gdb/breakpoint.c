@@ -97,7 +97,7 @@ static void create_breakpoints_sal (struct gdbarch *,
 				    gdb::unique_xmalloc_ptr<char>,
 				    enum bptype,
 				    enum bpdisp, int, int,
-				    int, int,
+				    int, int, int,
 				    int, int, int, unsigned);
 
 static int can_use_hardware_watchpoint
@@ -1510,6 +1510,19 @@ breakpoint_set_thread (struct breakpoint *b, int thread)
 
   b->thread = thread;
   if (old_thread != thread)
+    gdb::observers::breakpoint_modified.notify (b);
+}
+
+/* Set the inferior for this breakpoint.  If INFERIOR is 0, make
+   the breakpoint apply all inferiors.  */
+
+void
+breakpoint_set_inferior (struct breakpoint *b, int inferior)
+{
+  int old = b->inferior;
+
+  b->inferior = inferior;
+  if (old != inferior)
     gdb::observers::breakpoint_modified.notify (b);
 }
 
@@ -5678,6 +5691,7 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
      cause the stop, check whether the lane is active.  */
   if ((b->thread != -1 && b->thread != thread->global_num)
       || (b->task != 0 && b->task != ada_get_task_number (thread))
+      || (b->inferior != 0 && b->inferior != current_inferior ()->num)
       || (lanes_mask == 0))
     {
       infrun_debug_printf ("incorrect thread or task, not stopping");
@@ -6703,7 +6717,9 @@ print_one_breakpoint_location (struct breakpoint *b,
   if (loc != NULL && !header_of_multiple)
     {
       std::vector<int> inf_nums;
-      int mi_only = 1;
+      /* Always print inferiors if this is an inferior-specific
+	 breakpoint.  */
+      int mi_only = b->inferior == 0;
 
       for (inferior *inf : all_inferiors ())
 	{
@@ -8697,7 +8713,8 @@ code_breakpoint::code_breakpoint (struct gdbarch *gdbarch_,
 				  gdb::unique_xmalloc_ptr<char> cond_string_,
 				  gdb::unique_xmalloc_ptr<char> extra_string_,
 				  enum bpdisp disposition_,
-				  int thread_, int simd_lane_num_, int task_, int ignore_count_,
+				  int thread_, int simd_lane_num_, int task_,
+				  int inferior_, int ignore_count_,
 				  int from_tty,
 				  int enabled_, unsigned flags,
 				  int display_canonical_)
@@ -8724,6 +8741,7 @@ code_breakpoint::code_breakpoint (struct gdbarch *gdbarch_,
   thread = thread_;
   simd_lane_num = simd_lane_num_;
   task = task_;
+  inferior = inferior_;
 
   cond_string = std::move (cond_string_);
   extra_string = std::move (extra_string_);
@@ -8826,7 +8844,7 @@ create_breakpoint_sal (struct gdbarch *gdbarch,
 		       gdb::unique_xmalloc_ptr<char> extra_string,
 		       enum bptype type, enum bpdisp disposition,
 		       int thread, int simd_lane_num,  int task,
-		       int ignore_count, int from_tty,
+		       int inferior, int ignore_count, int from_tty,
 		       int enabled, int internal, unsigned flags,
 		       int display_canonical)
 {
@@ -8839,7 +8857,8 @@ create_breakpoint_sal (struct gdbarch *gdbarch,
 				std::move (cond_string),
 				std::move (extra_string),
 				disposition,
-				thread, simd_lane_num, task, ignore_count,
+				thread, simd_lane_num, task, inferior,
+				ignore_count,
 				from_tty,
 				enabled, flags,
 				display_canonical);
@@ -8869,7 +8888,7 @@ create_breakpoints_sal (struct gdbarch *gdbarch,
 			gdb::unique_xmalloc_ptr<char> extra_string,
 			enum bptype type, enum bpdisp disposition,
 			int thread, int simd_lane_num, int task,
-			int ignore_count, int from_tty,
+			int inferior, int ignore_count, int from_tty,
 			int enabled, int internal, unsigned flags)
 {
   if (canonical->pre_expanded)
@@ -8892,7 +8911,8 @@ create_breakpoints_sal (struct gdbarch *gdbarch,
 			     std::move (cond_string),
 			     std::move (extra_string),
 			     type, disposition,
-			     thread, simd_lane_num, task, ignore_count,
+			     thread, simd_lane_num, task, inferior,
+			     ignore_count,
 			     from_tty, enabled, internal, flags,
 			     canonical->special_display);
     }
@@ -9024,8 +9044,8 @@ check_fast_tracepoint_sals (struct gdbarch *gdbarch,
 
 /* Given TOK, a string specification of condition and thread, as
    accepted by the 'break' command, extract the condition
-   string, thread number, and SIMD lane number, and set *COND_STRING,
-   *THREAD, and *SIMD_LANE_NUM.
+   string, inferior number, thread number, and SIMD lane number,
+   and set *COND_STRING, *THREAD, and *SIMD_LANE_NUM.
    PC identifies the context at which the condition should be parsed.
    If no condition is found, *COND_STRING is set to NULL.
    If no thread is found, *THREAD is set to -1.  */
@@ -9034,11 +9054,13 @@ static void
 find_condition_and_thread (const char *tok, CORE_ADDR pc,
 			   gdb::unique_xmalloc_ptr<char> *cond_string,
 			   int *thread, int *simd_lane_num, int *task,
+			   int *inferior,
 			   gdb::unique_xmalloc_ptr<char> *rest)
 {
   cond_string->reset ();
   *thread = -1;
   *task = 0;
+  *inferior = 0;
   rest->reset ();
   bool force = false;
 
@@ -9107,6 +9129,18 @@ find_condition_and_thread (const char *tok, CORE_ADDR pc,
 	    error (_("Unknown task %d."), *task);
 	  tok = tmptok;
 	}
+      else if (toklen >= 1 && strncmp (tok, "inferior", toklen) == 0)
+	{
+	  char *tmptok;
+
+	  tok = end_tok + 1;
+	  *inferior = strtol (tok, &tmptok, 0);
+	  if (tok == tmptok)
+	    error (_("Junk after inferior keyword."));
+	  if (find_inferior_id (*inferior) == nullptr)
+	    error (_("Unknown inferior %d."), *inferior);
+	  tok = tmptok;
+	}
       else if (rest)
 	{
 	  rest->reset (savestring (tok, strlen (tok)));
@@ -9127,6 +9161,7 @@ find_condition_and_thread_for_sals (const std::vector<symtab_and_line> &sals,
 				    const char *input,
 				    gdb::unique_xmalloc_ptr<char> *cond_string,
 				    int *thread, int *simd_lane_num, int *task,
+				    int *inferior,
 				    gdb::unique_xmalloc_ptr<char> *rest)
 {
   int num_failures = 0;
@@ -9136,6 +9171,7 @@ find_condition_and_thread_for_sals (const std::vector<symtab_and_line> &sals,
       int thread_id = 0;
       int simd_lane = -1;
       int task_id = 0;
+      int inf_num = 0;
       gdb::unique_xmalloc_ptr<char> remaining;
 
       /* Here we want to parse 'arg' to separate condition from thread
@@ -9147,11 +9183,13 @@ find_condition_and_thread_for_sals (const std::vector<symtab_and_line> &sals,
       try
 	{
 	  find_condition_and_thread (input, sal.pc, &cond, &thread_id,
-				     &simd_lane, &task_id, &remaining);
+				     &simd_lane, &task_id, &inf_num,
+				     &remaining);
 	  *cond_string = std::move (cond);
 	  *thread = thread_id;
 	  *simd_lane_num = simd_lane;
 	  *task = task_id;
+	  *inferior = inf_num;
 	  *rest = std::move (remaining);
 	  break;
 	}
@@ -9252,7 +9290,10 @@ create_breakpoint (struct gdbarch *gdbarch,
   struct linespec_result canonical;
   bool pending = false;
   int task = 0;
+  int inferior = 0;
   int prev_bkpt_count = breakpoint_count;
+  gdb::unique_xmalloc_ptr<char> cond_string_copy;
+  gdb::unique_xmalloc_ptr<char> extra_string_copy;
 
   gdb_assert (ops != NULL);
 
@@ -9263,6 +9304,57 @@ create_breakpoint (struct gdbarch *gdbarch,
   try
     {
       ops->create_sals_from_location_spec (locspec, &canonical);
+
+      if (parse_extra)
+	{
+	  gdb::unique_xmalloc_ptr<char> rest;
+	  gdb::unique_xmalloc_ptr<char> cond;
+
+	  const linespec_sals &lsal = canonical.lsals[0];
+
+	  find_condition_and_thread_for_sals (lsal.sals, extra_string,
+					      &cond, &thread, &simd_lane,
+					      &task, &inferior, &rest);
+	  cond_string_copy = std::move (cond);
+	  extra_string_copy = std::move (rest);
+	}
+
+      /* If the breakpoint must only be installed only for a specific inferior,
+	 filter found sals first to only take into account those with the
+	 matching pspace.  If list remains empty after that, treat this
+	 as a pending breakpoint.  */
+
+      if (inferior > 0)
+	{
+	  using namespace std;
+
+	  struct inferior *inf = find_inferior_id (inferior);
+	  if (inf == nullptr)
+	    throw_error (NOT_FOUND_ERROR, _("No such inferior"));
+
+	  for (auto &lsal : canonical.lsals)
+	    {
+	      auto new_end = remove_if (begin (lsal.sals), end (lsal.sals),
+					[&] (symtab_and_line &sal)
+					  {
+					    return sal.pspace != inf->pspace;
+					  });
+	      lsal.sals.erase (new_end, end (lsal.sals));
+	    }
+
+	  auto new_end = remove_if (
+	      begin (canonical.lsals), end (canonical.lsals),
+	      [] (linespec_sals &lsals)
+		{
+		  return lsals.sals.empty ();
+		});
+	  canonical.lsals.erase (new_end, end (canonical.lsals));
+
+	  if (canonical.lsals.empty ())
+	    throw_error (
+		NOT_FOUND_ERROR,
+		_ ("No suitable breakpoint locations for the inferior"));
+	}
     }
   catch (const gdb_exception_error &e)
     {
@@ -9318,23 +9410,7 @@ create_breakpoint (struct gdbarch *gdbarch,
      breakpoint.  */
   if (!pending)
     {
-      gdb::unique_xmalloc_ptr<char> cond_string_copy;
-      gdb::unique_xmalloc_ptr<char> extra_string_copy;
-
-      if (parse_extra)
-	{
-	  gdb::unique_xmalloc_ptr<char> rest;
-	  gdb::unique_xmalloc_ptr<char> cond;
-
-	  const linespec_sals &lsal = canonical.lsals[0];
-
-	  find_condition_and_thread_for_sals (lsal.sals, extra_string,
-					      &cond, &thread, &simd_lane,
-					      &task, &rest);
-	  cond_string_copy = std::move (cond);
-	  extra_string_copy = std::move (rest);
-	}
-      else
+      if (!parse_extra)
 	{
 	  if (type_wanted != bp_dprintf
 	      && extra_string != NULL && *extra_string != '\0')
@@ -9380,7 +9456,8 @@ create_breakpoint (struct gdbarch *gdbarch,
 				   std::move (extra_string_copy),
 				   type_wanted,
 				   tempflag ? disp_del : disp_donttouch,
-				   thread, simd_lane, task, ignore_count,
+				   thread, simd_lane, task, inferior,
+				   ignore_count,
 				   from_tty, enabled, internal, flags);
     }
   else
@@ -9388,6 +9465,7 @@ create_breakpoint (struct gdbarch *gdbarch,
       std::unique_ptr <breakpoint> b = new_breakpoint_from_type (gdbarch,
 								 type_wanted);
       b->locspec = locspec->clone ();
+      b->inferior = inferior;
 
       if (parse_extra)
 	b->cond_string = NULL;
@@ -9398,6 +9476,7 @@ create_breakpoint (struct gdbarch *gdbarch,
 				? xstrdup (cond_string)
 				: NULL);
 	  b->thread = thread;
+	  b->inferior = inferior;
 	}
 
       /* Create a private copy of any extra string.  */
@@ -12184,6 +12263,14 @@ code_breakpoint::decode_location_spec (location_spec *locspec,
   if (locspec->type () == PROBE_LOCATION_SPEC)
     return bkpt_probe_decode_location_spec (this, locspec, search_pspace);
 
+  if (inferior > 0)
+    {
+      struct inferior *inf = find_inferior_id (inferior);
+      gdb_assert (inf != nullptr);
+      if (inf->pspace != search_pspace)
+	throw_error (NOT_FOUND_ERROR, "No suitable location for the inferior");
+    }
+
   struct linespec_result canonical;
 
   decode_line_full (locspec, DECODE_LINE_FUNFIRSTLINE, search_pspace,
@@ -12530,7 +12617,7 @@ strace_marker_create_breakpoints_sal (struct gdbarch *gdbarch,
 				      enum bptype type_wanted,
 				      enum bpdisp disposition,
 				      int thread, int simd_lane_num,
-				      int task, int ignore_count,
+				      int task, int inferior, int ignore_count,
 				      int from_tty, int enabled,
 				      int internal, unsigned flags)
 {
@@ -12556,7 +12643,8 @@ strace_marker_create_breakpoints_sal (struct gdbarch *gdbarch,
 			 std::move (cond_string),
 			 std::move (extra_string),
 			 disposition,
-			 thread, simd_lane_num, task, ignore_count,
+			 thread, simd_lane_num, task, inferior,
+			 ignore_count,
 			 from_tty, enabled, flags,
 			 canonical->special_display));
 
@@ -12693,6 +12781,20 @@ delete_breakpoint (struct breakpoint *bpt)
      same bp, we mark it as deleted before freeing its storage.  */
   bpt->type = bp_none;
   delete bpt;
+}
+
+/* See breakpoint.h.  */
+
+void
+delete_breakpoints_inf (inferior* inf)
+{
+  breakpoint *b, *b_temp;
+
+  ALL_BREAKPOINTS_SAFE (b, b_temp)
+    {
+      if (b->inferior > 0 && b->inferior == inf->num)
+	delete_breakpoint (b);
+    }
 }
 
 /* Iterator function to call a user-provided callback function once
@@ -13189,18 +13291,20 @@ code_breakpoint::location_spec_to_sals (location_spec *locspec,
       if (condition_not_parsed && extra_string != NULL)
 	{
 	  gdb::unique_xmalloc_ptr<char> local_cond, local_extra;
-	  int local_thread, local_simd_lane_num, local_task;
+	  int local_thread, local_simd_lane_num, local_task, local_inferior;
 
 	  find_condition_and_thread_for_sals (sals, extra_string.get (),
 					      &local_cond, &local_thread,
 					      &local_simd_lane_num,
-					      &local_task, &local_extra);
+					      &local_task, &local_inferior,
+					      &local_extra);
 	  gdb_assert (cond_string == nullptr);
 	  if (local_cond != nullptr)
 	    cond_string = std::move (local_cond);
 	  thread = local_thread;
 	  simd_lane_num = local_simd_lane_num;
 	  task = local_task;
+	  inferior = local_inferior;
 	  if (local_extra != nullptr)
 	    extra_string = std::move (local_extra);
 	  condition_not_parsed = 0;
@@ -14468,6 +14572,9 @@ breakpoint::print_recreate_thread (struct ui_file *fp) const
   if (task != 0)
     gdb_printf (fp, " task %d", task);
 
+  if (inferior != 0)
+    gdb_printf (fp, " inferior %d", inferior);
+
   gdb_printf (fp, "\n");
 }
 
@@ -14634,7 +14741,7 @@ specified name as a complete fully-qualified name instead."
    command.  */
 
 #define BREAK_ARGS_HELP(command) \
-command" [PROBE_MODIFIER] [LOCATION] [thread THREADNUM]\n\
+command" [PROBE_MODIFIER] [LOCATION] [thread THREADNUM] [inferior INFNUM]\n\
 \t[-force-condition] [if CONDITION]\n\
 PROBE_MODIFIER shall be present if the command is to be placed in a\n\
 probe point.  Accepted values are `-probe' (for a generic, automatically\n\
@@ -14647,6 +14754,7 @@ With no LOCATION, uses current execution address of the selected\n\
 stack frame.  This is useful for breaking on return to a stack frame.\n\
 \n\
 THREADNUM is the number from \"info threads\".\n\
+INFNUM is the number from \"info inferiors\".\n\
 CONDITION is a boolean expression.\n\
 \n\
 With the \"-force-condition\" flag, the condition is defined even when\n\

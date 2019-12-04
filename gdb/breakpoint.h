@@ -654,7 +654,7 @@ struct breakpoint_ops
 				  gdb::unique_xmalloc_ptr<char>,
 				  gdb::unique_xmalloc_ptr<char>,
 				  enum bptype, enum bpdisp, int, int,
-				  int, int, const struct breakpoint_ops *,
+				  int, int, int, const struct breakpoint_ops *,
 				  int, int, int, unsigned);
 
   /* Given the location (second parameter), this method decodes it and
@@ -809,6 +809,10 @@ struct breakpoint
   /* Ada task number for task-specific breakpoint, or 0 if don't
      care.  */
   int task = 0;
+
+  /* GDB inferior ID number for inferior-specific breakpoint, or 0
+     if don't care.  */
+  int inferior = 0;
 
   /* Count of the number of times this breakpoint was taken, dumped
      with the info, but not used for anything else.  Useful for seeing
@@ -1294,6 +1298,10 @@ struct breakpoint_deleter
   }
 };
 
+/* Deletes all breakpoints with an inferior condition which
+   have an inferior number match the argument.  */
+extern void delete_breakpoints_inf (struct inferior*);
+
 typedef std::unique_ptr<struct breakpoint, breakpoint_deleter> breakpoint_up;
 
 extern breakpoint_up set_momentary_breakpoint
@@ -1561,6 +1569,8 @@ extern void breakpoint_set_commands (struct breakpoint *b,
 extern void breakpoint_set_silent (struct breakpoint *b, int silent);
 
 extern void breakpoint_set_thread (struct breakpoint *b, int thread);
+
+extern void breakpoint_set_inferior (struct breakpoint *b, int inferior);
 
 extern void breakpoint_set_task (struct breakpoint *b, int task);
 

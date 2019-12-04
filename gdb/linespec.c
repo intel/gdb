@@ -255,7 +255,9 @@ typedef enum ls_token_type linespec_token_type;
 
 /* List of keywords.  This is NULL-terminated so that it can be used
    as enum completer.  */
-const char * const linespec_keywords[] = { "if", "thread", "task", "-force-condition", NULL };
+const char * const linespec_keywords[] = { "if", "thread", "task",
+					   "-force-condition",
+					   "inferior", NULL };
 #define IF_KEYWORD_INDEX 0
 #define FORCE_KEYWORD_INDEX 3
 

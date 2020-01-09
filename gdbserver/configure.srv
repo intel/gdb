@@ -31,7 +31,7 @@ ipa_ppc_linux_regobj="powerpc-32l-ipa.o powerpc-altivec32l-ipa.o powerpc-vsx32l-
 
 # Linux object files.  This is so we don't have to repeat
 # these files over and over again.
-srv_linux_obj="linux-low.o nat/linux-osdata.o nat/linux-procfs.o nat/linux-ptrace.o nat/linux-waitpid.o nat/linux-personality.o nat/linux-namespaces.o fork-child.o nat/fork-inferior.o"
+srv_linux_obj="nonstop-low.o linux-low.o nat/linux-osdata.o nat/linux-procfs.o nat/linux-ptrace.o nat/linux-waitpid.o nat/linux-personality.o nat/linux-namespaces.o fork-child.o nat/fork-inferior.o"
 
 # Input is taken from the "${target}" variable.
 

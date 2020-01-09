@@ -200,6 +200,7 @@ SFILES = \
 	$(srcdir)/netbsd-i386-low.cc \
 	$(srcdir)/netbsd-low.cc \
 	$(srcdir)/netbsd-low.h \
+	$(srcdir)/nonstop-low.cc \
 	$(srcdir)/proc-service.cc \
 	$(srcdir)/proc-service.list \
 	$(srcdir)/regcache.cc \

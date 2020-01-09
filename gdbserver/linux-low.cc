@@ -22,7 +22,6 @@
 #include "gdbsupport/agent.h"
 #include "tdesc.h"
 #include "gdbsupport/event-loop.h"
-#include "gdbsupport/event-pipe.h"
 #include "gdbsupport/rsp-low.h"
 #include "gdbsupport/signals-state-save-restore.h"
 #include "nat/linux-nat.h"
@@ -318,12 +317,6 @@ lwp_in_step_range (struct lwp_info *lwp)
 
   return (pc >= lwp->step_range_start && pc < lwp->step_range_end);
 }
-
-/* The event pipe registered as a waitable file in the event loop.  */
-static event_pipe linux_event_pipe;
-
-/* True if we're currently in async mode.  */
-#define target_is_async_p() (linux_event_pipe.is_open ())
 
 static void send_sigstop (struct lwp_info *lwp);
 
@@ -1081,8 +1074,6 @@ attach_proc_task_lwp_callback (ptid_t ptid)
     }
   return 0;
 }
-
-static void async_file_mark (void);
 
 /* Attach to PID.  If PID is the tgid, attach to it and all
    of its threads.  */
@@ -3554,20 +3545,6 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
   return ptid_of (current_thread);
 }
 
-/* Get rid of any pending event in the pipe.  */
-static void
-async_file_flush (void)
-{
-  linux_event_pipe.flush ();
-}
-
-/* Put something in the pipe, so the event loop wakes up.  */
-static void
-async_file_mark (void)
-{
-  linux_event_pipe.mark ();
-}
-
 ptid_t
 linux_process_target::wait (ptid_t ptid,
 			    target_waitstatus *ourstatus,
@@ -5835,71 +5812,6 @@ sigchld_handler (int signo)
     async_file_mark (); /* trigger a linux_wait */
 
   errno = old_errno;
-}
-
-bool
-linux_process_target::supports_non_stop ()
-{
-  return true;
-}
-
-bool
-linux_process_target::async (bool enable)
-{
-  bool previous = target_is_async_p ();
-
-  threads_debug_printf ("async (%d), previous=%d",
-			enable, previous);
-
-  if (previous != enable)
-    {
-      sigset_t mask;
-      sigemptyset (&mask);
-      sigaddset (&mask, SIGCHLD);
-
-      gdb_sigmask (SIG_BLOCK, &mask, NULL);
-
-      if (enable)
-	{
-	  if (!linux_event_pipe.open_pipe ())
-	    {
-	      gdb_sigmask (SIG_UNBLOCK, &mask, NULL);
-
-	      warning ("creating event pipe failed.");
-	      return previous;
-	    }
-
-	  /* Register the event loop handler.  */
-	  add_file_handler (linux_event_pipe.event_fd (),
-			    handle_target_event, NULL,
-			    "linux-low");
-
-	  /* Always trigger a linux_wait.  */
-	  async_file_mark ();
-	}
-      else
-	{
-	  delete_file_handler (linux_event_pipe.event_fd ());
-
-	  linux_event_pipe.close_pipe ();
-	}
-
-      gdb_sigmask (SIG_UNBLOCK, &mask, NULL);
-    }
-
-  return previous;
-}
-
-int
-linux_process_target::start_non_stop (bool nonstop)
-{
-  /* Register or unregister from event-loop accordingly.  */
-  target_async (nonstop);
-
-  if (target_is_async_p () != (nonstop != false))
-    return -1;
-
-  return 0;
 }
 
 bool

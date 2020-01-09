@@ -25,6 +25,7 @@
 
 #include "gdbthread.h"
 #include "gdb_proc_service.h"
+#include "nonstop-low.h"
 
 /* Included for ptrace type definitions.  */
 #include "nat/linux-ptrace.h"
@@ -116,7 +117,7 @@ struct regs_info
 #endif
 };
 
-struct process_info_private
+struct process_info_private : public nonstop_process_info
 {
   /* Arch-specific additions.  */
   struct arch_process_info *arch_private;
@@ -133,7 +134,7 @@ struct lwp_info;
 
 /* Target ops definitions for a Linux target.  */
 
-class linux_process_target : public process_stratum_target
+class linux_process_target : public nonstop_process_target
 {
 public:
 
@@ -222,12 +223,6 @@ public:
   int qxfer_siginfo (const char *annex, unsigned char *readbuf,
 		     unsigned const char *writebuf,
 		     CORE_ADDR offset, int len) override;
-
-  bool supports_non_stop () override;
-
-  bool async (bool enable) override;
-
-  int start_non_stop (bool enable) override;
 
   bool supports_multi_process () override;
 
@@ -719,11 +714,8 @@ struct pending_signal
    There is also ``all_processes'' is keyed by the "overall process ID",
    which GNU/Linux calls tgid, "thread group ID".  */
 
-struct lwp_info
+struct lwp_info : public nonstop_thread_info
 {
-  /* Backlink to the parent object.  */
-  struct thread_info *thread;
-
   /* If this flag is set, the next SIGSTOP will be ignored (the
      process will be immediately resumed).  This means that either we
      sent the SIGSTOP to it ourselves and got some other pending event

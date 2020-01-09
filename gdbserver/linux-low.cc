@@ -315,13 +315,6 @@ lwp_in_step_range (struct lwp_info *lwp)
   return (pc >= lwp->step_range_start && pc < lwp->step_range_end);
 }
 
-/* The read/write ends of the pipe registered as waitable file in the
-   event loop.  */
-static int linux_event_pipe[2] = { -1, -1 };
-
-/* True if we're currently in async mode.  */
-#define target_is_async_p() (linux_event_pipe[0] != -1)
-
 static void send_sigstop (struct lwp_info *lwp);
 
 /* Return non-zero if HEADER is a 64-bit ELF file.  */
@@ -1135,8 +1128,6 @@ attach_proc_task_lwp_callback (ptid_t ptid)
     }
   return 0;
 }
-
-static void async_file_mark (void);
 
 /* Attach to PID.  If PID is the tgid, attach to it and all
    of its threads.  */
@@ -3682,34 +3673,6 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
   return ptid_of (current_thread);
 }
 
-/* Get rid of any pending event in the pipe.  */
-static void
-async_file_flush (void)
-{
-  int ret;
-  char buf;
-
-  do
-    ret = read (linux_event_pipe[0], &buf, 1);
-  while (ret >= 0 || (ret == -1 && errno == EINTR));
-}
-
-/* Put something in the pipe, so the event loop wakes up.  */
-static void
-async_file_mark (void)
-{
-  int ret;
-
-  async_file_flush ();
-
-  do
-    ret = write (linux_event_pipe[1], "+", 1);
-  while (ret == 0 || (ret == -1 && errno == EINTR));
-
-  /* Ignore EAGAIN.  If the pipe is full, the event loop will already
-     be awakened anyway.  */
-}
-
 ptid_t
 linux_process_target::wait (ptid_t ptid,
 			    target_waitstatus *ourstatus,
@@ -6053,79 +6016,6 @@ sigchld_handler (int signo)
     async_file_mark (); /* trigger a linux_wait */
 
   errno = old_errno;
-}
-
-bool
-linux_process_target::supports_non_stop ()
-{
-  return true;
-}
-
-bool
-linux_process_target::async (bool enable)
-{
-  bool previous = target_is_async_p ();
-
-  if (debug_threads)
-    debug_printf ("linux_async (%d), previous=%d\n",
-		  enable, previous);
-
-  if (previous != enable)
-    {
-      sigset_t mask;
-      sigemptyset (&mask);
-      sigaddset (&mask, SIGCHLD);
-
-      gdb_sigmask (SIG_BLOCK, &mask, NULL);
-
-      if (enable)
-	{
-	  if (pipe (linux_event_pipe) == -1)
-	    {
-	      linux_event_pipe[0] = -1;
-	      linux_event_pipe[1] = -1;
-	      gdb_sigmask (SIG_UNBLOCK, &mask, NULL);
-
-	      warning ("creating event pipe failed.");
-	      return previous;
-	    }
-
-	  fcntl (linux_event_pipe[0], F_SETFL, O_NONBLOCK);
-	  fcntl (linux_event_pipe[1], F_SETFL, O_NONBLOCK);
-
-	  /* Register the event loop handler.  */
-	  add_file_handler (linux_event_pipe[0],
-			    handle_target_event, NULL);
-
-	  /* Always trigger a linux_wait.  */
-	  async_file_mark ();
-	}
-      else
-	{
-	  delete_file_handler (linux_event_pipe[0]);
-
-	  close (linux_event_pipe[0]);
-	  close (linux_event_pipe[1]);
-	  linux_event_pipe[0] = -1;
-	  linux_event_pipe[1] = -1;
-	}
-
-      gdb_sigmask (SIG_UNBLOCK, &mask, NULL);
-    }
-
-  return previous;
-}
-
-int
-linux_process_target::start_non_stop (bool nonstop)
-{
-  /* Register or unregister from event-loop accordingly.  */
-  target_async (nonstop);
-
-  if (target_is_async_p () != (nonstop != false))
-    return -1;
-
-  return 0;
 }
 
 bool

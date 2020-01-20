@@ -41,11 +41,5 @@ if {[start_sycl_program] < 0} {
 # We should be able to run to the end.
 continue_sycl_program_to_termination "1"
 
-# Now issue the "run" command from inferior 2.  Switching to inferior
-# 2 is needed in case the current inferior is inf 1.  Otherwise the
-# switch is redundant and harmless.
-gdb_test "inferior 2"
-gdb_test "run" [multi_line \
-		    "Starting program:  " \
-		    "No executable file specified." \
-		    "Use the \"file\" or \"exec-file\" command."]
+# Test that the auto-attach has removed inferior 2.
+gdb_test "inferior 2" "Inferior ID 2 not known."

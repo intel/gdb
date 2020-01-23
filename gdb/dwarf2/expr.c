@@ -1228,6 +1228,60 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	    op_ptr = safe_read_uleb128 (op_ptr, op_end, &uleb_offset);
 	    add_piece (size, uleb_offset);
 
+	    /* Pop off the address/regnum, and reset the location
+	       type.  */
+	    if (this->location != DWARF_VALUE_LITERAL
+		&& this->location != DWARF_VALUE_OPTIMIZED_OUT)
+	      pop ();
+	    this->location = DWARF_VALUE_MEMORY;
+	  }
+	  goto no_push;
+
+	case DW_OP_INTEL_piece_stack:
+	  {
+	    value * const vsize = fetch (0);
+	    pop ();
+
+	    dwarf_require_integral (value_type (vsize));
+	    const ULONGEST size
+	      = extract_unsigned_integer (value_contents (vsize),
+					  TYPE_LENGTH (value_type (vsize)),
+					  byte_order);
+
+	    /* Record the piece.  */
+	    add_piece (8 * size, 0);
+
+	    /* Pop off the address/regnum, and reset the location
+	       type.  */
+	    if (this->location != DWARF_VALUE_LITERAL
+		&& this->location != DWARF_VALUE_OPTIMIZED_OUT)
+	      pop ();
+	    this->location = DWARF_VALUE_MEMORY;
+	  }
+	  goto no_push;
+
+	case DW_OP_INTEL_bit_piece_stack:
+	  {
+	    value * const vsize = fetch (0);
+	    pop ();
+
+	    value * const voffset = fetch (0);
+	    pop ();
+
+	    dwarf_require_integral (value_type (vsize));
+	    const ULONGEST size
+	      = extract_unsigned_integer (value_contents (vsize),
+					  TYPE_LENGTH (value_type (vsize)),
+					  byte_order);
+
+	    dwarf_require_integral (value_type (voffset));
+	    const ULONGEST off
+	      = extract_unsigned_integer (value_contents (voffset),
+					  TYPE_LENGTH (value_type (voffset)),
+					  byte_order);
+	    /* Record the piece.  */
+	    add_piece (size, off);
+
             /* Pop off the address/regnum, and reset the location
 	       type.  */
 	    if (this->location != DWARF_VALUE_LITERAL
@@ -1398,6 +1452,14 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	  /* Return the address of the object we are currently observing.  */
 	  result = this->get_object_address ();
 	  result_val = value_from_ulongest (address_type, result);
+	  break;
+
+	case DW_OP_INTEL_push_simd_lane:
+	  {
+	    /* Return the current SIMD lane.  */
+	    result = this->get_simd_lane ();
+	    result_val = value_from_ulongest (address_type, result);
+	  }
 	  break;
 
 	default:

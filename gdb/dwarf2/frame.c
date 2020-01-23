@@ -305,6 +305,11 @@ public:
     invalid ("DW_OP_addrx or DW_OP_GNU_addr_index");
   }
 
+  ULONGEST get_simd_lane () override
+  {
+    invalid ("DW_OP_INTEL_push_simd_lane");
+  }
+
  private:
 
   void invalid (const char *op) ATTRIBUTE_NORETURN

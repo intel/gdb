@@ -265,6 +265,9 @@ private:
   /* Deref ADDR with size SIZE and return a value of type TYPE.
      If TYPE == nullptr, defaults to this->address_type ().  */
   value *deref (CORE_ADDR addr, int size, struct type *type = nullptr);
+
+  /* Return the current SIMD lane for DW_OP_INTEL_push_simd_lane.  */
+  ULONGEST get_simd_lane ();
 };
 
 /* Return the value of register number REG (a DWARF register number),

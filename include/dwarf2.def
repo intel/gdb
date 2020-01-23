@@ -716,6 +716,33 @@ DW_OP (DW_OP_PGI_omp_thread_num, 0xf8)
    to 0 except explicitly documented for one action.  Please refer AArch64 DWARF
    ABI documentation for details.  */
 DW_OP (DW_OP_AARCH64_operation, 0xea)
+/* http://dwarfstd.org/ShowIssue.php?issue=200720.1
+
+  The DW_OP_push_simd_lane operation pushes the SIMD lane for which the
+  expression shall be evaluated.
+
+  The operation is only valid in the context of a lexical block for which the
+  SIMD width is known (see DW_AT_simd_width).
+
+  The SIMD lane must be between zero and the lexical block's SIMD width.  */
+DW_OP (DW_OP_INTEL_push_simd_lane, 0xed)
+/* http://dwarfstd.org/ShowIssue.php?issue=200720.1
+
+   The DW_OP_piece_stack operation works similar to DW_OP_piece except that it
+   takes its argument from the DWARF stack.  */
+DW_OP (DW_OP_INTEL_piece_stack, 0xee)
+/* http://dwarfstd.org/ShowIssue.php?issue=200720.1
+
+  The DW_OP_bit_piece_stack operation works similar to DW_OP_bit_piece except
+  that it takes its arguments from the DWARF stack.
+
+  The first argument, the size in bits of the piece, is taken from the top of
+  the stack.  The second argument, the offset in bits from the location defined
+  by the preceding DWARF location description, is taken from the second stack
+  location.
+
+  Both arguments are popped from the DWARF stack.  */
+DW_OP (DW_OP_INTEL_bit_piece_stack, 0xef)
 DW_END_OP
 
 DW_FIRST_ATE (DW_ATE_void, 0x0)

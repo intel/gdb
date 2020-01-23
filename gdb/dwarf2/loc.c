@@ -835,6 +835,22 @@ public:
 
     return value_from_register (type, regnum, frame);
   }
+
+  /* Return the current SIMD lane for DW_OP_INTEL_push_simd_lane.  */
+  ULONGEST get_simd_lane () override
+  {
+    if (inferior_ptid == null_ptid)
+      error (_("No inferior."));
+
+    thread_info * const tp = inferior_thread ();
+    if (!tp->has_simd_lanes ())
+      error (_("Thread has no SIMD lanes."));
+
+    const int lane = tp->current_simd_lane ();
+    gdb_assert (lane >= 0);
+
+    return (ULONGEST) lane;
+  }
 };
 
 /* See dwarf2loc.h.  */
@@ -2839,6 +2855,14 @@ public:
     /* Nothing to do.  */
     return 1;
   }
+
+  /* DW_OP_INTEL_push_simd_lane only needs a thread with SIMD lanes.  */
+
+  ULONGEST get_simd_lane () override
+  {
+    /* Nothing to do.  */
+    return 0;
+  }
 };
 
 /* Compute the correct symbol_needs_kind value for the location
@@ -3624,6 +3648,9 @@ dwarf2_compile_expr_to_ax (struct agent_expr *expr, struct axs_value *loc,
 	  }
 	  break;
 
+	case DW_OP_INTEL_piece_stack:
+	case DW_OP_INTEL_bit_piece_stack:
+	case DW_OP_INTEL_push_simd_lane:
 	case DW_OP_GNU_uninit:
 	  unimplemented (op);
 

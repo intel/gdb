@@ -257,6 +257,9 @@ private:
      number DWREGNUM starting at bit BITOFFSET into BUF.  */
   void read_reg (gdb_byte *buf, size_t bitoffset, size_t bitsize,
 		 int dwregnum);
+
+  /* Return the current SIMD lane for DW_OP_INTEL_push_simd_lane.  */
+  ULONGEST get_simd_lane ();
 };
 
 /* Return the value of register number REG (a DWARF register number),

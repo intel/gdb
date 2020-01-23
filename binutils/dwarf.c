@@ -1703,6 +1703,11 @@ decode_location_expression (unsigned char * data,
 	  printf ("DW_OP_PGI_omp_thread_num");
 	  break;
 
+	  /* Intel SIMD extensions.  */
+	case DW_OP_INTEL_push_simd_lane:
+	  printf ("DW_OP_INTEL_push_simd_lane");
+	  break;
+
 	  /* Intel wide registers extension.  */
 	case DW_OP_INTEL_regval_bits:
 	  SAFE_BYTE_GET_AND_INC (uvalue, data, 1, end);

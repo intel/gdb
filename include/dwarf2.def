@@ -720,6 +720,16 @@ DW_OP (DW_OP_PGI_omp_thread_num, 0xf8)
    to 0 except explicitly documented for one action.  Please refer AArch64 DWARF
    ABI documentation for details.  */
 DW_OP (DW_OP_AARCH64_operation, 0xea)
+/* http://dwarfstd.org/ShowIssue.php?issue=200720.1
+
+  The DW_OP_push_simd_lane operation pushes the SIMD lane for which the
+  expression shall be evaluated.
+
+  The operation is only valid in the context of a lexical block for which the
+  SIMD width is known (see DW_AT_simd_width).
+
+  The SIMD lane must be between zero and the lexical block's SIMD width.  */
+DW_OP (DW_OP_INTEL_push_simd_lane, 0xed)
 DW_END_OP
 
 DW_FIRST_ATE (DW_ATE_void, 0x0)

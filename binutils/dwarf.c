@@ -1638,6 +1638,17 @@ decode_location_expression (unsigned char * data,
 	  printf ("DW_OP_PGI_omp_thread_num");
 	  break;
 
+	  /* Intel SIMD extensions.  */
+	case DW_OP_INTEL_push_simd_lane:
+	  printf ("DW_OP_INTEL_push_simd_lane");
+	  break;
+	case DW_OP_INTEL_piece_stack:
+	  printf ("DW_OP_INTEL_piece_stack");
+	  break;
+	case DW_OP_INTEL_bit_piece_stack:
+	  printf ("DW_OP_INTEL_bit_piece_stack");
+	  break;
+
 	default:
 	  if (op >= DW_OP_lo_user
 	      && op <= DW_OP_hi_user)

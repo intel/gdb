@@ -251,6 +251,9 @@ struct dwarf_expr_context
   /* Return the `object address' for DW_OP_push_object_address.  */
   virtual CORE_ADDR get_object_address () = 0;
 
+  /* Return the current SIMD lane for DW_OP_INTEL_push_simd_lane.  */
+  virtual ULONGEST get_simd_lane () = 0;
+
 private:
 
   struct type *address_type () const;

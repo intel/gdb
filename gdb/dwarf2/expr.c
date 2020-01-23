@@ -33,6 +33,7 @@
 #include "gdbsupport/underlying.h"
 #include "gdbarch.h"
 #include "objfiles.h"
+#include "inferior.h"
 
 /* Cookie for gdbarch data.  */
 
@@ -912,6 +913,29 @@ dwarf_expr_context::push_dwarf_reg_entry_value (call_site_parameter_kind kind,
   this->m_addr_size = this->m_per_cu->addr_size ();
 
   this->eval (data_src, size);
+}
+
+
+/* See expr.h.  */
+
+ULONGEST
+dwarf_expr_context::get_simd_lane ()
+{
+  if (inferior_ptid == null_ptid)
+    error (_("No inferior."));
+
+  thread_info * const tp = inferior_thread ();
+  if (!tp->has_simd_lanes ())
+    error (_("Thread has no SIMD lanes."));
+
+  const int lane = tp->current_simd_lane ();
+  gdb_assert (lane >= 0);
+
+  if (!tp->is_simd_lane_active (lane))
+    error (_("SIMD lane %d is inactive in thread %s"), lane,
+	   print_thread_id (tp));
+
+  return (ULONGEST) lane;
 }
 
 /* See expr.h.  */
@@ -2199,6 +2223,57 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	  }
 	  goto no_push;
 
+	case DW_OP_INTEL_piece_stack:
+	  {
+	    value * const vsize = fetch (0);
+	    pop ();
+
+	    dwarf_require_integral (value_type (vsize));
+	    const ULONGEST size
+	      = extract_unsigned_integer (value_contents (vsize),
+					  byte_order);
+
+	    /* Record the piece.  */
+	    add_piece (8 * size, 0);
+
+	    /* Pop off the address/regnum, and reset the location
+	       type.  */
+	    if (this->m_location != DWARF_VALUE_LITERAL
+		&& this->m_location != DWARF_VALUE_OPTIMIZED_OUT)
+	      pop ();
+	    this->m_location = DWARF_VALUE_MEMORY;
+	  }
+	  goto no_push;
+
+	case DW_OP_INTEL_bit_piece_stack:
+	  {
+	    value * const vsize = fetch (0);
+	    pop ();
+
+	    value * const voffset = fetch (0);
+	    pop ();
+
+	    dwarf_require_integral (value_type (vsize));
+	    const ULONGEST size
+	      = extract_unsigned_integer (value_contents (vsize),
+					  byte_order);
+
+	    dwarf_require_integral (value_type (voffset));
+	    const ULONGEST off
+	      = extract_unsigned_integer (value_contents (voffset),
+					  byte_order);
+	    /* Record the piece.  */
+	    add_piece (size, off);
+
+	    /* Pop off the address/regnum, and reset the location
+	       type.  */
+	    if (this->m_location != DWARF_VALUE_LITERAL
+		&& this->m_location != DWARF_VALUE_OPTIMIZED_OUT)
+	      pop ();
+	    this->m_location = DWARF_VALUE_MEMORY;
+	  }
+	  goto no_push;
+
 	case DW_OP_GNU_uninit:
 	  if (op_ptr != op_end)
 	    error (_("DWARF-2 expression error: DW_OP_GNU_uninit must always "
@@ -2376,6 +2451,14 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 
 	  result_val
 	    = value_from_ulongest (address_type, this->m_addr_info->addr);
+	  break;
+
+	case DW_OP_INTEL_push_simd_lane:
+	  {
+	    /* Return the current SIMD lane.  */
+	    result = this->get_simd_lane ();
+	    result_val = value_from_ulongest (address_type, result);
+	  }
 	  break;
 
 	default:

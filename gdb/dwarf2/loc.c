@@ -2959,6 +2959,9 @@ dwarf2_compile_expr_to_ax (struct agent_expr *expr, struct axs_value *loc,
 	  }
 	  break;
 
+	case DW_OP_INTEL_piece_stack:
+	case DW_OP_INTEL_bit_piece_stack:
+	case DW_OP_INTEL_push_simd_lane:
 	case DW_OP_GNU_uninit:
 	  unimplemented (op);
 

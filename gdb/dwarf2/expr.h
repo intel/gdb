@@ -252,6 +252,9 @@ private:
      but with the address being 0.  In this situation, we arrange for
      memory reads to come from the passed-in buffer.  */
   void read_mem (gdb_byte *buf, CORE_ADDR addr, size_t length);
+
+  /* Return the current SIMD lane for DW_OP_INTEL_push_simd_lane.  */
+  ULONGEST get_simd_lane ();
 };
 
 /* Return the value of register number REG (a DWARF register number),

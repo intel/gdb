@@ -96,6 +96,10 @@ struct block
   CORE_ADDR startaddr;
   CORE_ADDR endaddr;
 
+  /* The SIMD width of this block.  A width of zero means that this block
+     does not contain vectorized code.  */
+  ULONGEST simd_width;
+
   /* The symbol that names this block, if the block is the body of a
      function (real or inlined); otherwise, zero.  */
 
@@ -141,6 +145,7 @@ struct global_block
 
 #define BLOCK_START(bl)		(bl)->startaddr
 #define BLOCK_END(bl)		(bl)->endaddr
+#define BLOCK_SIMD_WIDTH(bl)	(bl)->simd_width
 #define BLOCK_FUNCTION(bl)	(bl)->function
 #define BLOCK_SUPERBLOCK(bl)	(bl)->superblock
 #define BLOCK_MULTIDICT(bl)	(bl)->multidict

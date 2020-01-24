@@ -467,6 +467,18 @@ DW_TAG (DW_AT_GNU_denominator, 0x2304)
 /* Biased integer extension.
    See https://gcc.gnu.org/wiki/DW_AT_GNU_bias .  */
 DW_TAG (DW_AT_GNU_bias, 0x2305)
+/* http://dwarfstd.org/ShowIssue.php?issue=200720.1
+
+  A subprogram or inlined subroutine may have a `DW_AT_simd_width` attribute
+  whose value is the SIMD width of the code it contains.  A value of zero means
+  that the subroutine does not contain SIMD code.
+
+  If the attribute is not present, the SIMD width is inherited from the parent
+  DIE.
+
+  The SIMD width may be overwritten for nested subroutines or for lexical blocks
+  contained within that subroutine.  */
+DW_AT (DW_AT_INTEL_simd_width, 0x2400)
 /* UPC extension.  */
 DW_AT (DW_AT_upc_threads_scaled, 0x3210)
 /* PGI (STMicroelectronics) extensions.  */

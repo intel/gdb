@@ -1336,6 +1336,9 @@ static void set_cu_language (unsigned int, struct dwarf2_cu *);
 static struct attribute *dwarf2_attr (struct die_info *, unsigned int,
 				      struct dwarf2_cu *);
 
+static attribute *dwarf2_find_ancestor_attr (die_info *, unsigned int,
+					     dwarf2_cu *);
+
 static const char *dwarf2_string_attr (struct die_info *die, unsigned int name,
                                        struct dwarf2_cu *cu);
 
@@ -13747,6 +13750,19 @@ read_func_scope (struct die_info *die, struct dwarf2_cu *cu)
   /* If we have address ranges, record them.  */
   dwarf2_record_block_ranges (die, block, baseaddr, cu);
 
+  /* If we have a SIMD width attribute, record it.  Otherwise, the
+     SIMD width is inherited from our parent.  */
+  attr = dwarf2_attr (die, DW_AT_INTEL_simd_width, cu);
+  if (attr != NULL)
+    BLOCK_SIMD_WIDTH (block) = DW_UNSND (attr);
+  else
+    {
+      attr = dwarf2_find_ancestor_attr (die->parent, DW_AT_INTEL_simd_width,
+					cu);
+      if (attr != NULL)
+	BLOCK_SIMD_WIDTH (block) = DW_UNSND (attr);
+    }
+
   gdbarch_make_symbol_special (gdbarch, cstk.name, objfile);
 
   /* Attach template arguments to function.  */
@@ -13841,8 +13857,36 @@ read_lexical_block_scope (struct die_info *die, struct dwarf2_cu *cu)
   inherit_abstract_dies (die, cu);
   struct context_stack cstk = cu->get_builder ()->pop_context ();
 
+  /* If this DIE contains a SIMD width attribute, we need to create a
+     block for it to denote the SIMD width change.
+
+     If there is no SIMD width attribute, we inherit the SIMD width from
+     our parent die.  If we create a block, we need to note the SIMD width
+     for that block.
+
+     Finally, if the inherited SIMD width is the same as our SIMD width,
+     we can skip generating the block just for that purpose.  */
+  attribute *simd_width_attr = dwarf2_attr (die, DW_AT_INTEL_simd_width, cu);
+  attribute *inherited_width_attr
+    = dwarf2_find_ancestor_attr (die->parent, DW_AT_INTEL_simd_width, cu);
+
+  ULONGEST simd_width = 0;
+  if (simd_width_attr != nullptr)
+    {
+      simd_width = DW_UNSND (simd_width_attr);
+      if (inherited_width_attr != nullptr)
+	{
+	  ULONGEST inherited_width = DW_UNSND (inherited_width_attr);
+	  if (simd_width == inherited_width)
+	    simd_width_attr = nullptr;
+	}
+    }
+  else if (inherited_width_attr != nullptr)
+    simd_width = DW_UNSND (inherited_width_attr);
+
   if (*cu->get_builder ()->get_local_symbols () != NULL
-      || (*cu->get_builder ()->get_local_using_directives ()) != NULL)
+      || (*cu->get_builder ()->get_local_using_directives ()) != NULL
+      || simd_width_attr != nullptr)
     {
       struct block *block
         = cu->get_builder ()->finish_block (0, cstk.old_blocks, NULL,
@@ -13859,6 +13903,9 @@ read_lexical_block_scope (struct die_info *die, struct dwarf2_cu *cu)
          block until after we've traversed its children, that's hard
          to do.  */
       dwarf2_record_block_ranges (die, block, baseaddr, cu);
+
+      /* Note the SIMD width for the block we created.  */
+      BLOCK_SIMD_WIDTH (block) = simd_width;
     }
   *cu->get_builder ()->get_local_symbols () = cstk.locals;
   cu->get_builder ()->set_local_using_directives (cstk.local_using_directives);
@@ -20367,6 +20414,19 @@ dwarf2_attr (struct die_info *die, unsigned int name, struct dwarf2_cu *cu)
     }
 
   return NULL;
+}
+
+/* Follow the parent link and return the first attribute matching NAME or
+   NULL if that attribute is not found.  */
+static attribute *
+dwarf2_find_ancestor_attr (die_info *die, unsigned int name, dwarf2_cu *cu)
+{
+  attribute *attr = nullptr;
+
+  for (; die != nullptr && attr == nullptr; die = die->parent)
+    attr = dwarf2_attr (die, name, cu);
+
+  return attr;
 }
 
 /* Return the string associated with a string-typed attribute, or NULL if it

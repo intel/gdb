@@ -32,6 +32,7 @@
 #include "regcache.h"
 #include "btrace.h"
 #include "gdbarch.h"
+#include "block.h"
 
 #include <ctype.h>
 #include <sys/types.h>
@@ -98,6 +99,26 @@ is_current_thread (const thread_info *thr)
   return thr == current_thread_;
 }
 
+/* Return the block at TP's current PC.  */
+
+static const block *
+thread_get_current_block (thread_info *tp)
+{
+  /* We need to switch to TP for get_selected_frame.  */
+  scoped_restore_current_thread restore_thread;
+  switch_to_thread (tp);
+
+  frame_info * const frame = get_selected_frame (nullptr);
+  if (frame == nullptr)
+    return nullptr;
+
+  CORE_ADDR pc;
+  if (!get_frame_pc_if_available (frame, &pc))
+    return nullptr;
+
+  return block_for_pc (pc);
+}
+
 /* See gdbthread.h.  */
 
 bool
@@ -106,8 +127,16 @@ thread_info::has_simd_lanes ()
   if (this->inf == nullptr)
     return false;
 
+  /* On SIMD architectures, all threads have lanes.  */
   gdbarch *arch = this->inf->gdbarch;
-  return gdbarch_active_lanes_mask_p (arch) != 0;
+  if (gdbarch_active_lanes_mask_p (arch) != 0)
+    return true;
+
+  const block * const blk = thread_get_current_block (this);
+  if (blk == nullptr)
+    return false;
+
+  return (BLOCK_SIMD_WIDTH (blk) > 0);
 }
 
 /* See gdbthread.h.  */
@@ -119,9 +148,16 @@ thread_info::active_simd_lanes_mask ()
 
   if (has_simd_lanes ())
     {
+      /* SIMD architectures provide a means for determining active lanes.  */
       gdbarch *arch = this->inf->gdbarch;
       if (gdbarch_active_lanes_mask_p (arch) != 0)
 	return gdbarch_active_lanes_mask (arch, this);
+
+      /* If the compiler indicated SIMD for the current block, we
+	 currently assume that all lanes are active.  */
+      const block * const blk = thread_get_current_block (this);
+      if (blk != nullptr && BLOCK_SIMD_WIDTH (blk) > 0)
+	return ~(~0u << BLOCK_SIMD_WIDTH (blk));
     }
 
   /* Default: only one lane is active.  */

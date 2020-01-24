@@ -123,6 +123,14 @@ struct block
   void set_end (CORE_ADDR end)
   { m_end = end; }
 
+  /* Return this block's SIMD width.  */
+  ULONGEST simd_width () const
+  { return m_simd_width; }
+
+  /* Set this block's SIMD width.  */
+  void set_simd_width (ULONGEST simd_width)
+  { m_simd_width = simd_width; }
+
   /* Return this block's function symbol.  */
   symbol *function () const
   { return m_function; }
@@ -208,6 +216,10 @@ struct block
 
   CORE_ADDR m_start;
   CORE_ADDR m_end;
+
+  /* The SIMD width of this block.  A width of zero means that this block
+     does not contain vectorized code.  */
+  ULONGEST m_simd_width;
 
   /* The symbol that names this block, if the block is the body of a
      function (real or inlined); otherwise, zero.  */

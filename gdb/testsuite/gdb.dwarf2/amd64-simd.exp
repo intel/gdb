@@ -1,0 +1,537 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test support for DW_AT_INTEL_simd_width and DW_OP_INTEL_push_simd_lane.
+
+load_lib dwarf.exp
+
+# We use IA assembly source files.
+if { ![istarget x86_64-*-* ] || ![is_lp64_target] } {
+    unsupported "Intel SIMD testing."
+    return -1
+}
+
+# This test can only be run on targets which support DWARF-2 and use gas.
+if ![dwarf2_support] {
+    return 0
+}
+
+standard_testfile .c amd64-simd-sse.S amd64-simd-sse-dwarf.S
+
+if [info exists GENERATE] {
+    # make check RUNTESTFLAGS="gdb.dwarf2/amd64-simd.exp GENERATE=1"
+    if {[gdb_compile "${srcdir}/${subdir}/amd64-simd-sse.c" \
+	     "${srcdir}/${subdir}/${srcfile2}" assembly \
+	     {additional_flags=-O2 additional_flags=-ftree-vectorize}] != ""} {
+	untested "failed to compile"
+	return -1
+    }
+
+    # We stop after generating the assembly template.  The tests very
+    # likely won't run the way we expect.
+    untested "Intel SIMD testing."
+    return 0
+}
+
+Dwarf::assemble [standard_output_file ${srcfile3}] {
+    global srcdir subdir
+
+    declare_labels l_lines l_int l_ts l_ts_a l_loc_tsa l_loc_i
+
+    cu {version 5} {
+	DW_TAG_compile_unit {
+	    {DW_AT_language @DW_LANG_C}
+	    {DW_AT_name "${srcdir}/${subdir}/amd64-simd-sse.c"}
+	    {DW_AT_low_pc Ltext DW_FORM_addr}
+	    {DW_AT_high_pc Letext DW_FORM_addr}
+	    {DW_AT_stmt_list ${l_lines} DW_FORM_sec_offset}
+	} {
+	    l_int: DW_TAG_base_type {
+		{DW_AT_byte_size 4 DW_FORM_udata}
+		{DW_AT_encoding @DW_ATE_signed}
+		{DW_AT_name "int"}
+	    }
+
+	    l_ts: DW_TAG_structure_type {
+		{DW_AT_name "ts"}
+		{DW_AT_byte_size 8 DW_FORM_udata}
+	    } {
+		DW_TAG_member {
+		    {DW_AT_name "a"}
+		    {DW_AT_type :${l_int}}
+		    {DW_AT_data_member_location 0 DW_FORM_udata}
+		}
+		DW_TAG_member {
+		    {DW_AT_name "b"}
+		    {DW_AT_type :${l_int}}
+		    {DW_AT_data_member_location 4 DW_FORM_udata}
+		}
+	    }
+
+	    l_ts_a: DW_TAG_array_type {
+		{DW_AT_type :${l_ts}}
+	    } {
+		DW_TAG_subrange_type {
+		    {DW_AT_type :${l_int}}
+		    {DW_AT_lower_bound 0 DW_FORM_udata}
+		    {DW_AT_upper_bound 1023 DW_FORM_udata}
+		}
+	    }
+
+	    DW_TAG_subprogram {
+		{DW_AT_name "test"}
+		{DW_AT_type :${l_int}}
+		{DW_AT_external 1 DW_FORM_flag}
+		{DW_AT_low_pc test DW_FORM_addr}
+		{DW_AT_high_pc LFE0 DW_FORM_addr}
+	    } {
+		DW_TAG_formal_parameter {
+		    {DW_AT_name "tsa"}
+		    {DW_AT_type :${l_ts_a}}
+		    {DW_AT_location ${l_loc_tsa} DW_FORM_sec_offset}
+		}
+		DW_TAG_formal_parameter {
+		    {DW_AT_name "n"}
+		    {DW_AT_type :${l_int}}
+		    {DW_AT_location {
+			# %rsi
+			DW_OP_reg4
+		    } SPECIAL_expr}
+		}
+
+		DW_TAG_variable {
+		    {DW_AT_name "i"}
+		    {DW_AT_type :${l_int}}
+		    {DW_AT_location ${l_loc_i} DW_FORM_sec_offset}
+		}
+
+		DW_TAG_lexical_block {
+		    {DW_AT_low_pc l30_1 DW_FORM_addr}
+		    {DW_AT_high_pc l28_3 DW_FORM_addr}
+		    {DW_AT_INTEL_simd_width 4 DW_FORM_udata}
+		}
+	    }
+	}
+    }
+
+    lines {version 2} l_lines {
+	include_dir "${srcdir}/${subdir}"
+	file_name "amd64-simd-sse.c" 1
+	program {
+	    {DW_LNE_set_address test}
+	    {DW_LNS_advance_line 23}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address l28_1}
+	    {DW_LNS_advance_line 4}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address l30_1}
+	    {DW_LNS_advance_line 2}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address l31_1}
+	    {DW_LNS_advance_line 1}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address l32_1}
+	    {DW_LNS_advance_line 1}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address l28_2}
+	    {DW_LNS_advance_line -4}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address l30_4}
+	    {DW_LNS_advance_line 2}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address l31_3}
+	    {DW_LNS_advance_line 1}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address l32_3}
+	    {DW_LNS_advance_line 1}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address l28_5}
+	    {DW_LNS_advance_line -4}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address l35}
+	    {DW_LNS_advance_line 7}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address l28_6}
+	    {DW_LNS_advance_line -7}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address LFE0}
+	    {DW_LNE_end_sequence}
+	}
+    }
+
+    loclists -is-64 false {
+	table {
+	    l_loc_tsa: list_ {
+		start_end l28_1 l30_2 {
+		    # %rdi
+		    DW_OP_bregx 5 0
+		}
+		start_end l30_3 l31_2 {
+		    # piece 1: %rdi
+		    DW_OP_bregx 5 0
+		    DW_OP_bregx 0 -32
+		    DW_OP_bregx 5 0
+		    DW_OP_minus
+		    DW_OP_INTEL_piece_stack
+		    # piece 2: %xmm1 (.a's), %xmm2 (.b's)
+		    DW_OP_reg18
+		    DW_OP_bit_piece 32 0
+		    DW_OP_reg19
+		    DW_OP_bit_piece 32 0
+		    DW_OP_reg18
+		    DW_OP_bit_piece 32 32
+		    DW_OP_reg19
+		    DW_OP_bit_piece 32 32
+		    DW_OP_reg18
+		    DW_OP_bit_piece 32 64
+		    DW_OP_reg19
+		    DW_OP_bit_piece 32 64
+		    DW_OP_reg18
+		    DW_OP_bit_piece 32 96
+		    DW_OP_reg19
+		    DW_OP_bit_piece 32 96
+		    # piece 3: %rdi
+		    DW_OP_bregx 0 0
+		    DW_OP_const2u 8192
+		    DW_OP_bregx 0 0
+		    DW_OP_bregx 5 0
+		    DW_OP_minus
+		    DW_OP_minus
+		    DW_OP_INTEL_piece_stack
+		}
+		start_end l32_1 l32_2 {
+		    # piece 1: %rdi
+		    DW_OP_bregx 5 0
+		    DW_OP_bregx 0 -32
+		    DW_OP_bregx 5 0
+		    DW_OP_minus
+		    DW_OP_INTEL_piece_stack
+		    # piece 2: %xmm0 (.a's), memory (.b's)
+		    DW_OP_reg17
+		    DW_OP_bit_piece 32 0
+		    DW_OP_bregx 0 -28
+		    DW_OP_piece 4
+		    DW_OP_reg17
+		    DW_OP_bit_piece 32 32
+		    DW_OP_bregx 0 -20
+		    DW_OP_piece 4
+		    DW_OP_reg17
+		    DW_OP_bit_piece 32 64
+		    DW_OP_bregx 0 -12
+		    DW_OP_piece 4
+		    DW_OP_reg17
+		    DW_OP_bit_piece 32 96
+		    # piece 3: %rdi
+		    DW_OP_bregx 0 -4
+		    DW_OP_const2u 8192
+		    DW_OP_bregx 0 -4
+		    DW_OP_bregx 5 0
+		    DW_OP_minus
+		    DW_OP_minus
+		    DW_OP_INTEL_piece_stack
+		}
+		start_end l28_2 l30_5 {
+		    # %rdi
+		    DW_OP_bregx 5 0
+		}
+		start_end l30_5 l28_5 {
+		    # piece 1: %rdi
+		    DW_OP_bregx 5 0
+		    # We could simply use 'DW_OP_bregx 1 0' but let's test
+		    # DW_OP_INTE_push_bit_piece_stack.
+		    DW_OP_reg1
+		    DW_OP_lit0
+		    DW_OP_const1u 57
+		    DW_OP_INTEL_push_bit_piece_stack
+		    DW_OP_lit8
+		    DW_OP_mul
+		    DW_OP_INTEL_piece_stack
+		    # piece 2: %eax
+		    # We could simply use DW_OP_reg0 but let's test DW_OP_INTEL_regs.
+		    DW_OP_lit0
+		    DW_OP_INTEL_regs
+		    DW_OP_piece 4
+		    # piece 3: %rdi
+		    DW_OP_bregx 5 4
+		    DW_OP_bregx 1 0
+		    DW_OP_lit8
+		    DW_OP_mul
+		    DW_OP_plus
+		    DW_OP_const2u 8188
+		    DW_OP_bregx 1 0
+		    DW_OP_lit8
+		    DW_OP_mul
+		    DW_OP_minus
+		    DW_OP_INTEL_piece_stack
+		}
+		start_end l28_5 LFE0 {
+		    # %rdi
+		    DW_OP_bregx 5 0
+		}
+	    }
+	}
+	table {
+	    l_loc_i: list_ {
+		start_end l28_1 l30_1 {
+		    DW_OP_lit0
+		    DW_OP_stack_value
+		}
+		start_end l30_1 l30_2 {
+		    # base: (%rax - %rdx) >> 2
+		    # plus: SIMD lane
+		    DW_OP_bregx 0 0
+		    DW_OP_bregx 5 0
+		    DW_OP_minus
+		    DW_OP_lit2
+		    DW_OP_shr
+		    DW_OP_INTEL_push_simd_lane
+		    DW_OP_plus
+		    DW_OP_stack_value
+		}
+		start_end l30_2 l28_3 {
+		    # base: (%rax - 32 - %rdx) >> 2
+		    # plus: SIMD lane
+		    DW_OP_bregx 0 -32
+		    DW_OP_bregx 5 0
+		    DW_OP_minus
+		    DW_OP_lit2
+		    DW_OP_shr
+		    DW_OP_INTEL_push_simd_lane
+		    DW_OP_plus
+		    DW_OP_stack_value
+		}
+		start_end l28_4 LFE0 {
+		    # %rdx
+		    DW_OP_reg1
+		}
+	    }
+	}
+    }
+}
+
+if [prepare_for_testing "failed to prepare" $testfile \
+	[list $srcfile [standard_output_file $srcfile3] $srcfile2]] {
+    return -1
+}
+
+if ![runto test] {
+    untested "failed to run to test"
+    return -1
+}
+
+gdb_test "info address i" \
+    [multi_line \
+	 " *Symbol \\\"i\\\" is multi-location:" \
+	 " *Range $hex-$hex: the constant 0" \
+	 " *Range $hex-$hex: a complex DWARF expression:" \
+	 " *0: DW_OP_bregx register 0 \\\[\\\$rax\\\] offset 0" \
+	 " *3: DW_OP_bregx register 5 \\\[\\\$rdi\\\] offset 0" \
+	 " *6: DW_OP_minus" \
+	 " *7: DW_OP_lit2" \
+	 " *8: DW_OP_shr" \
+	 " *9: DW_OP_INTEL_push_simd_lane" \
+	 " *10: DW_OP_plus" \
+	 " *11: DW_OP_stack_value" \
+	 " *" \
+	 " *Range $hex-$hex: a complex DWARF expression:" \
+	 " *0: DW_OP_bregx register 0 \\\[\\\$rax\\\] offset -32" \
+	 " *3: DW_OP_bregx register 5 \\\[\\\$rdi\\\] offset 0" \
+	 " *6: DW_OP_minus" \
+	 " *7: DW_OP_lit2" \
+	 " *8: DW_OP_shr" \
+	 " *9: DW_OP_INTEL_push_simd_lane" \
+	 " *10: DW_OP_plus" \
+	 " *11: DW_OP_stack_value" \
+	 " *" \
+	 " *Range $hex-$hex: a variable in \\\$rdx" \
+	 ".*"]
+
+gdb_test "info address tsa" \
+    [multi_line \
+	 " *Symbol \\\"tsa\\\" is multi-location:" \
+	 " *Range $hex-$hex: a complex DWARF expression:" \
+	 " *0: DW_OP_bregx register 5 \\\[\\\$rdi\\\] offset 0" \
+	 "" \
+	 " *Range $hex-$hex: a complex DWARF expression:" \
+	 " *0: DW_OP_bregx register 5 \\\[\\\$rdi\\\] offset 0" \
+	 " *3: DW_OP_bregx register 0 \\\[\\\$rax\\\] offset -32" \
+	 " *6: DW_OP_bregx register 5 \\\[\\\$rdi\\\] offset 0" \
+	 " *9: DW_OP_minus" \
+	 " *10: DW_OP_INTEL_piece_stack" \
+	 " *11: DW_OP_reg18 \\\[\\\$xmm1\\\]" \
+	 " *\\\[32-bit piece, offset 0 bits\\\], .* DWARF expression:" \
+	 " *0: DW_OP_bregx register 0 \\\[\\\$rax\\\] offset 0" \
+	 " *3: DW_OP_const2u 8192" \
+	 " *6: DW_OP_bregx register 0 \\\[\\\$rax\\\] offset 0" \
+	 " *9: DW_OP_bregx register 5 \\\[\\\$rdi\\\] offset 0" \
+	 " *12: DW_OP_minus" \
+	 " *13: DW_OP_minus" \
+	 " *14: DW_OP_INTEL_piece_stack" \
+	 "" \
+	 " *Range $hex-$hex: a complex DWARF expression:" \
+	 " *0: DW_OP_bregx register 5 \\\[\\\$rdi\\\] offset 0" \
+	 " *3: DW_OP_bregx register 0 \\\[\\\$rax\\\] offset -32" \
+	 " *6: DW_OP_bregx register 5 \\\[\\\$rdi\\\] offset 0" \
+	 " *9: DW_OP_minus" \
+	 " *10: DW_OP_INTEL_piece_stack" \
+	 " *11: DW_OP_reg17 \\\[\\\$xmm0\\\]" \
+	 " *\\\[32-bit piece, offset 0 bits\\\], .* DWARF expression:" \
+	 " *0: DW_OP_bregx register 0 \\\[\\\$rax\\\] offset -28" \
+	 " *\\\[4-byte piece\\\], .* DWARF expression:" \
+	 " *0: DW_OP_bregx register 0 \\\[\\\$rax\\\] offset -20" \
+	 " *\\\[4-byte piece\\\], .* DWARF expression:" \
+	 " *0: DW_OP_bregx register 0 \\\[\\\$rax\\\] offset -12" \
+	 " *\\\[4-byte piece\\\], .* DWARF expression:" \
+	 " *0: DW_OP_bregx register 0 \\\[\\\$rax\\\] offset -4" \
+	 " *3: DW_OP_const2u 8192" \
+	 " *6: DW_OP_bregx register 0 \\\[\\\$rax\\\] offset -4" \
+	 " *9: DW_OP_bregx register 5 \\\[\\\$rdi\\\] offset 0" \
+	 " *12: DW_OP_minus" \
+	 " *13: DW_OP_minus" \
+	 " *14: DW_OP_INTEL_piece_stack" \
+	 "" \
+	 " *Range $hex-$hex: a complex DWARF expression:" \
+	 " *0: DW_OP_bregx register 5 \\\[\\\$rdi\\\] offset 0" \
+	 "" \
+	 " *Range $hex-$hex: a complex DWARF expression:" \
+	 " *0: DW_OP_bregx register 5 \\\[\\\$rdi\\\] offset 0" \
+	 " *3: DW_OP_reg1 \\\[\\\$rdx\\\]" \
+	 " *4: DW_OP_lit0" \
+	 " *5: DW_OP_const1u 57" \
+	 " *7: DW_OP_INTEL_push_bit_piece_stack" \
+	 " *8: DW_OP_lit8" \
+	 " *9: DW_OP_mul" \
+	 " *10: DW_OP_INTEL_piece_stack" \
+	 " *11: DW_OP_lit0" \
+	 " *12: DW_OP_INTEL_regs" \
+	 " *\\\[4-byte piece\\\], and a complex DWARF expression:" \
+	 " *0: DW_OP_bregx register 5 \\\[\\\$rdi\\\] offset 4" \
+	 " *3: DW_OP_bregx register 1 \\\[\\\$rdx\\\] offset 0" \
+	 " *6: DW_OP_lit8" \
+	 " *7: DW_OP_mul" \
+	 " *8: DW_OP_plus" \
+	 " *9: DW_OP_const2u 8188" \
+	 " *12: DW_OP_bregx register 1 \\\[\\\$rdx\\\] offset 0" \
+	 " *15: DW_OP_lit8" \
+	 " *16: DW_OP_mul" \
+	 " *17: DW_OP_minus" \
+	 " *18: DW_OP_INTEL_piece_stack" \
+	 "" \
+	 " *Range $hex-$hex: a complex DWARF expression:" \
+	 " *0: DW_OP_bregx register 5 \\\[\\\$rdi\\\] offset 0" \
+	 ".*"]
+
+# We're not inside the SIMD region, yet.
+with_test_prefix "before" {
+    gdb_test "thread" "\\\[Current thread is 1 \\(.*\\)\\\]"
+    gdb_test "thread :1" "Thread 1 does not have SIMD lanes."
+    gdb_test "next" "tsa\\\[i\\\]\.a <<= 2;"
+}
+
+# We go to the vectorized loop body, first.
+with_test_prefix "loop: vectorized" {
+    # At the first stop, TSA is still in its original memory location, yet
+    # I is computed from the TSA base and TSA next pointer.
+    with_test_prefix "in memory" {
+	with_test_prefix "lane 0" {
+	    gdb_test "thread" \
+		"\\\[Current thread is 1:0 \\(.* lane 0\\)\\\]"
+	    gdb_test "print i" "= 0"
+	    gdb_test "print tsa\[i\]" "= {a = 100, b = 7}"
+	}
+
+	with_test_prefix "lane 1" {
+	    gdb_test "thread :1" \
+		"\\\[Switching to thread 1:1 \\(.* lane 1\\)\\\].*"
+	    gdb_test "print i" "= 1"
+	    gdb_test "print tsa\[i\]" "= {a = 101, b = 7}"
+	}
+
+	gdb_test "next" "tsa\\\[i\\\]\.a \\\*= tsa\\\[i\\\]\.b;"
+    }
+
+    # At the second stop, TSA[0-3] has been registerized into %xmm1 and
+    # %xmm2.  They have been shuffled such that %xmm1 contains TSA[0-3].A
+    # and %xmm2 contains TSA[0-3].B.
+    with_test_prefix "in %xmm1/%xmm2" {
+	# We preserve the SIMD lane across the next command.
+	with_test_prefix "lane 1" {
+	    gdb_test "thread" \
+		"\\\[Current thread is 1:1 \\(.* lane 1\\)\\\]"
+	    gdb_test "print i" "= 1"
+	    gdb_test "print tsa\[i\]" "= {a = 404, b = 7}"
+	}
+
+	gdb_test "next" "tsa\\\[i\\\]\.a -= 42;"
+    }
+
+    # TSA[0-3].A moved to %xmm0.  %xmm2 gets clobbered.  TSA[0-3].B is
+    # available from memory, yet %xmm2 has not been written back.
+    with_test_prefix "in %xmm0" {
+	# We preserve the SIMD lane across the next command.
+	with_test_prefix "lane 1" {
+	    gdb_test "thread" \
+		"\\\[Current thread is 1:1 \\(.* lane 1\\)\\\]"
+	    gdb_test "print i" "= 1"
+	    gdb_test "print tsa\[i\]" "= {a = 2828, b = 7}"
+	}
+
+	gdb_test "next" "for \\(i = 0; i < n; \\+\\+i\\)"
+    }
+}
+
+# The next iteration, we go to the linear cleanup loop.
+with_test_prefix "loop: linear" {
+    gdb_test "next" "tsa\\\[i\\\]\.a <<= 2;"
+
+    # At the first stop, TSA is in its original memory location.  I is in
+    # %rdx throughout the entire loop body.
+    with_test_prefix "in memory" {
+	# We do not have SIMD lanes anymore.
+	gdb_test "thread" "\\\[Current thread is 1 \\(.*\\)\\\]"
+	gdb_test "thread :1" "Thread 1 does not have SIMD lanes."
+
+	gdb_test "print i" "= 4"
+	gdb_test "print tsa\[i\]" "= {a = 104, b = 7}"
+
+	gdb_test "next" "tsa\\\[i\\\]\.a \\\*= tsa\\\[i\\\]\.b;"
+    }
+
+    # At the second stop, TSA[I].A has been loaded into %eax.  The rest,
+    # including TSA[I].B, is still in memory.
+    with_test_prefix "in %eax: 1" {
+	# We do not have SIMD lanes anymore.
+	gdb_test "thread" "\\\[Current thread is 1 \\(.*\\)\\\]"
+	gdb_test "thread :1" "Thread 1 does not have SIMD lanes."
+
+	gdb_test "print i" "= 4"
+	gdb_test "print tsa\[i\]" "= {a = 416, b = 7}"
+
+	# Let's change b for the multiplication.
+	gdb_test "print tsa\[i\].b = 2" "= 2"
+
+	gdb_test "next" "tsa\\\[i\\\]\.a -= 42;"
+    }
+
+    # TSA[I].A is still in %eax.
+    with_test_prefix "in %eax: 2" {
+	# We do not have SIMD lanes anymore.
+	gdb_test "thread" "\\\[Current thread is 1 \\(.*\\)\\\]"
+	gdb_test "thread :1" "Thread 1 does not have SIMD lanes."
+
+	gdb_test "print i" "= 4"
+	gdb_test "print tsa\[i\]" "= {a = 832, b = 2}"
+    }
+}

@@ -196,7 +196,7 @@ gdb_test_multiple "continue" $test {
 
 gdb_test_no_output "delete $second_breakpoint"
 
-#test exited event.
+#test exited event in case exit code is available.
 gdb_test "continue" ".*event type: continue.*
 .*clear_objfiles\[\r\n\]*progspace: .*py-events.*
 .*event type: exit.*
@@ -211,6 +211,33 @@ gdb_test "continue" ".*event type: continue.*
 .*exit inf: 2.*
 dir ok: True.*" "Inferior 2 terminated."
 
+gdb_breakpoint "first"
+gdb_test "run" ".*event type: new_objfile.*new objfile name.*
+.*event type: stop.*
+.*stop reason: breakpoint.*
+.*first breakpoint number: 6.*
+.*breakpoint number: 6.*
+all threads stopped.*" \
+    "run to kill later"
+
+# test exited event in case exit code is not available.
+gdb_test "kill inferior 2" ".*event type: exit.*
+.*exit code is unavailable.*
+.*exit inf: 2.*
+dir ok: False.*" "Inferior 2 killed."
+
+gdb_test "run" ".*event type: new_objfile.*new objfile name.*
+.*event type: stop.*
+.*stop reason: breakpoint.*
+.*first breakpoint number: 6.*
+.*breakpoint number: 6.*
+all threads stopped.*" \
+    "run to detach later"
+
+gdb_test "detach inferior 2" ".*event type: exit.*
+.*exit code is unavailable.*
+.*exit inf: 2.*
+dir ok: False.*" "Inferior 2 detached."
 
 # Test before_prompt event.
 gdb_test_multiline "define new user command" \

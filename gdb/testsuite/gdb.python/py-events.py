@@ -42,7 +42,10 @@ def breakpoint_stop_handler (event):
 def exit_handler (event):
     assert (isinstance (event, gdb.ExitedEvent))
     print ("event type: exit")
-    print ("exit code: %d" % (event.exit_code))
+    if str('exit_code' in dir(event)) == 'True':
+        print ("exit code: %d" % (event.exit_code))
+    else:
+        print ("exit code is unavailable")
     print ("exit inf: %d" % (event.inferior.num))
     print ("dir ok: %s" % str('exit_code' in dir(event)))
 

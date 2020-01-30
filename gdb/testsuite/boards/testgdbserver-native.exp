@@ -1,0 +1,140 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+## Board file is created by reusing contents of gcc-native-gdbserver-64.exp
+## and testgdb-remote.exp
+##
+## This is the AppDebugger GDBServer testing board on local host.
+## It requires three environment variables set:
+##
+## * "appdbg_compiler"
+##      Select the compiler suite to use. Valid options are "intel" (for using
+##      icc, icpc and ifort), "gnu" (for using gcc, g++ and gfortran) and
+##      "llvm" (for using clang and clang++)
+##
+## * "appdbg_architecture"
+##      Select the architecture to compile. Valid options are "x86" for regular
+##      32 bit executables, "x64" for regular 64 bit executables and "x32"
+##      for 64 bit executables with 32 bit pointers.
+##
+## * "appdbg_gdbserver"
+##      Gdbserver program which will be used for testing.
+
+if { ! [ info exists env(appdbg_compiler) ] } {
+	puts "Error: Environment variable \"appdbg_compiler\" not set."
+	exit 1
+}
+
+if { ! [ info exists env(appdbg_architecture) ] } {
+	puts "Error: Environment variable \"appdbg_architecture\" not set."
+	exit 1
+}
+
+if { ! [ info exists env(appdbg_gdbserver) ] } {
+        puts "Warning: Environment variable \"appdbg_gdbserver\" not set so default ../gdbserver/gdbserver will be used."
+        set appdbg_gdbserver "../gdbserver/gdbserver"
+} else {
+	set appdbg_gdbserver $env(appdbg_gdbserver)
+}
+
+load_generic_config "gdbserver"
+process_multilib_options ""
+
+switch $env(appdbg_compiler) {
+	intel {
+		puts "Info: Selecting compilers icc / icpc / ifort."
+		set_board_info compiler    "icc"
+		set_board_info c++compiler "icpc"
+		set_board_info f77compiler "ifort"
+		set_board_info f90compiler "ifort"
+	}
+	gnu {
+		puts "Info: Selecting compilers gcc / g++ / gfortran."
+		set_board_info compiler    "gcc"
+		set_board_info c++compiler "g++"
+		set_board_info f77compiler "gfortran"
+		set_board_info f90compiler "gfortran"
+	}
+	llvm {
+		# llvm has no fortran compiler (yet)
+		puts "Info: Selecting compilers clang / clang++."
+		set_board_info compiler    "clang"
+		set_board_info c++compiler "clang++"
+		set_board_info f77compiler "false"
+		set_board_info f90compiler "false"
+	}
+	default {
+		puts "Error: Environment variable \"appdbg_compiler\" must be one of \"intel\", \"gnu\" or \"llvm\"."
+		exit 1
+	}
+}
+
+switch $env(appdbg_architecture) {
+	x86 {
+		# 32 bit
+		set_board_info cflags   "-m32"
+		set_board_info cxxflags "-m32"
+		set_board_info cppflags "-m32"
+	}
+	x32 {
+		# 64 bit with 32 bit pointers
+		set_board_info cflags   "-mx32"
+		set_board_info cxxflags "-mx32"
+		set_board_info cppflags "-mx32"
+	}
+	x64 {
+		# 64 bit
+		set_board_info cflags   "-m64"
+		set_board_info cxxflags "-m64"
+		set_board_info cppflags "-m64"
+	}
+	default {
+		puts "Error: Environment variable \"appdbg_architecture\" must be one of \"x86\", \"x32\" or \"x64\"."
+		exit 1
+	}
+}
+
+set_board_info gdb,do_reload_on_run        1
+set_board_info gdb,noinferiorio            1
+set_board_info gdb_protocol                "remote"
+set_board_info gdb_server_prog             $appdbg_gdbserver
+set_board_info gdb_test_timeout            30
+set_board_info noargs                      1
+set_board_info use_gdb_stub                1
+set_board_info sockethost                  "localhost:"
+set_board_info hostname			   localhost
+
+proc ${board}_spawn { board cmd } {
+    global board_info
+
+    set baseboard [lindex [split $board "/"] 0]
+
+    set board_info($baseboard,isremote) 0
+    set result [remote_spawn $board $cmd]
+    set board_info($baseboard,isremote) 1
+
+    return $result
+}
+
+proc ${board}_download { board host dest } {
+    return $host
+}
+
+proc ${board}_file { dest op args } {
+    if { $op == "delete" } {
+	return 0
+    }
+    return [eval [list standard_file $dest $op] $args]
+}

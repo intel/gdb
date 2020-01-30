@@ -1,0 +1,165 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+## This is the AppDebugger GDB testing board for local testing.
+## It requires two environment variables set:
+##
+## * "appdbg_compiler"
+##      Select the compiler suite to use. Valid options are "intel" (for using
+##      icc, icpc and ifort), "gnu" (for using gcc, g++ and gfortran) and
+##      "llvm" (for using clang and clang++)
+##
+## * "appdbg_architecture"
+##      Select the architecture to compile. Valid options are "x86" for regular
+##      32 bit executables, "x64" for regular 64 bit executables and "x32"
+##      for 64 bit executables with 32 bit pointers.
+
+if { ! [ info exists env(appdbg_compiler) ] } {
+	puts "Error: Environment variable \"appdbg_compiler\" not set."
+	exit 1
+}
+
+if { ! [ info exists env(appdbg_architecture) ] } {
+	puts "Error: Environment variable \"appdbg_architecture\" not set."
+	exit 1
+}
+
+unset_board_info isremote
+set_board_info isremote 0
+
+switch $env(appdbg_compiler) {
+	intel {
+		puts "Info: Selecting compilers icc / icpc / ifort."
+		set_board_info compiler    "icc"
+		set_board_info c++compiler "icpc"
+		set_board_info f77compiler "ifort"
+		set_board_info f90compiler "ifort"
+	}
+	intel_next_gen {
+		puts "Info: Selecting compilers icx / icpx / ifx."
+		set_board_info compiler    "icx"
+		set_board_info c++compiler "icpx"
+		set_board_info f77compiler "ifx"
+		set_board_info f90compiler "ifx"
+	}
+	gnu {
+		puts "Info: Selecting compilers gcc / g++ / gfortran."
+		set_board_info compiler    "gcc"
+		set_board_info c++compiler "g++"
+		set_board_info f77compiler "gfortran"
+		set_board_info f90compiler "gfortran"
+	}
+	llvm {
+		# llvm has no fortran compiler (yet)
+		puts "Info: Selecting compilers clang / clang++."
+		set_board_info compiler    "clang"
+		set_board_info c++compiler "clang++"
+		set_board_info f77compiler "false"
+		set_board_info f90compiler "false"
+	}
+	dpcpp {
+		puts "Info: Selecting compilers dpcpp."
+		set_board_info compiler    "dpcpp"
+		set_board_info c++compiler "dpcpp"
+	}
+	dpcpp-aot-cpu {
+		puts "Info: Selecting compilers dpcpp-aot-cpu."
+		set_board_info compiler    "dpcpp-aot-cpu"
+		set_board_info c++compiler "dpcpp-aot-cpu"
+	}
+	dpcpp-aot-gen9 {
+		puts "Info: Selecting compilers dpcpp-aot-gen9."
+		set_board_info compiler    "dpcpp-aot-gen9"
+		set_board_info c++compiler "dpcpp-aot-gen9"
+	}
+	dpcpp-aot-tgl {
+		puts "Info: Selecting compilers dpcpp-aot-tgl."
+		set_board_info compiler    "dpcpp-aot-tgl"
+		set_board_info c++compiler "dpcpp-aot-tgl"
+	}
+	dpcpp-aot-host {
+		puts "Info: Selecting compilers dpcpp-aot-host."
+		set_board_info compiler    "dpcpp-aot-host"
+		set_board_info c++compiler "dpcpp-aot-host"
+	}
+	dpcpp-aot-fpga {
+		puts "Info: Selecting compilers dpcpp-aot-fpga."
+		set_board_info compiler    "dpcpp-aot-fpga"
+		set_board_info c++compiler "dpcpp-aot-fpga"
+	}
+	default {
+		puts "Error: Environment variable \"appdbg_compiler\" must be one of \"intel\", \"intel_next_gen\", \"dpcpp\", \"gnu\" or \"llvm\"."
+		exit 1
+	}
+}
+
+switch $env(appdbg_architecture) {
+	x86 {
+		# 32 bit
+		set_board_info cflags   "-m32"
+		set_board_info cxxflags "-m32"
+		set_board_info cppflags "-m32"
+	}
+	x32 {
+		# 64 bit with 32 bit pointers
+		set_board_info cflags   "-mx32"
+		set_board_info cxxflags "-mx32"
+		set_board_info cppflags "-mx32"
+	}
+	x64 {
+		# 64 bit
+		set_board_info cflags   "-m64"
+		set_board_info cxxflags "-m64"
+		set_board_info cppflags "-m64"
+	}
+	default {
+		puts "Error: Environment variable \"appdbg_architecture\" must be one of \"x86\", \"x32\" or \"x64\"."
+		exit 1
+	}
+}
+
+
+switch $env(appdbg_boardfile) {
+	sycl-intelgt {
+		load_board_description "sycl-intelgt"
+	}
+	sycl-cpu-intel {
+		load_board_description "sycl-cpu-intel"
+	}
+	sycl-host {
+		load_board_description "sycl-host"
+	}
+	openmp-cpu {
+		load_board_description "openmp-cpu"
+	}
+	openmp-gpu {
+		load_board_description "openmp-gpu"
+	}
+	openmp-host {
+		load_board_description "openmp-host"
+	}
+	sycl-intelfpga {
+		load_board_description "sycl-intelfpga"
+	}
+	unix {
+		set_board_info multitop ""
+		set gdb_test_timeout 30
+		load_base_board_description "unix"
+	}
+	default {
+		puts "Error: Environment variable \"appdbg_boardfile\" must be set."
+		exit 1
+	}
+}

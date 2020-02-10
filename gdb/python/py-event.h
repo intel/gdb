@@ -40,6 +40,7 @@ typedef struct
 } event_object;
 
 extern int emit_continue_event (ptid_t ptid);
+extern int emit_quit_event ();
 extern int emit_exited_event (const LONGEST *exit_code, struct inferior *inf);
 
 /* For inferior function call events, discriminate whether event is

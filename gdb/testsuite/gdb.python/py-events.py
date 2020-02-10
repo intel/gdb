@@ -55,6 +55,10 @@ def continue_handler (event):
     if ( event.inferior_thread is not None) :
         print ("thread num: %s" % (event.inferior_thread.num))
 
+def quit_handler (event):
+    assert (isinstance (event, gdb.QuitEvent))
+    print ("event type: quit")
+
 def new_objfile_handler (event):
     assert (isinstance (event, gdb.NewObjFileEvent))
     print ("event type: new_objfile")
@@ -100,6 +104,7 @@ class test_events (gdb.Command):
         gdb.events.stop.connect (breakpoint_stop_handler)
         gdb.events.exited.connect (exit_handler)
         gdb.events.cont.connect (continue_handler)
+        gdb.events.quit.connect (quit_handler)
         gdb.events.inferior_call.connect (inferior_call_handler)
         gdb.events.memory_changed.connect (memory_changed_handler)
         gdb.events.register_changed.connect (register_changed_handler)

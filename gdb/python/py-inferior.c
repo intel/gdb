@@ -126,6 +126,21 @@ python_on_resume (ptid_t ptid)
 }
 
 /* Callback, registered as an observer, that notifies Python listeners
+   when a GDB quit command is issued.  */
+
+static void
+python_quit ()
+{
+  if (!gdb_python_initialized)
+    return;
+
+  gdbpy_enter enter_py (target_gdbarch (), current_language);
+
+  if (emit_quit_event () < 0)
+    gdbpy_print_stack ();
+}
+
+/* Callback, registered as an observer, that notifies Python listeners
    when an inferior function call is about to be made. */
 
 static void
@@ -1033,6 +1048,7 @@ gdbpy_initialize_inferior (void)
   gdb::observers::thread_exit.attach (delete_thread_object);
   gdb::observers::normal_stop.attach (python_on_normal_stop);
   gdb::observers::target_resumed.attach (python_on_resume);
+  gdb::observers::quit.attach (python_quit);
   gdb::observers::inferior_call_pre.attach (python_on_inferior_call_pre);
   gdb::observers::inferior_call_post.attach (python_on_inferior_call_post);
   gdb::observers::memory_changed.attach (python_on_memory_change);

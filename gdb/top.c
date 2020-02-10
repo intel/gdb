@@ -73,6 +73,7 @@
 #include "cli-out.h"
 #include "tracepoint.h"
 #include "inf-loop.h"
+#include "observable.h"
 
 #if defined(TUI)
 # include "tui/tui.h"
@@ -1775,6 +1776,7 @@ quit_force (int *exit_arg, int from_tty)
   try
     {
       disconnect_tracing ();
+      gdb::observers::quit.notify ();
       for (inferior *inf : all_inferiors ())
 	kill_or_detach (inf, from_tty);
     }

@@ -37,6 +37,7 @@ DEFINE_OBSERVABLE (signal_received);
 DEFINE_OBSERVABLE (end_stepping_range);
 DEFINE_OBSERVABLE (signal_exited);
 DEFINE_OBSERVABLE (exited);
+DEFINE_OBSERVABLE (quit);
 DEFINE_OBSERVABLE (no_history);
 DEFINE_OBSERVABLE (sync_execution_done);
 DEFINE_OBSERVABLE (command_error);

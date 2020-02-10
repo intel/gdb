@@ -64,6 +64,9 @@ extern observable<enum gdb_signal /* siggnal */> signal_exited;
 /* The inferior program is finished.  */
 extern observable<int /* exitstatus */> exited;
 
+/* The exit from GDB.  */
+extern observable<> quit;
+
 /* Reverse execution: target ran out of history info.  */
 extern observable<> no_history;
 

@@ -262,3 +262,17 @@ gdb_test "python print(count)" 2 "check for before_prompt event"
 
 gdb_test_no_output "xxz" "run a canned sequence"
 gdb_test "python print(count)" 4 "check for before_prompt event"
+
+set msg "quit GDB"
+gdb_test_multiple "quit" $msg {
+    -re "Quit anyway\\? \\(y or n\\) $" {
+	send_gdb "y\n"
+	exp_continue
+    }
+    -re "event type: quit*." {
+	pass $msg
+    }
+    eof {
+	fail $msg
+    }
+}

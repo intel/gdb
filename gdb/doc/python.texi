@@ -3158,6 +3158,9 @@ the attribute does not exist.
 A reference to the inferior which triggered the @code{exited} event.
 @end defvar
 
+@item events.quit
+Emits @code{events.QuitEvent} which indicates the exit from GDB.
+
 @item events.stop
 Emits @code{gdb.StopEvent} which extends @code{gdb.ThreadEvent}.
 

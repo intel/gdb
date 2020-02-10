@@ -405,6 +405,7 @@ SUBDIR_PYTHON_SRCS = \
 	python/py-param.c \
 	python/py-prettyprint.c \
 	python/py-progspace.c \
+	python/py-quitevent.c \
 	python/py-record.c \
 	python/py-record-btrace.c \
 	python/py-record-full.c \

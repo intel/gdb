@@ -41,6 +41,11 @@ GDB_PY_DEFINE_EVENT_TYPE (continue,
 			  "GDB continue event object",
 			  thread_event_object_type);
 
+GDB_PY_DEFINE_EVENT_TYPE (quit,
+			  "QuitEvent",
+			  "GDB quit event object",
+			  event_object_type);
+
 GDB_PY_DEFINE_EVENT_TYPE (exited,
 			  "ExitedEvent",
 			  "GDB exited event object",

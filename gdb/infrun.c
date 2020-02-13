@@ -3041,9 +3041,25 @@ proceed_resume_thread_checked (thread_info *tp, execution_control_state *ecs)
 
   reset_ecs (ecs, tp);
   switch_to_thread (tp);
-  keep_going_pass_signal (ecs);
-  if (!ecs->wait_some_more)
-    error (_("Command aborted."));
+  bool ok = false;
+  try
+    {
+      keep_going_pass_signal (ecs);
+      ok = true;
+    }
+  catch (const gdb_exception &ex)
+    {
+      /* We cannot recover if the target has closed.  */
+      if (ex.error == TARGET_CLOSE_ERROR)
+	throw;
+
+      exception_print (gdb_stderr, ex);
+      infrun_debug_printf ("resuming %s has failed",
+			   target_pid_to_str (tp->ptid).c_str ());
+    }
+
+  if (ok && !ecs->wait_some_more)
+    error (_ ("Command aborted."));
 }
 
 /* Basic routine for continuing the program in various fashions.

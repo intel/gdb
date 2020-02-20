@@ -1158,6 +1158,7 @@ linux_process_target::attach (unsigned long pid)
   /* Don't ignore the initial SIGSTOP if we just attached to this
      process.  It will be collected by wait shortly.  */
   initial_thread = find_thread_ptid (ptid_t (pid, pid, 0));
+  gdb_assert (initial_thread);
   initial_thread->last_resume_kind = resume_stop;
 
   /* We must attach to every LWP.  If /proc is mounted, use that to
@@ -1187,6 +1188,7 @@ linux_process_target::attach (unsigned long pid)
       gdb_assert (lwpid > 0);
 
       lwp = find_lwp_pid (ptid_t (lwpid));
+      gdb_assert (lwp);
 
       if (!WIFSTOPPED (wstat) || WSTOPSIG (wstat) != SIGSTOP)
 	{
@@ -1575,6 +1577,7 @@ linux_process_target::detach (process_info *process)
     });
 
   main_lwp = find_lwp_pid (ptid_t (process->pid));
+  gdb_assert (main_lwp);
   detach_one_lwp (main_lwp);
 
   mourn (process);
@@ -2518,6 +2521,7 @@ linux_process_target::wait_for_event_filtered (ptid_t wait_ptid,
   else if (filter_ptid != null_ptid)
     {
       requested_child = find_lwp_pid (filter_ptid);
+      gdb_assert (requested_child);
 
       if (stopping_threads == NOT_STOPPING_THREADS
 	  && requested_child->status_pending_p

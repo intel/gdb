@@ -27,6 +27,7 @@
 
 #include "../features/intelgt-grf.c"
 #include "../features/intelgt-arf9.c"
+#include "../features/intelgt-arf11.c"
 
 int using_threads = 1;
 
@@ -285,6 +286,9 @@ intelgt_process_target::create_target_description (
     case intelgt::version::Gen9:
       regnum = create_feature_intelgt_arf9 (tdesc.get (), regnum);
       break;
+    case intelgt::version::Gen11:
+      regnum = create_feature_intelgt_arf11 (tdesc.get (), regnum);
+      break;
     }
 
   intelgt_info = intelgt::arch_info::get_or_create (gt_version);
@@ -315,6 +319,10 @@ intelgt_process_target::attach (unsigned long pid)
     {
     case 9:
       tdesc = create_target_description (intelgt::version::Gen9);
+      break;
+
+    case 11:
+      tdesc = create_target_description (intelgt::version::Gen11);
       break;
 
     default:

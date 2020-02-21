@@ -192,6 +192,11 @@ arch_info_gen9::emask_regnum () const
   return grf_reg_count () + 20;
 }
 
+/* Architectural info for Gen 11.
+   It is the same as Gen 9.  */
+
+using arch_info_gen11 = arch_info_gen9;
+
 /* Static members of intelgt_arch_info.  */
 std::map<version, arch_info *> arch_info::infos;
 
@@ -204,6 +209,9 @@ arch_info::get_or_create (version vers)
 	{
 	case version::Gen9:
 	  infos[vers] = new arch_info_gen9 ();
+	  break;
+	case version::Gen11:
+	  infos[vers] = new arch_info_gen11 ();
 	  break;
 	}
     }

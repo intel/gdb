@@ -30,6 +30,7 @@ namespace intelgt {
 enum class version : unsigned char
   {
     Gen9 = 9,
+    Gen11 = 11,
   };
 
 /* Register information.  */

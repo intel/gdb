@@ -35,6 +35,7 @@
 
 #define GT_FEATURE_GRF		"org.gnu.gdb.intelgt.grf"
 #define GT_FEATURE_ARF9		"org.gnu.gdb.intelgt.arf9"
+#define GT_FEATURE_ARF11	"org.gnu.gdb.intelgt.arf11"
 
 /* Global debug flag.  */
 static bool intelgt_debug = false;
@@ -255,6 +256,10 @@ intelgt_version_from_tdesc (const target_desc *tdesc)
   if (feature != nullptr)
     return intelgt::version::Gen9;
 
+  feature = tdesc_find_feature (tdesc, GT_FEATURE_ARF11);
+  if (feature != nullptr)
+    return intelgt::version::Gen11;
+
   error (_("A supported Intel(R) Graphics Technology feature was not "
 	   "found"));
 }
@@ -275,6 +280,8 @@ intelgt_initialize_gdbarch_data (const target_desc *tdesc,
   iga_gen_t iga_version = IGA_GEN_INVALID;
   if (gt_version == intelgt::version::Gen9)
     iga_version = IGA_GEN9;
+  else if (gt_version == intelgt::version::Gen11)
+    iga_version = IGA_GEN11;
 
   if (iga_version != IGA_GEN_INVALID)
     {
@@ -397,6 +404,9 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
       /* Fill in data for ARF registers.  */
       feature = tdesc_find_feature (tdesc, GT_FEATURE_ARF9);
+
+      if (feature == nullptr) /* Try again.  */
+	feature = tdesc_find_feature (tdesc, GT_FEATURE_ARF11);
 
       if (feature != nullptr)
 	{

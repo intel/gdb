@@ -234,6 +234,7 @@ FEATURE_XMLFILES = aarch64-core.xml \
 	i386/x32-core.xml \
 	intelgt-grf.xml \
 	intelgt-arf9.xml \
+	intelgt-arf11.xml \
 	riscv/rv32e-xregs.xml \
 	riscv/32bit-cpu.xml \
 	riscv/32bit-fpu.xml \

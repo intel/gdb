@@ -20329,6 +20329,9 @@ set_cu_language (unsigned int lang, struct dwarf2_cu *cu)
     case DW_LANG_Rust_old:
       cu->language = language_rust;
       break;
+    case DW_LANG_OpenCL:
+      cu->language = language_opencl;
+      break;
     case DW_LANG_Cobol74:
     case DW_LANG_Cobol85:
     default:

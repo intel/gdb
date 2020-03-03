@@ -96,6 +96,10 @@ enum debug_loc_kind
      the applicable base address.  */
   DEBUG_LOC_OFFSET_PAIR = 4,
 
+  /* This is for DWARF5's DW_LLE_start_end, where start and end are
+     absolute addresses rather than offsets from the base address.  */
+  DEBUG_LOC_ABS_START_END = 5,
+
   /* An internal value indicating there is insufficient data.  */
   DEBUG_LOC_BUFFER_OVERFLOW = -1,
 
@@ -255,9 +259,26 @@ decode_debug_loclists_addresses (dwarf2_per_cu_data *per_cu,
       *new_ptr = loc_ptr;
       return DEBUG_LOC_OFFSET_PAIR;
 
+    case DW_LLE_start_end:
+      if (loc_ptr + addr_size > buf_end)
+	return DEBUG_LOC_BUFFER_OVERFLOW;
+      if (signed_addr_p)
+	*low = extract_signed_integer (loc_ptr, addr_size, byte_order);
+      else
+	*low = extract_unsigned_integer (loc_ptr, addr_size, byte_order);
+      loc_ptr += addr_size;
+      if (loc_ptr + addr_size > buf_end)
+	return DEBUG_LOC_BUFFER_OVERFLOW;
+      if (signed_addr_p)
+	*high = extract_signed_integer (loc_ptr, addr_size, byte_order);
+      else
+	*high = extract_unsigned_integer (loc_ptr, addr_size, byte_order);
+      loc_ptr += addr_size;
+      *new_ptr = loc_ptr;
+      return DEBUG_LOC_ABS_START_END;
+
     /* Following cases are not supported yet.  */
     case DW_LLE_startx_endx:
-    case DW_LLE_start_end:
     case DW_LLE_default_location:
     default:
       return DEBUG_LOC_INVALID_ENTRY;
@@ -393,9 +414,33 @@ dwarf2_find_location_expression (struct dwarf2_loclist_baton *baton,
 	  base_address = high + base_offset;
 	  continue;
 
+	case DEBUG_LOC_ABS_START_END:
+	  /* For absolute addresses, only add the base offset in case
+	     we're debugging a PIE executable.  */
+	  low += base_offset;
+	  high += base_offset;
+	  break;
+
 	case DEBUG_LOC_START_END:
 	case DEBUG_LOC_START_LENGTH:
 	case DEBUG_LOC_OFFSET_PAIR:
+	  /* Otherwise, a location expression entry.  If the entry is from
+	     a DWO, don't add base address: the entry is from .debug_addr
+	     which already has the DWARF "base address".  We still add
+	     base_offset in case we're debugging a PIE
+	     executable.  However, if the entry is DW_LLE_offset_pair from
+	     a DWO, add the base address as the operands are offsets
+	     relative to the applicable base address.  */
+	  if (baton->from_dwo && kind != DEBUG_LOC_OFFSET_PAIR)
+	    {
+	      low += base_offset;
+	      high += base_offset;
+	    }
+	  else
+	    {
+	      low += base_address;
+	      high += base_address;
+	    }
 	  break;
 
 	case DEBUG_LOC_BUFFER_OVERFLOW:
@@ -405,23 +450,6 @@ dwarf2_find_location_expression (struct dwarf2_loclist_baton *baton,
 
 	default:
 	  gdb_assert_not_reached ("bad debug_loc_kind");
-	}
-
-      /* Otherwise, a location expression entry.
-	 If the entry is from a DWO, don't add base address: the entry is from
-	 .debug_addr which already has the DWARF "base address". We still add
-	 base_offset in case we're debugging a PIE executable. However, if the
-	 entry is DW_LLE_offset_pair from a DWO, add the base address as the
-	 operands are offsets relative to the applicable base address.  */
-      if (baton->from_dwo && kind != DEBUG_LOC_OFFSET_PAIR)
-	{
-	  low += base_offset;
-	  high += base_offset;
-	}
-      else
-	{
-	  low += base_address;
-	  high += base_address;
 	}
 
       if (baton->per_cu->version () < 5)
@@ -4659,6 +4687,7 @@ loclist_describe_location (struct symbol *symbol, CORE_ADDR addr,
 	case DEBUG_LOC_START_END:
 	case DEBUG_LOC_START_LENGTH:
 	case DEBUG_LOC_OFFSET_PAIR:
+	case DEBUG_LOC_ABS_START_END:
 	  break;
 
 	case DEBUG_LOC_BUFFER_OVERFLOW:

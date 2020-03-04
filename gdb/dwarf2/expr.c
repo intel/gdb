@@ -960,8 +960,15 @@ dwarf_expr_context::fetch_result (struct type *type, struct type *subobj_type,
       for (dwarf_expr_piece &piece : this->m_pieces)
 	bit_size += piece.size;
       /* Complain if the expression is larger than the size of the
-	 outer type.  */
-      if (bit_size > 8 * TYPE_LENGTH (type))
+	 outer type.
+
+	 For array types for which we do not know the upper bound, we do
+	 not know the length, yet we still want to allow accessing the
+	 array.  */
+      if (bit_size > 8 * TYPE_LENGTH (type)
+	  && (type->code () != TYPE_CODE_ARRAY
+	      || (type->index_type ()->bounds ()->high.kind ()
+		  != PROP_UNDEFINED)))
 	invalid_synthetic_pointer ();
 
       piece_closure *c

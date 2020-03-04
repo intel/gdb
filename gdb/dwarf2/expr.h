@@ -261,9 +261,6 @@ private:
    read as an address in a given FRAME.  */
 CORE_ADDR read_addr_from_reg (frame_info *frame, int reg);
 
-void dwarf_expr_require_composition (const gdb_byte *, const gdb_byte *,
-				     const char *);
-
 int dwarf_block_to_dwarf_reg (const gdb_byte *buf, const gdb_byte *buf_end);
 
 int dwarf_block_to_dwarf_reg_deref (const gdb_byte *buf,

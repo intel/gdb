@@ -2303,9 +2303,15 @@ dwarf2_evaluate_loc_desc_full (struct type *type, struct frame_info *frame,
 
       for (dwarf_expr_piece &piece : ctx.pieces)
 	bit_size += piece.size;
-      /* Complain if the expression is larger than the size of the
-	 outer type.  */
-      if (bit_size > 8 * TYPE_LENGTH (type))
+      /* Complain if the expression is larger than the size of the outer
+	 type.
+
+	 For array types for which we do not know the upper bound, we do
+	 not know the length, yet we still want to allow accessing the
+	 array.  */
+      if (bit_size > 8 * TYPE_LENGTH (type)
+	  && (type->code () != TYPE_CODE_ARRAY
+	      || (type->index_type ()->bounds ()->high.kind () != PROP_UNDEFINED)))
 	invalid_synthetic_pointer ();
 
       c = allocate_piece_closure (per_cu, per_objfile, std::move (ctx.pieces),

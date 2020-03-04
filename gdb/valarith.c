@@ -230,7 +230,9 @@ value_subscripted_rvalue (struct value *array, LONGEST index,
   if (index < lowerbound
       || (!array_upper_bound_undefined
 	  && elt_offs >= type_length_units (array_type))
-      || (array->lval () != lval_memory && array_upper_bound_undefined))
+      || (array_upper_bound_undefined
+	  && array->lval () != lval_memory
+	  && array->lval () != lval_computed))
     {
       if (type_not_associated (array_type))
 	error (_("no such vector element (vector not associated)"));

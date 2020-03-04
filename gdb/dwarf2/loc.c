@@ -3200,14 +3200,12 @@ dwarf2_compile_expr_to_ax (struct agent_expr *expr, struct axs_value *loc,
 	case DW_OP_reg29:
 	case DW_OP_reg30:
 	case DW_OP_reg31:
-	  dwarf_expr_require_composition (op_ptr, op_end, "DW_OP_regx");
 	  loc->u.reg = dwarf_reg_to_regnum_or_error (arch, op - DW_OP_reg0);
 	  loc->kind = axs_lvalue_register;
 	  break;
 
 	case DW_OP_regx:
 	  op_ptr = safe_read_uleb128 (op_ptr, op_end, &reg);
-	  dwarf_expr_require_composition (op_ptr, op_end, "DW_OP_regx");
 	  loc->u.reg = dwarf_reg_to_regnum_or_error (arch, reg);
 	  loc->kind = axs_lvalue_register;
 	  break;
@@ -3226,15 +3224,12 @@ dwarf2_compile_expr_to_ax (struct agent_expr *expr, struct axs_value *loc,
 	    ax_const_l (expr, extract_unsigned_integer (op_ptr, len,
 							byte_order));
 	    op_ptr += len;
-	    dwarf_expr_require_composition (op_ptr, op_end,
-					    "DW_OP_implicit_value");
 
 	    loc->kind = axs_rvalue;
 	  }
 	  break;
 
 	case DW_OP_stack_value:
-	  dwarf_expr_require_composition (op_ptr, op_end, "DW_OP_stack_value");
 	  loc->kind = axs_rvalue;
 	  break;
 

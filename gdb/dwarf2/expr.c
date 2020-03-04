@@ -1311,22 +1311,6 @@ safe_skip_leb128 (const gdb_byte *buf, const gdb_byte *buf_end)
 }
 
 
-/* Check that the current operator is either at the end of an
-   expression, or that it is followed by a composition operator or by
-   DW_OP_GNU_uninit (which should terminate the expression).  */
-
-void
-dwarf_expr_require_composition (const gdb_byte *op_ptr, const gdb_byte *op_end,
-				const char *op_name)
-{
-  if (op_ptr != op_end && *op_ptr != DW_OP_piece && *op_ptr != DW_OP_bit_piece
-      && *op_ptr != DW_OP_GNU_uninit)
-    error (_("DWARF-2 expression error: `%s' operations must be "
-	     "used either alone or in conjunction with DW_OP_piece "
-	     "or DW_OP_bit_piece."),
-	   op_name);
-}
-
 /* Return true iff the types T1 and T2 are "the same".  This only does
    checks that might reasonably be needed to compare DWARF base
    types.  */
@@ -1713,8 +1697,6 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	case DW_OP_reg29:
 	case DW_OP_reg30:
 	case DW_OP_reg31:
-	  dwarf_expr_require_composition (op_ptr, op_end, "DW_OP_reg");
-
 	  result = op - DW_OP_reg0;
 	  result_val = value_from_ulongest (address_type, result);
 	  this->m_location = DWARF_VALUE_REGISTER;
@@ -1722,7 +1704,6 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 
 	case DW_OP_regx:
 	  op_ptr = safe_read_uleb128 (op_ptr, op_end, &reg);
-	  dwarf_expr_require_composition (op_ptr, op_end, "DW_OP_regx");
 
 	  result = reg;
 	  result_val = value_from_ulongest (address_type, result);
@@ -1740,14 +1721,11 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	    this->m_data = op_ptr;
 	    this->m_location = DWARF_VALUE_LITERAL;
 	    op_ptr += len;
-	    dwarf_expr_require_composition (op_ptr, op_end,
-					    "DW_OP_implicit_value");
 	  }
 	  goto no_push;
 
 	case DW_OP_stack_value:
 	  this->m_location = DWARF_VALUE_STACK;
-	  dwarf_expr_require_composition (op_ptr, op_end, "DW_OP_stack_value");
 	  goto no_push;
 
 	case DW_OP_implicit_pointer:
@@ -1769,8 +1747,6 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	    result_val = value_from_ulongest (address_type, result);
 
 	    this->m_location = DWARF_VALUE_IMPLICIT_POINTER;
-	    dwarf_expr_require_composition (op_ptr, op_end,
-					    "DW_OP_implicit_pointer");
 	  }
 	  break;
 
@@ -2275,7 +2251,6 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	  goto no_push;
 
 	case DW_OP_GNU_uninit:
-	  dwarf_expr_require_composition (op_ptr, op_end, "DW_OP_GNU_uninit");
 	  this->m_initialized = false;
 	  goto no_push;
 

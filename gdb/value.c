@@ -3658,7 +3658,7 @@ value_from_component (struct value *whole, struct type *type, LONGEST offset)
 {
   struct value *v;
 
-  if (whole->lval () == lval_memory && whole->lazy ())
+  if (whole->lazy ())
     v = value::allocate_lazy (type);
   else
     {

@@ -805,7 +805,6 @@ do_compile_dwarf_expr_to_c (int indent, string_file *stream,
 	case DW_OP_reg29:
 	case DW_OP_reg30:
 	case DW_OP_reg31:
-	  dwarf_expr_require_composition (op_ptr, op_end, "DW_OP_regx");
 	  pushf_register_address (indent, stream, registers_used, arch,
 				  dwarf_reg_to_regnum_or_error
 				    (arch, op - DW_OP_reg0));
@@ -813,7 +812,6 @@ do_compile_dwarf_expr_to_c (int indent, string_file *stream,
 
 	case DW_OP_regx:
 	  op_ptr = safe_read_uleb128 (op_ptr, op_end, &reg);
-	  dwarf_expr_require_composition (op_ptr, op_end, "DW_OP_regx");
 	  pushf_register_address (indent, stream, registers_used, arch,
 				  dwarf_reg_to_regnum_or_error (arch, reg));
 	  break;

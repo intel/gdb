@@ -170,3 +170,32 @@ nonstop_process_target::start_non_stop (bool nonstop)
   gdb_assert_not_reached ("start_non_stop should not be called on Windows.");
 #endif
 }
+
+ptid_t
+nonstop_process_target::wait (ptid_t ptid,
+			      target_waitstatus *ourstatus,
+			      int target_options)
+{
+  ptid_t event_ptid;
+
+  /* Flush the async file first.  */
+  if (target_is_async_p ())
+    async_file_flush ();
+
+  do
+    {
+      event_ptid = low_wait (ptid, ourstatus, target_options);
+    }
+  while ((target_options & TARGET_WNOHANG) == 0
+	 && event_ptid == null_ptid
+	 && ourstatus->kind == TARGET_WAITKIND_IGNORE);
+
+  /* If at least one stop was reported, there may be more.  A single
+     SIGCHLD can signal more than one child stop.  */
+  if (target_is_async_p ()
+      && (target_options & TARGET_WNOHANG) != 0
+      && event_ptid != null_ptid)
+    async_file_mark ();
+
+  return event_ptid;
+}

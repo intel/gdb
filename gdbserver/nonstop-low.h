@@ -52,6 +52,15 @@ public:
   bool async (bool enable) override;
 
   int start_non_stop (bool enable) override;
+
+  ptid_t wait (ptid_t ptid, target_waitstatus *status,
+	       int options) override final;
+
+protected:
+
+  /* Wait for process, return status.  */
+  virtual ptid_t low_wait (ptid_t ptid, target_waitstatus *ourstatus,
+			   int target_options) = 0;
 };
 
 /* Given THREAD, return its nonstop_thread_info.  */

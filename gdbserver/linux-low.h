@@ -157,9 +157,6 @@ public:
 
   void resume (thread_resume *resume_info, size_t n) override;
 
-  ptid_t wait (ptid_t ptid, target_waitstatus *status,
-	       int options) override;
-
   void fetch_registers (regcache *regcache, int regno) override;
 
   void store_registers (regcache *regcache, int regno) override;
@@ -349,9 +346,8 @@ private:
   /* Wait for all children to stop for the SIGSTOPs we just queued.  */
   void wait_for_sigstop ();
 
-  /* Wait for process, returns status.  */
-  ptid_t wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
-		 int target_options);
+  ptid_t low_wait (ptid_t ptid, target_waitstatus *ourstatus,
+		   int target_options) override;
 
   /* Stop all lwps that aren't stopped yet, except EXCEPT, if not NULL.
      If SUSPEND, then also increase the suspend count of every LWP,

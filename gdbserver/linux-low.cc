@@ -2760,7 +2760,7 @@ linux_process_target::stabilize_threads ()
       /* Note that we go through the full wait even loop.  While
 	 moving threads out of jump pad, we need to be able to step
 	 over internal breakpoints and such.  */
-      wait_1 (minus_one_ptid, &ourstatus, 0);
+      low_wait (minus_one_ptid, &ourstatus, 0);
 
       if (ourstatus.kind () == TARGET_WAITKIND_STOPPED)
 	{
@@ -2865,8 +2865,8 @@ linux_process_target::gdb_catch_this_syscall (lwp_info *event_child)
 }
 
 ptid_t
-linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
-			      target_wait_flags target_options)
+linux_process_target::low_wait (ptid_t ptid, target_waitstatus *ourstatus,
+				target_wait_flags target_options)
 {
   THREADS_SCOPED_DEBUG_ENTER_EXIT;
 
@@ -3543,35 +3543,6 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
     return filter_exit_event (event_child, ourstatus);
 
   return ptid_of (current_thread);
-}
-
-ptid_t
-linux_process_target::wait (ptid_t ptid,
-			    target_waitstatus *ourstatus,
-			    target_wait_flags target_options)
-{
-  ptid_t event_ptid;
-
-  /* Flush the async file first.  */
-  if (target_is_async_p ())
-    async_file_flush ();
-
-  do
-    {
-      event_ptid = wait_1 (ptid, ourstatus, target_options);
-    }
-  while ((target_options & TARGET_WNOHANG) == 0
-	 && event_ptid == null_ptid
-	 && ourstatus->kind () == TARGET_WAITKIND_IGNORE);
-
-  /* If at least one stop was reported, there may be more.  A single
-     SIGCHLD can signal more than one child stop.  */
-  if (target_is_async_p ()
-      && (target_options & TARGET_WNOHANG) != 0
-      && event_ptid != null_ptid)
-    async_file_mark ();
-
-  return event_ptid;
 }
 
 /* Send a signal to an LWP.  */

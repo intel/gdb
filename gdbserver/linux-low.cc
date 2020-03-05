@@ -2835,7 +2835,7 @@ linux_process_target::stabilize_threads ()
       /* Note that we go through the full wait even loop.  While
 	 moving threads out of jump pad, we need to be able to step
 	 over internal breakpoints and such.  */
-      wait_1 (minus_one_ptid, &ourstatus, 0);
+      low_wait (minus_one_ptid, &ourstatus, 0);
 
       if (ourstatus.kind == TARGET_WAITKIND_STOPPED)
 	{
@@ -2941,8 +2941,8 @@ linux_process_target::gdb_catch_this_syscall (lwp_info *event_child)
 }
 
 ptid_t
-linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
-			      int target_options)
+linux_process_target::low_wait (ptid_t ptid, target_waitstatus *ourstatus,
+				int target_options)
 {
   client_state &cs = get_client_state ();
   int w;
@@ -2960,7 +2960,7 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
   if (debug_threads)
     {
       debug_enter ();
-      debug_printf ("wait_1: [%s]\n", target_pid_to_str (ptid));
+      debug_printf ("low_wait: [%s]\n", target_pid_to_str (ptid));
     }
 
   /* Translate generic target options into linux options.  */
@@ -3007,7 +3007,7 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
 
       if (debug_threads)
 	{
-	  debug_printf ("wait_1 ret = null_ptid, "
+	  debug_printf ("low_wait ret = null_ptid, "
 			"TARGET_WAITKIND_IGNORE\n");
 	  debug_exit ();
 	}
@@ -3019,7 +3019,7 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
     {
       if (debug_threads)
 	{
-	  debug_printf ("wait_1 ret = null_ptid, "
+	  debug_printf ("low_wait ret = null_ptid, "
 			"TARGET_WAITKIND_NO_RESUMED\n");
 	  debug_exit ();
 	}
@@ -3041,7 +3041,7 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
 
 	  if (debug_threads)
 	    {
-	      debug_printf ("wait_1 ret = %s, exited with "
+	      debug_printf ("low_wait ret = %s, exited with "
 			    "retcode %d\n",
 			    target_pid_to_str (ptid_of (current_thread)),
 			    WEXITSTATUS (w));
@@ -3055,7 +3055,7 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
 
 	  if (debug_threads)
 	    {
-	      debug_printf ("wait_1 ret = %s, terminated with "
+	      debug_printf ("low_wait ret = %s, terminated with "
 			    "signal %d\n",
 			    target_pid_to_str (ptid_of (current_thread)),
 			    WTERMSIG (w));
@@ -3263,7 +3263,7 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
 
 		  if (debug_threads)
 		    {
-		      debug_printf ("wait_1 ret = %s, stopped "
+		      debug_printf ("low_wait ret = %s, stopped "
 				    "while stabilizing threads\n",
 				    target_pid_to_str (ptid_of (current_thread)));
 		      debug_exit ();
@@ -3661,7 +3661,7 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
 
   if (debug_threads)
     {
-      debug_printf ("wait_1 ret = %s, %d, %d\n",
+      debug_printf ("low_wait ret = %s, %d, %d\n",
 		    target_pid_to_str (ptid_of (current_thread)),
 		    ourstatus->kind, ourstatus->value.sig);
       debug_exit ();
@@ -3671,35 +3671,6 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
     return filter_exit_event (event_child, ourstatus);
 
   return ptid_of (current_thread);
-}
-
-ptid_t
-linux_process_target::wait (ptid_t ptid,
-			    target_waitstatus *ourstatus,
-			    int target_options)
-{
-  ptid_t event_ptid;
-
-  /* Flush the async file first.  */
-  if (target_is_async_p ())
-    async_file_flush ();
-
-  do
-    {
-      event_ptid = wait_1 (ptid, ourstatus, target_options);
-    }
-  while ((target_options & TARGET_WNOHANG) == 0
-	 && event_ptid == null_ptid
-	 && ourstatus->kind == TARGET_WAITKIND_IGNORE);
-
-  /* If at least one stop was reported, there may be more.  A single
-     SIGCHLD can signal more than one child stop.  */
-  if (target_is_async_p ()
-      && (target_options & TARGET_WNOHANG) != 0
-      && event_ptid != null_ptid)
-    async_file_mark ();
-
-  return event_ptid;
 }
 
 /* Send a signal to an LWP.  */

@@ -31,6 +31,7 @@ enum class version : unsigned char
   {
     Gen9 = 9,
     Gen11 = 11,
+    Gen12 = 12,
   };
 
 /* Register information.  */

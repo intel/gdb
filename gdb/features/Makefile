@@ -231,6 +231,7 @@ FEATURE_XMLFILES = aarch64-core.xml \
 	intelgt-grf.xml \
 	intelgt-arf9.xml \
 	intelgt-arf11.xml \
+	intelgt-arf12.xml \
 	loongarch/base32.xml \
 	loongarch/base64.xml \
 	riscv/rv32e-xregs.xml \

@@ -197,6 +197,11 @@ arch_info_gen9::emask_regnum () const
 
 using arch_info_gen11 = arch_info_gen9;
 
+/* Architectural info for Gen 12.
+   It is the same as Gen 11.  */
+
+using arch_info_gen12 = arch_info_gen11;
+
 /* Static members of intelgt_arch_info.  */
 std::map<version, arch_info *> arch_info::infos;
 
@@ -212,6 +217,9 @@ arch_info::get_or_create (version vers)
 	  break;
 	case version::Gen11:
 	  infos[vers] = new arch_info_gen11 ();
+	  break;
+	case version::Gen12:
+	  infos[vers] = new arch_info_gen12 ();
 	  break;
 	}
     }

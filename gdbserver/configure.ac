@@ -382,8 +382,10 @@ if test "$srv_libs" != "" -a "$srv_libs" != "-ldl"; then
 fi
 
 # Check for Intel(R) Graphics Technology debug library
+AC_LANG_PUSH([C++])
 AC_LIB_HAVE_LINKFLAGS([igfxdbg], [], [#include "igfxdbg.h"],
   [igfxdbg_SetOption ("anOption", "aValue"); ],)
+AC_LANG_POP([C++])
 
 case "${target}" in
   intelgt-*)

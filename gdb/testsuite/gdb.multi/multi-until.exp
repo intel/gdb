@@ -1,0 +1,50 @@
+# This testcase is part of GDB, the GNU debugger.
+
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test 'until' with 2 inferiors.
+
+standard_testfile
+
+if {[use_gdb_stub]} {
+    return 0
+}
+
+if {[prepare_for_testing "failed to prepare" $testfile $srcfile]} {
+    return -1
+}
+
+set until_location1 [gdb_get_line_number "until here 1"]
+
+gdb_test "add-inferior -exec $binfile" ".*Added inferior 2.*"\
+    "add second inferior with the same source"
+
+# Run both inferiors until main.
+if ![runto_main] then {
+    fail "inf 1 can't run to main"
+    return 0
+}
+gdb_test "inferior 2"
+if ![runto_main] then {
+    fail "inf 2 can't run to main"
+    return 0
+}
+
+gdb_test "until $until_location1" \
+    "main .* at .*:$until_location1.*" \
+    "until line"
+
+gdb_test "until" ".*until here 2.*" "until w/o args"

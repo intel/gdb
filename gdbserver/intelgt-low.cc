@@ -24,6 +24,7 @@
 #include "igfxdbg.h"
 #include "regcache.h"
 #include "tdesc.h"
+#include "nonstop-low.h"
 
 #include "../features/intelgt-grf.c"
 #include "../features/intelgt-arf9.c"
@@ -33,8 +34,18 @@
 int using_threads = 1;
 
 constexpr unsigned long TIMEOUT_INFINITE = (unsigned long) -1;
+constexpr unsigned long TIMEOUT_NOHANG = 1;
 
 static intelgt::arch_info *intelgt_info;
+
+/* The device event that we shall process next.  */
+
+static GTEvent *next_event = nullptr;
+
+/* The flag that denotes whether we have issued an interrupt request
+   for which we have not checked the stop events, yet.  The purpose of
+   this flag is to prevent sending the request multiple times.  */
+static bool interrupt_in_progress = false;
 
 /* Convenience macros.  */
 
@@ -136,11 +147,29 @@ igfxdbg_reg_type (intelgt::reg_group group)
 /* GT-specific process info to save as process_info's
    private target data.  */
 
-struct process_info_private
+struct process_info_private : public nonstop_process_info
 {
   /* GT device handle.  */
   GTDeviceHandle device_handle;
 };
+
+/* GT-specific thread info to save as thread_info's
+   private target data.  */
+
+struct intelgt_thread : public nonstop_thread_info
+{
+  /* GT Thread handle.  */
+  GTThreadHandle handle;
+};
+
+/* Given a THREAD, return the intelgt_thread data stored
+   as its target data.  */
+
+static intelgt_thread *
+get_intelgt_thread (thread_info *thread)
+{
+  return static_cast<intelgt_thread *> (get_thread_nti (thread));
+}
 
 /* Given a GTEvent, return the corresponding thread_info.  */
 
@@ -162,7 +191,10 @@ find_thread_from_gt_event (GTEvent *event)
   if (gdb_thread == nullptr)
     {
       dprintf ("An unknown GT thread detected; adding to the list");
-      gdb_thread = add_thread (ptid, event->thread);
+      intelgt_thread *new_thread = new intelgt_thread {};
+      new_thread->handle = event->thread;
+      gdb_thread = add_thread (ptid, new_thread);
+      new_thread->thread = gdb_thread;
     }
 
   return gdb_thread;
@@ -178,9 +210,8 @@ clear_all_threads (int pid)
   for_each_thread (pid, [] (thread_info *gdb_thread)
     {
       dprintf ("Deleting %s", target_pid_to_str (gdb_thread->id));
-      /* At this point, we would have to 'free' gdb_thread->target_data
-	 had we dynamically allocated it.  Because it is an opaque pointer
-	 to us, we simply set the pointer to null.  */
+      intelgt_thread *gt_thread = get_intelgt_thread (gdb_thread);
+      delete gt_thread;
       gdb_thread->target_data = nullptr;
       remove_thread (gdb_thread);
     });
@@ -188,7 +219,7 @@ clear_all_threads (int pid)
 
 /* Target op definitions for an Intel GT target.  */
 
-class intelgt_process_target : public process_stratum_target
+class intelgt_process_target : public nonstop_process_target
 {
 public:
 
@@ -207,11 +238,6 @@ public:
   void join (int pid) override;
 
   bool thread_alive (ptid_t pid) override;
-
-  void resume (thread_resume *resume_info, size_t n) override;
-
-  ptid_t wait (ptid_t ptid, target_waitstatus *status,
-	       int options) override;
 
   void fetch_registers (regcache *regcache, int regno) override;
 
@@ -245,6 +271,32 @@ public:
 
   const gdb_byte *sw_breakpoint_from_kind (int kind, int *size) override;
 
+  bool supports_stopped_by_sw_breakpoint () override;
+
+  bool stopped_by_sw_breakpoint () override;
+
+protected: /* Target ops from nonstop_process_target.  */
+
+  ptid_t low_wait (ptid_t ptid, target_waitstatus *ourstatus,
+		   int target_options) override;
+
+  bool supports_breakpoints () override;
+
+  void resume_one_nti (nonstop_thread_info *nti, bool step, int signal,
+		       void *siginfo) override;
+
+  void low_send_sigstop (nonstop_thread_info *nti) override;
+
+  bool supports_resume_all () override;
+
+  void resume_all_threads (int pid) override;
+
+  bool thread_still_has_status_pending (thread_info *thread) override;
+
+  bool thread_needs_step_over (thread_info *thread) override;
+
+  void start_step_over (thread_info *thread) override;
+
 private:
 
   target_desc *create_target_description (intelgt::version gt_version);
@@ -254,6 +306,33 @@ private:
 
   void write_gt_register (regcache *regcache, GTThreadHandle thread,
 			  int index);
+
+  CORE_ADDR get_pc (nonstop_thread_info *nti);
+
+  bool breakpoint_at (CORE_ADDR where);
+
+  void wait_for_sigstop ();
+
+  void handle_kernel_loaded (GTEvent *event);
+
+  void handle_kernel_unloaded (GTEvent *event);
+
+  void handle_thread_started (int parent_pid, GTEvent *event);
+
+  ptid_t handle_thread_stopped (GTEvent *event, target_waitstatus *status);
+
+  void handle_thread_exited (GTEvent *event);
+
+  ptid_t handle_device_exited (GTEvent *event, target_waitstatus *status);
+
+  ptid_t handle_step_completed (GTEvent *event, target_waitstatus *status);
+
+  ptid_t process_single_event (int parent_pid, GTEvent *event,
+			       target_waitstatus *status, int options);
+
+  void process_thread_stopped_event (thread_info *gdb_thread, GTEvent *event,
+				     target_waitstatus *status,
+				     bool mark_pending);
 };
 
 /* The 'create_inferior' target op.
@@ -349,6 +428,13 @@ intelgt_process_target::attach (unsigned long pid)
   fprintf (stderr, "intelgt: attached to device with id 0x%x (Gen%d)\n",
 	   info.device_id, info.gen_major);
 
+  /* FIXME: At this point, we have not added any threads, yet.
+     This creates a problem in nonstop mode.
+     We may want to hang here until the first thread creation event
+     is received.  */
+  if (target_is_async_p ())
+    async_file_mark ();
+
   return 0; /* success */
 }
 
@@ -417,7 +503,7 @@ intelgt_process_target::thread_alive (ptid_t ptid)
   if (gdb_thread == nullptr)
     return false;
 
-  GTThreadHandle handle = (GTThreadHandle) gdb_thread->target_data;
+  GTThreadHandle handle = get_intelgt_thread (gdb_thread)->handle;
 
   ThreadDetails info;
   info.size_of_this = sizeof (info);
@@ -433,61 +519,10 @@ intelgt_process_target::thread_alive (ptid_t ptid)
   return (info.is_alive) ? true : false;
 }
 
-/* The 'resume' target op.  */
-
-void
-intelgt_process_target::resume (thread_resume *resume_info, size_t n)
-{
-  ptid_t ptid = resume_info->thread;
-  enum resume_kind kind = resume_info->kind;
-
-  dprintf ("thread: %s, resume: %d", target_pid_to_str (ptid), kind);
-
-  if (ptid == minus_one_ptid)
-    {
-      regcache_invalidate ();
-
-      if (kind == resume_step)
-	error (_("single-stepping all threads is not supported"));
-      else
-	{
-	  GTDeviceHandle device = current_process ()->priv->device_handle;
-	  APIResult result = igfxdbg_ContinueExecutionAll (device);
-	  if (result != eGfxDbgResultSuccess)
-	    error (_("failed to continue all the threads; result: %s"),
-		   igfxdbg_result_to_string (result));
-	}
-    }
-  else
-    {
-      thread_info *gdb_thread = find_thread_ptid (ptid);
-      regcache_invalidate_thread (gdb_thread);
-      GTThreadHandle handle = (GTThreadHandle) gdb_thread->target_data;
-
-      if (kind == resume_step)
-	{
-	  if (resume_info->step_range_end != 0)
-	    error (_("range-stepping not supported"));
-
-	  APIResult result = igfxdbg_StepOneInstruction (handle);
-	  if (result != eGfxDbgResultSuccess)
-	    error (_("failed to step the thread; result: %s"),
-		   igfxdbg_result_to_string (result));
-	}
-      else
-	{
-	  APIResult result = igfxdbg_ContinueExecution (handle);
-	  if (result != eGfxDbgResultSuccess)
-	    error (_("failed to continue the thread; result: %s"),
-		   igfxdbg_result_to_string (result));
-	}
-    }
-}
-
 /* Handle a 'kernel loaded' event.  */
 
-static void
-handle_kernel_loaded (GTEvent *event)
+void
+intelgt_process_target::handle_kernel_loaded (GTEvent *event)
 {
   gdb_assert (event->type == eGfxDbgEventKernelLoaded);
   gdb_assert (event->kernel != nullptr);
@@ -498,8 +533,8 @@ handle_kernel_loaded (GTEvent *event)
 
 /* Handle a 'kernel unloaded' event.  */
 
-static void
-handle_kernel_unloaded (GTEvent *event)
+void
+intelgt_process_target::handle_kernel_unloaded (GTEvent *event)
 {
   gdb_assert (event->type == eGfxDbgEventKernelUnloaded);
   gdb_assert (event->kernel != nullptr);
@@ -510,8 +545,8 @@ handle_kernel_unloaded (GTEvent *event)
 
 /* Handle a 'thread started' event.  */
 
-static void
-handle_thread_started (int parent_pid, GTEvent *event)
+void
+intelgt_process_target::handle_thread_started (int parent_pid, GTEvent *event)
 {
   gdb_assert (event->type == eGfxDbgEventThreadStarted);
 
@@ -528,44 +563,110 @@ handle_thread_started (int parent_pid, GTEvent *event)
 
   /* FIXME: Make thread_id 'long' in igfxdbg.h.  */
   ptid_t ptid = ptid_t {parent_pid, (long) info.thread_id, 0l};
-  add_thread (ptid, event->thread);
+  intelgt_thread *new_thread = new intelgt_thread {};
+  new_thread->handle = event->thread;
+  new_thread->thread = add_thread (ptid, new_thread);
 
   dprintf ("Added %s", target_pid_to_str (ptid));
 }
 
+void
+intelgt_process_target::process_thread_stopped_event (thread_info *gdb_thread,
+						      GTEvent *event,
+						      target_waitstatus *status,
+						      bool mark_pending)
+{
+  nonstop_thread_info *nti = get_thread_nti (gdb_thread);
+  nti->stopped = true;
+  nti->stop_expected = false;
+  nti->stop_reason = TARGET_STOPPED_BY_NO_REASON;
+  gdb_thread->last_resume_kind = resume_stop;
+
+  status->kind = TARGET_WAITKIND_STOPPED;
+  if (event->details.stopped_from_interrupt)
+    {
+      status->value.sig = GDB_SIGNAL_0;
+      interrupt_in_progress = false;
+    }
+  else
+    {
+      status->value.sig = GDB_SIGNAL_TRAP;
+      if (breakpoint_at (get_pc (nti)))
+	nti->stop_reason = TARGET_STOPPED_BY_SW_BREAKPOINT;
+    }
+
+  /* Mark this event as pending.  If this is going to be reported,
+     we will clear the flag in 'wait'.  */
+  if (mark_pending)
+    {
+      gdb_thread->last_status = *status;
+      gdb_thread->status_pending_p = 1;
+
+      dprintf ("Marked stop event of %s", target_pid_to_str (gdb_thread->id));
+    }
+  else
+    dprintf ("Processed stop event of %s", target_pid_to_str (gdb_thread->id));
+}
+
 /* Handle a 'thread stopped' event.  */
 
-static ptid_t
-handle_thread_stopped (GTEvent *event, target_waitstatus *status)
+ptid_t
+intelgt_process_target::handle_thread_stopped (GTEvent *event,
+					       target_waitstatus *status)
 {
   gdb_assert (event->type == eGfxDbgEventThreadStopped);
   gdb_assert (event->thread != nullptr);
 
+  ptid_t ptid = null_ptid;
+
   thread_info *gdb_thread = find_thread_from_gt_event (event);
+  dprintf ("gdb_thread: %s", target_pid_to_str (gdb_thread->id));
 
-  status->kind = TARGET_WAITKIND_STOPPED;
+  /* FIXME: This is a workaround.  If this is the result of an interrupt,
+     mark all the running threads as stopped.  */
   if (event->details.stopped_from_interrupt)
-    /* FIXME: This is a HACK against all-stop multi-target.
-       Normally we should pass GDB_SIGNAL_INT.  */
-    status->value.sig = GDB_SIGNAL_0;
+    {
+      dprintf ("stop event is from an interrupt");
+
+      bool mark_pending = true;
+      process_info *proc = find_process_from_gt_event (event);
+      for_each_thread (proc->pid, [&] (thread_info *thread)
+	{
+	  if (mark_pending)
+	    ptid = thread->id;
+
+	  if (!thread->status_pending_p)
+	    {
+	      process_thread_stopped_event (thread, event, status,
+					    mark_pending);
+	      /* If in all-stop mode, mark only one thread with a pending
+		 stop event.  The others are stopped internally and not
+		 reported to GDB.  */
+	      if (!non_stop)
+		mark_pending = false;
+	    }
+	});
+    }
   else
-    status->value.sig = GDB_SIGNAL_TRAP;
-
-  /* Mark this event as pending.  If this is going to be reported,
-     we will clear the flag in 'wait'.  */
-  gdb_thread->last_status = *status;
-  gdb_thread->status_pending_p = 1;
-
-  ptid_t ptid = gdb_thread->id;
-  dprintf ("Marked stop event of %s", target_pid_to_str (ptid));
+    {
+      nonstop_thread_info *nti = get_thread_nti (gdb_thread);
+      if (nti->stopped)
+	{
+	  dprintf ("Thread %s is already stopped, not reporting",
+		   target_pid_to_str (gdb_thread->id));
+	  return null_ptid;
+	}
+      process_thread_stopped_event (gdb_thread, event, status, true);
+      ptid = gdb_thread->id;
+    }
 
   return ptid;
 }
 
 /* Handle a 'thread exited' event.  */
 
-static void
-handle_thread_exited (GTEvent *event)
+void
+intelgt_process_target::handle_thread_exited (GTEvent *event)
 {
   gdb_assert (event->type == eGfxDbgEventThreadExited);
   gdb_assert (event->thread != nullptr);
@@ -575,17 +676,17 @@ handle_thread_exited (GTEvent *event)
   ptid_t ptid = gdb_thread->id;
   dprintf ("Removing thread %s", target_pid_to_str (ptid));
 
-  /* At this point, we would have to 'free' gdb_thread->target_data,
-     had we dynamically allocated it.  Because it is an opaque pointer
-     to us, we simply set the pointer to null.  */
+  intelgt_thread *gt_thread = get_intelgt_thread (gdb_thread);
+  delete gt_thread;
   gdb_thread->target_data = nullptr;
   remove_thread (gdb_thread);
 }
 
 /* Handle a 'device exited' event.  */
 
-static ptid_t
-handle_device_exited (GTEvent *event, target_waitstatus *status)
+ptid_t
+intelgt_process_target::handle_device_exited (GTEvent *event,
+					      target_waitstatus *status)
 {
   gdb_assert (event->type == eGfxDbgEventDeviceExited);
 
@@ -594,15 +695,15 @@ handle_device_exited (GTEvent *event, target_waitstatus *status)
 
   /* FIXME: Make pid 'int' in igfxdbg.h.  */
   int pid = (int) event->pid;
-  clear_all_threads (pid);
 
   return ptid_t {pid};
 }
 
 /* Handle a 'step completed' event.  */
 
-static ptid_t
-handle_step_completed (GTEvent *event, target_waitstatus *status)
+ptid_t
+intelgt_process_target::handle_step_completed (GTEvent *event,
+					       target_waitstatus *status)
 {
   gdb_assert (event->type == eGfxDbgEventStepCompleted);
   gdb_assert (event->thread != nullptr);
@@ -617,15 +718,19 @@ handle_step_completed (GTEvent *event, target_waitstatus *status)
      we will clear the flag in 'wait'.  */
   gdb_thread->last_status = *status;
   gdb_thread->status_pending_p = 1;
+  nonstop_thread_info *nti = get_thread_nti (gdb_thread);
+  nti->stopped = true;
+  nti->stop_reason = TARGET_STOPPED_BY_SINGLE_STEP;
 
   return ptid;
 }
 
 /* Process a single event.  */
 
-static ptid_t
-process_single_event (int parent_pid, GTEvent *event,
-		      target_waitstatus *status, int options)
+ptid_t
+intelgt_process_target::process_single_event (int parent_pid, GTEvent *event,
+					      target_waitstatus *status,
+					      int options)
 {
   switch (event->type)
     {
@@ -673,17 +778,25 @@ process_single_event (int parent_pid, GTEvent *event,
 /* The 'wait' target op.  */
 
 ptid_t
-intelgt_process_target::wait (ptid_t ptid, target_waitstatus *status,
-			      int options)
+intelgt_process_target::low_wait (ptid_t ptid, target_waitstatus *status,
+				  int options)
 {
-  dprintf ("ptid: %s, options: 0x%x", target_pid_to_str (ptid), options);
+  if (!non_stop)
+    dprintf ("ptid: %s, options: 0x%x", target_pid_to_str (ptid), options);
 
   if (!(ptid.is_pid () || ptid == minus_one_ptid))
     error (_("Waiting on an individual thread is not supported"));
 
   process_info *proc;
   if (ptid == minus_one_ptid)
-    proc = current_process ();
+    {
+      if (current_thread == nullptr)
+	{
+	  status->kind = TARGET_WAITKIND_IGNORE;
+	  return null_ptid;
+	}
+      proc = current_process ();
+    }
   else
     proc = find_process_pid (ptid.pid ());
   if (proc == nullptr)
@@ -691,32 +804,57 @@ intelgt_process_target::wait (ptid_t ptid, target_waitstatus *status,
 	   target_pid_to_str (ptid));
 
   GTDeviceHandle device_handle = proc->priv->device_handle;
-  GTEvent gt_event;
+  static GTEvent gt_event;
   gt_event.size_of_this = sizeof (gt_event);
 
   ptid_t id = null_ptid;
 
   while (id == null_ptid)
     {
-      APIResult result = igfxdbg_WaitForEvent (device_handle, &gt_event,
-					       TIMEOUT_INFINITE);
-      if (result != eGfxDbgResultSuccess)
+      unsigned long timeout = TIMEOUT_INFINITE;
+      if ((options & TARGET_WNOHANG) != 0)
+	timeout = TIMEOUT_NOHANG;
+
+      if (next_event == nullptr)
 	{
-	  dprintf (_("failed to wait on the device; result: %s"),
-		   igfxdbg_result_to_string (result));
-	  return minus_one_ptid;
+	  APIResult result = igfxdbg_WaitForEvent (device_handle, &gt_event,
+						   timeout);
+	  if (result == eGfxDbgResultTimedOut
+	      && timeout != TIMEOUT_INFINITE)
+	    {
+	      if (target_is_async_p ())
+		async_file_mark ();
+	      status->kind = TARGET_WAITKIND_IGNORE;
+	      return null_ptid;
+	    }
+
+	  if (result != eGfxDbgResultSuccess)
+	    {
+	      dprintf (_("failed to wait on the device; result: %s"),
+		       igfxdbg_result_to_string (result));
+	      return minus_one_ptid;
+	    }
+
+	  next_event = &gt_event;
 	}
-      /* Process all the events, report the first stop event.  The
+
+      /* All-stop:
+	 Process all the events, report the first stop event.  The
 	 other stop events are not reported now, but stay as pending
-	 in their eventing thread.  */
-      GTEvent *event = &gt_event;
-      while (event != nullptr)
+	 in their eventing thread.
+
+	 Non-stop:
+	 Report the first stop event; do not process the remaining ones
+	 now.  Just keep them under the GT_EVENT pointer.  They will be
+	 reported when the 'wait' op is called.  */
+      while (next_event != nullptr)
 	{
 	  struct target_waitstatus event_status;
 	  ptid_t eventing_ptid
-	    = process_single_event (proc->pid, event,
+	    = process_single_event (proc->pid, next_event,
 				    &event_status, options);
 
+	  next_event = next_event->next;
 	  if (id == null_ptid && eventing_ptid != null_ptid)
 	    {
 	      /* This is the event we will report.  */
@@ -725,16 +863,20 @@ intelgt_process_target::wait (ptid_t ptid, target_waitstatus *status,
 	      thread_info *thread = find_thread_ptid (id);
 	      if (thread != nullptr)
 		thread->status_pending_p = 0;
+	      if (non_stop)
+		break;
 	    }
-	  event = event->next;
 	}
 
-      result = igfxdbg_ReleaseEvent (device_handle, &gt_event);
-      if (result != eGfxDbgResultSuccess)
+      if (next_event == nullptr)
 	{
-	  dprintf (_("failed to release the event; result: %s"),
-		   igfxdbg_result_to_string (result));
-	  return minus_one_ptid;
+	  APIResult result = igfxdbg_ReleaseEvent (device_handle, &gt_event);
+	  if (result != eGfxDbgResultSuccess)
+	    {
+	      dprintf (_("failed to release the event; result: %s"),
+		       igfxdbg_result_to_string (result));
+	      return minus_one_ptid;
+	    }
 	}
     }
 
@@ -771,7 +913,7 @@ intelgt_process_target::fetch_registers (regcache *regcache, int regno)
 {
   dprintf ("regno: %d", regno);
 
-  GTThreadHandle handle = (GTThreadHandle) current_thread->target_data;
+  GTThreadHandle handle = get_intelgt_thread (current_thread)->handle;
 
   if (regno == -1) /* All registers.  */
     for (int i = 0; i < intelgt_info->num_registers (); i++)
@@ -809,7 +951,7 @@ intelgt_process_target::store_registers (regcache *regcache, int regno)
 {
   dprintf ("regno: %d", regno);
 
-  GTThreadHandle handle = (GTThreadHandle) current_thread->target_data;
+  GTThreadHandle handle = get_intelgt_thread (current_thread)->handle;
   if (!igfxdbg_IsThreadStopped (handle))
     return;
 
@@ -835,7 +977,7 @@ intelgt_process_target::read_memory (CORE_ADDR memaddr,
       return 0;
     }
 
-  GTThreadHandle handle = (GTThreadHandle) current_thread->target_data;
+  GTThreadHandle handle = get_intelgt_thread (current_thread)->handle;
 
   unsigned read_size = 0;
   APIResult result = igfxdbg_ReadMemory (handle, memaddr, myaddr,
@@ -867,7 +1009,7 @@ intelgt_process_target::write_memory (CORE_ADDR memaddr,
       return 0;
     }
 
-  GTThreadHandle handle = (GTThreadHandle) current_thread->target_data;
+  GTThreadHandle handle = get_intelgt_thread (current_thread)->handle;
 
   unsigned written_size = 0;
   APIResult result = igfxdbg_WriteMemory (handle, memaddr, myaddr,
@@ -897,11 +1039,19 @@ intelgt_process_target::request_interrupt ()
   if (current_thread == nullptr)
     return;
 
+  if (interrupt_in_progress)
+    {
+      dprintf ("request ignored; an interrupt is already in progress");
+      return;
+    }
+
   GTDeviceHandle device_handle = current_process ()->priv->device_handle;
   APIResult result = igfxdbg_Interrupt (device_handle);
   if (result != eGfxDbgResultSuccess)
     error (_("could not interrupt; result: %s"),
 	   igfxdbg_result_to_string (result));
+
+  interrupt_in_progress = true;
 }
 
 /* The 'supports_z_point_type' target op.  */
@@ -994,7 +1144,7 @@ intelgt_process_target::thread_stopped (struct thread_info *gdb_thread)
 {
   dprintf ("pid: %s", target_pid_to_str (gdb_thread->id));
 
-  GTThreadHandle handle = (GTThreadHandle) gdb_thread->target_data;
+  GTThreadHandle handle = get_intelgt_thread (gdb_thread)->handle;
   return igfxdbg_IsThreadStopped (handle);
 }
 
@@ -1022,6 +1172,203 @@ bool
 intelgt_process_target::supports_hardware_single_step ()
 {
   return true;
+}
+
+bool
+intelgt_process_target::breakpoint_at (CORE_ADDR where)
+{
+  dprintf ("where: %s", core_addr_to_string_nz (where));
+
+  bool is_breakpoint = false;
+  gdb_byte inst[intelgt::MAX_INST_LENGTH];
+  int err = read_memory (where, inst, intelgt::MAX_INST_LENGTH);
+  if (err == 0)
+    is_breakpoint = intelgt_info->has_breakpoint (inst);
+  else
+    dprintf ("failed to read memory at %s", core_addr_to_string_nz (where));
+
+  dprintf ("%sbreakpoint found.", is_breakpoint ? "" : "no ");
+  return is_breakpoint;
+}
+
+CORE_ADDR
+intelgt_process_target::get_pc (nonstop_thread_info *nti)
+{
+  dprintf ("nti: %s", target_pid_to_str (nti->thread->id));
+
+  return read_pc (get_thread_regcache (nti->thread, 1));
+}
+
+bool
+intelgt_process_target::supports_breakpoints ()
+{
+  return true;
+}
+
+void
+intelgt_process_target::resume_one_nti (nonstop_thread_info *nti, bool step,
+					int signal, void *siginfo)
+{
+  dprintf ("nti: %s, step: %d, signal: %d",
+	   target_pid_to_str (nti->thread->id), step, signal);
+
+  if (!nti->stopped)
+    return;
+
+  if (nti->thread->status_pending_p)
+    {
+      dprintf ("not resuming; has pending status");
+      return;
+    }
+
+  process_info *proc = get_thread_process (nti->thread);
+  if (proc->tdesc != nullptr)
+    dprintf ("  %s from pc 0x%lx", step ? "step" : "continue",
+	     (long) get_pc (nti));
+
+  regcache_invalidate_thread (nti->thread);
+
+  GTThreadHandle handle = get_intelgt_thread (nti->thread)->handle;
+  if (step)
+    {
+      APIResult result = igfxdbg_StepOneInstruction (handle);
+      if (result != eGfxDbgResultSuccess)
+	error (_("failed to step the thread; result: %s"),
+	       igfxdbg_result_to_string (result));
+    }
+  else
+    {
+      APIResult result = igfxdbg_ContinueExecution (handle);
+      if (result != eGfxDbgResultSuccess)
+	error (_("failed to continue the thread; result: %s"),
+	       igfxdbg_result_to_string (result));
+    }
+
+  nti->stopped = false;
+  nti->stop_reason = TARGET_STOPPED_BY_NO_REASON;
+  nti->thread->status_pending_p = 0;
+}
+
+void
+intelgt_process_target::low_send_sigstop (nonstop_thread_info *nti)
+{
+  dprintf ("nti: %s", target_pid_to_str (nti->thread->id));
+  if (nti->stopped)
+    dprintf ("thread already stopped");
+
+  request_interrupt ();
+
+  if (target_is_async_p ())
+    async_file_mark ();
+}
+
+void
+intelgt_process_target::wait_for_sigstop ()
+{
+  dprintf ("enter");
+
+  if (!interrupt_in_progress)
+    return;
+
+  /* Interrupt halts the whole device.  Receiving an stop event from a
+     single thread is sufficient to conclude that the device stopped,
+     if the thread stopped due to a interrupt request.  */
+  target_waitstatus status;
+  while (true)
+    {
+      ptid_t event_ptid = wait (minus_one_ptid, &status, 0);
+      if (status.kind == TARGET_WAITKIND_STOPPED
+	  && status.value.sig == GDB_SIGNAL_0)
+	break; /* We got what we were expecting.  */
+      else
+	{
+	  /* Mark this as pending, and keep listening.  */
+	  thread_info *thread = find_thread_ptid (event_ptid);
+	  if (thread == nullptr)
+	    continue;
+
+	  thread->last_status = status;
+	  thread->status_pending_p = true;
+	  dprintf ("unexpected event; thread: %s, kind: %d, signal: %d",
+		   target_pid_to_str (thread->id),
+		   status.kind, status.value.sig);
+	}
+    }
+
+  for_each_thread ([] (thread_info *thread)
+    {
+      nonstop_thread_info *nti = get_thread_nti (thread);
+      nti->stop_expected = false;
+      nti->stopped = true;
+    });
+}
+
+bool
+intelgt_process_target::supports_resume_all ()
+{
+  return true;
+}
+
+void
+intelgt_process_target::resume_all_threads (int pid)
+{
+  dprintf ("enter, pid: %d", pid);
+
+  regcache_invalidate ();
+
+  GTDeviceHandle device = current_process ()->priv->device_handle;
+  APIResult result = igfxdbg_ContinueExecutionAll (device);
+  if (result != eGfxDbgResultSuccess)
+    error (_("failed to continue all the threads; result: %s"),
+	   igfxdbg_result_to_string (result));
+
+  for_each_thread ([] (thread_info *thread)
+    {
+      nonstop_thread_info *nti = get_thread_nti (thread);
+      nti->stopped = false;
+      nti->stop_reason = TARGET_STOPPED_BY_NO_REASON;
+    });
+
+  if (target_is_async_p ())
+    async_file_mark ();
+}
+
+bool
+intelgt_process_target::thread_still_has_status_pending (thread_info *thread)
+{
+  dprintf ("thread: %s", target_pid_to_str (thread->id));
+  return thread->status_pending_p;
+}
+
+bool
+intelgt_process_target::thread_needs_step_over (thread_info *thread)
+{
+  dprintf ("thread: %s", target_pid_to_str (thread->id));
+
+  /* GDB should be handling step-over for us.  */
+  return false;
+}
+
+void
+intelgt_process_target::start_step_over (thread_info *thread)
+{
+  dprintf ("thread: %s", target_pid_to_str (thread->id));
+  /* Do nothing.  GDB should be handling step-over via resume
+     requests.  */
+}
+
+bool
+intelgt_process_target::supports_stopped_by_sw_breakpoint ()
+{
+  return true;
+}
+
+bool
+intelgt_process_target::stopped_by_sw_breakpoint ()
+{
+  nonstop_thread_info *nti = get_thread_nti (current_thread);
+
+  return (nti->stop_reason == TARGET_STOPPED_BY_SW_BREAKPOINT);
 }
 
 /* The Intel GT target ops object.  */

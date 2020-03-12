@@ -11149,11 +11149,12 @@ until_break_command (const char *arg, int from_tty, int anywhere)
 
   /* Set a breakpoint where the user wants it and at return from
      this function.  */
-
+  program_space *filter_pspace = current_program_space;
 
   std::vector<symtab_and_line> sals
     = decode_line_with_last_displayed_allow_empty (arg,
-						   DECODE_LINE_FUNFIRSTLINE);
+						   DECODE_LINE_FUNFIRSTLINE,
+						   filter_pspace);
 
   if (sals.empty ())
     error (_("Couldn't get information on specified line."));

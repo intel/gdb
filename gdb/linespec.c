@@ -3335,9 +3335,17 @@ decode_line_with_current_source (const char *string, int flags)
 std::vector<symtab_and_line>
 decode_line_with_last_displayed (const char *string, int flags)
 {
-  if (string == 0)
+  if (string == nullptr)
     error (_("Empty line specification."));
 
+  return decode_line_with_last_displayed_allow_empty (string, flags);
+}
+
+/* See linespec.h.  */
+
+std::vector<symtab_and_line>
+decode_line_with_last_displayed_allow_empty (const char *string, int flags)
+{
   event_location_up location = string_to_event_location (&string,
 							 current_language);
   std::vector<symtab_and_line> sals

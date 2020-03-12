@@ -11150,21 +11150,13 @@ until_break_command (const char *arg, int from_tty, int anywhere)
   /* Set a breakpoint where the user wants it and at return from
      this function.  */
 
-  event_location_up location = string_to_event_location (&arg, current_language);
 
   std::vector<symtab_and_line> sals
-    = (last_displayed_sal_is_valid ()
-       ? decode_line_1 (location.get (), DECODE_LINE_FUNFIRSTLINE, NULL,
-			get_last_displayed_symtab (),
-			get_last_displayed_line ())
-       : decode_line_1 (location.get (), DECODE_LINE_FUNFIRSTLINE,
-			NULL, NULL, 0));
+    = decode_line_with_last_displayed_allow_empty (arg,
+						   DECODE_LINE_FUNFIRSTLINE);
 
   if (sals.empty ())
     error (_("Couldn't get information on specified line."));
-
-  if (*arg)
-    error (_("Junk at end of arguments."));
 
   tp = inferior_thread ();
   thread = tp->global_num;

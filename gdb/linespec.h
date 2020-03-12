@@ -138,11 +138,20 @@ extern void decode_line_full (struct event_location *location, int flags,
 extern std::vector<symtab_and_line> decode_line_with_current_source
     (const char *, int);
 
+
 /* Given a string, return the line specified by it, using the last displayed
-   codepoint's values as defaults, or nothing if they aren't valid.  */
+   codepoint's values as defaults, or nothing if they aren't valid.
+   Allows STRING to be empty.  */
+
+extern std::vector<symtab_and_line> decode_line_with_last_displayed_allow_empty
+  (const char *, int);
+
+/* Given a string, return the line specified by it, using the last displayed
+   codepoint's values as defaults, or nothing if they aren't valid.
+   Throws an error, if STRING is empty.  */
 
 extern std::vector<symtab_and_line> decode_line_with_last_displayed
-    (const char *, int);
+  (const char *, int);
 
 /* Does P represent one of the keywords?  If so, return
    the keyword.  If not, return NULL.  */

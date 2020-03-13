@@ -123,6 +123,16 @@ protected:
   /* Return true if breakpoints are supported.  */
   virtual bool supports_breakpoints () = 0;
 
+  /* Return true if this target supports resuming all threads
+     in one go.  */
+  virtual bool supports_resume_all ();
+
+  /* Resume all threads in a single request made to the debug interface.
+     Targets that have this feature should override this method and
+     return true in supports_resume_all.  PID is -1 if all threads
+     of all processes are to be resumed.  */
+  virtual void resume_all_threads (int pid);
+
   /* This function is called once per thread.  We check the thread's
      resume request, which will tell us whether to resume, step, or
      leave the thread stopped; and what signal, if any, it should be
@@ -135,9 +145,15 @@ protected:
      If the thread should be left with a pending event, we queue any needed
      signals, since we won't actually resume.  We already have a pending
      event to report, so we don't need to preserve any step requests;
-     they should be re-issued if necessary.  */
+     they should be re-issued if necessary.
+
+     If WANT_ALL_RESUMED is true, we received a wildcard request to
+     continue all threads.  In this case, instead of resuming each
+     thread one by one, all threads are resumed in shot, if the target
+     supports that operation.  */
   virtual void resume_one_thread (thread_info *thread,
-				  bool leave_all_stopped);
+				  bool leave_all_stopped,
+				  bool want_all_resumed);
 
   /* Handle a resume_stop request for an already-stopped thread.  Any
      target-specific handling that's not done in resume_one_thread can

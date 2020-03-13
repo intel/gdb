@@ -216,6 +216,23 @@ nonstop_process_target::resume (thread_resume *resume_info, size_t n)
       set_resume_request (thread, resume_info, n);
     });
 
+  /* Check if this is a resume-all request for everything (-1, 0, 0),
+     or a specific process (P, -1, 0).  */
+  ptid_t resume_all_ptid = resume_info[0].thread;
+  bool want_all_resumed = (n == 1
+			   && (resume_all_ptid == minus_one_ptid
+			       || (resume_all_ptid.pid () != -1
+				   && resume_all_ptid.lwp () == -1
+				   && resume_all_ptid.tid () == 0))
+			   && resume_info[0].kind == resume_continue);
+
+  int resume_all_pid = -1;
+  if (want_all_resumed && resume_all_ptid != minus_one_ptid)
+    {
+      /* This is a resume-all request for a process.  */
+      resume_all_pid = resume_all_ptid.pid ();
+    }
+
   /* If there is a thread which would otherwise be resumed, which has
      a pending status, then don't resume any threads - we can just
      report the pending status.  Make sure to queue any signals that
@@ -266,8 +283,17 @@ nonstop_process_target::resume (thread_resume *resume_info, size_t n)
      we may have to queue all signals we'd otherwise deliver.  */
   for_each_thread ([&] (thread_info *thread)
     {
-      resume_one_thread (thread, leave_all_stopped);
+      resume_one_thread (thread, leave_all_stopped, want_all_resumed);
     });
+
+  if (want_all_resumed && supports_resume_all ())
+    {
+      /* If the resume request was a wildcard resume and the target
+	 supports this feature, the resume_one_thread iteration
+	 above did not send individual requests.  */
+      if (!leave_all_stopped)
+	resume_all_threads (resume_all_pid);
+    }
 
   if (need_step_over != nullptr)
     start_step_over (need_step_over);
@@ -398,7 +424,8 @@ nonstop_process_target::send_sigstop (nonstop_thread_info *nti)
 
 void
 nonstop_process_target::resume_one_thread (thread_info *thread,
-					   bool leave_all_stopped)
+					   bool leave_all_stopped,
+					   bool want_all_resumed)
 {
   nonstop_thread_info *nti = get_thread_nti (thread);
   const char *pid_str = target_pid_to_str (ptid_of (thread));
@@ -467,7 +494,10 @@ nonstop_process_target::resume_one_thread (thread_info *thread,
       if (debug_threads)
 	debug_printf ("resuming %s\n", pid_str);
 
-      proceed_one_nti (nti, nullptr);
+      /* If requested to resume all and the target supports doing this
+	 in a single shot, skip individual resume attempt.  */
+      if (!(want_all_resumed && supports_resume_all ()))
+	proceed_one_nti (nti, nullptr);
     }
   else
     {
@@ -593,4 +623,17 @@ nonstop_process_target::maybe_hw_step (thread_info *thread)
       gdb_assert (has_single_step_breakpoints (thread));
       return false;
     }
+}
+
+bool
+nonstop_process_target::supports_resume_all ()
+{
+  return false;
+}
+
+void
+nonstop_process_target::resume_all_threads (int pid)
+{
+  gdb_assert_not_reached ("target op resume_all_threads is not "
+			  "implemented");
 }

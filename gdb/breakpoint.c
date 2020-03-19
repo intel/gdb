@@ -1605,6 +1605,19 @@ commands_command_1 (const char *arg, int from_tty,
      NULL after the call to read_command_lines if the user provides an empty
      list of command by just typing "end".  */
   bool cmd_read = false;
+  bool all_lanes = false;
+
+  if (arg != NULL && *arg == '/')
+    {
+      arg++;
+
+      if (*arg == 'a')
+	{
+	  all_lanes = true;
+	  arg++;
+	  arg = skip_spaces (arg);
+	}
+    }
 
   std::string new_arg;
 
@@ -1638,10 +1651,14 @@ commands_command_1 (const char *arg, int from_tty,
 	     cmd = control->body_list_0;
 	   else
 	     {
+	       const char *lane_info = "";
+	       if (all_lanes)
+		 lane_info = "\nCommands will be applied to all hit SIMD lanes.";
+
 	       std::string str
 		 = string_printf (_("Type commands for breakpoint(s) "
-				    "%s, one per line."),
-				  arg);
+				    "%s, one per line.%s"),
+				  arg, lane_info);
 
 	       auto do_validate = [=] (const char *line)
 				  {
@@ -1664,6 +1681,7 @@ commands_command_1 (const char *arg, int from_tty,
 	 {
 	   validate_commands_for_breakpoint (b, cmd.get ());
 	   b->commands = cmd;
+	   b->is_cmd_for_all_lanes = all_lanes;
 	   notify_breakpoint_modified (b);
 	 }
      });
@@ -4559,6 +4577,7 @@ bpstat::bpstat (const bpstat &other)
     bp_location_at (other.bp_location_at),
     breakpoint_at (other.breakpoint_at),
     commands (other.commands),
+    is_cmd_for_all_lanes (other.is_cmd_for_all_lanes),
     print (other.print),
     stop (other.stop),
     print_it (other.print_it),
@@ -4801,6 +4820,11 @@ bpstat_do_actions_1 (bpstat **bsp)
   int printed_hit_locno = -1;
 
   breakpoint_proceeded = 0;
+
+  /* After all actions are done, restore the original SIMD lane.  */
+  thread_info *thread = inferior_thread ();
+  scoped_restore_current_simd_lane restore_lane {thread};
+
   for (; bs != NULL; bs = bs->next)
     {
       struct command_line *cmd = NULL;
@@ -4841,9 +4865,37 @@ bpstat_do_actions_1 (bpstat **bsp)
 	  cmd = cmd->next;
 	}
 
+      unsigned int execution_mask = thread->has_simd_lanes ()
+	? bs->hit_lane_mask
+	: 0x1;
+
       while (cmd != NULL)
 	{
-	  execute_control_command (cmd);
+	  if (bs->is_cmd_for_all_lanes)
+	    {
+	      /* Apply actions to all hit SIMD lanes.  */
+	      for_active_lanes (execution_mask, [&] (int lane)
+		{
+		  /* We switch lanes in the thread for which the commands
+		     were called.  Note, the current thread might have
+		     changed, but the loop takes only the original thread
+		     into the consideration.  */
+		  thread->set_current_simd_lane (lane);
+
+		  execute_control_command (cmd);
+
+		  return !breakpoint_proceeded;
+		});
+	    }
+	  else
+	    {
+	      int lane = find_first_active_simd_lane (execution_mask);
+	      thread->set_current_simd_lane (lane);
+
+	      /* Apply actions only to the first hit lane.  */
+	      execute_control_command (cmd);
+	    }
+
 	  /* After execute_control_command, if breakpoint_proceeded is true,
 	     BS has been freed and cannot be accessed anymore.  */
 
@@ -5130,6 +5182,7 @@ bpstat::bpstat (struct bp_location *bl, bpstat ***bs_link_pointer)
     bp_location_at (bp_location_ref_ptr::new_reference (bl)),
     breakpoint_at (bl->owner),
     commands (NULL),
+    is_cmd_for_all_lanes (false),
     print (0),
     stop (0),
     print_it (print_it_normal),
@@ -5143,6 +5196,7 @@ bpstat::bpstat ()
   : next (NULL),
     breakpoint_at (NULL),
     commands (NULL),
+    is_cmd_for_all_lanes (false),
     print (0),
     stop (0),
     print_it (print_it_normal),
@@ -5931,6 +5985,8 @@ bpstat_stop_status (const address_space *aspace,
 	      if (b->silent)
 		bs->print = false;
 	      bs->commands = b->commands;
+	      bs->is_cmd_for_all_lanes = b->is_cmd_for_all_lanes;
+
 	      if (command_line_is_silent (bs->commands
 					  ? bs->commands.get () : NULL))
 		bs->print = false;
@@ -14797,6 +14853,8 @@ Give a space-separated breakpoint list as argument after \"commands\".\n\
 A list element can be a breakpoint number (e.g. `5') or a range of numbers\n\
 (e.g. `5-7').\n\
 With no argument, the targeted breakpoint is the last one set.\n\
+Modifier `/a' forces the breakpoint actions to be executed for all lanes\n\
+which match the condition of the specified breakpoint(s).\n\
 The commands themselves follow starting on the next line.\n\
 Type a line containing \"end\" to indicate the end of them.\n\
 Give \"silent\" as the first line to make the breakpoint silent;\n\

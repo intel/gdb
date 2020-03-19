@@ -29,7 +29,7 @@ if {![runto_main]} {
 # Load 'global_foo' into a history variable.
 gdb_test "p global_foo" "\\{f = 1, array = \\{1, 2, 3, 4, 5\\}\\}"
 
-gdb_test_no_output "set debug target 1"
+gdb_test "set debug target 1"
 
 # Now print an array element from within 'global_foo', but accessed
 # via the history element.  The history element should be non-lazy,
@@ -62,7 +62,7 @@ gdb_test_multiple "p \$.array\[1\]" "" {
     -re "^\[^\$\]\[^\r\n\]+\r\n" {
 	exp_continue
     }
-    -re "^\\\$${decimal} = 2\r\n$gdb_prompt " {
+    -re "^\\\$${decimal} = 2\r\n.*$gdb_prompt " {
 	if { $saw_memory_access } {
 	    if { $saw_auxv_parse } {
 		# The expression parser may look up global symbols, which

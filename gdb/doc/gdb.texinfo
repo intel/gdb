@@ -5758,6 +5758,11 @@ Specify a list of commands for the given breakpoints.  The commands
 themselves appear on the following lines.  Type a line containing just
 @code{end} to terminate the commands.
 
+@code{/a} modifier forces @value{GDBN} to execute the breakpoint actions
+for all SIMD lanes which match the condition of the specified
+breakpoint(s).  Note, that if there are active lanes which do not match
+the breakpoint condition, actions are not executed for these lanes.
+
 To remove all commands from a breakpoint, type @code{commands} and
 follow it immediately with @code{end}; that is, give no commands.
 

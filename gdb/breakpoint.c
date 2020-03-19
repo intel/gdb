@@ -4328,7 +4328,7 @@ bpstats::bpstats (const bpstats &other)
     print (other.print),
     stop (other.stop),
     print_it (other.print_it),
-    simd_lane_num (other.simd_lane_num)
+    simd_lane_mask (other.simd_lane_mask)
 {
   if (other.old_val != NULL)
     old_val = release_value (value_copy (other.old_val.get ()));
@@ -4636,13 +4636,9 @@ maybe_print_thread_hit_breakpoint (struct ui_out *uiout)
     {
       const char *name;
       struct thread_info *thr = inferior_thread ();
-      std::vector<int> lanes;
-
-      if (thr->has_simd_lanes ())
-	lanes.push_back (thr->current_simd_lane ());
 
       uiout->text ("Thread ");
-      uiout->field_fmt ("thread-id", "%s", print_thread_id (thr, &lanes));
+      uiout->field_fmt ("thread-id", "%s", print_thread_id (thr));
 
       name = thr->name != NULL ? thr->name : target_thread_name (thr);
       if (name != NULL)
@@ -4826,7 +4822,7 @@ bpstats::bpstats (struct bp_location *bl, bpstat **bs_link_pointer)
     print (0),
     stop (0),
     print_it (print_it_normal),
-    simd_lane_num (-1)
+    simd_lane_mask (0x0)
 {
   **bs_link_pointer = this;
   *bs_link_pointer = &next;
@@ -4839,7 +4835,7 @@ bpstats::bpstats ()
     print (0),
     stop (0),
     print_it (print_it_normal),
-    simd_lane_num (-1)
+    simd_lane_mask (0x0)
 {
 }
 
@@ -5323,9 +5319,8 @@ bpstat_check_breakpoint_conditions (bpstat bs, thread_info *thread)
       return;
     }
 
-  /* Remember the SIMD lane: it is either the first active lane in the thread
-     or the lane, which was specified for the BP.  */
-  bs->simd_lane_num = find_first_active_simd_lane (lanes_mask);
+  /* Remember the SIMD mask.  */
+  bs->simd_lane_mask = lanes_mask;
 
   /* Evaluate extension language breakpoints that have a "stop" method
      implemented.  */
@@ -5394,23 +5389,27 @@ bpstat_check_breakpoint_conditions (bpstat bs, thread_info *thread)
 	  try
 	    {
 	      scoped_restore_current_simd_lane restore_lane {thread};
+	      unsigned int condition_mask = 0x0;
 
-	      /* Start evaluating the condition for all SIMD lanes which might
-		 have cause the stop.  Once the condition is true for a lane,
-		 break the loop.  */
+	      /* Evaluate the condition for all SIMD lanes which might have
+		 caused the stop.  */
 	      for_active_lanes (lanes_mask, [&] (int lane)
 		{
 		  thread->set_current_simd_lane (lane);
-		  condition_result = breakpoint_cond_eval (cond);
+		  if (breakpoint_cond_eval (cond))
+		    {
+		      /* Unmask the lane if the condition is true.  */
+		      condition_mask = condition_mask | (0x1 << lane);
+		    }
 
-		  /* We stop at the first successfull condition evaluation.  */
-		  return !condition_result;
+		  return true;
 		});
 
-	      /* If condition was true for a lane, then in THREAD this lane
-		 is still set as current.  Remember this lane.  */
-	      if (condition_result)
-		bs->simd_lane_num = thread->current_simd_lane ();
+
+	      /* If at least one lane is unmasked, then the condition
+		 was hold.  Update the SIMD lanes mask.  */
+	      condition_result = condition_mask != 0x0;
+	      bs->simd_lane_mask = condition_mask;
 	    }
 	  catch (const gdb_exception &ex)
 	    {
@@ -5840,9 +5839,6 @@ bpstat_what (bpstat bs_head)
 	  internal_error (__FILE__, __LINE__,
 			  _("bpstat_what: unhandled bptype %d"), (int) bptype);
 	}
-
-      /* Also, return the number of the SIMD lane, which triggered the hit.  */
-      retval.simd_lane_num = bs->simd_lane_num;
 
       retval.main_action = std::max (retval.main_action, this_action);
     }
@@ -12695,6 +12691,26 @@ bkpt_print_it (bpstat bs)
   else
     uiout->message ("Breakpoint %pF, ",
 		    signed_field ("bkptno", b->number));
+  if (show_thread_that_caused_stop () && bs->simd_lane_mask != 0x0)
+    {
+      if (inferior_thread ()->has_simd_lanes ())
+	{
+	  std::vector<int> hit_lanes;
+	  for_active_lanes (bs->simd_lane_mask, [&] (int lane)
+	    {
+	      hit_lanes.push_back (lane);
+	      return true;
+	    });
+
+	  if (hit_lanes.size () > 1)
+	    uiout->text ("with SIMD lanes ");
+	  else
+	    uiout->text ("with SIMD lane ");
+
+	  uiout->text (make_ranges_from_sorted_vector (hit_lanes).c_str ());
+	  uiout->text (", ");
+	}
+    }
 
   return PRINT_SRC_AND_LOC;
 }

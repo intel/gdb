@@ -163,6 +163,14 @@ find_first_active_simd_lane (unsigned int mask)
   return result;
 }
 
+/* See gdbthread.h.  */
+
+bool
+is_simd_lane_active (unsigned int mask, int lane)
+{
+  return ((mask >> lane) & 0x1) == 0x1;
+}
+
 struct thread_info*
 inferior_thread (void)
 {

@@ -6486,6 +6486,26 @@ process_event_stop_test (struct execution_control_state *ecs)
       stop_stack_dummy = what.call_dummy;
     }
 
+  if (ecs->event_thread->control.stop_bpstat != nullptr)
+    {
+      unsigned int mask
+	= ecs->event_thread->control.stop_bpstat->simd_lane_mask;
+
+      if (mask != 0x0)
+	{
+	  int current_simd_lane = ecs->event_thread->current_simd_lane ();
+	  /* If previous SIMD lane matches the SIMD lane mask, do not
+	     change it.  Otherwise, find a new one.  */
+	  if (!is_simd_lane_active (mask, current_simd_lane))
+	    {
+	      /* If a specific SIMD lane caused the stop, then switch
+		 the thread to this lane.  */
+	      int lane = find_first_active_simd_lane (mask);
+	      ecs->event_thread->set_current_simd_lane (lane);
+	    }
+	}
+    }
+
   /* A few breakpoint types have callbacks associated (e.g.,
      bp_jit_event).  Run them now.  */
   bpstat_run_callbacks (ecs->event_thread->control.stop_bpstat);
@@ -6652,6 +6672,7 @@ process_event_stop_test (struct execution_control_state *ecs)
 	 whether a/the breakpoint is there when the thread is next
 	 resumed.  */
       ecs->event_thread->stepping_over_breakpoint = 1;
+
       stop_waiting (ecs);
       return;
 

@@ -155,7 +155,7 @@ bool
 thread_info::is_simd_lane_active (int lane)
 {
   unsigned int mask = active_simd_lanes_mask ();
-  return (mask & (0x1 << lane)) != 0;
+  return ::is_simd_lane_active (mask, lane);
 }
 
 /* See gdbthread.h.  */
@@ -174,6 +174,14 @@ find_first_active_simd_lane (unsigned int mask)
     });
 
   return result;
+}
+
+/* See gdbthread.h.  */
+
+bool
+is_simd_lane_active (unsigned int mask, int lane)
+{
+  return ((mask >> lane) & 0x1) == 0x1;
 }
 
 struct thread_info*

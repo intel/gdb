@@ -1198,8 +1198,8 @@ struct bpstat
        associated with this element of the bpstat chain.  */
     enum bp_print_how print_it;
 
-    /* Tell which SIMD lane hit the BP.  */
-    int simd_lane_num;
+    /* Tell which SIMD lanes are hit the BP.  */
+    unsigned int simd_lane_mask;
   };
 
 enum inf_context

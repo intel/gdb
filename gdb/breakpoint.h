@@ -755,6 +755,7 @@ struct breakpoint
   /* Chain of command lines to execute when this breakpoint is
      hit.  */
   counted_command_line commands;
+  bool is_cmd_for_all_lanes = false;
   /* Stack depth (address of frame).  If nonzero, break only if fp
      equals this.  */
   struct frame_id frame_id = null_frame_id;
@@ -1200,6 +1201,7 @@ struct bpstats
 
     /* The associated command list.  */
     counted_command_line commands;
+    bool is_cmd_for_all_lanes;
 
     /* Old value associated with a watchpoint.  */
     value_ref_ptr old_val;

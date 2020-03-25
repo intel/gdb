@@ -2829,6 +2829,8 @@ handle_v_cont (char *own_buf)
 	{
 	  const char *q;
 	  ptid_t ptid = read_ptid (p + 1, &q);
+	  if (ptid == null_ptid)
+	    goto err;
 
 	  if (p == q)
 	    goto err;

@@ -588,13 +588,17 @@ read_ptid (const char *buf, const char **obuf)
   /* No multi-process.  Just a tid.  */
   ULONGEST tid = hex_or_minus_one (p, &pp);
 
+  if (obuf)
+    *obuf = pp;
+
   /* Since GDB is not sending a process id (multi-process extensions
      are off), then there's only one process.  Default to the first in
      the list.  */
-  int pid = get_first_process ()->pid;
+  process_info *first_proc = get_first_process ();
+  if (first_proc == nullptr)
+    return null_ptid;
 
-  if (obuf)
-    *obuf = pp;
+  int pid = first_proc->pid;
 
   return ptid_t (pid, tid);
 }

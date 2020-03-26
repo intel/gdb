@@ -630,6 +630,7 @@ srv_xmlbuiltin
 GDBSERVER_LIBS
 GDBSERVER_DEPFILES
 RDYNAMIC
+CONFIG_OBS
 REPORT_BUGS_TEXI
 REPORT_BUGS_TO
 PKGVERSION
@@ -10379,6 +10380,18 @@ elif test "${srv_mingw}" = "yes"; then
   # WIN32APILIBS is set by GDB_AC_COMMON.
   LIBS="$LIBS $WIN32APILIBS"
 fi
+
+CONFIG_OBS=""
+
+# If we build for Windows, then also build file properties
+# for GDB executable.
+case $host_os in
+  *mingw32*)
+    CONFIG_OBS="$CONFIG_OBS gdb_exe_properties.o"
+    ;;
+esac
+
+
 
 if test "${srv_linux_usrregs}" = "yes"; then
 

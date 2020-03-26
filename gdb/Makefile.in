@@ -1824,7 +1824,7 @@ test-cp-name-parser$(EXEEXT): test-cp-name-parser.o $(LIBIBERTY)
 INIT_FILES = \
 	$(patsubst %.o,%.c, \
 	  $(patsubst %-exp.o,%-exp.y, \
-	    $(filter-out init.o version.o %_S.o %_U.o,\
+	    $(filter-out init.o version.o gdb_exe_properties.o %_S.o %_U.o,\
 	      $(COMMON_OBS))))
 
 init.c: stamp-init; @true
@@ -2090,6 +2090,10 @@ stamp-version: Makefile version.in $(srcdir)/../bfd/version.h $(srcdir)/../gdbsu
 
 gdb.cxref: $(SFILES)
 	cxref -I. $(SFILES) >gdb.cxref
+
+# Windows exe properties
+gdb_exe_properties.o: $(srcdir)/gdb_exe_properties.rc
+	$(WINDRES) $(srcdir)/gdb_exe_properties.rc gdb_exe_properties.o
 
 force_update:
 

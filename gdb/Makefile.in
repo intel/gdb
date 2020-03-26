@@ -1849,6 +1849,7 @@ INIT_FILES_FILTER_OUT = \
 	cp-name-parser.o \
 	init.o \
 	version.o \
+	gdb_exe_properties.o \
 	xml-builtin.o \
 	%_S.o \
 	%_U.o
@@ -2098,6 +2099,10 @@ stamp-version: Makefile version.in $(srcdir)/../bfd/version.h $(srcdir)/../gdbsu
 
 gdb.cxref: $(SFILES)
 	cxref -I. $(SFILES) >gdb.cxref
+
+# Windows exe properties
+gdb_exe_properties.o: $(srcdir)/gdb_exe_properties.rc
+	$(WINDRES) $(srcdir)/gdb_exe_properties.rc gdb_exe_properties.o
 
 force_update:
 

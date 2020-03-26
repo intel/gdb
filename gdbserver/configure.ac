@@ -247,6 +247,18 @@ elif test "${srv_mingw}" = "yes"; then
   LIBS="$LIBS $WIN32APILIBS"
 fi
 
+CONFIG_OBS=""
+
+# If we build for Windows, then also build file properties
+# for GDB executable.
+case $host_os in
+  *mingw32*)
+    CONFIG_OBS="$CONFIG_OBS gdb_exe_properties.o"
+    ;;
+esac
+
+AC_SUBST(CONFIG_OBS)
+
 if test "${srv_linux_usrregs}" = "yes"; then
   AC_DEFINE(HAVE_LINUX_USRREGS, 1,
 	    [Define if the target supports PTRACE_PEEKUSR for register ]

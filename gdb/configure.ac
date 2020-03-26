@@ -630,6 +630,14 @@ AC_SUBST(READLINE_DEPS)
 AC_SUBST(READLINE_CFLAGS)
 AC_SUBST(READLINE_TEXI_INCFLAG)
 
+# If we build for Windows, then also build file properties
+# for GDB executable.
+case $target_os in
+  *mingw32*)
+    CONFIG_OBS="$CONFIG_OBS gdb_exe_properties.o"
+    ;;
+esac
+
 # Generate jit-reader.h
 
 # This is typedeffed to GDB_CORE_ADDR in jit-reader.h

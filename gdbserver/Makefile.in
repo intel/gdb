@@ -47,6 +47,8 @@ AR = @AR@
 AR_FLAGS = rc
 STRIP = @STRIP@
 
+CONFIG_OBS = @CONFIG_OBS@
+
 # Dependency tracking information.
 DEPMODE = @CCDEPMODE@
 DEPDIR = @DEPDIR@
@@ -232,7 +234,7 @@ LIBOBJS = @LIBOBJS@
 SOURCES = $(SFILES)
 TAGFILES = $(SOURCES) ${HFILES} ${ALLPARAM} ${POSSLIBS}
 
-OBS = \
+OBS = $(CONFIG_OBS) \
 	alloc.o \
 	ax.o \
 	debug.o \
@@ -490,6 +492,11 @@ ax-ipa.o: ax.cc
 ax.o: ax.cc
 	$(COMPILE) $(WARN_CFLAGS_NO_FORMAT) $<
 	$(POSTCOMPILE)
+
+# Windows exe properties
+gdb_exe_properties.o:
+	${WINDRES} $(srcdir)/../gdb/gdb_exe_properties.rc gdb_exe_properties.o
+
 
 # Rules for objects that go in the in-process agent.
 

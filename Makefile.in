@@ -36741,7 +36741,7 @@ all-gdbserver: configure-gdbserver
 	$(HOST_EXPORTS)  \
 	(cd $(HOST_SUBDIR)/gdbserver && \
 	  $(MAKE) $(BASE_FLAGS_TO_PASS) $(EXTRA_HOST_FLAGS) $(STAGE1_FLAGS_TO_PASS)  \
-		$(TARGET-gdbserver))
+		"WINDRES=$${WINDRES}" $(TARGET-gdbserver))
 @endif gdbserver
 
 

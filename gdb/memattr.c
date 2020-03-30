@@ -494,7 +494,11 @@ enable_mem_command (const char *args, int from_tty)
       number_or_range_parser parser (args);
       while (!parser.finished ())
 	{
-	  int num = parser.get_number ();
+	  const char *p = parser.cur_tok ();
+	  int num = 0;
+	  if (!parser.get_number (&num))
+	    error (_("Incorrect mem ID: '%s'"), p);
+
 	  mem_enable (num);
 	}
     }
@@ -532,7 +536,12 @@ disable_mem_command (const char *args, int from_tty)
       number_or_range_parser parser (args);
       while (!parser.finished ())
 	{
-	  int num = parser.get_number ();
+	  const char *p = parser.cur_tok ();
+	  int num = 0;
+
+	  if (!parser.get_number (&num))
+	    error (_("Incorrect mem ID: '%s'"), p);
+
 	  mem_disable (num);
 	}
     }
@@ -579,7 +588,11 @@ delete_mem_command (const char *args, int from_tty)
   number_or_range_parser parser (args);
   while (!parser.finished ())
     {
-      int num = parser.get_number ();
+      const char *p = parser.cur_tok ();
+
+      int num = 0;
+      if (!parser.get_number (&num) || num == 0)
+	error (_("Incorrect mem ID: '%s'"), p);
       mem_delete (num);
     }
 

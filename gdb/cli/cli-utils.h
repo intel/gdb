@@ -32,17 +32,21 @@ struct cmd_list_element;
    convenience variable, or ("$" or "$$") followed by digits.
 
    TRAILER is a character which can be found after the number; most
-   commonly this is `-'.  If you don't want a trailer, use \0.  */
+   commonly this is `-'.  If you don't want a trailer, use \0.
 
-extern int get_number_trailer (const char **pp, int trailer);
+   Returns TRUE on success (parsed value is written to PARSED_VALUE).
+   If parsing failed, returns FALSE.  */
+
+extern bool get_number_trailer (const char **pp, int *parsed_value,
+				int trailer);
 
 /* Convenience.  Like get_number_trailer, but with no TRAILER.  */
 
-extern int get_number (const char **);
+extern bool get_number (const char **, int *);
 
 /* Like the above, but takes a non-const "char **".  */
 
-extern int get_number (char **);
+extern bool get_number (char **, int *);
 
 /* Like get_number_trailer, but works with ULONGEST, and throws on
    error instead of returning 0.  */
@@ -91,7 +95,7 @@ public:
      pointing at the '-' token.  Subsequent calls will not advance the
      pointer until the range is completed.  The call that completes
      the range will advance the pointer past <number2>.  */
-  int get_number ();
+  bool get_number (int *num);
 
   /* Setup internal state such that get_next() returns numbers in the
      START_VALUE to END_VALUE range.  END_PTR is where the string is

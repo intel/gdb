@@ -37,15 +37,16 @@ invalid_thread_id_error (const char *string)
    STRING is the parser string to be used in the error message if we
    do get back a negative number.  */
 
-static int
-get_positive_number_trailer (const char **pp, int trailer, const char *string)
+static bool
+get_non_negative_number_trailer (const char **pp, int *parsed_value,
+				 int trailer, const char *string)
 {
-  int num;
+  bool retval = get_number_trailer (pp, parsed_value, trailer);
 
-  num = get_number_trailer (pp, trailer);
-  if (num < 0)
+  if (*parsed_value < 0)
     error (_("negative value: %s"), string);
-  return num;
+
+  return retval;
 }
 
 /* See tid-parse.h.  */
@@ -69,7 +70,9 @@ parse_thread_id (const char *tidstr, const char **end, int *simd_lane_num)
       int inf_num;
 
       p1 = number;
-      inf_num = get_positive_number_trailer (&p1, '.', number);
+      if (!get_non_negative_number_trailer (&p1, &inf_num, '.', number))
+	invalid_thread_id_error (number);
+
       if (inf_num == 0)
 	invalid_thread_id_error (number);
 
@@ -95,7 +98,8 @@ parse_thread_id (const char *tidstr, const char **end, int *simd_lane_num)
   if (p1[0] != ':')
     {
       /* Thread number is presented.  */
-      thr_num = get_positive_number_trailer (&p1, trailer, number);
+      if (!get_non_negative_number_trailer (&p1, &thr_num, trailer, number))
+	invalid_thread_id_error (number);
 
       if (thr_num == 0)
 	invalid_thread_id_error (number);
@@ -129,7 +133,9 @@ parse_thread_id (const char *tidstr, const char **end, int *simd_lane_num)
 	error (_("Thread %s does not have SIMD lanes."), print_thread_id (tp));
 
       p1 = dot + 1;
-      lane_num = get_positive_number_trailer (&p1, 0, number);
+
+      if (!get_non_negative_number_trailer (&p1, &lane_num, 0, dot))
+	error (_("Incorrect SIMD lane number: %s."), dot);
 
       if (lane_num >= (sizeof (unsigned int)) * 8)
 	error (_("Incorrect SIMD lane number: %d."), lane_num);
@@ -253,9 +259,11 @@ tid_range_parser::get_tid_or_range (int *inf_num,
 
 	  /* Parse number to the left of the dot.  */
 	  p = m_cur_tok;
-	  m_inf_num = get_positive_number_trailer (&p, '.', m_cur_tok);
+	  if (!get_non_negative_number_trailer (&p, &m_inf_num, '.', m_cur_tok))
+	    return false;
+
 	  if (m_inf_num == 0)
-	    return 0;
+	    return false;
 
 	  m_qualified = true;
 	  p = dot + 1;
@@ -283,14 +291,16 @@ tid_range_parser::get_tid_or_range (int *inf_num,
     }
 
   *inf_num = m_inf_num;
-  *thr_start = m_range_parser.get_number ();
-  if (*thr_start < 0)
-    error (_("negative value: %s"), m_cur_tok);
-  if (*thr_start == 0)
+  *thr_start = 0;
+
+  if (!m_range_parser.get_number (thr_start) || *thr_start == 0)
     {
       m_state = STATE_INFERIOR;
       return false;
     }
+
+  if (*thr_start < 0)
+    error (_("negative value: %s"), m_cur_tok);
 
   /* If we successfully parsed a thread number or finished parsing a
      thread range, switch back to assuming the next TID is

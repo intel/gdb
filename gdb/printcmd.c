@@ -2030,7 +2030,7 @@ static void
 map_display_numbers (const char *args,
 		     gdb::function_view<void (struct display *)> function)
 {
-  int num;
+  int num = 0;
 
   if (args == NULL)
     error_no_arg (_("one or more display numbers"));
@@ -2041,8 +2041,7 @@ map_display_numbers (const char *args,
     {
       const char *p = parser.cur_tok ();
 
-      num = parser.get_number ();
-      if (num == 0)
+      if (!parser.get_number (&num) || num == 0)
 	warning (_("bad display number at or near '%s'"), p);
       else
 	{

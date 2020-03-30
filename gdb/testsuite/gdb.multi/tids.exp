@@ -352,7 +352,7 @@ with_test_prefix "two inferiors" {
 	thr_apply_info_thr_error "${prefix}1-\$zero" "inverted range"
 	thr_apply_info_thr_error "${prefix}\$one-0" "inverted range"
 	thr_apply_info_thr_error "${prefix}\$one-\$zero" "inverted range"
-	thr_apply_info_thr_error "${prefix}1-" "inverted range"
+	thr_apply_info_thr_invalid "${prefix}1-"
 	thr_apply_info_thr_error "${prefix}2-1" "inverted range"
 	thr_apply_info_thr_error "${prefix}2-\$one" "inverted range"
 	if {$prefix == ""} {
@@ -367,7 +367,7 @@ with_test_prefix "two inferiors" {
 	thr_apply_info_thr_error "${prefix}\$minus_one" \
 	    "negative value: ${prefix_re}\\\$minus_one"
 
-	thr_apply_info_thr_error "${prefix}1-*" "inverted range"
+	thr_apply_info_thr_invalid "${prefix}1-*"
 	thr_apply_info_thr_invalid "${prefix}*1"
 	thr_apply_info_thr_invalid "${prefix}*foo"
 	thr_apply_info_thr_invalid "${prefix}foo*"

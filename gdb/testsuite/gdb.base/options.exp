@@ -324,8 +324,7 @@ proc_with_prefix test-frame-apply {} {
 
     test_gdb_complete_unique "frame apply all" "frame apply all"
 
-    gdb_test "frame apply level 0-" \
-	"Please specify a command to apply on the selected frames"
+    gdb_test "frame apply level 0-" "Missing or invalid LEVEL... argument"
     test_gdb_complete_none "frame apply level 0-"
 
     foreach cmd {
@@ -402,8 +401,7 @@ proc_with_prefix test-thread-apply {} {
     test_gdb_complete_unique "thread apply all" "thread apply all"
     test_gdb_complete_unique "taas" "taas"
 
-    gdb_test "thread apply 1-" \
-	"inverted range"
+    gdb_test "thread apply 1-" "Invalid thread ID: 1-"
     test_gdb_complete_none "frame apply level 1-"
 
     foreach cmd {

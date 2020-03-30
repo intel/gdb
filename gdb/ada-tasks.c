@@ -1588,7 +1588,9 @@ task_apply_command (const char *tidlist, int from_tty)
   number_or_range_parser parser (tidlist);
   while (!parser.finished ())
     {
-      int num = parser.get_number ();
+      int num = 0;
+      if (!parser.get_number (&num))
+	error (_("bad Ada Task number '%s'"), tidlist);
 
       if (num < 1 || num - 1 >= data->task_list.size ())
 	warning (_("no Ada Task with number %d"), num);

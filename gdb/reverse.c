@@ -220,7 +220,10 @@ delete_bookmark_command (const char *args, int from_tty)
   number_or_range_parser parser (args);
   while (!parser.finished ())
     {
-      int num = parser.get_number ();
+      int num = 0;
+
+      if (!parser.get_number (&num) || num == 0)
+	error (_("Invalid bookmark '%s'."), parser.cur_tok ());
       if (!delete_one_bookmark (num))
 	/* Not found.  */
 	warning (_("No bookmark #%d."), num);
@@ -233,7 +236,7 @@ static void
 goto_bookmark_command (const char *args, int from_tty)
 {
   struct bookmark *b;
-  unsigned long num;
+  int num = 0;
   const char *p = args;
 
   if (args == NULL || args[0] == '\0')
@@ -258,9 +261,7 @@ goto_bookmark_command (const char *args, int from_tty)
     }
 
   /* General case.  Bookmark identified by bookmark number.  */
-  num = get_number (&args);
-
-  if (num == 0)
+  if (!get_number (&args, &num) || num == 0)
     error (_("goto-bookmark: invalid bookmark number '%s'."), p);
 
   ALL_BOOKMARKS (b)
@@ -316,7 +317,11 @@ info_bookmarks_command (const char *args, int from_tty)
       number_or_range_parser parser (args);
       while (!parser.finished ())
 	{
-	  int bnum = parser.get_number ();
+	  const char *p = parser.cur_tok ();
+	  int bnum;
+	  if (!parser.get_number (&bnum) || bnum == 0)
+	    error (_("Invalid bookmark '%s'."), p);
+
 	  bookmark_1 (bnum);
 	}
     }

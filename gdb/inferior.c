@@ -637,7 +637,11 @@ detach_inferior_command (const char *args, int from_tty)
   number_or_range_parser parser (args);
   while (!parser.finished ())
     {
-      int num = parser.get_number ();
+      int num = 0;
+      const char *p = parser.cur_tok ();
+
+      if (!parser.get_number (&num))
+	error (_("Wrong inferior ID '%s'"), p);
 
       inferior *inf = find_inferior_id (num);
       if (inf == NULL)
@@ -676,7 +680,10 @@ kill_inferior_command (const char *args, int from_tty)
   number_or_range_parser parser (args);
   while (!parser.finished ())
     {
-      int num = parser.get_number ();
+      const char *p = parser.cur_tok ();
+      int num = 0;
+      if (!parser.get_number (&num))
+	error (_("Wrong inferior ID '%s'"), p);
 
       inferior *inf = find_inferior_id (num);
       if (inf == NULL)
@@ -803,7 +810,11 @@ remove_inferior_command (const char *args, int from_tty)
   number_or_range_parser parser (args);
   while (!parser.finished ())
     {
-      int num = parser.get_number ();
+      const char *p = parser.cur_tok ();
+      int num = 0;
+      if (!parser.get_number (&num))
+	error (_("Wrong inferior ID '%s'"), p);
+
       struct inferior *inf = find_inferior_id (num);
 
       if (inf == NULL)

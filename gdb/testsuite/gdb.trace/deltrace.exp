@@ -198,7 +198,7 @@ gdb_test "delete tracepoint [expr $trcpt2 + $trcpt3]" \
 			"3.4: delete invalid tracepoint number"
 
 # 3.5 delete tracepoint number zero
-gdb_test "delete tracepoint 0" "bad breakpoint number at or near '0'" \
+gdb_test "delete tracepoint 0" "Wrong breakpoint number '0'." \
 			"3.5: delete tracepoint number zero"
 
 # 3.6 help delete tracepoints

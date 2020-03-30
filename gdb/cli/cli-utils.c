@@ -78,10 +78,11 @@ get_ulongest (const char **pp, int trailer)
 
 /* See documentation in cli-utils.h.  */
 
-int
-get_number_trailer (const char **pp, int trailer)
+bool
+get_number_trailer (const char **pp, int *num, int trailer)
 {
-  int retval = 0;	/* default */
+  bool retval = false;	/* Default.  */
+  int parsed_value = 0;
   const char *p = *pp;
   bool negative = false;
 
@@ -98,11 +99,14 @@ get_number_trailer (const char **pp, int trailer)
       if (val)	/* Value history reference */
 	{
 	  if (value_type (val)->code () == TYPE_CODE_INT)
-	    retval = value_as_long (val);
+	    {
+	      parsed_value = value_as_long (val);
+	      retval = true;
+	    }
 	  else
 	    {
 	      printf_filtered (_("History value must have integer type.\n"));
-	      retval = 0;
+	      retval = false;
 	    }
 	}
       else	/* Convenience variable */
@@ -120,12 +124,15 @@ get_number_trailer (const char **pp, int trailer)
 	  varname[p - start] = '\0';
 	  if (get_internalvar_integer (lookup_internalvar (varname),
 				       &longest_val))
-	    retval = (int) longest_val;
+	    {
+	      parsed_value = (int) longest_val;
+	      retval = true;
+	    }
 	  else
 	    {
 	      printf_filtered (_("Convenience variable must "
 				 "have integer value.\n"));
-	      retval = 0;
+	      retval = false;
 	    }
 	}
     }
@@ -141,40 +148,47 @@ get_number_trailer (const char **pp, int trailer)
 	  while (*p && !isspace((int) *p))
 	    ++p;
 	  /* Return zero, which caller must interpret as error.  */
-	  retval = 0;
+	  retval = false;
 	}
       else
-	retval = atoi (p1);
+	{
+	  parsed_value = atoi (p1);
+	  retval = true;
+	}
+
     }
   if (!(isspace (*p) || *p == '\0' || *p == trailer))
     {
       /* Trailing junk: return 0 and let caller print error msg.  */
       while (!(isspace (*p) || *p == '\0' || *p == trailer))
 	++p;
-      retval = 0;
+      retval = false;
     }
   p = skip_spaces (p);
   *pp = p;
-  return negative ? -retval : retval;
+
+  if (num != nullptr)
+    *num = negative ? -parsed_value : parsed_value;
+  return retval;
 }
 
 /* See documentation in cli-utils.h.  */
 
-int
-get_number (const char **pp)
+bool
+get_number (const char **pp, int *num)
 {
-  return get_number_trailer (pp, '\0');
+  return get_number_trailer (pp, num, '\0');
 }
 
 /* See documentation in cli-utils.h.  */
 
-int
-get_number (char **pp)
+bool
+get_number (char **pp, int *num)
 {
   int result;
   const char *p = *pp;
 
-  result = get_number_trailer (&p, '\0');
+  result = get_number_trailer (&p, num, '\0');
   *pp = (char *) p;
   return result;
 }
@@ -234,15 +248,19 @@ number_or_range_parser::init (const char *string)
 
 /* See documentation in cli-utils.h.  */
 
-int
-number_or_range_parser::get_number ()
+bool
+number_or_range_parser::get_number (int *num)
 {
+  bool retval = false;
+
   if (m_in_range)
     {
       /* All number-parsing has already been done.  Return the next
 	 integer value (one greater than the saved previous value).
 	 Do not advance the token pointer until the end of range is
 	 reached.  */
+
+      retval = true;
 
       if (++m_last_retval == m_end_value)
 	{
@@ -255,7 +273,11 @@ number_or_range_parser::get_number ()
     {
       /* Default case: state->m_cur_tok is pointing either to a solo
 	 number, or to the first number of a range.  */
-      m_last_retval = get_number_trailer (&m_cur_tok, '-');
+      if (!get_number_trailer (&m_cur_tok, &m_last_retval, '-'))
+	return false;
+
+      retval = true;
+
       /* If get_number_trailer has found a '-' preceded by a space, it
 	 might be the start of a command option.  So, do not parse a
 	 range if the '-' is followed by an alpha or another '-'.  We
@@ -277,7 +299,15 @@ number_or_range_parser::get_number ()
 
 	  temp = &m_end_ptr;
 	  m_end_ptr = skip_spaces (m_cur_tok + 1);
-	  m_end_value = ::get_number (temp);
+
+	  if (!::get_number (temp, &m_end_value))
+	    {
+	      /* Advance the token pointer behind the failed range.  */
+	      m_cur_tok = m_end_ptr;
+
+	      return false;
+	    }
+
 	  if (m_end_value < m_last_retval)
 	    {
 	      error (_("inverted range"));
@@ -300,12 +330,19 @@ number_or_range_parser::get_number ()
       if (*(m_cur_tok + 1) == '$')
 	{
 	  /* Convenience variable.  */
-	  m_last_retval = ::get_number (&m_cur_tok);
+	  if (!::get_number (&m_cur_tok, &m_last_retval))
+	    return false;
+
+	  retval = true;
+
 	  if (m_last_retval < 0)
 	    error (_("negative value"));
 	}
     }
-  return m_last_retval;
+  if (num != nullptr)
+    *num = m_last_retval;
+
+  return retval;
 }
 
 /* See documentation in cli-utils.h.  */
@@ -314,7 +351,7 @@ void
 number_or_range_parser::setup_range (int start_value, int end_value,
 				     const char *end_ptr)
 {
-  gdb_assert (start_value > 0);
+  gdb_assert (start_value >= 0);
 
   m_in_range = true;
   m_end_ptr = end_ptr;
@@ -357,9 +394,9 @@ number_is_in_list (const char *list, int number)
     error (_("Arguments must be numbers or '$' variables."));
   while (!parser.finished ())
     {
-      int gotnum = parser.get_number ();
+      int gotnum = 0;
 
-      if (gotnum == 0)
+      if (!parser.get_number (&gotnum) || gotnum == 0)
 	error (_("Arguments must be numbers or '$' variables."));
       if (gotnum == number)
 	return 1;

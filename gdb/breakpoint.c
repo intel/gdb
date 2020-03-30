@@ -1122,7 +1122,7 @@ static void
 condition_command (const char *arg, int from_tty)
 {
   const char *p;
-  int bnum;
+  int bnum = 0;
 
   if (arg == 0)
     error_no_arg (_("breakpoint number"));
@@ -1135,8 +1135,7 @@ condition_command (const char *arg, int from_tty)
   gdb::option::process_options
     (&p, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_ERROR, group);
 
-  bnum = get_number (&p);
-  if (bnum == 0)
+  if (!get_number (&p, &bnum) || bnum == 0)
     error (_("Bad breakpoint argument: '%s'"), arg);
 
   set_breakpoint_condition (bnum, p, from_tty, cc_opts.force_condition);
@@ -14333,13 +14332,12 @@ static void
 ignore_command (const char *args, int from_tty)
 {
   const char *p = args;
-  int num;
+  int num = 0;
 
   if (p == 0)
     error_no_arg (_("a breakpoint number"));
 
-  num = get_number (&p);
-  if (num == 0)
+  if (!get_number (&p, &num) || num == 0)
     error (_("bad breakpoint number: '%s'"), args);
   if (*p == 0)
     error (_("Second argument (specified ignore-count) is missing."));
@@ -14397,7 +14395,11 @@ map_breakpoint_numbers (const char *args,
 
   while (!parser.finished ())
     {
-      int num = parser.get_number ();
+      const char *p = parser.cur_tok ();
+      int num = 0;
+      if (!parser.get_number (&num) || num == 0)
+	error (_("Wrong breakpoint number '%s'."), p);
+
       map_breakpoint_number_range (std::make_pair (num, num), function);
     }
 }
@@ -14445,18 +14447,20 @@ extract_bp_num (extract_bp_kind kind, const char *start,
 		int trailer, const char **end_out = NULL)
 {
   const char *end = start;
-  int num = get_number_trailer (&end, trailer);
+  int num = 0;
+
+  if (!get_number_trailer (&end, &num, trailer) || num == 0)
+    {
+      error (kind == extract_bp_kind::bp
+	     ? _("Bad breakpoint number '%.*s'")
+	     : _("Bad breakpoint location number '%.*s'"),
+	     int (end - start), start);
+    }
   if (num < 0)
     error (kind == extract_bp_kind::bp
 	   ? _("Negative breakpoint number '%.*s'")
 	   : _("Negative breakpoint location number '%.*s'"),
 	   int (end - start), start);
-  if (num == 0)
-    error (kind == extract_bp_kind::bp
-	   ? _("Bad breakpoint number '%.*s'")
-	   : _("Bad breakpoint location number '%.*s'"),
-	   int (end - start), start);
-
   if (end_out != NULL)
     *end_out = end;
   return num;
@@ -14778,12 +14782,13 @@ enable_once_command (const char *args, int from_tty)
 static void
 enable_count_command (const char *args, int from_tty)
 {
-  int count;
+  int count = 0;
 
   if (args == NULL)
     error_no_arg (_("hit count"));
 
-  count = get_number (&args);
+  if (!get_number (&args, &count) || count == 0)
+    error (_("Wrong argument: hit count."));
 
   map_breakpoint_numbers
     (args, [&] (breakpoint *b)
@@ -15291,18 +15296,19 @@ get_tracepoint_by_number (const char **arg,
 {
   int tpnum;
   const char *instring = arg == NULL ? NULL : *arg;
+  bool no_error = true;
 
   if (parser != NULL)
     {
       gdb_assert (!parser->finished ());
-      tpnum = parser->get_number ();
+      no_error = parser->get_number (&tpnum);
     }
   else if (arg == NULL || *arg == NULL || ! **arg)
     tpnum = tracepoint_count;
   else
-    tpnum = get_number (arg);
+    no_error = get_number (arg, &tpnum);
 
-  if (tpnum <= 0)
+  if (!no_error || tpnum <= 0)
     {
       if (instring && *instring)
 	printf_filtered (_("bad tracepoint number at or near '%s'\n"), 

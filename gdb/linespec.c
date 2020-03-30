@@ -1586,9 +1586,9 @@ decode_line_2 (struct linespec_state *self,
   number_or_range_parser parser (args);
   while (!parser.finished ())
     {
-      int num = parser.get_number ();
+      int num = 0;
 
-      if (num == 0)
+      if (!parser.get_number (&num) || num == 0)
 	error (_("canceled"));
       else if (num == 1)
 	{

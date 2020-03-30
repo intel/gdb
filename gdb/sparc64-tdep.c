@@ -461,7 +461,8 @@ adi_examine_command (const char *args, int from_tty)
   if (p && *p == '/')
     {
       p++;
-      cnt = get_number (&p);
+      cnt = 0;
+      get_number (&p, &cnt);
     }
 
   CORE_ADDR next_address = 0;
@@ -502,12 +503,13 @@ adi_assign_command (const char *args, int from_tty)
   else
     error ("%s", _(adi_usage));
 
-  size_t cnt = 1;
+  int cnt = 1;
   const char *p = args;
   if (exp && *exp == '/')
     {
       p = exp + 1;
-      cnt = get_number (&p);
+      cnt = 0;
+      get_number (&p, &cnt);
     }
 
   CORE_ADDR next_address = 0;

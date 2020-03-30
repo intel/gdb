@@ -3092,7 +3092,7 @@ frame_apply_level_cmd_completer (struct cmd_list_element *ignore,
       while (!levels.finished ())
 	{
 	  /* Call for effect.  */
-	  levels.get_number ();
+	  levels.get_number (nullptr);
 
 	  if (levels.in_range ())
 	    levels.skip_range ();
@@ -3144,7 +3144,8 @@ frame_apply_cmd_completer (struct cmd_list_element *ignore,
 {
   const char *cmd = text;
 
-  int count = get_number_trailer (&cmd, 0);
+  int count = 0;
+  get_number_trailer (&cmd, &count, 0);
   if (count == 0)
     return;
 
@@ -3175,7 +3176,11 @@ frame_apply_level_command (const char *cmd, int from_tty)
   while (!levels.finished ())
     {
       /* Call for effect.  */
-      levels.get_number ();
+      if (!levels.get_number (nullptr))
+	{
+	  level_found = false;
+	  break;
+	}
 
       level_found = true;
       if (levels.in_range ())
@@ -3191,7 +3196,9 @@ frame_apply_level_command (const char *cmd, int from_tty)
   levels.init (levels_str);
   while (!levels.finished ())
     {
-      const int level_beg = levels.get_number ();
+      int level_beg;
+      levels.get_number (&level_beg);
+
       int n_frames;
 
       if (levels.in_range ())
@@ -3232,8 +3239,8 @@ frame_apply_command (const char* cmd, int from_tty)
 
   if (cmd == NULL)
     error (_("Missing COUNT argument."));
-  count = get_number_trailer (&cmd, 0);
-  if (count == 0)
+
+  if (!get_number_trailer (&cmd, &count, 0))
     error (_("Invalid COUNT argument."));
 
   if (count < 0)

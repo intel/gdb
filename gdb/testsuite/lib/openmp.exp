@@ -1,0 +1,336 @@
+# Copyright 2020-2022 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Support library for testing OpenMP debugging in GDB.
+
+# Return compiler flags for OpenMP.
+load_lib fortran.exp
+
+if {![info exists openmp_device_generation]} {
+    set openmp_device_generation ""
+}
+if {![info exists openmp_device_id]} {
+    set openmp_device_id ""
+}
+
+if {![info exists OFFLOAD_DEVICE_GROUP]} {
+    set OFFLOAD_DEVICE_GROUP "cpu,host,gpu"
+}
+
+if {![info exists OFFLOAD_BACKEND_GROUP]} {
+    set OFFLOAD_BACKEND_GROUP "level0,opencl"
+}
+
+if {[info exists OPENMP_LANG_GROUP]} {
+    set openmp_languages_list {}
+    set openmp_languages [split "$OPENMP_LANG_GROUP" ","]
+    foreach lang $openmp_languages {
+	if {$lang eq "cpp"} {
+	    lappend openmp_languages_list "cpp"
+	} elseif {$lang eq "fortran"} {
+	    lappend openmp_languages_list "f90"
+	}
+    }
+} else {
+    set openmp_languages_list {"cpp" "f90"}
+}
+
+# Compile a given OpenMP source file.
+
+proc prepare_openmp_for_testing {binfile srcfile extension {options ""}} {
+    set message "failed to compile $srcfile"
+
+    if {$extension eq "f90"} {
+	set language "f90"
+    } elseif {$extension eq "cpp"} {
+	set language "c++"
+    } else {
+	return -1
+    }
+
+    return [build_executable $message \
+		$binfile \
+		$srcfile \
+		[concat openmp $language debug $options]]
+}
+
+# Run a test on the target for checking if it supports OpenMP.  Return 0 if
+# OpenMP is supported, 1 otherwise.
+
+proc skip_openmp_tests {device extension} {
+    global srcdir subdir objdir inferior_exited_re env decimal hex
+    global openmp_device_generation openmp_device_id
+
+    set result 1
+    with_test_prefix [init_openmp_device "$device" $extension] {
+	set exe "$objdir/openmp-devices_$extension"
+	set src "$srcdir/lib/openmp-devices.$extension"
+
+	if {[prepare_openmp_for_testing ${exe} ${src} "$extension"] == -1} {
+	    verbose "OpenMP: Compilation failed for $extension." 0
+	    return 1
+	}
+
+	# Number of devices is always returned 0 in case of OpenMP Host offload so
+	# in this case testing is not skipped due to this.
+	if {[info exists env(OMP_TARGET_OFFLOAD)]} {
+	    if {"$env(OMP_TARGET_OFFLOAD)" eq "DISABLED"} {
+		return 0
+	    }
+	}
+
+	clean_restart $exe
+
+	set gdbserver_started 0
+	set test "Test OpenMP support"
+	gdb_test_multiple "run" $test {
+	    -re "id ($hex) \\\((Gen$decimal)\\\).*\r\n" {
+		set openmp_device_id $expect_out(1,string)
+		set openmp_device_generation $expect_out(2,string)
+		exp_continue
+	    }
+	    -re "intelgt: attached to device.*(Intel.*).*\r\n" {
+		set openmp_device_generation $expect_out(1,string)
+		exp_continue
+	    }
+	    -re "intelgt: gdbserver-ze started for process.*\r\n" {
+		set gdbserver_started 1
+		exp_continue
+	    }
+	    -re -wrap "$inferior_exited_re normally].*" {
+		if {!$gdbserver_started
+		    && [require_openmp_device "GPU"]} {
+		    set result 1
+		} else {
+		    set result 0
+		}
+	    }
+	    -re -wrap "$inferior_exited_re with code.*" {
+		set result 1
+	    }
+	    -re -wrap "received signal SIGABRT, Aborted.*" {
+		set result 1
+	    }
+	    -re "Quit anyway\\? \\(y or n\\) $" {
+		send_gdb "y\n"
+		set result 1
+	    }
+	}
+    }
+
+    gdb_exit
+
+    return $result
+}
+
+# Issue a 'continue' command and expect to see program termination.
+
+proc continue_openmp_program_to_termination {{msg_suffix ""}} {
+    global gdb_prompt inferior_exited_re
+
+    set is_non_stop 0
+    gdb_test_multiple "show non-stop" "get non-stop mode" {
+	-re "non-stop mode is off.\r\n$gdb_prompt $" {
+	    set is_non_stop 0
+	}
+	-re "non-stop mode is on.\r\n$gdb_prompt $" {
+	    set is_non_stop 1
+	}
+    }
+
+    if {!$is_non_stop} {
+	gdb_test "continue" "$inferior_exited_re normally].*" \
+	    "continue to end $msg_suffix"
+    } else {
+	gdb_test_multiple "continue -a" "continue to end $msg_suffix" {
+	    -re "$inferior_exited_re normally].*$gdb_prompt.*" {
+		pass $gdb_test_name
+	    }
+	}
+    }
+}
+
+# Call cpp or fortran main function according to extension value.
+
+proc openmp_run_to_main {extension} {
+    set result 1
+    if {$extension eq "f90"} {
+	if {![fortran_runto_main]} {
+	    set result 0
+	}
+    } else {
+	if {![runto_main]} {
+	    set result 0
+	}
+    }
+
+    return $result
+}
+
+# Build and run OpenMP program to main.
+
+proc start_openmp_program {extension} {
+    global binfile srcfile env
+
+    set exe "${binfile}_${extension}"
+    clean_restart $exe
+    if {![openmp_run_to_main $extension]} {
+	untested "failed to run to main"
+	return 0
+    }
+
+    return 1
+}
+
+# Return true if the OpenMP device selected via the env
+# matches the arguments.  Otherwise return false.
+# Exact match is used for LIBOMPTARGET_DEVICETYPE env.
+# As the LIBOMPTARGET_DEVICETYPE can only meaningfully be set to CPU and GPU
+# it is set to "" in case we are doing host offload.  Thus, host offload can
+# be queried via `require_openmp_device ""`.
+
+proc require_openmp_device {type} {
+    global env
+
+	if {![info exists env(OMP_TARGET_OFFLOAD)]
+	|| ("$env(OMP_TARGET_OFFLOAD)" ne "DISABLED"
+	    && ![info exists env(LIBOMPTARGET_DEVICETYPE)])} {
+	verbose "OpenMP: test parameters not set; use LIBOMPTARGET_DEVICETYPE env" 0
+	return 0
+    }
+
+    return [expr { $env(LIBOMPTARGET_DEVICETYPE) eq $type }]
+}
+
+# Initialize the environment for OpenMP offload according to input
+# device value.
+
+proc init_openmp_device {device_info extension} {
+    global env openmp_device_generation openmp_device_id
+
+    set device_list [split "$device_info" ";"]
+    set device [lindex $device_list 0]
+    set backend [lindex $device_list 1]
+
+    if {[llength $device_list] > 2} {
+	set openmp_device_generation [lindex $device_list 2]
+	set openmp_device_id [lindex $device_list 3]
+    }
+
+    if {[string match "host" $device]} {
+	set env(OMP_TARGET_OFFLOAD) "DISABLED"
+	set env(LIBOMPTARGET_DEVICETYPE) "host"
+    } else {
+	set env(LIBOMPTARGET_DEVICETYPE) [string toupper $device]
+	set env(LIBOMPTARGET_PLUGIN) $backend
+	set env(OMP_TARGET_OFFLOAD) "MANDATORY"
+    }
+
+    return "$device:$backend:$extension"
+}
+
+# Returns 0 is device name is unexpected, otherwise returns 1.
+
+proc is_omp_supported_device {device} {
+    if {[string match -nocase "host" $device]
+	|| [string match -nocase "cpu" $device]
+	|| [string match -nocase "gpu" $device]} {
+	return 1
+    }
+
+    return 0
+}
+
+# Returns list of supported OpenMP devices list.
+
+proc omp_get_supported_devices_list {extension} {
+    global OFFLOAD_DEVICE_GROUP OFFLOAD_BACKEND_GROUP
+    global openmp_device_generation openmp_device_id
+
+    set device_list {}
+
+    if {![is_omp_offload_supported_compiler "${extension}"]} {
+	unsupported "OpenMP ${extension} tests supported only for dpcpp and icpx compilers."
+	return $device_list
+    }
+
+    set defined_device_list [split "$OFFLOAD_DEVICE_GROUP" ","]
+    foreach device $defined_device_list {
+	if {![is_omp_supported_device $device]} {
+	    verbose "OpenMP device name $device is unknown." 0
+	    continue
+	}
+
+	if {[string match "gpu" $device]
+	    && [string match "*level*" $OFFLOAD_BACKEND_GROUP]} {
+	    if {![skip_openmp_tests "$device;level0" $extension]} {
+		lappend device_list "${device};level_zero;$openmp_device_generation;$openmp_device_id"
+	    }
+	}
+
+	if {[string match "*opencl*" $OFFLOAD_BACKEND_GROUP]} {
+	    if {![skip_openmp_tests "$device;opencl" $extension]} {
+		lappend device_list "${device};opencl;$openmp_device_generation;$openmp_device_id"
+	    }
+	}
+    }
+
+    if {[llength $device_list] == 0} {
+        verbose "OpenMP:${extension}: Target does not support OpenMP." 0
+    } else {
+	verbose "OpenMP:${extension}: List of supported devices ${device_list}." 0
+    }
+    return $device_list
+}
+
+# Returns list of supported OpenMP devices list for CPP.
+
+gdb_caching_proc init_omp_cpp_devices_list {
+    return [omp_get_supported_devices_list "cpp"]
+}
+
+# Returns list of supported OpenMP devices list for F90.
+
+gdb_caching_proc init_omp_f90_devices_list {
+    return [omp_get_supported_devices_list "f90"]
+}
+
+# Returns the list of OpenMP supported target devices for the input
+# extension value.
+
+proc omp_get_device_list {extension} {
+    if {$extension eq "cpp"} {
+	return [init_omp_cpp_devices_list]
+    } elseif {$extension eq "f90"} {
+	return [init_omp_f90_devices_list]
+    }
+
+    return {}
+}
+
+# Get compiler info and return 1 if the compiler is icpx or ifx,
+# otherwise return 0.
+
+proc is_omp_offload_supported_compiler {extension} {
+    if {$extension eq "cpp"} {
+	set extension "c++"
+    }
+
+    if {($extension eq "f90" && [test_compiler_info {ifx-*} f90])
+	 || ($extension eq "c++" && [test_compiler_info {icx-*} c++])} {
+	return 1
+    }
+    return 0
+}

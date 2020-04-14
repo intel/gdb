@@ -1,0 +1,87 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for OpenMP, for a program that has independent,
+# unnamed kernels.
+
+load_lib openmp.exp
+
+foreach extension $openmp_languages_list {
+    set device_list [omp_get_device_list $extension]
+    if {[llength $device_list] == 0} {
+	unsupported "target does not support OpenMP ${extension}"
+	continue
+    }
+
+    standard_testfile ".${extension}"
+    set exe "${binfile}_${extension}"
+
+    if {[prepare_openmp_for_testing ${exe} ${srcfile} $extension] == -1} {
+	untested "OpenMP: Fail to prepare the test ${exe}"
+	continue
+    }
+
+    foreach device_info "${device_list}" {
+	with_test_prefix [init_openmp_device $device_info $extension] {
+
+	    if {![start_openmp_program $extension]} {
+		untested "Fail to start the program"
+		continue
+	    }
+
+	    set kernel [gdb_get_line_number "kernel-line"]
+	    set post_kernel [gdb_get_line_number "line-after-kernel"]
+	    set exit_line [gdb_get_line_number "exit-line"]
+	    gdb_breakpoint $kernel
+	    gdb_breakpoint $post_kernel
+	    gdb_breakpoint $exit_line
+
+	    # Check that we stop inside the kernels, regardless of the submission
+	    # order, and finally the post-kernel line in the host.
+	    for {set i 1} {$i <= 4} {incr i} {
+		gdb_continue_to_breakpoint "hit the BP, occurrence $i" \
+		    ".*$srcfile:$kernel.*"
+	    }
+
+	    # For OpenMP nowait clause breakpoint does not hit post kernel randomly.
+	    # DOQG-314: On GPU we hit the kernel entry, so we need to continue twice.
+	    for {set i 1} {$i <= 2} {incr i} {
+		with_test_prefix "iter $i" {
+		    if {( $i == 1 ) && ( [require_openmp_device "GPU"] )} {
+			setup_kfail "JIRA DOQG/314" "*-*-*"
+		    }
+		    gdb_test_multiple "continue" "hit the BP post-kernel" {
+			-re -wrap ".*$srcfile.*$post_kernel.*" {
+			    pass "$gdb_test_name"
+			    break;
+			}
+			-re -wrap ".*omp target teams .*" {
+			    fail "$gdb_test_name"
+			}
+		    }
+		}
+	    }
+
+	    gdb_continue_to_breakpoint "hit the BP at exit" \
+		".*$srcfile:$exit_line.*"
+
+	    if {$extension eq "cpp"} {
+		gdb_test "print in_arr\[0\]" "= 101" "value set in 2nd section"
+	    } else {
+		gdb_test "print in_arr(0)" "= 101" "value set in 2nd section"
+	    }
+	}
+    }
+}

@@ -1,0 +1,61 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for stepping into a kernel function.
+
+load_lib openmp.exp
+
+foreach extension $openmp_languages_list {
+    set device_list [omp_get_device_list $extension]
+    if {[llength $device_list] == 0} {
+	unsupported "target does not support OpenMP ${extension}"
+	continue
+    }
+
+    standard_testfile "call-stack.${extension}"
+    set exe "${binfile}_${extension}"
+
+    if {[prepare_openmp_for_testing ${exe} ${srcfile} $extension] == -1} {
+	untested "OpenMP: Fail to prepare the test ${exe}"
+	continue
+    }
+
+    foreach device_info "${device_list}" {
+	with_test_prefix [init_openmp_device $device_info $extension] {
+
+	    if {![start_openmp_program $extension]} {
+		untested "Fail to start the program"
+		continue
+	    }
+
+	    set inside [gdb_get_line_number "ordinary-outer-loc"]
+	    gdb_breakpoint $inside
+	    gdb_continue_to_breakpoint "inside" ".*$srcfile:$inside.*"
+
+	    if {${extension} eq "f90" && [require_openmp_device "CPU"]} {
+		setup_kfail "JIRA CMPLRLLVM/29442" "*-*-*"
+	    }
+	    if {${extension} eq "f90" && [require_openmp_device "GPU"]} {
+		setup_kfail "JIRA DOQG/3138" "*-*-*"
+	    }
+	    gdb_test "step" "first .* at .*" "step into function"
+
+	    if {${extension} eq "cpp" && [omp_is_level_zero_debug_api]} {
+		setup_kfail "JIRA DOQG/3397" "*-*-*"
+	    }
+	    continue_openmp_program_to_termination ""
+	}
+    }
+}

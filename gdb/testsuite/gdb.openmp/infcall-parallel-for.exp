@@ -1,0 +1,48 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for OpenMP, for making infcalls inside a
+# parallel_for kernel.
+
+load_lib openmp.exp
+
+if {[skip_openmp_tests]} {
+    untested "skipping openmp test"
+    return 0
+}
+
+standard_testfile parallel-for-1D.${openmp_program_extension}
+
+if {[start_openmp_program]} {
+    return -1
+}
+
+set last_line [gdb_get_line_number "kernel-last-line"]
+gdb_breakpoint $last_line
+
+# Check that we can make an infcall from different threads.
+
+for {set j 1} {$j <= 4} {incr j} {
+    gdb_continue_to_breakpoint "hit the last line, occurrence $j" \
+	".*$srcfile:$last_line.*"
+
+    if {$openmp_program_extension eq "f90"} {
+	gdb_test "print update_val\(in_elem, 100\).eqv.in_elem2" ".TRUE."\
+	     "thread invariant, $j"
+    } else {
+	gdb_test "print update_val\(in_elem, 100\) == in_elem2" "true"\
+	    "thread invariant, $j"
+    }
+}

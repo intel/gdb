@@ -141,14 +141,23 @@ switch $env(appdbg_boardfile) {
 	sycl-host {
 		load_board_description "sycl-host"
 	}
-	openmp-cpu {
-		load_board_description "openmp-cpu"
+	openmp-cpu-cpp {
+		load_board_description "openmp-cpu-cpp"
 	}
-	openmp-gpu {
-		load_board_description "openmp-gpu"
+	openmp-cpu-f90 {
+		load_board_description "openmp-cpu-f90"
 	}
-	openmp-host {
-		load_board_description "openmp-host"
+	openmp-gpu-cpp {
+		load_board_description "openmp-gpu-cpp"
+	}
+	openmp-gpu-f90 {
+		load_board_description "openmp-gpu-f90"
+	}
+	openmp-host-cpp {
+		load_board_description "openmp-host-cpp"
+	}
+	openmp-host-f90 {
+		load_board_description "openmp-host-f90"
 	}
 	sycl-intelfpga {
 		load_board_description "sycl-intelfpga"

@@ -1,0 +1,113 @@
+# Copyright 2019-2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for OpenMP, for a program that has asynchronous
+# kernels.
+
+load_lib openmp.exp
+
+set device_list [omp_get_device_list]
+if {[llength ${device_list}] == 0} {
+    unsupported "target does not support OpenMP"
+    return 0
+}
+
+foreach extension ${openmp_languages_list} {
+    standard_testfile ".${extension}"
+    set exe "${binfile}_${extension}"
+
+    if {${extension} eq "cpp"} {
+	set language "c++"
+    } else {
+	set language ${extension}
+    }
+
+    if {[build_executable "failed to compile ${srcfile}" \
+	${exe} ${srcfile} [concat openmp ${language} debug]]} {
+	if {${extension} eq "f90"} {
+	    kfail "JIRA CMPLRLLVM/51149" "OpenMP: Fail to prepare the test ${exe}"
+	}
+	continue
+    }
+
+    foreach device_info ${device_list} {
+	with_test_prefix \
+	    [string cat [init_openmp_device ${device_info}] ":${extension}"] {
+
+	    clean_restart ${exe}
+	    if {![openmp_run_to_main ${extension}]} {
+		untested "Failed to run to main"
+		continue
+	    }
+
+	    set kernel_1 [gdb_get_line_number "kernel-1-line"]
+	    set kernel_2 [gdb_get_line_number "kernel-2-line"]
+	    set post_kernel [gdb_get_line_number "post-kernel-line"]
+	    gdb_breakpoint ${kernel_1}
+	    gdb_breakpoint ${kernel_2}
+	    gdb_breakpoint ${post_kernel} {temporary}
+
+	    # Produce a dummy line for the propagated kernel bp hit depending on the
+	    # language used.
+	    proc get_omp_language_bp_dummy {language} {
+		if {${language} eq "f90"} {
+		    return "omp target teams.*"
+		} else {
+		    return "pragma omp target.*"
+		}
+	    }
+
+	    # Check that we stop inside the kernels and the host, regardless of
+	    # the order.
+
+	    set kernel1_hit 0
+	    set kernel2_hit 0
+	    set prop_bp_hit 0
+	    for {set i 1} {$i <= 5} {incr i} {
+		gdb_test_multiple "continue" "continue $i" {
+		    -re -wrap "Breakpoint .*${srcfile}:${kernel_1}.*" {
+			incr kernel1_hit
+		    }
+		    -re -wrap "Breakpoint .*${srcfile}:${kernel_2}.*" {
+			incr kernel2_hit
+		    }
+		    -re -wrap "breakpoint .*${srcfile}:${post_kernel}.*" {
+			pass ${gdb_test_name}
+		    }
+		    -re -wrap "[get_omp_language_bp_dummy ${extension}]" {
+			# For GPU the breakpoint defined for kernel-1 will propagate to
+			# kernel-2 and cause a BP hit at the kernel entry.  Ignore that hit
+			# and report a kfail.
+			if {[require_openmp_device "GPU"]} {
+			    setup_kfail "JIRA DOQG/314" "*-*-*"
+			}
+			gdb_assert {false} "should not be hit"
+			incr prop_bp_hit
+		    }
+		    -re -wrap "${inferior_exited_re} normally].*" {
+			gdb_assert {${kernel1_hit} == 1} "hit first kernel"
+			gdb_assert {${kernel2_hit} == 1} "hit second kernel"
+
+			if {[require_openmp_device "GPU"]} {
+			    setup_kfail "JIRA DOQG/314" "*-*-*"
+			}
+			gdb_assert {${prop_bp_hit} == 0} "propagated breakpoint is not hit"
+			break
+		    }
+		}
+	    }
+	}
+    }
+}

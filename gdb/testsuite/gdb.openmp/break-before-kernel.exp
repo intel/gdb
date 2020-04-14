@@ -1,0 +1,65 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDB's support for OpenMP; in particular, inserting and hitting
+# breakpoints before a kernel.  As an extra also check if a breakpoint
+# that has been propagated on the host side will not spill into the
+# kernel on non-CPU targets.
+
+load_lib openmp.exp
+
+set device_list [omp_get_device_list]
+if {[llength ${device_list}] == 0} {
+    unsupported "target does not support OpenMP"
+    return 0
+}
+
+standard_testfile single-task.cpp
+
+if {[build_executable "failed to compile ${srcfile}" \
+    ${binfile} ${srcfile} {openmp c++ debug}]} {
+    return -1
+}
+
+foreach device_info ${device_list} {
+    openmp_with_intelgt_lock $device_info "cpp" {
+	array set bp_strings {
+    	    "line-before-kernel" 0
+    	    "intentionally-empty-line" 1
+	}
+	foreach {bp_line offset} [array get bp_strings] {
+	    clean_restart ${binfile}
+	    if {![runto_main]} {
+		untested "Failed to run to main"
+		continue
+	    }
+
+	    set line_number [gdb_get_line_number $bp_line]
+	    gdb_breakpoint "${srcfile}:${line_number}"
+
+	    incr line_number $offset
+
+	    # Test that we actually hit the breakpoint or the propagated
+	    # breakpoint.
+	    set msg "continue to breakpoint on $device_info for $bp_line"
+	    gdb_continue_to_breakpoint $msg ".*${srcfile}:${line_number}.*"
+
+	    # Now we should be able to run to the end without hitting
+	    # any other kernel/non-kernel breakpoints.
+	    gdb_test "continue" "${inferior_exited_re} normally].*" \
+		"continue to end for $bp_line"
+	}
+    }
+}

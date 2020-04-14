@@ -1,0 +1,70 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs OpenMP support for the "info locals" and "info args"
+# commands inside a kernel.
+
+load_lib openmp.exp
+
+if {[skip_openmp_tests]} {
+    untested "skipping openmp test"
+    return 0
+}
+
+standard_testfile call-stack.${openmp_program_extension}
+
+if {[start_openmp_program]} {
+    return -1
+}
+
+set outer_loc [gdb_get_line_number "ordinary-outer-loc"]
+set inner_loc [gdb_get_line_number "kernel-function-return"]
+gdb_breakpoint "$outer_loc"
+gdb_breakpoint "$inner_loc"
+
+gdb_continue_to_breakpoint "bp 1" ".*$srcfile:$outer_loc.*"
+
+gdb_test_multiple "info locals ten" "info locals ten" {
+    -re -wrap "ten = 10\r\nten = (-)?$decimal\t<shadowed>" {
+	pass $gdb_test_name
+    }
+    -re -wrap "ten = 10" {
+	pass $gdb_test_name
+    }
+}
+
+gdb_test_multiple "info locals five" "info locals five" {
+    -re -wrap "five = 5\r\nfive = (-)?$decimal\t<shadowed>" {
+	pass $gdb_test_name
+    }
+    -re -wrap "five = 5" {
+	pass $gdb_test_name
+    }
+}
+
+gdb_test_multiple "info locals fifteen" "info locals fifteen" {
+    -re -wrap "fifteen = 15\r\nfifteen = (-)?$decimal\t<shadowed>" {
+	pass $gdb_test_name
+    }
+    -re -wrap "fifteen = 15" {
+	pass $gdb_test_name
+    }
+}
+
+gdb_continue_to_breakpoint "bp 2" ".*$srcfile:$inner_loc.*"
+gdb_test "info locals" "total = 180.*" "info locals 2"
+gdb_test "info args"  [multi_line \
+    "num1 = 16" \
+    "num2 = 3"]

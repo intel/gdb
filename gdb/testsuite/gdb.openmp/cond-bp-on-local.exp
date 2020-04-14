@@ -1,0 +1,77 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests conditional breakpoints in OpenMP kernels.
+
+load_lib openmp.exp
+
+if {[skip_openmp_tests]} {
+    untested "skipping openmp test"
+    return 0
+}
+
+standard_testfile parallel-for-1D.${openmp_program_extension}
+
+if {[start_openmp_program]} {
+    return -1
+}
+
+# Define a conditional breakpoint with the condition set on a local
+# variable.  We pick these values:
+# 0: the most obvious one
+# 256: a value that's divisible by 8, 16, and 32: typical SIMD widths
+# 533: a value that's not divisible by a typical SIMD width
+# The values are also chosen far away from each other; we expect them
+# to be covered by different threads even when threads have SIMD lanes
+# (again, assuming typical SIMD widths).
+set last_line [gdb_get_line_number "kernel-last-line"]
+if {$openmp_program_extension eq "f90"} {
+    set condition "\(\(i.EQV.0).OR.(i.EQV.256).OR.(i.EQV.533\)\)"
+} else {
+    set condition "\(i == 0 || i == 256 || i == 533\)"
+}
+gdb_test "break $last_line if $condition" \
+    "Breakpoint $decimal at .*"
+
+# Also define a breakpoint at the very end of the program.
+# After hitting the conditional breakpoint 3 times, we should
+# hit this breakpoint.
+set end_marker [gdb_get_line_number "end-marker"]
+gdb_breakpoint $end_marker
+
+# Continue and count the hits.
+set count 0
+for {set j 1} {$j <= 3} {incr j} {
+    gdb_continue_to_breakpoint "hit the conditional BP, trip $j" \
+	".*$srcfile:$last_line.*"
+
+    gdb_test_multiple "print i" "reading i, trip $j" {
+	-re -wrap " = 0" {
+	    incr count
+	}
+	-re -wrap " = 256" {
+	    incr count
+	}
+	-re -wrap " = 533" {
+	    incr count
+	}
+    }
+}
+
+gdb_assert {$count == 3}
+
+# Continuing now should hit the end-of-program marker
+gdb_continue_to_breakpoint "end of program" \
+    ".*$srcfile:$end_marker.*"

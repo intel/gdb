@@ -1,0 +1,53 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for OpenMP; in particular, printing values of local
+# vars and data elements.
+
+load_lib openmp.exp
+
+if {[skip_openmp_tests]} {
+    untested "skipping openmp test"
+    return 0
+}
+
+standard_testfile single-task.${openmp_program_extension}
+
+if {[start_openmp_program]} {
+    return -1
+}
+
+# Break at the last line of the kernel, then read local vars and data
+# elements.
+set last_line [gdb_get_line_number "kernel-line-4"]
+gdb_breakpoint $last_line
+gdb_continue_to_breakpoint "last line" ".*$srcfile:$last_line.*"
+
+gdb_test "print ten" "10"
+gdb_test "print four" "4"
+gdb_test "print fourteen" "14"
+
+if {$openmp_program_extension eq "cpp"} {
+    gdb_test "ptype ten" "type = int"
+    gdb_test "ptype four" "type = int"
+    gdb_test "ptype fourteen" "type = int"
+} else {
+    set int [fortran_int4]
+    gdb_test "ptype ten" "type = $int"
+    gdb_test "ptype four" "type = $int"
+    gdb_test "ptype fourteen" "type = $int"
+}
+
+continue_openmp_program_to_termination

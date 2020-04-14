@@ -1,0 +1,50 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for OpenMP, for stepping inside a parallel_for kernel.
+
+load_lib openmp.exp
+
+if {[skip_openmp_tests]} {
+    untested "skipping openmp test"
+    return 0
+}
+
+standard_testfile parallel-for-1D.${openmp_program_extension}
+
+if {[start_openmp_program]} {
+    return -1
+}
+
+set second_line [gdb_get_line_number "kernel-second-line"]
+gdb_breakpoint $second_line
+
+# Check that we can step inside the kernel.  We do not check
+# for each element because the number of hits received may depend on
+# whether the kernel was vectorized, and if so, the width of vectors.
+# Since the data array in the test program is large, having a small
+# number of trips here should be safe.
+#
+# Lock the scheduler for stepping to avoid inference.
+
+gdb_test_no_output "set scheduler-locking step"
+
+for {set j 1} {$j <= 5} {incr j} {
+    gdb_continue_to_breakpoint "hit the second line, occurrence $j" \
+	".*$srcfile:$second_line.*"
+
+    gdb_test "next" "in_elem3 = .*" "next, occurrence $j:1"
+    gdb_test "next" "out_arr.* = in_elem.*" "next, occurrence $j:2"
+}

@@ -1,0 +1,41 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDB's support for OpenMP.  This is the simplest scenario where a
+# program is run to completion without any breakpoints.
+
+load_lib openmp.exp
+
+if {[skip_openmp_tests]} {
+    untested "skipping openmp test"
+    return 0
+}
+
+standard_testfile local-vars.${openmp_program_extension}
+
+if {[start_openmp_program]} {
+    return -1
+}
+
+continue_openmp_program_to_termination "1"
+
+# Now test re-running.
+if {![openmp_run_to_main $openmp_program_extension]} {
+    untested "failed to run to main second time"
+    return -1
+}
+
+# We should be able to run to the end.
+continue_openmp_program_to_termination "2"

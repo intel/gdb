@@ -1,0 +1,54 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDB's support for OpenMP; in particular, inserting and hitting
+# breakpoints inside and outside a kernel.
+
+load_lib openmp.exp
+
+if {[skip_openmp_tests]} {
+    untested "skipping openmp test"
+    return 0
+}
+
+standard_testfile local-vars.${openmp_program_extension}
+
+if {[start_openmp_program]} {
+    return -1
+}
+
+# Set breakpoints inside and outside the kernel.
+array set bp_locations_kernel {}
+set num_kernel_locations 4
+
+gdb_breakpoint "$srcfile:[gdb_get_line_number line-after-kernel]" {message}
+
+for {set i 1} {$i <= $num_kernel_locations} {incr i} {
+    set bp_locations_kernel($i) [gdb_get_line_number "kernel-line-$i"]
+    gdb_breakpoint "$srcfile:$bp_locations_kernel($i)" {message}
+}
+
+# Test that we actually hit the breakpoints.
+for {set i 1} {$i <= $num_kernel_locations} {incr i} {
+    gdb_continue_to_breakpoint "kernel line $i" \
+	".*$srcfile:$bp_locations_kernel($i).*"
+}
+
+gdb_continue_to_breakpoint "line after kernel" \
+    ".*$srcfile:[gdb_get_line_number line-after-kernel].*"
+
+# Now we should be able to run to the end without hitting
+# any other kernel/non-kernel breakpoints.
+continue_openmp_program_to_termination

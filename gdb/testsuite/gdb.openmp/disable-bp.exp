@@ -1,0 +1,41 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests disabling a OpenMP kernel breakpoint after a hit.
+
+load_lib openmp.exp
+
+if {[skip_openmp_tests]} {
+    untested "skipping openmp test"
+    return 0
+}
+
+standard_testfile parallel-for-1D.${openmp_program_extension}
+
+if {[start_openmp_program]} {
+    return -1
+}
+
+set last_line [gdb_get_line_number "kernel-last-line"]
+gdb_breakpoint $last_line
+set bpnum [get_integer_valueof "\$bpnum" 0 "get bpnum"]
+
+# First, we should hit the breakpoint.  Any thread is fine.
+gdb_continue_to_breakpoint "kernel" ".*$srcfile:$last_line.*"
+
+# Disable and expect to run until completion.
+gdb_test_no_output "disable $bpnum"
+
+continue_openmp_program_to_termination

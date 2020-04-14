@@ -1,0 +1,47 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for OpenMP, for a program that has two kernels.
+
+load_lib openmp.exp
+
+if {[skip_openmp_tests]} {
+    untested "skipping openmp test"
+    return 0
+}
+
+standard_testfile .${openmp_program_extension}
+
+if {[start_openmp_program]} {
+    return -1
+}
+
+set kernel_1 [gdb_get_line_number "kernel-1-line"]
+set kernel_2 [gdb_get_line_number "kernel-2-line"]
+set post_kernel [gdb_get_line_number "line-after-kernel"]
+gdb_breakpoint $kernel_1 {temporary}
+gdb_breakpoint $kernel_2 {temporary}
+gdb_breakpoint $post_kernel
+
+# Check that we stop inside kernel-1 first, then kernel 2, and finally
+# the post-kernel line in the host.
+gdb_continue_to_breakpoint "hit the BP in kernel 1" \
+    ".*$srcfile:$kernel_1.*"
+
+gdb_continue_to_breakpoint "hit the BP in kernel 2" \
+    ".*$srcfile:$kernel_2.*"
+
+gdb_continue_to_breakpoint "hit the BP post-kernel" \
+    ".*$srcfile:$post_kernel.*"

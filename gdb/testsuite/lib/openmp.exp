@@ -1,0 +1,173 @@
+# Copyright 2020 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Support library for testing OpenMP debugging in GDB.
+
+# Return compiler flags for OpenMP.
+load_lib fortran.exp
+
+proc openmp_compilation_options {extension} {
+    set flags "additional_flags=-fiopenmp \
+	    additional_flags=-O0 \
+	    additional_flags=-fopenmp-targets=spir64"
+
+    if [expr {$extension eq "f90"}] {
+	return [concat {f90 debug} $flags]
+    } elseif [expr {$extension eq "cpp"}] {
+	return [concat {c++ debug} $flags libs=-lstdc++]
+    } else {
+	return []
+    }
+
+}
+
+# Compile a given OpenMP source file.
+
+proc prepare_openmp_for_testing {binfile srcfile extension} {
+    set options [openmp_compilation_options $extension]
+    set message "failed to compile $srcfile"
+    return [prepare_for_testing $message $binfile $srcfile $options]
+}
+
+# Gdb caching procedure to run a test on the target for checking if it supports
+# OpenMP.  Return 0 if OpenMP is supported, 1 otherwise.
+
+gdb_caching_proc skip_openmp_tests {
+    global openmp_program_extension
+    global srcdir gdb_prompt subdir
+    global inferior_exited_re
+    global env
+
+    if {![info exists openmp_program_extension]} {
+	verbose "openmp_program_extension board info is not configured"
+	return 1
+    }
+
+    # Set up, compile, and execute a simple OpenMP program.
+    set exe "openmp-devices"
+    set orig_subdir $subdir
+    set subdir "lib"
+    set src "openmp-devices.${openmp_program_extension}"
+
+    if {[prepare_openmp_for_testing $exe $src $openmp_program_extension]} {
+	verbose "OpenMP: Compilation failed for $openmp_program_extension" 0
+	return 1
+    }
+    verbose -log "OpenMP: Compilation succeeded for openmp-devices"
+
+    set subdir $orig_subdir
+    set test "Test OpenMP support"
+    set result 1
+    gdb_test_multiple "run" $test {
+	-re "$inferior_exited_re normally].*$gdb_prompt $" {
+	    verbose "OpenMP: Support detected" 0
+	    set result 0
+	}
+	-re "$gdb_prompt $" {
+	    # Number of devices is always returned 0 in case of OpenMP Host offload so
+	    # in this case testing is not skipped due to this.
+	    if [info exists env(OMP_TARGET_OFFLOAD)] {
+		if [expr { $env(OMP_TARGET_OFFLOAD) eq "DISABLED" }] {
+		    verbose "OpenMP: Offload is done on the host." 0
+		    set result 0
+		}
+	    } else {
+		verbose "OpenMP: Support NOT detected" 0
+		set result 1
+	    }
+	}
+    }
+
+    gdb_exit
+
+    return $result
+}
+
+# Issue a 'continue' command and expect to see program termination.
+
+proc continue_openmp_program_to_termination {{msg_suffix ""}} {
+    global gdb_prompt inferior_exited_re
+
+    set is_non_stop 0
+    gdb_test_multiple "show non-stop" "get non-stop mode" {
+	-re "non-stop mode is off.\r\n$gdb_prompt $" {
+	    set is_non_stop 0
+	}
+	-re "non-stop mode is on.\r\n$gdb_prompt $" {
+	    set is_non_stop 1
+	}
+    }
+
+    if {!$is_non_stop} {
+	gdb_test "continue" "$inferior_exited_re normally].*" \
+	    "continue to end $msg_suffix"
+    } else {
+	gdb_test_multiple "continue -a" "continue to end $msg_suffix" {
+	    -re "$inferior_exited_re normally].*$gdb_prompt.*" {
+		pass $gdb_test_name
+	    }
+	}
+    }
+}
+
+# Call cpp or fortran main function according to extension value.
+
+proc openmp_run_to_main {extension} {
+    set result 1
+    if {$extension eq "f90"} {
+	if [fortran_runto_main] {
+	    set result 0
+	}
+    } else {
+	if [runto_main] {
+	    set result 0
+	}
+    }
+
+    return $result
+}
+
+# Build and run OpenMP program to main.
+
+proc start_openmp_program {} {
+    global openmp_program_extension
+    global binfile
+    global srcfile
+
+    if {[prepare_openmp_for_testing $binfile $srcfile $openmp_program_extension]} {
+        verbose "OpenMP: Compilation failed for $srcfile.$openmp_program_extension" 0
+        return 1
+    }
+    if {[openmp_run_to_main  $openmp_program_extension]} {
+	untested "failed to run to main"
+	return 1
+    }
+
+    return 0
+}
+
+# Return true if the OpenMP device selected via the env
+# matches the arguments.  Otherwise return false.
+# Exact match is used for LIBOMPTARGET_DEVICETYPE env.
+
+proc require_openmp_device {type} {
+    global env
+    if {![info exists env(LIBOMPTARGET_DEVICETYPE)]} {
+	verbose "OpenMP: test parameters not set; use LIBOMPTARGET_DEVICETYPE env" 0
+	return 0
+    }
+
+    return [expr { $env(LIBOMPTARGET_DEVICETYPE) eq $type }]
+}

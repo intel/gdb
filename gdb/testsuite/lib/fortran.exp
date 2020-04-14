@@ -38,6 +38,8 @@ proc fortran_int4 {} {
 	return "integer"
     } elseif {[test_compiler_info {icc-*}]} {
 	return "INTEGER\\(4\\)"
+    } elseif {[test_compiler_info {intel-*}]} {
+	return "INTEGER\\*4"
     } else {
 	return "unknown"
     }

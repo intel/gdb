@@ -1,0 +1,137 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test the auto-attach script for Intel GT by terminating/killing/detaching
+# the host/gt inferior.
+
+load_lib openmp.exp
+
+if [use_gdb_stub] {
+    return
+}
+
+if {![require_openmp_device "GPU"]} {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if {[skip_openmp_tests]} {
+    untested "skipping openmp test"
+    return -1
+}
+
+standard_testfile single-task.${openmp_program_extension}
+
+set option "additional_flags=-DOMIT_REPORT"
+if {[start_openmp_program]} {
+    return -1
+}
+
+# Run until the end, potentially with BPs inside and outside the kernel.
+
+proc run_end_to_end {has_kernel_bp has_outside_bp} {
+    global srcfile
+    global openmp_program_extension
+
+    if {![openmp_run_to_main  $openmp_program_extension] < 0} {
+	fail "run the program"
+	return -1
+    } else {
+	pass "run the program"
+    }
+
+    if {$has_kernel_bp} {
+	set kernel_bp [gdb_get_line_number "kernel-line-3"]
+	gdb_breakpoint $kernel_bp
+
+	gdb_continue_to_breakpoint "inside the kernel" \
+	    ".*$srcfile:$kernel_bp.*"
+    }
+    if {$has_outside_bp} {
+	set end_bp [gdb_get_line_number "return-stmt"]
+	gdb_breakpoint $end_bp
+
+	gdb_continue_to_breakpoint "outside the kernel" \
+	    ".*$srcfile:$end_bp.*"
+    }
+
+    continue_openmp_program_to_termination
+}
+
+# Run up to a BP, then kill/detach an inferior.
+
+proc run_to_bp {which_bp scenario iter} {
+    global srcfile
+    global openmp_program_extension
+
+    if {![openmp_run_to_main  $openmp_program_extension] < 0} {
+	fail "run the program"
+        return -1
+    } else {
+	pass "run the program"
+    }
+
+    if {$which_bp eq "inside"} {
+	set kernel_bp [gdb_get_line_number "kernel-line-3"]
+	gdb_breakpoint $kernel_bp
+
+	gdb_continue_to_breakpoint "inside the kernel" \
+	    ".*$srcfile:$kernel_bp.*"
+    } else {
+	set end_bp [gdb_get_line_number "return-stmt"]
+	gdb_breakpoint $end_bp
+
+	gdb_continue_to_breakpoint "outside the kernel" \
+	    ".*$srcfile:$end_bp.*"
+    }
+
+    # Host inferior ID is always 1.
+    set host_inf 1
+    # GT inferior is created anew each time we run.
+    set gt_inf [expr $iter + 1]
+    set fill "\[^\r\n\]*"
+
+    set output ".*inferior $gt_inf $fill has been removed.*"
+    if {$scenario eq "kill_host"} {
+	gdb_test "kill inferiors $host_inf" $output
+    } elseif {$scenario eq "detach_host"} {
+	gdb_test "detach inferiors $host_inf" $output
+    } elseif {$scenario eq "detach_gt"} {
+	gdb_test "detach inferiors $gt_inf" $output
+    }
+}
+
+# Re-run multiple times until termination, with and without
+# inside/outside BPs.
+foreach_with_prefix has_kernel_bp {0 1} {
+    foreach_with_prefix has_outside_bp {0 1} {
+        clean_restart $binfile
+        foreach_with_prefix iter {1 2 3} {
+            run_end_to_end $has_kernel_bp $has_outside_bp
+        }
+    }
+}
+
+# Re-run multiple times, where either the host or the gt inferior
+# is killed/detached.
+
+foreach_with_prefix which_bp {inside outside} {
+    foreach_with_prefix scenario {kill_host detach_host detach_gt} {
+        clean_restart $binfile
+        foreach_with_prefix iter {1 2 3} {
+            run_to_bp $which_bp $scenario $iter
+        }
+    }
+}

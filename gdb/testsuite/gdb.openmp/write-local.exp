@@ -1,0 +1,59 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for OpenMP; in particular, modifying local vars
+# and data element values (through accessors).
+
+load_lib openmp.exp
+
+set device_list [omp_get_device_list]
+if {[llength ${device_list}] == 0} {
+    unsupported "target does not support OpenMP"
+    return 0
+}
+
+standard_testfile single-task.cpp
+
+if {[build_executable "failed to compile ${srcfile}" \
+    ${binfile} ${srcfile} {openmp cpp debug}]} {
+    return -1
+}
+
+foreach device_info ${device_list} {
+    with_test_prefix [string cat [init_openmp_device ${device_info}] ":cpp"] {
+
+	clean_restart ${binfile}
+	if {![runto_main]} {
+	    untested "Failed to run to main"
+	    continue
+	}
+
+	set line2 [gdb_get_line_number "kernel-line-2"]
+	set line4 [gdb_get_line_number "kernel-line-4"]
+
+	gdb_breakpoint $line2
+	gdb_breakpoint $line4
+
+	gdb_continue_to_breakpoint "line2" ".*${srcfile}:${line2}.*"
+	gdb_test "print ten = 15" "15"
+
+	gdb_continue_to_breakpoint "line4" ".*${srcfile}:${line4}.*"
+	# 'fourteen' is now 15 + 4
+	gdb_test "print fourteen" "19"
+
+	gdb_test "continue" "${inferior_exited_re} normally].*" \
+	    "continue to end"
+    }
+}

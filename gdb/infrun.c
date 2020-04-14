@@ -4802,6 +4802,21 @@ handle_one (const wait_one_event &event)
   if (event.ws.kind () == TARGET_WAITKIND_NO_RESUMED)
     {
       /* All resumed threads exited.  */
+      /* 'stop_all_threads' used to be called for non-stop targets
+	 only.  In the process of enabling the multi-target feature
+	 also for all-stop targets, it's now called for all-stop
+	 targets, too.  For one particular test when using the
+	 gdbserver board (gdb.threads/no-unwaited-for-left.exp), we
+	 were getting the NO_RESUMED waitkind that led to infinite
+	 looping.  The loop below is an attempt to avoid such a
+	 scenario.  */
+      for (auto *target : all_non_exited_process_targets ())
+	{
+	  switch_to_target_no_thread (target);
+	  mark_non_executing_threads (target, minus_one_ptid,
+				      event.ws);
+	}
+
       return true;
     }
   else if (event.ws.kind () == TARGET_WAITKIND_THREAD_EXITED
@@ -4867,13 +4882,19 @@ handle_one (const wait_one_event &event)
       t->set_resumed (false);
       t->control.may_range_step = 0;
 
+      /* We are calling 'mark_non_executing_threads' below, which uses
+	 the current top target.  Also, 'setup_inferior' below uses
+	 the current inferior.  So, do a context switch.  */
+      switch_to_thread_no_regs (t);
+
       /* This may be the first time we see the inferior report
 	 a stop.  */
       if (t->inf->needs_setup)
-	{
-	  switch_to_thread_no_regs (t);
-	  setup_inferior (0);
-	}
+	setup_inferior (0);
+
+      /* This is needed to mark all the relevant threads in case the
+	 event is received from an all-stop target.  */
+      mark_non_executing_threads (event.target, event.ptid, event.ws);
 
       if (event.ws.kind () == TARGET_WAITKIND_STOPPED
 	  && event.ws.sig () == GDB_SIGNAL_0)
@@ -4942,18 +4963,12 @@ stop_all_threads (void)
   int pass;
   int iterations = 0;
 
-  gdb_assert (exists_non_stop_target ());
-
   infrun_debug_printf ("starting");
 
   scoped_restore_current_thread restore_thread;
 
-  /* Enable thread events of all targets.  */
-  for (auto *target : all_non_exited_process_targets ())
-    {
-      switch_to_target_no_thread (target);
-      target_thread_events (true);
-    }
+  /* Target thread events are enabled as we do our passes below.
+     Don't forget to disable them when we exit.  */
 
   SCOPE_EXIT
     {
@@ -4970,6 +4985,9 @@ stop_all_threads (void)
 	debug_prefixed_printf ("infrun", "stop_all_threads", "done");
     };
 
+  /* Avoid sending multiple interrupts to all-stop targets.  */
+  std::set<process_stratum_target *> interrupt_requested;
+
   /* Request threads to stop, and then wait for the stops.  Because
      threads we already know about can spawn more threads while we're
      trying to stop them, and we only learn about new threads when we
@@ -4985,6 +5003,15 @@ stop_all_threads (void)
 	  for (auto *target : all_non_exited_process_targets ())
 	    {
 	      switch_to_target_no_thread (target);
+	      /* All-stop targets that are executing cannot respond to
+		 queries.  Skip them now.  They will be stopped below,
+		 and in the next pass we can update their thread lists.
+		 Enabling target_thread_events is also skipped for the
+		 very same reason.  */
+	      if (!target_is_non_stop_p () && target->threads_executing)
+		continue;
+
+	      target_thread_events (true);
 	      update_thread_list ();
 	    }
 
@@ -4992,14 +5019,9 @@ stop_all_threads (void)
 	     to tell the target to stop.  */
 	  for (thread_info *t : all_non_exited_threads ())
 	    {
-	      /* For a single-target setting with an all-stop target,
-		 we would not even arrive here.  For a multi-target
-		 setting, until GDB is able to handle a mixture of
-		 all-stop and non-stop targets, simply skip all-stop
-		 targets' threads.  This should be fine due to the
-		 protection of 'check_multi_target_resumption'.  */
-
 	      switch_to_thread_no_regs (t);
+
+	      /* All-stop targets are handled below.  */
 	      if (!target_is_non_stop_p ())
 		continue;
 
@@ -5032,6 +5054,28 @@ stop_all_threads (void)
 		     resumed with a pending status to process.  */
 		  t->set_resumed (false);
 		}
+	    }
+
+	  /* All-stop targets.  */
+	  for (auto *target : all_non_exited_process_targets ())
+	    {
+	      switch_to_target_no_thread (target);
+
+	      /* Non-stop targets were handled above.  */
+	      if (target_is_non_stop_p ())
+		continue;
+
+	      if (!target->threads_executing
+		  || (interrupt_requested.find (target)
+		      != interrupt_requested.end ()))
+		{
+		  /* No need to send an interrupt.  */
+		  continue;
+		}
+
+	      target_stop (minus_one_ptid);
+	      interrupt_requested.insert (target);
+	      ++waits_needed;
 	    }
 
 	  if (waits_needed == 0)
@@ -8007,9 +8051,9 @@ stop_waiting (struct execution_control_state *ecs)
   /* Let callers know we don't want to wait for the inferior anymore.  */
   ecs->wait_some_more = 0;
 
-  /* If all-stop, but there exists a non-stop target, stop all
-     threads now that we're presenting the stop to the user.  */
-  if (!non_stop && exists_non_stop_target ())
+  /* If all-stop, stop all threads now that we're presenting the stop
+     to the user.  */
+  if (!non_stop)
     stop_all_threads ();
 }
 

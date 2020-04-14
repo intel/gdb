@@ -1,0 +1,68 @@
+# Copyright 2019-2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for OpenMP, for a program that has independent,
+# unnamed kernels.
+
+load_lib openmp.exp
+
+if {[skip_openmp_tests]} {
+    untested "skipping openmp test"
+    return 0
+}
+
+standard_testfile .${openmp_program_extension}
+
+if {[start_openmp_program]} {
+    return -1
+}
+
+set kernel [gdb_get_line_number "kernel-line"]
+set post_kernel [gdb_get_line_number "line-after-kernel"]
+set exit_line [gdb_get_line_number "exit-line"]
+gdb_breakpoint $kernel
+gdb_breakpoint $post_kernel
+gdb_breakpoint $exit_line
+
+# Check that we stop inside the kernels, regardless of the submission
+# order, and finally the post-kernel line in the host.
+for {set i 1} {$i <= 4} {incr i} {
+    gdb_continue_to_breakpoint "hit the BP, occurrence $i" \
+	".*$srcfile:$kernel.*"
+}
+
+# For OpenMP nowait clause breakpoint does not hit post kernel randomly.
+for {set i 1} {$i <= 2} {incr i} {
+    with_test_prefix "iter $i" {
+	gdb_test_multiple "continue" "hit the BP post-kernel" {
+	    -re -wrap ".*$srcfile.*$post_kernel.*" {
+		pass "$gdb_test_name"
+		break;
+	    }
+	    -re -wrap ".*omp target teams .*" {
+		fail "$gdb_test_name"
+	    }
+	}
+    }
+}
+
+gdb_continue_to_breakpoint "hit the BP at exit" \
+    ".*$srcfile:$exit_line.*"
+
+if {$openmp_program_extension eq "cpp"} {
+    gdb_test "print in_arr\[0\]" "= 101" "value set in 2nd section"
+} else {
+    gdb_test "print in_arr(0)" "= 101" "value set in 2nd section"
+}

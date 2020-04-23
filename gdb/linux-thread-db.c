@@ -1629,7 +1629,7 @@ thread_db_target::update_thread_list ()
 {
   struct thread_db_info *info;
 
-  prune_threads ();
+  prune_threads (current_inferior ()->process_target ());
 
   for (inferior *inf : all_inferiors ())
     {

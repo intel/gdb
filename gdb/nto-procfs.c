@@ -391,7 +391,7 @@ nto_procfs_target::update_thread_list ()
   if (ctl_fd == -1)
     return;
 
-  prune_threads ();
+  prune_threads (this);
 
   pid = current_inferior ()->pid;
 

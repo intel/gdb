@@ -828,12 +828,15 @@ switch_to_thread_if_alive (thread_info *thr)
 /* See gdbthreads.h.  */
 
 void
-prune_threads (void)
+prune_threads (process_stratum_target *target)
 {
   scoped_restore_current_thread restore_thread;
 
   for (thread_info *tp : all_threads_safe ())
     {
+      if (tp->inf->process_target () != target)
+	continue;
+
       switch_to_inferior_no_thread (tp->inf);
 
       if (!thread_alive (tp))

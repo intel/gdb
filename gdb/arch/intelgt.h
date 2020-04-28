@@ -106,9 +106,12 @@ public:
   const char *get_register_name (int index);
 
   /* The length of an instruction in bytes.  */
-  virtual unsigned int inst_length_compacted () = 0;
+  virtual unsigned int inst_length_compacted () const = 0;
 
-  virtual unsigned int inst_length_full () = 0;
+  virtual unsigned int inst_length_full () const = 0;
+
+  /* The length of INST in bytes.  */
+  virtual unsigned int inst_length (const gdb_byte inst[]) const = 0;
 
   /* The maximum size of a register.  */
   virtual unsigned int max_reg_size () = 0;

@@ -1120,15 +1120,10 @@ intelgt_process_target::sw_breakpoint_from_kind (int kind, int *size)
 {
   dprintf ("kind: %d", kind);
 
-  switch (kind)
-    {
-    case intelgt::BP_INSTRUCTION:
-      *size = intelgt_info->breakpoint_inst_length ();
-      return intelgt_info->breakpoint_inst ();
-    }
+  /* We do not support breakpoint instructions.
 
-  dprintf ("Unrecognized breakpoint kind: %d", kind);
-
+     Use gdbarch methods that use read/write memory target operations for
+     setting s/w breakopints.  */
   *size = 0;
   return NULL;
 }

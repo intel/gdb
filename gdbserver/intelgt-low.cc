@@ -264,12 +264,6 @@ public:
 
   bool supports_z_point_type (char z_type) override;
 
-  int insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
-		    int size, raw_breakpoint *bp) override;
-
-  int remove_point (enum raw_bkpt_type type, CORE_ADDR addr,
-		    int size, raw_breakpoint *bp) override;
-
   bool supports_hardware_single_step () override;
 
   CORE_ADDR read_pc (regcache *regcache) override;
@@ -1072,51 +1066,11 @@ intelgt_process_target::supports_z_point_type (char z_type)
 {
   dprintf ("z_type: %c", z_type);
 
-  switch (z_type)
-    {
-    case Z_PACKET_SW_BP:
-      return true;
-    case Z_PACKET_HW_BP:
-    case Z_PACKET_WRITE_WP:
-    case Z_PACKET_READ_WP:
-    case Z_PACKET_ACCESS_WP:
-    default:
-      return false;
-    }
-}
+  /* We do not support breakpoints.
 
-/* The 'insert_point' target op.
-   Returns 0 on success, -1 on failure and 1 on unsupported.  */
-
-int
-intelgt_process_target::insert_point (enum raw_bkpt_type type,
-				      CORE_ADDR addr, int kind,
-				      raw_breakpoint *bp)
-{
-  dprintf ("type: %d, addr: %s, kind: %d", type,
-	   core_addr_to_string_nz (addr), kind);
-
-  if (type != raw_bkpt_type_sw)
-    return 1;
-
-  return insert_memory_breakpoint (bp);
-}
-
-/* The 'remove_point' target op.
-   Returns 0 on success, -1 on failure and 1 on unsupported.  */
-
-int
-intelgt_process_target::remove_point (enum raw_bkpt_type type,
-				      CORE_ADDR addr, int kind,
-				      raw_breakpoint* bp)
-{
-  dprintf ("type: %d, addr: %s, kind: %d", type,
-	   core_addr_to_string_nz (addr), kind);
-
-  if (type != raw_bkpt_type_sw)
-    return 1;
-
-  return remove_memory_breakpoint (bp);
+     Use gdbarch methods that use read/write memory target operations for
+   setting s/w breakopints.  */
+  return false;
 }
 
 /* The 'read_pc' target op.  */

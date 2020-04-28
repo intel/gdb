@@ -81,7 +81,7 @@ public:
 
   virtual unsigned int max_reg_size () override;
 
-  virtual bool is_compacted_inst (const gdb_byte inst[]) override;
+  virtual bool is_compacted_inst (const gdb_byte inst[]) const override;
 
   virtual const gdb_byte *breakpoint_inst () override;
 
@@ -92,6 +92,14 @@ public:
   virtual int sp_regnum () const override;
 
   virtual int emask_regnum () const override;
+
+  virtual bool set_breakpoint (gdb_byte inst[]) const override;
+
+  virtual bool clear_breakpoint (gdb_byte inst[]) const override;
+
+  virtual bool has_breakpoint (const gdb_byte inst[]) const override;
+
+  virtual int breakpoint_bit_offset (const gdb_byte inst[]) const override;
 };
 
 arch_info_gen9::arch_info_gen9 ()
@@ -149,7 +157,7 @@ arch_info_gen9::max_reg_size ()
 }
 
 bool
-arch_info_gen9::is_compacted_inst (const gdb_byte inst[])
+arch_info_gen9::is_compacted_inst (const gdb_byte inst[]) const
 {
   /* Check the CmptCtrl flag (bit 29).  */
   return inst[3] & 0x20;
@@ -190,6 +198,84 @@ int
 arch_info_gen9::emask_regnum () const
 {
   return grf_reg_count () + 20;
+}
+
+/* Get the bit at POS in INST.  */
+
+static bool
+get_inst_bit (const gdb_byte inst[], int pos)
+{
+  if (pos < 0 || (MAX_INST_LENGTH * 8) <= pos)
+    internal_error (__FILE__, __LINE__, _("bad bit offset: %d"), pos);
+
+  const int idx = pos >> 3;
+  const int off = pos & 7;
+  const int mask = 1 << off;
+  const gdb_byte byte = inst[idx];
+
+  return (byte & mask) != 0;
+}
+
+/* Set the bit at POS in INST.  */
+
+static bool
+set_inst_bit (gdb_byte inst[], int pos)
+{
+  if (pos < 0 || (MAX_INST_LENGTH * 8) <= pos)
+    internal_error (__FILE__, __LINE__, _("bad bit offset: %d"), pos);
+
+  const int idx = pos >> 3;
+  const int off = pos & 7;
+  const int mask = 1 << off;
+  const gdb_byte byte = inst[idx];
+
+  const bool old = (byte & mask) != 0;
+  inst[idx] |= mask;
+
+  return old;
+}
+
+/* Clear the bit at POS in INST.  */
+
+static bool
+clear_inst_bit (gdb_byte inst[], int pos)
+{
+  if (pos < 0 || (MAX_INST_LENGTH * 8) <= pos)
+    internal_error (__FILE__, __LINE__, _("bad bit offset: %d"), pos);
+
+  const int idx = pos >> 3;
+  const int off = pos & 7;
+  const int mask = 1 << off;
+  const gdb_byte byte = inst[idx];
+
+  const bool old = (byte & mask) != 0;
+  inst[idx] &= ~mask;
+
+  return old;
+}
+
+bool
+arch_info_gen9::set_breakpoint (gdb_byte inst[]) const
+{
+  return set_inst_bit (inst, breakpoint_bit_offset (inst));
+}
+
+bool
+arch_info_gen9::clear_breakpoint (gdb_byte inst[]) const
+{
+  return clear_inst_bit (inst, breakpoint_bit_offset (inst));
+}
+
+bool
+arch_info_gen9::has_breakpoint (const gdb_byte inst[]) const
+{
+  return get_inst_bit (inst, breakpoint_bit_offset (inst));
+}
+
+int
+arch_info_gen9::breakpoint_bit_offset (const gdb_byte inst[]) const
+{
+  return (is_compacted_inst (inst) ? 7 : 30);
 }
 
 /* Architectural info for Gen 11.

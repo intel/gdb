@@ -75,9 +75,11 @@ public:
 
   arch_info_gen9 ();
 
-  virtual unsigned int inst_length_compacted () override;
+  virtual unsigned int inst_length_compacted () const override;
 
-  virtual unsigned int inst_length_full () override;
+  virtual unsigned int inst_length_full () const override;
+
+  virtual unsigned int inst_length (const gdb_byte inst[]) const override;
 
   virtual unsigned int max_reg_size () override;
 
@@ -139,15 +141,23 @@ arch_info_gen9::arch_info_gen9 ()
 };
 
 unsigned int
-arch_info_gen9::inst_length_compacted ()
+arch_info_gen9::inst_length_compacted () const
 {
   return 8;
 }
 
 unsigned int
-arch_info_gen9::inst_length_full ()
+arch_info_gen9::inst_length_full () const
 {
   return 16;
+}
+
+unsigned int
+arch_info_gen9::inst_length (const gdb_byte inst[]) const
+{
+  return (is_compacted_inst (inst)
+	  ? inst_length_compacted ()
+	  : inst_length_full ());
 }
 
 unsigned int

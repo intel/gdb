@@ -78,6 +78,12 @@ enum breakpoint_kind
     BP_INSTRUCTION = 1,
   };
 
+enum
+  {
+    /* The maximal length of an IntelGT instruction in bytes.  */
+    MAX_INST_LENGTH = 16
+  };
+
 /* Architectural information for an Intel(R) Graphics Technology
    version.  One instance per Gen version is created.  Instances can
    be accessed through the factory method 'get_or_create'.  */
@@ -108,7 +114,7 @@ public:
   virtual unsigned int max_reg_size () = 0;
 
   /* Return true if the given INST is compacted; false otherwise.  */
-  virtual bool is_compacted_inst (const gdb_byte inst[]) = 0;
+  virtual bool is_compacted_inst (const gdb_byte inst[]) const = 0;
 
   /* The breakpoint instruction used for this arch.  */
   virtual const gdb_byte *breakpoint_inst () = 0;
@@ -125,6 +131,28 @@ public:
   /* The index of the 'emask' register.  */
   virtual int emask_regnum () const = 0;
 
+  /* Set the breakpoint bit in INST.
+
+     Returns the state of the bit prior to setting it:
+
+       false: clear
+       true : set.  */
+  virtual bool set_breakpoint (gdb_byte inst[]) const = 0;
+
+  /* Clear the breakpoint bit in INST.
+
+     Returns the state of the bit prior to clearing it:
+
+       false: clear
+       true : set.  */
+  virtual bool clear_breakpoint (gdb_byte inst[]) const = 0;
+
+  /* Get the state of the breakpoint bit in INST.
+
+       false: clear
+       true : set.  */
+  virtual bool has_breakpoint (const gdb_byte inst[]) const = 0;
+
   /* Factory method to ensure one instance per version.  */
   static arch_info *get_or_create (version vers);
 
@@ -132,6 +160,9 @@ protected:
 
   /* The collection of registers (GRF + ARF).  */
   std::vector<gt_register> regs;
+
+  /* The offset in bits of the breakpoint bit in INST.  */
+  virtual int breakpoint_bit_offset (const gdb_byte inst[]) const = 0;
 
 private:
 

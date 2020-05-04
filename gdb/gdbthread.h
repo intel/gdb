@@ -550,6 +550,9 @@ struct thread_info *find_thread_by_handle
 /* Finds the first thread of the specified inferior.  */
 extern struct thread_info *first_thread_of_inferior (inferior *inf);
 
+/* Finds the first non-exited thread of the specified inferior.  */
+extern struct thread_info *first_non_exited_thread_of_inferior (inferior *inf);
+
 /* Returns any thread of inferior INF, giving preference to the
    current thread.  */
 extern struct thread_info *any_thread_of_inferior (inferior *inf);

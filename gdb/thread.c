@@ -730,6 +730,19 @@ first_thread_of_inferior (inferior *inf)
   return &inf->thread_list.front ();
 }
 
+/* Finds the first non-exited thread of the inferior INF.  */
+
+thread_info *
+first_non_exited_thread_of_inferior (inferior *inf)
+{
+  gdb_assert (inf->pid != 0);
+
+  for (thread_info *tp : inf->non_exited_threads ())
+    return tp;
+
+  return nullptr;
+}
+
 thread_info *
 any_thread_of_inferior (inferior *inf)
 {

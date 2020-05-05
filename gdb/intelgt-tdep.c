@@ -216,6 +216,92 @@ static const struct frame_unwind intelgt_unwinder =
     nullptr,				/* dealloc_cache */
   };
 
+
+/* The memory_insert_breakpoint gdbarch method.  */
+
+static int
+intelgt_memory_insert_breakpoint (gdbarch *gdbarch, struct bp_target_info *bp)
+{
+  dprintf ("req ip: %s", paddress (gdbarch, bp->reqstd_address));
+
+  /* Ensure that we have enough space in the breakpoint.  */
+  gdb_static_assert (intelgt::MAX_INST_LENGTH <= BREAKPOINT_MAX);
+
+  gdb_byte inst[intelgt::MAX_INST_LENGTH];
+  int err = target_read_memory (bp->reqstd_address, inst,
+				intelgt::MAX_INST_LENGTH);
+  if (err != 0)
+    {
+      /* We could fall back to reading a full and then a compacted
+	 instruction but I think we should rather allow short reads than
+	 having the caller try smaller and smaller sizes.  */
+      dprintf ("Failed to read memory at %s (%s).",
+	       paddress (gdbarch, bp->reqstd_address), strerror (err));
+      return err;
+    }
+
+  const intelgt::arch_info * const intelgt_info
+    = get_intelgt_arch_info (gdbarch);
+
+  bp->placed_address = bp->reqstd_address;
+  bp->shadow_len = intelgt_info->inst_length (inst);
+
+  /* Make a copy before we set the breakpoint so we can restore the
+     original instruction when removing the breakpoint again.
+
+     This isn't strictly necessary but it saves one target access.  */
+  memcpy (bp->shadow_contents, inst, bp->shadow_len);
+
+  const bool already = intelgt_info->set_breakpoint (inst);
+  if (already)
+    {
+      /* Warn if the breakpoint bit is already set.
+
+	 There is still a breakpoint, probably hard-coded, and it should
+	 still trigger and we're still able to step over it.  It's just
+	 not our breakpoint.  */
+      warning (_("Using permanent breakpoint at %s."),
+	       paddress (gdbarch, bp->placed_address));
+
+      /* There's no need to write the unmodified instruction back.  */
+      return 0;
+    }
+
+  err = target_write_raw_memory (bp->placed_address, inst, bp->shadow_len);
+  if (err != 0)
+    dprintf ("Failed to insert breakpoint at %s (%s).",
+	     paddress (gdbarch, bp->placed_address), strerror (err));
+
+  return err;
+}
+
+/* The memory_remove_breakpoint gdbarch method.  */
+
+static int
+intelgt_memory_remove_breakpoint (gdbarch *gdbarch, struct bp_target_info *bp)
+{
+  dprintf ("req ip: %s, placed ip: %s",
+	   paddress (gdbarch, bp->reqstd_address),
+	   paddress (gdbarch, bp->placed_address));
+
+  const intelgt::arch_info * const intelgt_info
+    = get_intelgt_arch_info (gdbarch);
+
+  /* Warn if we're inserting a permanent breakpoint.  */
+  if (intelgt_info->has_breakpoint (bp->shadow_contents))
+    warning (_("Re-inserting permanent breakpoint at %s."),
+	     paddress (gdbarch, bp->placed_address));
+
+  /* See comment in mem-break.c on write_inferior_memory.  */
+  int err = target_write_raw_memory (bp->placed_address, bp->shadow_contents,
+				     bp->shadow_len);
+  if (err != 0)
+    dprintf ("Failed to remove breakpoint at %s (%s).",
+	     paddress (gdbarch, bp->placed_address), strerror (err));
+
+  return err;
+}
+
 /* The 'breakpoint_kind_from_pc' gdbarch method.
    This is a required gdbarch function.  */
 
@@ -503,6 +589,10 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   dwarf2_append_unwinders (gdbarch);
   frame_unwind_append_unwinder (gdbarch, &intelgt_unwinder);
 
+  set_gdbarch_memory_insert_breakpoint (gdbarch,
+					intelgt_memory_insert_breakpoint);
+  set_gdbarch_memory_remove_breakpoint (gdbarch,
+					intelgt_memory_remove_breakpoint);
   set_gdbarch_breakpoint_kind_from_pc (gdbarch,
 				       intelgt_breakpoint_kind_from_pc);
   set_gdbarch_sw_breakpoint_from_kind (gdbarch,

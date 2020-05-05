@@ -344,22 +344,14 @@ intelgt_breakpoint_kind_from_pc (gdbarch *gdbarch, CORE_ADDR *pcptr)
 /* The 'sw_breakpoint_from_kind' gdbarch method.  */
 
 static const gdb_byte *
-intelgt_sw_breakpoint_from_kind (gdbarch *gdbarch,
-				 int kind, int *size)
+intelgt_sw_breakpoint_from_kind (gdbarch *gdbarch, int kind, int *size)
 {
   dprintf ("kind: %d", kind);
 
-  intelgt::arch_info *intelgt_info = get_intelgt_arch_info (gdbarch);
+  /* We do not support breakpoint instructions.
 
-  switch (kind)
-    {
-    case intelgt::BP_INSTRUCTION:
-      *size = intelgt_info->breakpoint_inst_length ();
-      return intelgt_info->breakpoint_inst ();
-    }
-
-  dprintf ("Unrecognized breakpoint kind: %d", kind);
-
+     We use breakpoint bits in instructions, instead.  See
+     intelgt_memory_insert_breakpoint.  */
   *size = 0;
   return nullptr;
 }

@@ -5859,8 +5859,18 @@ remote_target::remote_detach_1 (inferior *inf, int from_tty)
       remove_breakpoints_inf (current_inferior ());
     }
 
-  /* Tell the remote target to detach.  */
-  remote_detach_pid (pid);
+  try
+    {
+      /* Tell the remote target to detach.  */
+      remote_detach_pid (pid);
+    }
+  catch (const gdb_exception_error &ex)
+    {
+      /* Assume that we failed to detach because the process already
+	 exited but we have not processed the exit event, yet.  Just
+	 swallow the exception.  */
+      exception_fprintf (gdb_stderr, ex, "detach: ");
+    }
 
   /* Exit only if this is the only active inferior.  */
   if (from_tty && !rs->extended && number_of_live_inferiors (this) == 1)

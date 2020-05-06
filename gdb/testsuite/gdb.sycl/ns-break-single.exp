@@ -1,0 +1,110 @@
+# Copyright 2020-2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test non-stop functionality for SYCL.  Define a breakpoint that is
+# hit by only one thread.  The other threads should be in running
+# state.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-branch.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+# The actual test that we reuse once for a breakpoint at a guarded
+# statement that is hit by a single thread, and once more for a
+# conditional breakpoint whose condition holds for only one thread.
+
+proc test {device location dim0val {condition ""}} {
+    global srcfile binfile decimal gdb_prompt inferior_exited_re
+
+    clean_restart ${binfile}
+    gdb_test_no_output "set non-stop on"
+
+    if {![runto_main [sycl_get_device_args $device]]} {
+	return -1
+    }
+
+    # Set breakpoint at the given location.
+    set bp [gdb_get_line_number "$location"]
+    gdb_breakpoint "$bp $condition"
+
+    gdb_test "continue -a" ".reakpoint .*$srcfile:$bp.*" \
+	"continue to the breakpoint"
+
+    # Check that only one thread is in stop state and the others are
+    # running.
+    set num_stopped_threads 0
+    set stopped_thread_id ""
+    set tid_re "$decimal\(\.$decimal\)?"
+    set wpfa "with print frame-arguments none -- "
+    gdb_test_multiple "${wpfa}info threads" "thread states" -lbl {
+	-re "\r\n. ($tid_re)\[^\r\n\]* at ${srcfile}:$bp" {
+	    set stopped_thread_id $expect_out(1,string)
+	    incr num_stopped_threads
+	    exp_continue
+	}
+	-re "\r\n. \[^\r\n\]* .running." {
+	    exp_continue
+	}
+	-re "$gdb_prompt $" {
+	    if {$num_stopped_threads == 1} {
+		pass $gdb_test_name
+	    } else {
+		fail $gdb_test_name
+	    }
+	}
+    }
+
+    # Switch to the stopped thread, check the condition variable, and
+    # resume.  The program should come to termination.
+    gdb_test "thread $stopped_thread_id" \
+	".Switching to thread ${stopped_thread_id}.*" \
+	"switch to the stopped thread"
+
+    gdb_test "print dim0" " = $dim0val"
+
+    gdb_test_multiple "continue -a" "continue to end" {
+	-re "$inferior_exited_re normally].*$gdb_prompt.*" {
+	    pass $gdb_test_name
+	}
+    }
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	with_test_prefix "guarded stmt" {
+	    test "$device" "kernel-condition" "37"
+	}
+	with_test_prefix "conditional BP" {
+	    test "$device" "kernel-last-line" "16" "if dim0 == 16"
+	}
+    }
+}

@@ -173,8 +173,26 @@ proc continue_and_get_device_name {} {
 proc continue_sycl_program_to_termination {{msg_suffix ""}} {
     global gdb_prompt inferior_exited_re
 
-    gdb_test "continue" "$inferior_exited_re normally].*" \
-	"continue to end $msg_suffix"
+    set is_non_stop 0
+    gdb_test_multiple "show non-stop" "get non-stop mode" {
+	-re "non-stop mode is off.\r\n$gdb_prompt $" {
+	    set is_non_stop 0
+	}
+	-re "non-stop mode is on.\r\n$gdb_prompt $" {
+	    set is_non_stop 1
+	}
+    }
+
+    if {!$is_non_stop} {
+	gdb_test "continue" "$inferior_exited_re normally].*" \
+	    "continue to end $msg_suffix"
+    } else {
+	gdb_test_multiple "continue -a" "continue to end $msg_suffix" {
+	    -re "$inferior_exited_re normally].*$gdb_prompt.*" {
+		pass $gdb_test_name
+	    }
+	}
+    }
 }
 
 # Return the ID of a current thread (<inferior number>.<thread number>).

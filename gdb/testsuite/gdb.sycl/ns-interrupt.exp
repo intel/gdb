@@ -1,0 +1,115 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test non-stop functionality for SYCL.  Define a breakpoint that is
+# hit by two threads.  Resume and then interrupt one of those threads.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-branch.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+# HOST is not interesting for this test.
+if {[require_sycl_device "host" "*"]} {
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+clean_restart ${binfile}
+gdb_test_no_output "set non-stop on"
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Set the breakpoint.
+set bp [gdb_get_line_number "kernel-last-line"]
+gdb_breakpoint "$bp if dim0 == 9 || dim0 == 117"
+
+# Two threads are expected to hit.
+set num_hits 0
+gdb_test_multiple "continue -a" "continue to the breakpoint" {
+    -re "Breakpoint .*, \[^\r\n\]+$srcfile:$bp" {
+	incr num_hits
+	if {$num_hits == 2} {
+	    pass $gdb_test_name
+	} else {
+	    exp_continue
+	}
+    }
+    -re "$gdb_prompt " {
+	exp_continue
+    }
+}
+
+# Find the stopped threads' ids.
+set count 0
+set stopped_thread_id ""
+set tid_re "$decimal\(\.$decimal\)?"
+set thread1 ""
+gdb_test_multiple "info threads" "thread states" {
+    -re ". ($tid_re)\[^\r\n\]*\[Tt\]hread \[^\r\n\]* at ${srcfile}:$bp" {
+	set stopped_thread_id $expect_out(1,string)
+	incr count
+	set thread$count $stopped_thread_id
+	exp_continue
+    }
+    -re ". ($tid_re)\[^\r\n\]*\[Tt\]hread \[^\r\n\]* .running." {
+	exp_continue
+    }
+    -re "$gdb_prompt $" {
+	if {$count == 2} {
+	    pass $gdb_test_name
+	} else {
+	    fail $gdb_test_name
+	}
+    }
+}
+
+if {$thread1 eq ""} {
+    fail "no stopped thread found"
+    return
+}
+
+# Switch to a stopped thread, resume it.  Then interrupt.  Keep the
+# other thread stopped to avoid finishing the kernel execution.
+gdb_test "thread $thread1" \
+    ".Switching to thread ${thread1}.*" \
+    "switch to a stopped thread"
+
+gdb_test "continue &" "Continuing\." "resume the thread"
+
+# Put the output of info threads into the log for debugging purposes.
+gdb_test "info threads" ".*" "first info threads for logging"
+
+gdb_test_multiple "interrupt" "interrupt the thread" {
+    -re "$gdb_prompt " {
+	gdb_test_multiple "" $gdb_test_name {
+	    -re "Thread $thread1 \[^\r\n\]*stopped.*" {
+		pass $gdb_test_name
+	    }
+	}
+    }
+}
+
+# Once more, for the log.
+gdb_test "info threads" ".*" "second info threads for logging"

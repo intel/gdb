@@ -1,0 +1,98 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test non-stop functionality for SYCL.  Define a breakpoint that is
+# hit by only one thread.  The other threads should be in running
+# state.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-branch.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+# HOST is not interesting for this test.
+if {[require_sycl_device "host" "*"]} {
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+# The actual test that we reuse once for a breakpoint at a guarded
+# statement that is hit by a single thread, and once more for a
+# conditional breakpoint whose condition holds for only one thread.
+
+proc test {location dim0val {condition ""}} {
+    global srcfile binfile decimal gdb_prompt
+
+    clean_restart ${binfile}
+    gdb_test_no_output "set non-stop on"
+
+    if {[start_sycl_program] < 0} {
+	return -1
+    }
+
+    # Set breakpoint at the given location.
+    set bp [gdb_get_line_number "$location"]
+    gdb_breakpoint "$bp $condition"
+
+    gdb_test "continue -a" ".reakpoint .*$srcfile:$bp.*" \
+	"continue to the breakpoint"
+
+    # Check that only one thread is in stop state and the others are
+    # running.
+    set num_stopped_threads 0
+    set stopped_thread_id ""
+    set tid_re "$decimal\(\.$decimal\)?"
+    gdb_test_multiple "info threads" "thread states" {
+	-re ". ($tid_re)\[^\r\n\]*\[Tt\]hread \[^\r\n\]* at ${srcfile}:$bp" {
+	    set stopped_thread_id $expect_out(1,string)
+	    incr num_stopped_threads
+	    exp_continue
+	}
+	-re ". ($tid_re)\[^\r\n\]*\[Tt\]hread \[^\r\n\]* .running." {
+	    exp_continue
+	}
+	-re "$gdb_prompt $" {
+	    if {$num_stopped_threads == 1} {
+		pass $gdb_test_name
+	    } else {
+		fail $gdb_test_name
+	    }
+	}
+    }
+
+    # Switch to the stopped thread, check the condition variable, and
+    # resume.  The program should come to termination.
+    gdb_test "thread $stopped_thread_id" \
+	".Switching to thread ${stopped_thread_id}.*" \
+	"switch to the stopped thread"
+
+    gdb_test "print dim0" " = $dim0val"
+
+    continue_sycl_program_to_termination
+}
+
+with_test_prefix "guarded stmt" {
+    test "kernel-condition" "37"
+}
+with_test_prefix "conditional BP" {
+    test "kernel-last-line" "16" "if dim0 == 16"
+}

@@ -1,0 +1,100 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test non-stop functionality for SYCL.  Define a breakpoint that is
+# hit by all threads.  Continue each stopped thread individually.
+# Eventually the program should terminate.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-branch.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+# HOST is not interesting for this test.
+if {[require_sycl_device "host" "*"]} {
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+save_vars { GDBFLAGS } {
+    append GDBFLAGS " -ex \"set non-stop on\""
+    clean_restart ${binfile}
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Set a breakpoint inside the kernel.
+# Because of the condition, we should see 4 hits.
+set bp [gdb_get_line_number "kernel-last-line"]
+gdb_breakpoint "$bp if dim0 % 32 == 0"
+
+set fill "\[^\r\n\]*"
+set num_hits 0
+gdb_test_multiple "continue -a" "continue to the breakpoint" {
+    -re "Breakpoint ${fill}$srcfile:$bp\r\n${fill}kernel-last-line${fill}\r\n" {
+	incr num_hits
+	if {$num_hits == 4} {
+	    pass $gdb_test_name
+	} else {
+	    exp_continue
+	}
+    }
+    -re "$gdb_prompt " {
+	exp_continue
+    }
+}
+
+# Resume stopped threads individually.
+set exit_detected 0
+foreach iter {1 2 3 4} { with_test_prefix "iter $iter" {
+    # Collect the id of a stopped thread.
+    set stopped_thread_id ""
+    set tid_re "$decimal\(\.$decimal\)?"
+    gdb_test_multiple "info threads" "find a stopped thread" {
+	-re ". ($tid_re)\[^\r\n\]*\[Tt\]hread \[^\r\n\]* at ${srcfile}:$bp" {
+	    set stopped_thread_id $expect_out(1,string)
+	    exp_continue
+	}
+	-re ". ($tid_re)\[^\r\n\]*\[Tt\]hread \[^\r\n\]* .running." {
+	    exp_continue
+	}
+	-re "$gdb_prompt " {
+	    gdb_assert {[string length $stopped_thread_id] > 0} $gdb_test_name
+	}
+    }
+
+    # Switch to the stopped thread.
+    gdb_test "thread $stopped_thread_id" \
+	"Switching to thread ${stopped_thread_id}.*" "switch to thread"
+
+    gdb_test "continue &" "Continuing." "resume the stopped thread"
+
+    if {$iter == 4} {
+	gdb_test_multiple "" "termination" {
+	    -re "Correct.*$inferior_exited_re normally" {
+		pass $gdb_test_name
+	    }
+	}
+    }
+}}

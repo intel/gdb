@@ -302,6 +302,34 @@ intelgt_memory_remove_breakpoint (gdbarch *gdbarch, struct bp_target_info *bp)
   return err;
 }
 
+/* The program_breakpoint_here_p gdbarch method.  */
+
+static bool
+intelgt_program_breakpoint_here_p (gdbarch *gdbarch, CORE_ADDR pc)
+{
+  dprintf ("pc: %s", paddress (gdbarch, pc));
+
+  gdb_byte inst[intelgt::MAX_INST_LENGTH];
+  int err = target_read_memory (pc, inst, intelgt::MAX_INST_LENGTH);
+  if (err != 0)
+    {
+      /* We could fall back to reading a full and then a compacted
+	 instruction but I think we should rather allow short reads than
+	 having the caller try smaller and smaller sizes.  */
+      dprintf ("Failed to read memory at %s (%s).",
+	       paddress (gdbarch, pc), strerror (err));
+      return err;
+    }
+
+  const intelgt::arch_info * const intelgt_info
+    = get_intelgt_arch_info (gdbarch);
+  const bool is_bkpt = intelgt_info->has_breakpoint (inst);
+
+  dprintf ("%sbreakpoint found.", is_bkpt ? "" : "no ");
+
+  return is_bkpt;
+}
+
 /* The 'breakpoint_kind_from_pc' gdbarch method.
    This is a required gdbarch function.  */
 
@@ -593,6 +621,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 					intelgt_memory_insert_breakpoint);
   set_gdbarch_memory_remove_breakpoint (gdbarch,
 					intelgt_memory_remove_breakpoint);
+  set_gdbarch_program_breakpoint_here_p (gdbarch,
+					 intelgt_program_breakpoint_here_p);
   set_gdbarch_breakpoint_kind_from_pc (gdbarch,
 				       intelgt_breakpoint_kind_from_pc);
   set_gdbarch_sw_breakpoint_from_kind (gdbarch,

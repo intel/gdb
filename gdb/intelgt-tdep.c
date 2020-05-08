@@ -312,6 +312,39 @@ intelgt_initialize_gdbarch_data (const target_desc *tdesc,
 #endif
 }
 
+/* Generic pointers are tagged in order to preserve the address
+   space to which they are pointing.  Tags are encoded into [61:63] bits of
+   an address:
+   000/111 - global,
+   001 - private,
+   010 - local (SLM).  */
+static CORE_ADDR
+intelgt_pointer_to_address (gdbarch *gdbarch,
+			    type *type, const gdb_byte *buf)
+{
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  CORE_ADDR addr
+    = extract_unsigned_integer (buf, TYPE_LENGTH (type), byte_order);
+
+  unsigned long tag = addr >> 56;
+  switch (tag)
+    {
+      /* Private.  */
+    case 0x20ul:
+      /* Global.  */
+    case 0xe0ul:
+      /* Mask out the tag, we want an address to the global address
+	 space (first 8 bits are 0s).  */
+      addr &= ~(((0x0ul << 8) - 1) << 56);
+      break;
+    default:
+      if (tag != 0x0ul)
+	dprintf (_("Address tag '%lx' not resolved."), tag);
+    }
+
+  return addr;
+}
+
 #if defined (HAVE_LIBIGA64)
 /* Map CORE_ADDR to symbol names for jump labels in an IGA disassembly.  */
 
@@ -474,6 +507,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_sw_breakpoint_from_kind (gdbarch,
 				       intelgt_sw_breakpoint_from_kind);
   set_gdbarch_can_step_over_breakpoint (gdbarch, 1);
+  set_gdbarch_pointer_to_address (gdbarch, intelgt_pointer_to_address);
 
   /* Disassembly */
   set_gdbarch_print_insn (gdbarch, intelgt_print_insn);

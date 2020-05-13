@@ -142,6 +142,8 @@ private:
 
   /* Process the inferior state.  */
   bool process_inferior_state (const char *space);
+  /* Process the thread state.  */
+  bool process_thread_state ();
   bool get_tid_or_range (int *inf_num, int *thr_start, int *thr_end);
 
   /* The possible states of the tid range parser's state machine,
@@ -168,6 +170,9 @@ private:
 
   /* Last inferior number returned.  */
   int m_inf_num;
+
+  /* Last thread number returned.  */
+  int m_thr_num;
 
   /* True if the TID last parsed was explicitly inferior-qualified.
      IOW, whether the spec specified an inferior number

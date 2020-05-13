@@ -2004,7 +2004,7 @@ thread_apply_command (const char *tidlist, int from_tty)
       if (inf != NULL)
 	tp = find_thread_id (inf, thr_num);
 
-      if (parser.in_star_range ())
+      if (parser.in_thread_star_range ())
 	{
 	  if (inf == NULL)
 	    {

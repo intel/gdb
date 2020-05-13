@@ -175,6 +175,7 @@ tid_range_parser::init (const char *tidlist, int default_inferior)
   m_inf_num = 0;
   m_qualified = false;
   m_default_inferior = default_inferior;
+  m_in_thread_star_range = false;
 }
 
 /* See tid-parse.h.  */
@@ -193,7 +194,6 @@ tid_range_parser::finished () const
 		   || *m_cur_tok == '$'
 		   || *m_cur_tok == '*'));
     case STATE_THREAD_RANGE:
-    case STATE_STAR_RANGE:
       return m_range_parser.finished ();
     }
 
@@ -210,7 +210,6 @@ tid_range_parser::cur_tok () const
     case STATE_INFERIOR:
       return m_cur_tok;
     case STATE_THREAD_RANGE:
-    case STATE_STAR_RANGE:
       return m_range_parser.cur_tok ();
     }
 
@@ -220,8 +219,7 @@ tid_range_parser::cur_tok () const
 void
 tid_range_parser::skip_range ()
 {
-  gdb_assert (m_state == STATE_THREAD_RANGE
-	      || m_state == STATE_STAR_RANGE);
+  gdb_assert (m_state == STATE_THREAD_RANGE);
 
   m_range_parser.skip_range ();
   init (m_range_parser.cur_tok (), m_default_inferior);
@@ -269,16 +267,18 @@ tid_range_parser::process_inferior_state (const char *space)
       p = m_cur_tok;
     }
 
+  m_state = STATE_THREAD_RANGE;
+
   m_range_parser.init (p);
   if (p[0] == '*' && (p[1] == '\0' || isspace (p[1])))
     {
       /* Setup the number range parser to return numbers in the
 	 whole [1,INT_MAX] range.  */
       m_range_parser.setup_range (1, INT_MAX, skip_spaces (p + 1));
-      m_state = STATE_STAR_RANGE;
+      m_in_thread_star_range = true;
     }
   else
-    m_state = STATE_THREAD_RANGE;
+    m_in_thread_star_range = false;
 
   return true;
 }
@@ -332,6 +332,7 @@ tid_range_parser::get_tid_or_range (int *inf_num,
   if (!m_range_parser.in_range ())
     {
       m_state = STATE_INFERIOR;
+      m_in_thread_star_range = false;
       m_cur_tok = m_range_parser.cur_tok ();
 
       if (thr_end != NULL)
@@ -341,8 +342,7 @@ tid_range_parser::get_tid_or_range (int *inf_num,
   /* If we're midway through a range, and the caller wants the end
      value, return it and skip to the end of the range.  */
   if (thr_end != NULL
-      && (m_state == STATE_THREAD_RANGE
-	  || m_state == STATE_STAR_RANGE))
+      && (m_state == STATE_THREAD_RANGE))
     {
       *thr_end = m_range_parser.end_value ();
 
@@ -376,9 +376,9 @@ tid_range_parser::get_tid (int *inf_num, int *thr_num)
 /* See tid-parse.h.  */
 
 bool
-tid_range_parser::in_star_range () const
+tid_range_parser::in_thread_star_range () const
 {
-  return m_state == STATE_STAR_RANGE;
+  return m_state == STATE_THREAD_RANGE && m_in_thread_star_range;
 }
 
 bool

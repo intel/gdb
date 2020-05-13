@@ -283,6 +283,24 @@ tid_range_parser::process_inferior_state (const char *space)
   return true;
 }
 
+/* See tid-parse.h.  */
+
+bool
+tid_range_parser::process_thread_state ()
+{
+  m_thr_num = 0;
+  if (!m_range_parser.get_number (&m_thr_num) || m_thr_num == 0)
+    {
+      m_state = STATE_INFERIOR;
+      return false;
+    }
+
+  if (m_thr_num < 0)
+    error (_("negative value: %s"), m_cur_tok);
+
+  return true;
+}
+
 /* Helper for tid_range_parser::get_tid and
    tid_range_parser::get_tid_range.  Return the next range if THR_END
    is non-NULL, return a single thread ID otherwise.  */
@@ -303,14 +321,10 @@ tid_range_parser::get_tid_or_range (int *inf_num,
   *inf_num = m_inf_num;
   *thr_start = 0;
 
-  if (!m_range_parser.get_number (thr_start) || *thr_start == 0)
-    {
-      m_state = STATE_INFERIOR;
-      return false;
-    }
+  if (!process_thread_state ())
+    return false;
 
-  if (*thr_start < 0)
-    error (_("negative value: %s"), m_cur_tok);
+  *thr_start = m_thr_num;
 
   /* If we successfully parsed a thread number or finished parsing a
      thread range, switch back to assuming the next TID is

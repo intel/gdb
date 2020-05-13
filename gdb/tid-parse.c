@@ -219,7 +219,7 @@ tid_range_parser::cur_tok () const
 void
 tid_range_parser::skip_range ()
 {
-  gdb_assert (m_state == STATE_THREAD_RANGE);
+  gdb_assert (in_thread_state ());
 
   m_range_parser.skip_range ();
   init (m_range_parser.cur_tok (), m_default_inferior);
@@ -341,8 +341,7 @@ tid_range_parser::get_tid_or_range (int *inf_num,
 
   /* If we're midway through a range, and the caller wants the end
      value, return it and skip to the end of the range.  */
-  if (thr_end != NULL
-      && (m_state == STATE_THREAD_RANGE))
+  if (thr_end != nullptr && in_thread_state ())
     {
       *thr_end = m_range_parser.end_value ();
 
@@ -378,7 +377,7 @@ tid_range_parser::get_tid (int *inf_num, int *thr_num)
 bool
 tid_range_parser::in_thread_star_range () const
 {
-  return m_state == STATE_THREAD_RANGE && m_in_thread_star_range;
+  return in_thread_state () && m_in_thread_star_range;
 }
 
 bool

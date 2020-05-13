@@ -369,6 +369,12 @@ number_or_range_parser::setup_range (int start_value, int end_value,
   m_end_value = end_value;
 }
 
+void
+number_or_range_parser::set_end_ptr (const char *end_ptr)
+{
+  m_end_ptr = end_ptr;
+}
+
 /* See documentation in cli-utils.h.  */
 
 bool

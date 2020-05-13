@@ -237,13 +237,14 @@ number_or_range_parser::number_or_range_parser (const char *string)
 /* See documentation in cli-utils.h.  */
 
 void
-number_or_range_parser::init (const char *string)
+number_or_range_parser::init (const char *string, int end_trailer)
 {
   m_cur_tok = string;
   m_last_retval = 0;
   m_end_value = 0;
   m_end_ptr = NULL;
   m_in_range = false;
+  m_end_trailer = end_trailer;
 }
 
 /* See documentation in cli-utils.h.  */
@@ -271,10 +272,19 @@ number_or_range_parser::get_number (int *num)
     }
   else if (*m_cur_tok != '-')
     {
+      const char *restore_tok = m_cur_tok;
       /* Default case: state->m_cur_tok is pointing either to a solo
 	 number, or to the first number of a range.  */
       if (!get_number_trailer (&m_cur_tok, &m_last_retval, '-'))
-	return false;
+	{
+	  /* Make another attempt only if there is a custom end trailer.  */
+	  if (m_end_trailer == 0)
+	    return false;
+
+	  m_cur_tok = restore_tok;
+	  if (!get_number_trailer (&m_cur_tok, &m_last_retval, m_end_trailer))
+	    return false;
+	}
 
       retval = true;
 
@@ -300,7 +310,7 @@ number_or_range_parser::get_number (int *num)
 	  temp = &m_end_ptr;
 	  m_end_ptr = skip_spaces (m_cur_tok + 1);
 
-	  if (!::get_number (temp, &m_end_value))
+	  if (!::get_number_trailer (temp, &m_end_value, m_end_trailer))
 	    {
 	      /* Advance the token pointer behind the failed range.  */
 	      m_cur_tok = m_end_ptr;

@@ -1910,13 +1910,27 @@ make_thread_apply_options_def_group (qcs_flags *flags)
   return {{thr_qcs_flags_option_defs}, flags};
 }
 
-/* Apply a GDB command to a list of threads.  List syntax is a whitespace
-   separated list of numbers, or ranges, or the keyword `all'.  Ranges consist
-   of two numbers separated by a hyphen.  Examples:
+/* Apply a GDB command to a list of threads and SIMD lanes.  List syntax
+   is a whitespace separated list of numbers, or ranges, or the keyword
+   `all'.  Ranges consist of two numbers separated by a hyphen.  Examples:
 
    thread apply 1 2 7 4 backtrace       Apply backtrace cmd to threads 1,2,7,4
    thread apply 2-7 9 p foo(1)  Apply p foo(1) cmd to threads 2->7 & 9
-   thread apply all x/i $pc   Apply x/i $pc cmd to all threads.  */
+   thread apply all x/i $pc   Apply x/i $pc cmd to all threads.
+
+   With SIMD syntax ranges are parsed as follows:
+   Item     Expanded items
+   1.2:3    1.2:3
+   :4       1.2:4
+   1:5-7    1.1:5 1.1:6 1.1:7
+   2-3      1.2:<default lane> 1.3:<default lane>
+   2-3:4-6  1.2:2 1.2:3 1.2:4 1.3:2 1.3:3 1.3:4
+   2.3:*    2.3:<all active lanes>
+   3.4-6    3.4:<default lane> 3.5:<default lane> 3.6:<default lane>
+   3.4-5:*  3.4:<all active lanes> 3.5:<all active lanes>
+
+   Where the default lane is the currently selected lane within
+   the SIMD thread ifi ti s active, or the first active lane.  */
 
 static void
 thread_apply_all_command (const char *cmd, int from_tty)
@@ -1979,8 +1993,7 @@ thread_apply_command_completer (cmd_list_element *ignore,
      return below.  */
   tracker.set_use_custom_word_point (true);
 
-  tid_range_parser parser;
-  parser.init (text, current_inferior ()->num);
+  tid_range_parser parser {text, current_inferior ()->num, -1};
 
   try
     {
@@ -2050,12 +2063,15 @@ thread_apply_command (const char *tidlist, int from_tty)
 {
   qcs_flags flags;
   const char *cmd = NULL;
-  tid_range_parser parser;
+
+  if (inferior_ptid == null_ptid)
+    error (_("The program is not being run."));
 
   if (tidlist == NULL || *tidlist == '\000')
     error (_("Please specify a thread ID list"));
 
-  parser.init (tidlist, current_inferior ()->num);
+  tid_range_parser parser {tidlist, current_inferior ()->num,
+			   inferior_thread ()->per_inf_num};
   while (!parser.finished ())
     {
       int inf_num, thr_start, thr_end;
@@ -2080,14 +2096,16 @@ thread_apply_command (const char *tidlist, int from_tty)
 
   scoped_restore_current_thread restore_thread;
 
-  parser.init (tidlist, current_inferior ()->num);
+  parser.init (tidlist, current_inferior ()->num,
+	       inferior_thread ()->per_inf_num);
   while (!parser.finished ())
     {
       struct thread_info *tp = NULL;
       struct inferior *inf;
-      int inf_num, thr_num;
+      int inf_num, thr_num, simd_lane_num;
 
-      parser.get_tid (&inf_num, &thr_num);
+      bool is_simd_from_star = parser.in_simd_lane_star_range ();
+      parser.get_tid (&inf_num, &thr_num, &simd_lane_num);
       inf = find_inferior_id (inf_num);
       if (inf != NULL)
 	tp = find_thread_id (inf, thr_num);
@@ -2102,8 +2120,10 @@ thread_apply_command (const char *tidlist, int from_tty)
 	    }
 
 	  /* No use looking for threads past the highest thread number
-	     the inferior ever had.  */
-	  if (thr_num >= inf->highest_thread_num)
+	     the inferior ever had.  However, wait until SIMD lane parsing
+	     is done.  */
+	  if (thr_num >= inf->highest_thread_num
+	      && !parser.in_simd_lane_state ())
 	    parser.skip_range ();
 
 	  /* Be quiet about unknown threads numbers.  */
@@ -2124,6 +2144,49 @@ thread_apply_command (const char *tidlist, int from_tty)
 	{
 	  warning (_("Thread %s has terminated."), print_thread_id (tp));
 	  continue;
+	}
+
+      scoped_restore_current_simd_lane restore_simd_lane {tp};
+
+      /* If SIMD lane was specified.  */
+      if (simd_lane_num >= 0)
+	{
+	  if (tp->has_simd_lanes ())
+	    {
+	      /* If thread has SIMD lanes, check that the specified one is
+		 currently active.  */
+	      if (tp->is_simd_lane_active (simd_lane_num))
+		tp->set_current_simd_lane (simd_lane_num);
+	      else
+		{
+		  if (!is_simd_from_star)
+		    {
+		      /* Print warning only for explicitly specified SIMD
+			 lanes.  */
+		      warning (_("SIMD lane %d is inactive in thread %s"),
+			       simd_lane_num, print_thread_id (tp));
+		    }
+		  continue;
+		}
+	    }
+	  else
+	    {
+	      warning (_("Thread %s does not have SIMD lanes."),
+		       print_thread_id (tp));
+	      if (parser.in_simd_lane_state ())
+		parser.skip_simd_lane_range ();
+
+	      continue;
+	    }
+	}
+      else if (tp->has_simd_lanes ())
+	{
+	  /* If the lane was not specified, switch to the default lane.  */
+	  tp->set_default_simd_lane ();
+
+	  /* Note, we allow running the command for an inactive thread,
+	     as user can manually switch to this thread and execute
+	     the command.  */
 	}
 
       thr_try_catch_cmd (tp, cmd, from_tty, flags);

@@ -56,19 +56,22 @@ struct thread_info *parse_thread_id (const char *tidstr, const char **end,
 class tid_range_parser
 {
 public:
-  /* Default construction.  Must call init before calling get_*.  */
-  tid_range_parser () {}
+  tid_range_parser () = delete;
 
   /* Calls init automatically.  See init for description of
      parameters.  */
-  tid_range_parser (const char *tidlist, int default_inferior);
+  tid_range_parser (const char *tidlist, int default_inferior,
+		    int default_thr_num);
 
   /* Reinitialize a tid_range_parser.  TIDLIST is the string to be
      parsed.  DEFAULT_INFERIOR is the inferior number to assume if a
-     non-qualified thread ID is found.  */
-  void init (const char *tidlist, int default_inferior);
+     non-qualified thread ID is found.  DEFAULT_THR_NUM is the thread
+     number to assume if no thread ID is found.  */
+  void init (const char *tidlist, int default_inferior,
+	     int default_thr_num);
 
-  /* Parse a thread ID or a thread range list.
+  /* Parse a thread ID or a thread range list.  Optionally, parse
+     the SIMD lane.
 
      This function is designed to be called iteratively.  While
      processing a thread ID range list, at each call it will return
@@ -82,20 +85,28 @@ public:
      pointer until the range is completed.  The call that completes
      the range will advance the pointer past <thread_number2>.
 
+     A thread range in a thread range list can be accompanied by a SIMD
+     lane range list.  If this is the case, then the SIMD range is parsed
+     for every thread in the thread range.  If SIMD_LANE_NUM is specified,
+     the next SIMD lane number is returned there.
+
      This function advances through the input string for as long you
      call it.  Once the end of the input string is reached, a call to
      finished returns false (see below).
 
-     E.g., with list: "1.2 3.4-6":
+     E.g., with list: "1.2 3.4-6:3-4":
 
-     1st call: *INF_NUM=1; *THR_NUM=2 (finished==0)
-     2nd call: *INF_NUM=3; *THR_NUM=4 (finished==0)
-     3rd call: *INF_NUM=3; *THR_NUM=5 (finished==0)
-     4th call: *INF_NUM=3; *THR_NUM=6 (finished==1)
+     1st call: *INF_NUM=1; *THR_NUM=2 *SIMD_LANE_NUM=-1 (finished==0)
+     2nd call: *INF_NUM=3; *THR_NUM=4 *SIMD_LANE_NUM=3 (finished==0)
+     3nd call: *INF_NUM=3; *THR_NUM=4 *SIMD_LANE_NUM=4 (finished==0)
+     4rd call: *INF_NUM=3; *THR_NUM=5 *SIMD_LANE_NUM=3 (finished==0)
+     5rd call: *INF_NUM=3; *THR_NUM=5 *SIMD_LANE_NUM=4 (finished==0)
+     6th call: *INF_NUM=3; *THR_NUM=6 *SIMD_LANE_NUM=3 (finished==0)
+     7th call: *INF_NUM=3; *THR_NUM=6 *SIMD_LANE_NUM=4 (finished==1)
 
      Returns true if a thread/range is parsed successfully, false
      otherwise.  */
-  bool get_tid (int *inf_num, int *thr_num);
+  bool get_tid (int *inf_num, int *thr_num, int *simd_lane_num);
 
   /* Like get_tid, but return a thread ID range per call, rather then
      a single thread ID.
@@ -119,7 +130,14 @@ public:
   /* Returns true if processing a thread range (e.g., 1.2-3 or 1.*).  */
   bool in_thread_state () const;
 
-  /* Returns true if parsing has completed.  */
+  /* Returns true if processing a star wildcard (e.g., "1.2:*")
+     SIMD lane ID range.  */
+  bool in_simd_lane_star_range () const;
+
+  /* Returns true if simd lane range part is parsed now.  */
+  bool in_simd_lane_state () const;
+
+ /* Returns true if parsing has completed.  */
   bool finished () const;
 
   /* Return the current token being parsed.  When parsing has
@@ -129,6 +147,10 @@ public:
   /* When parsing a range, advance past the final token in the
      range.  */
   void skip_range ();
+
+  /* Skip parsing SIMD part for the just parsed thread.  Switch back
+     to parsing the thread part.  */
+  void skip_simd_lane_range ();
 
   /* True if the TID last parsed was explicitly inferior-qualified.
      IOW, whether the spec specified an inferior number
@@ -143,8 +165,12 @@ private:
   /* Process the inferior state.  */
   bool process_inferior_state (const char *space);
   /* Process the thread state.  */
-  bool process_thread_state ();
-  bool get_tid_or_range (int *inf_num, int *thr_start, int *thr_end);
+  bool process_thread_state (const char *space);
+  /* Process the SIMD lane state.  */
+  bool process_simd_lane_state ();
+  bool get_tid_or_range (int *inf_num, int *thr_start, int *thr_end,
+			 int *simd_lane);
+  const size_t m_simd_max_len = (sizeof (unsigned int)) * 8;
 
   /* The possible states of the tid range parser's state machine,
      indicating what sub-component are we expecting.  */
@@ -155,10 +181,16 @@ private:
 
       /* Parsing the thread number or thread number range.  */
       STATE_THREAD_RANGE,
+
+      /* Parsing a SIMD lane range.  */
+      STATE_SIMD_LANE_RANGE,
     } m_state;
 
   /* Shows whether we are parsing a thread star range right now.  */
   bool m_in_thread_star_range;
+
+  /* Shows whether we are parsing a SIMD lane star range right now.  */
+  bool m_in_simd_lane_star_range;
 
   /* The string being parsed.  When parsing has finished, this points
      past the last parsed token.  */
@@ -168,11 +200,15 @@ private:
      sub-component.  */
   number_or_range_parser m_range_parser;
 
+  /* The SIMD lane range parser.  */
+  number_or_range_parser m_simd_lane_range_parser;
+
   /* Last inferior number returned.  */
   int m_inf_num;
-
   /* Last thread number returned.  */
   int m_thr_num;
+  /* Last SIMD lane num returned.  */
+  int m_simd_lane_num;
 
   /* True if the TID last parsed was explicitly inferior-qualified.
      IOW, whether the spec specified an inferior number
@@ -181,6 +217,7 @@ private:
 
   /* The inferior number to assume if the TID is not qualified.  */
   int m_default_inferior;
+  int m_default_thr_num;
 };
 
 

@@ -112,9 +112,9 @@ public:
      otherwise.  */
   bool get_tid_range (int *inf_num, int *thr_start, int *thr_end);
 
-  /* Returns true if processing a star wildcard (e.g., "1.*")
+  /* Returns true if processing a thread star wildcard (e.g., "1.*")
      range.  */
-  bool in_star_range () const;
+  bool in_thread_star_range () const;
 
   /* Returns true if processing a thread range (e.g., 1.2-3).  */
   bool in_thread_range () const;
@@ -155,10 +155,10 @@ private:
 
       /* Parsing the thread number or thread number range.  */
       STATE_THREAD_RANGE,
-
-      /* Parsing a star wildcard thread range.  E.g., "1.*".  */
-      STATE_STAR_RANGE,
     } m_state;
+
+  /* Shows whether we are parsing a thread star range right now.  */
+  bool m_in_thread_star_range;
 
   /* The string being parsed.  When parsing has finished, this points
      past the last parsed token.  */

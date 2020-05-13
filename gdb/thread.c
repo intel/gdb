@@ -1991,7 +1991,7 @@ thread_apply_command_completer (cmd_list_element *ignore,
 	  if (!parser.get_tid_range (&inf_num, &thr_start, &thr_end))
 	    break;
 
-	  if (parser.in_star_range () || parser.in_thread_range ())
+	  if (parser.in_thread_state ())
 	    parser.skip_range ();
 	}
     }

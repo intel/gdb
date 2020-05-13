@@ -392,13 +392,18 @@ proc_with_prefix test-frame-apply {} {
 # Basic option-machinery + "thread apply" command integration tests.
 proc_with_prefix test-thread-apply {} {
 
-    test_gdb_complete_unique "thread apply all" "thread apply all"
+    test_gdb_complete_multiple "thread apply " "all" "" {
+	"all"
+	"all-lanes"
+    }
+    test_gdb_complete_unique "thread apply all-lanes" "thread apply all-lanes"
     test_gdb_complete_unique "taas" "taas"
 
     gdb_test "thread apply 1-" "Invalid thread ID: 1-"
     test_gdb_complete_none "frame apply level 1-"
 
     foreach cmd {
+	"thread apply all-lanes"
 	"thread apply all"
 	"thread apply 1"
 	"taas"
@@ -437,6 +442,9 @@ proc_with_prefix test-thread-apply {} {
 	if {$cmd == "thread apply all" || $cmd == "taas"} {
 	    set errmsg \
 		"Please specify a command at the end of 'thread apply all'"
+	} elseif {$cmd == "thread apply all-lanes"} {
+	    set errmsg \
+		"Please specify a command at the end of 'thread apply all-lanes'"
 	} elseif {$cmd == "thread apply 1"} {
 	    set errmsg \
 		"Please specify a command following the thread ID list"

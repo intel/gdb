@@ -235,6 +235,54 @@ tid_range_parser::tid_is_qualified () const
   return m_qualified;
 }
 
+/* See tid-parse.h.  */
+
+bool
+tid_range_parser::process_inferior_state (const char *space)
+{
+  const char *p = m_cur_tok;
+
+  while (p < space && *p != '.')
+    p++;
+  if (p < space)
+    {
+      const char *dot = p;
+
+      /* Parse number to the left of the dot.  */
+      p = m_cur_tok;
+      if (!get_non_negative_number_trailer (&p, &m_inf_num, '.', m_cur_tok))
+	return false;
+
+      if (m_inf_num == 0)
+	error (_("Invalid thread ID 0: %s"), m_cur_tok);
+
+      m_qualified = true;
+      p = dot + 1;
+
+      if (isspace (*p))
+	return false;
+    }
+  else
+    {
+      m_inf_num = m_default_inferior;
+      m_qualified = false;
+      p = m_cur_tok;
+    }
+
+  m_range_parser.init (p);
+  if (p[0] == '*' && (p[1] == '\0' || isspace (p[1])))
+    {
+      /* Setup the number range parser to return numbers in the
+	 whole [1,INT_MAX] range.  */
+      m_range_parser.setup_range (1, INT_MAX, skip_spaces (p + 1));
+      m_state = STATE_STAR_RANGE;
+    }
+  else
+    m_state = STATE_THREAD_RANGE;
+
+  return true;
+}
+
 /* Helper for tid_range_parser::get_tid and
    tid_range_parser::get_tid_range.  Return the next range if THR_END
    is non-NULL, return a single thread ID otherwise.  */
@@ -243,51 +291,13 @@ bool
 tid_range_parser::get_tid_or_range (int *inf_num,
 				    int *thr_start, int *thr_end)
 {
+  const char *space;
+  space = skip_to_space (m_cur_tok);
+
   if (m_state == STATE_INFERIOR)
     {
-      const char *p;
-      const char *space;
-
-      space = skip_to_space (m_cur_tok);
-
-      p = m_cur_tok;
-      while (p < space && *p != '.')
-	p++;
-      if (p < space)
-	{
-	  const char *dot = p;
-
-	  /* Parse number to the left of the dot.  */
-	  p = m_cur_tok;
-	  if (!get_non_negative_number_trailer (&p, &m_inf_num, '.', m_cur_tok))
-	    return false;
-
-	  if (m_inf_num == 0)
-	    return false;
-
-	  m_qualified = true;
-	  p = dot + 1;
-
-	  if (isspace (*p))
-	    return false;
-	}
-      else
-	{
-	  m_inf_num = m_default_inferior;
-	  m_qualified = false;
-	  p = m_cur_tok;
-	}
-
-      m_range_parser.init (p);
-      if (p[0] == '*' && (p[1] == '\0' || isspace (p[1])))
-	{
-	  /* Setup the number range parser to return numbers in the
-	     whole [1,INT_MAX] range.  */
-	  m_range_parser.setup_range (1, INT_MAX, skip_spaces (p + 1));
-	  m_state = STATE_STAR_RANGE;
-	}
-      else
-	m_state = STATE_THREAD_RANGE;
+      if (!process_inferior_state (space))
+	return false;
     }
 
   *inf_num = m_inf_num;

@@ -140,6 +140,8 @@ private:
   tid_range_parser (const tid_range_parser &);
   tid_range_parser &operator= (const tid_range_parser &);
 
+  /* Process the inferior state.  */
+  bool process_inferior_state (const char *space);
   bool get_tid_or_range (int *inf_num, int *thr_start, int *thr_end);
 
   /* The possible states of the tid range parser's state machine,

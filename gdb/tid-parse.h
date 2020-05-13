@@ -116,8 +116,8 @@ public:
      range.  */
   bool in_thread_star_range () const;
 
-  /* Returns true if processing a thread range (e.g., 1.2-3).  */
-  bool in_thread_range () const;
+  /* Returns true if processing a thread range (e.g., 1.2-3 or 1.*).  */
+  bool in_thread_state () const;
 
   /* Returns true if parsing has completed.  */
   bool finished () const;

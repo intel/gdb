@@ -3411,7 +3411,7 @@ programs:
 @item @samp{thread @var{thread-id}}, a command to switch among threads,
 and if available, among SIMD lanes within a thread
 @item @samp{info threads}, a command to inquire about existing threads
-@item @samp{thread apply [@var{thread-id-list} | all] @var{args}},
+@item @samp{thread apply [@var{thread-id-list} | all | all-lanes] @var{args}},
 a command to apply a command to a list of threads
 @item thread-specific breakpoints
 @item @samp{set print thread-events}, which controls printing of 
@@ -3748,16 +3748,20 @@ threads.
 @anchor{thread apply all}
 @kindex thread apply
 @cindex apply command to several threads
-@item thread apply [@var{thread-id-list} | all [-ascending]] [@var{flag}]@dots{} @var{command}
+@item thread apply [@var{thread-id-list} | all [-ascending]| all-lanes [-ascending]] [@var{flag}]@dots{} @var{command}
 The @code{thread apply} command allows you to apply the named
 @var{command} to one or more threads.  If SIMD lanes are supported,
 the command is applied to all active SIMD lanes within a thread.
 Specify the threads that you want affected using the thread ID list
-syntax (@pxref{thread ID lists}), or specify @code{all} to apply
-to all threads.  To apply a command to all threads in descending
+syntax (@pxref{thread ID lists}), specify @code{all} to apply
+to all threads, or specify @code{all-lanes} to apply the command to all active
+SIMD lanes in all threads.  To apply a command to all threads in descending
 order, type @kbd{thread apply all @var{command}}.  To apply a command
-to all threads in ascending order, type
-@kbd{thread apply all -ascending @var{command}}.
+to all threads in ascending order, type @kbd{thread apply all -ascending @var{command}}.
+To apply a command to all active lanes in descending order, type
+@kbd{thread apply all-lanes @var{command}}.  To apply a command to all
+active lanes in ascending order, type
+@kbd{thread apply all-lanes -ascending @var{command}}.
 
 The @var{flag} arguments control what output to produce and how to handle
 errors raised when applying @var{command} to a thread.  @var{flag}

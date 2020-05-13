@@ -1927,11 +1927,15 @@ make_thread_apply_options_def_group (qcs_flags *flags)
 
 /* Apply a GDB command to a list of threads and SIMD lanes.  List syntax
    is a whitespace separated list of numbers, or ranges, or the keyword
-   `all'.  Ranges consist of two numbers separated by a hyphen.  Examples:
+   `all', or the keyword `all-lanes'.  Ranges consist of two numbers
+   separated by a hyphen.  Examples:
 
    thread apply 1 2 7 4 backtrace       Apply backtrace cmd to threads 1,2,7,4
    thread apply 2-7 9 p foo(1)  Apply p foo(1) cmd to threads 2->7 & 9
-   thread apply all x/i $pc   Apply x/i $pc cmd to all threads.
+   thread apply all x/i $pc   Apply x/i $pc cmd to all threads, the default
+   SIMD lane.
+   thread apply all-lanes p foo(1)    Apply p foo(1) cmd to all active SIMD
+   lanes of all threads
 
    With SIMD syntax ranges are parsed as follows:
    Item     Expanded items
@@ -1945,10 +1949,11 @@ make_thread_apply_options_def_group (qcs_flags *flags)
    3.4-5:*  3.4:<all active lanes> 3.5:<all active lanes>
 
    Where the default lane is the currently selected lane within
-   the SIMD thread ifi ti s active, or the first active lane.  */
+   the SIMD thread if it is active, or the first active lane.  */
 
 static void
-thread_apply_all_command (const char *cmd, int from_tty)
+thread_apply_all_command_1 (const char *cmd, int from_tty,
+			    simd_lane_kind lane_kind)
 {
   bool ascending = false;
   qcs_flags flags;
@@ -1960,8 +1965,18 @@ thread_apply_all_command (const char *cmd, int from_tty)
 
   validate_flags_qcs ("thread apply all", &flags);
 
+  bool for_all_lanes = lane_kind == simd_lane_kind::SIMD_LANE_ALL_ACTIVE;
+
+  const char *cmd_name = for_all_lanes
+    ? "thread apply all-lanes"
+    : "thread apply all";
+
+  simd_lane_order lane_order = ascending
+    ? simd_lane_order::SIMD_LANE_ORDER_ASCENDING
+    : simd_lane_order::SIMD_LANE_ORDER_DESCENDING;
+
   if (cmd == NULL || *cmd == '\000')
-    error (_("Please specify a command at the end of 'thread apply all'"));
+    error (_("Please specify a command at the end of '%s'"), cmd_name);
 
   update_thread_list ();
 
@@ -1994,19 +2009,48 @@ thread_apply_all_command (const char *cmd, int from_tty)
 
       for (tp_emask &saved : tp_emask_list_cpy)
 	{
-	  thread_info *thr = saved.tp;
-	  if (switch_to_thread_if_alive (thr))
-	    {
-	      /* switch_to_thread does not change the selected SIMD lane,
-		 and it could become inactive since the 'thread apply' call.
-		 Setting the lane to default ensures, that we are at
-		 the same lane as we would be if a user switched to
-		 the thread THR manually.  However, we do not want to switch
-		 the lane permanently, so restore the previouS SIMD lane.  */
-	      scoped_restore_current_simd_lane restore_simd_lane {thr};
-	      thr->set_default_simd_lane ();
+	  thread_info *tp = saved.tp;
 
-	      thr_try_catch_cmd (thr, cmd, from_tty, flags);
+	  if (!switch_to_thread_if_alive (tp))
+	    continue;
+
+	  scoped_restore_current_simd_lane restore_simd_lane {tp};
+
+	  if (for_all_lanes)
+	    {
+	      /* thread apply all-lanes.  Apply the command to all active
+		 lanes in all threads.  */
+
+	      /* The command is applied only to threads with non-zero
+		 emask.  If the thread was inactive at the moment when
+		 "thread apply" command was issued, this thread is
+		 skipped.  */
+	      for_active_lanes (saved.emask, [&] (int lane)
+		{
+		  if (tp->is_simd_lane_active (lane))
+		    {
+		      tp->set_current_simd_lane (lane);
+		      thr_try_catch_cmd (tp, cmd, from_tty, flags);
+		    }
+
+		  return true;
+		}, lane_order);
+	    }
+	  else
+	    {
+	      /* thread apply all.  Apply the command to all threads,
+		 the default lane.  */
+
+	      /* switch_to_thread does not change the selected SIMD
+		 lane, and it could become inactive since the 'thread apply'
+		 call.  Setting the lane to the default ensures, that we
+		 are at the same lane as we would be if a user switched
+		 to the thread TP manually.  However, we do not want to
+		 switch the lane permanently, so the previous SIMD lane
+		 will be scope-restored.  */
+	      tp->set_default_simd_lane ();
+
+	      thr_try_catch_cmd (tp, cmd, from_tty, flags);
 	    }
 	}
     }
@@ -2084,6 +2128,23 @@ thread_apply_all_command_completer (cmd_list_element *ignore,
     return;
 
   complete_nested_command_line (tracker, text);
+}
+/* The implementation of "thread apply all-lanes" command.  */
+
+static void
+thread_apply_all_lanes_command (const char *cmd, int from_tty)
+{
+  thread_apply_all_command_1 (cmd, from_tty,
+			      simd_lane_kind::SIMD_LANE_ALL_ACTIVE);
+}
+
+/* The implementation of "thread apply all" command.  */
+
+static void
+thread_apply_all_command (const char *cmd, int from_tty)
+{
+  thread_apply_all_command_1 (cmd, from_tty,
+			      simd_lane_kind::SIMD_LANE_DEFAULT);
 }
 
 /* Implementation of the "thread apply" command.  */
@@ -2662,6 +2723,18 @@ THREAD_APPLY_OPTION_HELP),
 
   c = add_cmd ("all", class_run, thread_apply_all_command,
 	       thread_apply_all_help.c_str (),
+	       &thread_apply_list);
+  set_cmd_completer_handle_brkchars (c, thread_apply_all_command_completer);
+
+  static std::string thread_apply_all_lanes_help = gdb::option::build_help (_("\
+Apply a command to all active lanes in all threads.\n\
+\n\
+Usage: thread apply all-lanes [OPTION]... COMMAND\n"
+THREAD_APPLY_OPTION_HELP),
+    thread_apply_all_opts);
+
+  c = add_cmd ("all-lanes", class_run, thread_apply_all_lanes_command,
+	       thread_apply_all_lanes_help.c_str (),
 	       &thread_apply_list);
   set_cmd_completer_handle_brkchars (c, thread_apply_all_command_completer);
 

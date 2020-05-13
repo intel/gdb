@@ -72,6 +72,14 @@ static int highest_thread_num;
 /* The current/selected thread.  */
 static thread_info *current_thread_;
 
+/* A helper structure to save a thread pointer and its emask.  */
+
+struct tp_emask
+{
+  thread_info_ref tp;
+  unsigned int emask;
+};
+
 /* Returns true if THR is the current thread.  */
 
 static bool
@@ -1687,26 +1695,34 @@ print_thread_id (thread_info *thr, std::vector<int> *lanes)
   return s;
 }
 
-/* Sort an array of struct thread_info pointers by thread ID (first by
+/* Sort an array of struct tp_emask pointers by thread ID (first by
    inferior number, and then by per-inferior thread number).  Sorts in
    ascending order.  */
 
 static bool
-tp_array_compar_ascending (const thread_info_ref &a, const thread_info_ref &b)
+tp_array_compar_ascending (const tp_emask &a_tp_emask,
+			   const tp_emask &b_tp_emask)
 {
+  const thread_info_ref &a = a_tp_emask.tp;
+  const thread_info_ref &b = b_tp_emask.tp;
+
   if (a->inf->num != b->inf->num)
     return a->inf->num < b->inf->num;
 
   return (a->per_inf_num < b->per_inf_num);
 }
 
-/* Sort an array of struct thread_info pointers by thread ID (first by
+/* Sort an array of struct tp_emask pointers by thread ID (first by
    inferior number, and then by per-inferior thread number).  Sorts in
    descending order.  */
 
 static bool
-tp_array_compar_descending (const thread_info_ref &a, const thread_info_ref &b)
+tp_array_compar_descending (const tp_emask &a_tp_emask,
+			    const tp_emask &b_tp_emask)
 {
+  const thread_info_ref &a = a_tp_emask.tp;
+  const thread_info_ref &b = b_tp_emask.tp;
+
   if (a->inf->num != b->inf->num)
     return a->inf->num > b->inf->num;
 
@@ -1874,23 +1890,39 @@ thread_apply_all_command (const char *cmd, int from_tty)
 	 thread, in case the command is one that wipes threads.  E.g.,
 	 detach, kill, disconnect, etc., or even normally continuing
 	 over an inferior or thread exit.  */
-      std::vector<thread_info_ref> thr_list_cpy;
-      thr_list_cpy.reserve (tc);
+      std::vector<tp_emask> tp_emask_list_cpy;
+      tp_emask_list_cpy.reserve (tc);
 
       for (thread_info *tp : all_non_exited_threads ())
-	thr_list_cpy.push_back (thread_info_ref::new_reference (tp));
-      gdb_assert (thr_list_cpy.size () == tc);
+	tp_emask_list_cpy.push_back ({thread_info_ref::new_reference (tp),
+				      tp->active_simd_lanes_mask ()});
+
+      gdb_assert (tp_emask_list_cpy.size () == tc);
 
       auto *sorter = (ascending
 		      ? tp_array_compar_ascending
 		      : tp_array_compar_descending);
-      std::sort (thr_list_cpy.begin (), thr_list_cpy.end (), sorter);
+      std::sort (tp_emask_list_cpy.begin (), tp_emask_list_cpy.end (), sorter);
 
       scoped_restore_current_thread restore_thread;
 
-      for (thread_info_ref &thr : thr_list_cpy)
-	if (switch_to_thread_if_alive (thr.get ()))
-	  thread_try_catch_cmd (thr.get (), {}, cmd, from_tty, flags);
+      for (tp_emask &saved : tp_emask_list_cpy)
+	{
+	  thread_info *thr = saved.tp.get ();
+	  if (switch_to_thread_if_alive (thr))
+	    {
+	      /* switch_to_thread does not change the selected SIMD lane,
+		 and it could become inactive since the 'thread apply' call.
+		 Setting the lane to default ensures, that we are at
+		 the same lane as we would be if a user switched to
+		 the thread THR manually.  However, we do not want to switch
+		 the lane permanently, so restore the previouS SIMD lane.  */
+	      scoped_restore_current_simd_lane restore_simd_lane {thr};
+	      thr->set_default_simd_lane ();
+
+	      thread_try_catch_cmd (thr, {}, cmd, from_tty, flags);
+	    }
+	}
     }
 }
 

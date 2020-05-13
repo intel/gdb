@@ -84,8 +84,10 @@ public:
   /* Calls init automatically.  */
   number_or_range_parser (const char *string);
 
-  /* STRING is the string to be parsed.  */
-  void init (const char *string);
+  /* STRING is the string to be parsed.  END_TRAILER is optional and
+     specifies an additional symbol which marks the valid end of
+     a number.  */
+  void init (const char *string, int end_trailer = 0);
 
   /* While processing a range, this fuction is called iteratively; At
      each call it will return the next value in the range.
@@ -141,6 +143,7 @@ private:
 
   /* When parsing a range, the final value in the range.  */
   int m_end_value;
+  int m_end_trailer;
 
   /* When parsing a range, a pointer past the final token in the
      range.  */

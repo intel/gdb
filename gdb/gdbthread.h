@@ -77,6 +77,22 @@ enum step_over_calls_kind
     STEP_OVER_UNDEBUGGABLE
   };
 
+/* For some commands, user can choose whether the command is only for one
+   SIMD lane, or for all active lanes.
+
+   SIMD_LANE_DEFAULT
+   When GDB selects a SIMD lane, it preserves previously chosen SIMD lane if
+   the lane is active.  If there is no previously chosen lane or it became
+   inactive, GDB takes the first active SIMD lane within the thread.
+
+   SIMD_LANE_ALL_ACTIVE
+   Apply command for all active SIMD lanes.  */
+enum class simd_lane_kind
+  {
+    SIMD_LANE_DEFAULT,
+    SIMD_LANE_ALL_ACTIVE,
+  };
+
 /* Inferior thread specific part of `struct infcall_control_state'.
 
    Inferior process counterpart is `struct inferior_control_state'.  */

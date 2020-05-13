@@ -3494,7 +3494,7 @@ of the thread.
 @anchor{thread ID lists}
 @cindex thread ID lists
 Some commands accept a space-separated @dfn{thread ID list} as
-argument.  A list element can be:
+argument.  A thread element can be:
 
 @enumerate
 @item
@@ -3516,13 +3516,64 @@ refers to all threads of the current inferior.
 
 @end enumerate
 
-For example, if the current inferior is 1, and inferior 7 has one
-thread with ID 7.1, the thread list @samp{1 2-3 4.5 6.7-9 7.*}
-includes threads 1 to 3 of inferior 1, thread 5 of inferior 4, threads
-7 to 9 of inferior 6 and all threads of inferior 7.  That is, in
-expanded qualified form, the same as @samp{1.1 1.2 1.3 4.5 6.7 6.8 6.9
-7.1}.
+All thread elements can be extended with a SIMD lane specifiers:
 
+@enumerate
+@item
+A SIMD lane identifier within a thread in the format
+@var{thread ID}:@var{lane}.  If @var{thread ID} is skipped, then
+the currently selected thread is taken, e.g. @samp{:2} specifies SIMD lane 2
+in the current thread.  Another valid examples: @samp{2:3}, @samp{2-3:4},
+@samp{1.*:3}.
+
+@item
+A SIMD lane range in the format @var{thread ID}:@var{lane 1}-@var{lane 2}.
+Without the thread identifier, it assumes the currently selected thread.
+Examples: @samp{:2-3}, @samp{1.3:2-4}, @samp{2-3:2-5}, @samp{*:3-5}.
+
+@item
+A SIMD lane wildcard -- all active SIMD lanes of specified thread(s) or the
+current thread if no thread is specified: @var{thread ID}:@code{*}:
+@samp{:*}, @samp{1:*}, @samp{1.2-3:*}.  The thread ID wildcard can be
+used together with the SIMD lane wildcard: @samp{*:*} or @samp{1.*:*}.
+@end enumerate
+
+In case when the target architecture supports SIMD lanes but a lane is not
+specified in the list item, @value{GDBN} takes the default SIMD lane,
+which is the currently selected lane if it is active, or the first active
+SIMD lane within the thread.
+
+For example, without SIMD lane support if the current inferior is 1,
+and inferior 7 has one thread with ID 7.1, the thread list
+@samp{1 2-3 4.5 6.7-9 7.*} includes threads 1 to 3 of inferior 1,
+thread 5 of inferior 4, threads 7 to 9 of inferior 6 and all threads
+of inferior 7.  That is, in expanded qualified form, the same as
+@samp{1.1 1.2 1.3 4.5 6.7 6.8 6.9 7.1}.
+
+With the SIMD lane support, if the current inferior is 1, it has three
+threads (1.1, 1.2, 1.3), the current thread is 1.2, and inferior 4 has
+one thread with ID 4.1, the expanded elements look as following:
+
+@smallexample
+List item   Expanded items
+1.2	 1.2:<default lane>
+1.2:3       1.2:3
+:4	  1.2:4
+:3-4	1.2:3 1.2:4
+:*	  1.2:<all active lanes>
+1:5-7       1.1:5 1.1:6 1.1:7
+2-3	 1.2:<default lane> 1.3:<default lane>
+2-3:4-6     1.2:2 1.2:3 1.2:4 1.3:2 1.3:3 1.3:4
+2.3:*       2.3:<all active lanes>
+3.4-6       3.4:<default lane> 3.5:<default lane> 3.6:<default lane>
+3.4-5:*     3.4:<all active lanes> 3.5:<all active lanes>
+*	   1.1:<default lane> 1.2:<default lane> 1.3:<default lane>
+*:2	 1.1:2 1.2:2 1.3:2
+*:2-3       1.1:2 1.1:3 1.2:2 1.2:3 1.3:2 1.3:3
+*:*	 1.1:<all active lanes> 1.2:<all active lanes> 1.3:<all active lanes>
+4.*	 4.1:<default lane>
+4.*:*       4.1:<all active lanes>
+@end smallexample
 
 @anchor{global thread numbers}
 @cindex global thread number

@@ -129,6 +129,10 @@ public:
     m_in_range = false;
   }
 
+  /* Setup the END_PTR, where the string is advanced to when get_next()
+     returns END_VALUE.  */
+  void set_end_ptr (const char*);
+
 private:
   /* No need for these.  They are intentionally not defined anywhere.  */
   number_or_range_parser (const number_or_range_parser &);

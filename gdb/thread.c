@@ -1937,7 +1937,7 @@ thread_apply_command_completer (cmd_list_element *ignore,
 	  if (!parser.get_tid_range (&inf_num, &thr_start, &thr_end))
 	    break;
 
-	  if (parser.in_star_range () || parser.in_thread_range ())
+	  if (parser.in_thread_star_range () || parser.in_thread_range ())
 	    parser.skip_range ();
 	}
     }
@@ -2038,7 +2038,7 @@ thread_apply_command (const char *tidlist, int from_tty)
       if (inf != NULL)
 	tp = find_thread_id (inf, thr_num);
 
-      if (parser.in_star_range ())
+      if (parser.in_thread_star_range ())
 	{
 	  if (inf == NULL)
 	    {

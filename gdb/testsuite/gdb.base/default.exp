@@ -800,7 +800,7 @@ gdb_test "tbreak" "No default breakpoint address now."
 #test thread
 gdb_test "thread" "No thread selected"
 #test thread apply
-gdb_test "thread apply" "Please specify a thread ID list"
+gdb_test "thread apply" "The program is not being run."
 #test thread find
 gdb_test "thread find" "Command requires an argument."
 #test thread name

@@ -57,7 +57,7 @@ proc do_load_and_test_core { core var working_var working_value dump_excluded } 
 
     set core_loaded [gdb_core_cmd "$core" "load core"]
     if { $core_loaded == -1 } {
-	fail "loading $core"
+	fail "loading core"
 	return
     }
 
@@ -102,7 +102,7 @@ proc test_disasm { core address should_fail } {
 
 	set core_loaded [gdb_core_cmd "$core" "load core"]
 	if { $core_loaded == -1 } {
-	    fail "loading $core"
+	    fail "loading core"
 	    return
 	}
 
@@ -121,7 +121,7 @@ proc test_disasm { core address should_fail } {
 
 	set core_loaded [gdb_core_cmd "$core" "load core"]
 	if { $core_loaded == -1 } {
-	    fail "loading $core"
+	    fail "loading core"
 	    return
 	}
 

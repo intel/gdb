@@ -21,7 +21,9 @@
 #include "server.h"
 #include "nonstop-low.h"
 #include "gdbsupport/gdb-sigmask.h"
+#ifndef USE_WIN32API
 #include "gdbsupport/event-pipe.h"
+#endif
 
 #include <signal.h>
 
@@ -34,14 +36,20 @@ get_thread_nti (thread_info *thread)
 /* Async interaction stuff.
 
    The event pipe registered as a waitable file in the event loop.  */
+#ifndef USE_WIN32API
 static event_pipe the_event_pipe;
+#endif
 
 /* True if we are currently in async mode.  */
 
 bool
 target_is_async_p ()
 {
+#ifndef USE_WIN32API
   return the_event_pipe.is_open ();
+#else
+  return false;
+#endif
 }
 
 /* Get rid of any pending event in the pipe.  */
@@ -49,7 +57,11 @@ target_is_async_p ()
 void
 async_file_flush ()
 {
+#ifndef USE_WIN32API
   the_event_pipe.flush ();
+#else
+  gdb_assert_not_reached ("async_file_flush should not be called on Windows.");
+#endif
 }
 
 /* Put something in the pipe, so the event loop wakes up.  */
@@ -57,13 +69,21 @@ async_file_flush ()
 void
 async_file_mark ()
 {
+#ifndef USE_WIN32API
   the_event_pipe.mark ();
+#else
+  gdb_assert_not_reached ("async_file_mark should not be called on Windows.");
+#endif
 }
 
 bool
 nonstop_process_target::supports_non_stop ()
 {
+#ifndef USE_WIN32API
   return true;
+#else
+  return false;
+#endif
 }
 
 bool
@@ -76,6 +96,7 @@ nonstop_process_target::async (bool enable)
 
   if (previous != enable)
     {
+#ifndef USE_WIN32API
       sigset_t mask;
       sigemptyset (&mask);
       sigaddset (&mask, SIGCHLD);
@@ -108,6 +129,9 @@ nonstop_process_target::async (bool enable)
 	}
 
       gdb_sigmask (SIG_UNBLOCK, &mask, NULL);
+#else
+      gdb_assert_not_reached ("async should not be called on Windows.");
+#endif
     }
 
   return previous;
@@ -116,6 +140,7 @@ nonstop_process_target::async (bool enable)
 int
 nonstop_process_target::start_non_stop (bool nonstop)
 {
+#ifndef USE_WIN32API
   /* Register or unregister from event-loop accordingly.  */
   async (nonstop);
 
@@ -123,4 +148,7 @@ nonstop_process_target::start_non_stop (bool nonstop)
     return -1;
 
   return 0;
+#else
+  gdb_assert_not_reached ("start_non_stop should not be called on Windows.");
+#endif
 }

@@ -7405,7 +7405,12 @@ remote_notif_stop_parse (remote_target *remote,
 			 const notif_client *self, const char *buf,
 			 struct notif_event *event)
 {
-  remote->remote_parse_stop_reply (buf, (struct stop_reply *) event);
+  stop_reply *stop_rep = (stop_reply *) event;
+  remote->remote_parse_stop_reply (buf, stop_rep);
+  if (!remote->m_features.remote_multi_process_p ()
+      && stop_rep->ws.kind () == TARGET_WAITKIND_EXITED
+      && stop_rep->ptid == null_ptid)
+    stop_rep->ptid = magic_null_ptid;
 }
 
 static void

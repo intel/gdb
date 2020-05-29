@@ -45,10 +45,13 @@ set line_dim0_defined [gdb_get_line_number "kernel-dim0-defined"]
 set third_line [gdb_get_line_number "kernel-third-line"]
 
 gdb_breakpoint "$line_dim0_defined if dim0 == 3" {temporary}
+with_test_prefix "breakpoint 1" { set bp1 [get_var_for_lane "\$bpnum"] }
+
 gdb_breakpoint "$line_dim0_defined if dim0 < 8 && dim0 % 2 == 0" {temporary}
+with_test_prefix "breakpoint 2" { set bp2 [get_var_for_lane "\$bpnum"] }
 
 set test "commands #1"
-gdb_test_multiple "commands 2-3" $test {
+gdb_test_multiple "commands $bp1 $bp2" $test {
     -re "End with" {
 	pass $test
     }
@@ -60,16 +63,20 @@ gdb_continue_to_breakpoint \
     "continue to BPs with commands for a single lane" \
     ".*\\$$decimal = 3\[\r\n\]+\\$$decimal = 0"
 
-set first_thread [get_current_thread "$line_dim0_defined"]
-
 # The current SIMD lane has to be 3.
 gdb_test "thread" ".*:3.*" "Check lane after commands for one lane."
 
-gdb_breakpoint "$third_line thread $first_thread if dim0 % 2 == 1" {temporary}
-gdb_breakpoint "$third_line if dim0 == 4" {temporary}
+set first_thread [get_current_thread "$line_dim0_defined"]
 
+gdb_breakpoint "$third_line thread $first_thread if dim0 % 2 == 1" {temporary}
+with_test_prefix "breakpoint 3" { set bp3 [get_var_for_lane "\$bpnum"] }
+
+gdb_breakpoint "$third_line if dim0 == 4" {temporary}
+with_test_prefix "breakpoint 4" { set bp4 [get_var_for_lane "\$bpnum"] }
+
+gdb_test "thread :3" "$first_thread:3.*" "Set lane to 3 for the first thread ($first_thread)."
 set test "commands #3"
-gdb_test_multiple "commands /a 4-5" $test {
+gdb_test_multiple "commands /a $bp3 $bp4" $test {
     -re "Commands will be applied to all hit SIMD lanes.*End with" {
 	pass $test
     }

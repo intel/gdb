@@ -195,3 +195,26 @@ proc get_current_thread {location} {
     }
     return 0
 }
+
+# Returns a non-negative integer value of variable VAR for SIMD lane
+# LANE_NUM in the current thread.
+# Returns -1 on error.
+proc get_var_for_lane {var {lane_num 0}} {
+    global decimal
+    global gdb_prompt
+
+    gdb_test "thread :$lane_num" ":$lane_num.*" \
+	"switch the current thread to lane $lane_num"
+
+    set msg "get $var value for the current thread, lane $lane_num"
+    gdb_test_multiple "print $var" $msg {
+	-re "= ($decimal).*$gdb_prompt" {
+	    pass $gdb_test_name
+	    return $expect_out(1,string)
+	}
+	-re "$gdb_prompt" {
+	    fail $gdb_test_name
+	    return -1
+	}
+    }
+}

@@ -67,26 +67,8 @@ if { $first_thread eq "2.2" } {
     }
 }
 
-proc get_dim0_for_lane {lane_num} {
-    global decimal
-    global gdb_prompt
-
-    gdb_test "thread :$lane_num" ":$lane_num.*" "switch the current thread to lane $lane_num"
-
-    gdb_test_multiple "print dim0" "get dim0 value for the current thread, lane $lane_num " {
-	-re "= ($decimal).*$gdb_prompt" {
-	    pass $gdb_test_name
-	    return $expect_out(1,string)
-	}
-	-re "$gdb_prompt" {
-	    fail $gdb_test_name
-	    return -1
-	}
-    }
-}
-
-set dim0_first_thread_5 [get_dim0_for_lane 5]
-set dim0_first_thread_7 [get_dim0_for_lane 7]
+set dim0_first_thread_5 [get_var_for_lane "dim0" 5]
+set dim0_first_thread_7 [get_var_for_lane "dim0" 7]
 
 set test_lane_clause "should stop on a BP with a lane clause"
 set n_hit_lane_clause 0

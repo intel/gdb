@@ -141,8 +141,7 @@ proc one_jit_test {solib_binfiles_target match_str} {
 }
 
 # Compile the main code (which loads the JIT objects) as a shared library.
-if { [compile_jit_elf_main_as_so $main_solib_srcfile $main_solib_binfile \
-	{additional_flags="-DMAIN=jit_dl_main"}] < 0 } {
+if { [compile_jit_elf_main_as_so $main_solib_srcfile $main_solib_binfile] < 0 } {
     return
 }
 

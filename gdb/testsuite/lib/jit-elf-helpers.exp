@@ -52,7 +52,7 @@ proc compile_jit_main {main_srcfile main_binfile options} {
 #
 # On success, return 0.
 # On failure, return -1.
-proc compile_jit_elf_main_as_so {main_solib_srcfile main_solib_binfile options} {
+proc compile_jit_elf_main_as_so {main_solib_srcfile main_solib_binfile} {
     global jit_load_address jit_load_increment
 
     set options [list \
@@ -76,7 +76,7 @@ proc compile_jit_elf_main_as_so {main_solib_srcfile main_solib_binfile options} 
 #
 # On success, return a list of target path to the shared libraries.
 # On failure, return -1.
-proc compile_and_download_n_jit_so {jit_solib_basename jit_solib_srcfile count} {
+proc compile_and_download_n_jit_so {jit_solib_basename jit_solib_srcfile count {options {}}} {
     global jit_load_address jit_load_increment
     set binfiles_target {}
 
@@ -92,12 +92,13 @@ proc compile_and_download_n_jit_so {jit_solib_basename jit_solib_srcfile count} 
 	# in the compiled shared library against a fixed base address.  Combined
 	# with mapping the resulting binary to the same fixed base it allows
 	# to dynamically execute functions from it without any further adjustments.
-	set options [list \
+	set so_options [concat \
+	    $options \
 	    additional_flags=-DFUNCTION_NAME=[format "jit_function_%04d" $i] \
 	    additional_flags=-Xlinker \
 	    additional_flags=-Ttext-segment=$addr]
 	if { [gdb_compile_shlib ${jit_solib_srcfile} ${binfile} \
-		  $options] != "" } {
+		  $so_options] != "" } {
 	    set f [file tail $binfile]
 	    untested "failed to compile shared library $f"
 	    return -1

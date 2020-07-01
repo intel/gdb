@@ -236,3 +236,29 @@ proc get_var_for_lane {var {lane_num 0}} {
 	}
     }
 }
+
+# Returns 1 if the current thread has SIMD lanes, 0 if it doesn't.
+# Returns -1 on error.
+
+proc current_thread_has_simd_lanes {} {
+    global gdb_prompt decimal
+
+    gdb_test_multiple "thread" "current_thread_has_simd_lanes" {
+	-re "Current thread is $decimal.$decimal:$decimal .*$gdb_prompt $" {
+	    return 1
+	}
+	-re "Current thread is $decimal:$decimal .*$gdb_prompt $" {
+	    return 1
+	}
+	-re "Current thread is .*$gdb_prompt $" {
+	    return 0
+	}
+	-re "$gdb_prompt $" {
+	    fail $gdb_test_name
+	    return 0
+	}
+    }
+
+    fail $gdb_test_name
+    return 0
+}

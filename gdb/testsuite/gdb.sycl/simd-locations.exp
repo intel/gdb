@@ -1,0 +1,103 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for accessing variables in SYCL from different SIMD lanes.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set l1 [gdb_get_line_number "bp\.1"]
+set l2 [gdb_get_line_number "bp\.2"]
+
+gdb_breakpoint $l1
+gdb_continue_to_breakpoint "bp.1" ".*$srcfile:$l1.*"
+
+proc test_bp_1 {} {
+    global decimal
+
+    gdb_test "print wi" " = .*"
+    gdb_test "print lid" " = .*"
+
+    # Call operator() explicitly to work around known limitations.
+    gdb_test_expr_eq "pgid.operator() (wi)" "gid"
+    gdb_test_expr_eq "ain\[gid\]" "in"
+    gdb_test_expr_eq "acs\[lid\].c" "cs"
+
+    # LCS may be implemented as reference.  Skip some output.
+    gdb_test "print lcs" " = .* 4"
+}
+
+with_test_prefix "bp.1" {
+    if { [current_thread_has_simd_lanes] } {
+	for {set i 0} {$i < 8} {set i [expr $i+4]} {
+	    with_test_prefix "lane $i" {
+		gdb_test "thread :$i" "Switching to thread .*:$i.*"
+
+		test_bp_1
+	    }
+	}
+    } else {
+	test_bp_1
+    }
+}
+
+# Make sure we're not stuck on bp.1.
+delete_breakpoints
+gdb_breakpoint $l2
+gdb_continue_to_breakpoint "bp.2" ".*$srcfile:$l2.*"
+
+proc test_bp_2 {} {
+    global decimal
+
+    gdb_test "print wi" " = .*"
+    gdb_test "print lid" " = .*"
+
+    # Call operator() explicitly to work around known limitations.
+    gdb_test_expr_eq "pgid.operator() (wi)" "gid"
+    gdb_test_expr_eq "atmp\[gid\].a" "in"
+    gdb_test_expr_eq "aout\[gid\]" "out"
+
+    # LCS may be implemented as reference.  Skip some output.
+    gdb_test "print lcs" " = .* 4"
+    gdb_test "print cs" " = 4"
+}
+
+with_test_prefix "bp.2" {
+    if { [current_thread_has_simd_lanes] } {
+	for {set i 0} {$i < 8} {set i [expr $i+4]} {
+	    with_test_prefix "lane $i" {
+		gdb_test "thread :$i" "Switching to thread .*:$i.*"
+
+		test_bp_2
+	    }
+	}
+    } else {
+	test_bp_2
+    }
+}

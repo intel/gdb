@@ -7718,5 +7718,58 @@ gdb_caching_proc have_fuse_ld_gold {
     return [gdb_simple_compile $me $src executable $flags]
 }
 
+# Evaluate two expressions and compare the resulting strings.
+#
+# EXPR_1 and EXPR_2 are expression strings that will be passed to
+#   the print command.
+# MESSAGE is an optional message to be printed.  If this is
+#   omitted, then the pass/fail messages use "EXPR_1 == EXPR_2".
+#
+proc gdb_test_expr_eq { expr_1 expr_2 { message "" } } {
+    global gdb_prompt
+
+    if { $message eq "" } {
+	set message "$expr_1 == $expr_2"
+    }
+
+    set res_1 "___foo"
+    set res_2 "___bar"
+    gdb_test_multiple "print $expr_1" "$message: print $expr_1" {
+	-re " = (.*)$gdb_prompt $" {
+	    set res_1 $expect_out(1,string)
+	    pass $gdb_test_name
+	}
+	-re "$gdb_prompt $" {
+	    fail $gdb_test_name
+	    return -1
+	}
+	timeout {
+	    fail $gdb_test_name
+	    return -1
+	}
+    }
+
+    gdb_test_multiple "print $expr_2" "$message: print $expr_2" {
+	-re " = (.*)$gdb_prompt $" {
+	    set res_2 $expect_out(1,string)
+	    pass $gdb_test_name
+	}
+	-re "$gdb_prompt $" {
+	    fail $gdb_test_name
+	    return -1
+	}
+	timeout {
+	    fail $gdb_test_name
+	    return -1
+	}
+    }
+
+    if { $res_1 eq $res_2 } {
+	pass $message
+    } else {
+	fail $message
+    }
+}
+
 # Always load compatibility stuff.
 load_lib future.exp

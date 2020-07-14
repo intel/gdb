@@ -102,12 +102,14 @@ main (int argc, char *argv[])
 
 	      in_s in = ain[gid];
 	      uint16_t cs = acs[lid].c;
+	      uint32_t ops = aops[0];
 
 	      atmp[gid] = in;
 	      pgid (wi) = gid;
 	      lcs = cs;
 
-	      aops[0] += 1; /* bp.1 */
+	      ops += 1;
+	      aops[0] = ops; /* bp.1 */
 	    });
 
 	  wg.parallel_for_work_item ([&] (cl::sycl::h_item<1> wi)
@@ -117,13 +119,15 @@ main (int argc, char *argv[])
 
 	      uint16_t in = atmp[gid].a;
 	      uint16_t cs = lcs;
+	      uint32_t ops = aops[0];
 	      out_s out;
 
 	      out.a = in;
 	      out.c = in + cs;
 	      aout[gid] = out;
 
-	      aops[0] += 1; /* bp.2 */
+	      ops += 1;
+	      aops[0] = ops; /* bp.2 */
 	    });
 	});
     });

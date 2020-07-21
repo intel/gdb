@@ -44393,6 +44393,11 @@ These are the currently defined stub features and their properties:
 @tab @samp{-}
 @tab Yes
 
+@item @samp{Qbtrace-conf:pt:ptwrite}
+@tab Yes
+@tab @samp{-}
+@tab Yes
+
 @item @samp{QNonStop}
 @tab No
 @tab @samp{-}
@@ -44703,6 +44708,9 @@ The remote stub understands the @samp{Qbtrace-conf:bts:size} packet.
 
 @item Qbtrace-conf:pt:size
 The remote stub understands the @samp{Qbtrace-conf:pt:size} packet.
+
+@item Qbtrace-conf:pt:ptwrite
+The remote stub understands the @samp{Qbtrace-conf:pt:ptwrite} packet.
 
 @item swbreak
 The remote stub reports the @samp{swbreak} stop reason for memory
@@ -45207,6 +45215,18 @@ Reply:
 @table @samp
 @item OK
 The ring buffer size has been set.
+@item E.errtext
+A badly formed request or an error was encountered.
+@end table
+
+@item Qbtrace-conf:pt:ptwrite=@var{(yes|no)}
+Indicate support for @code{PTWRITE} packets.  This allows for backwards
+compatibility.
+
+Reply:
+@table @samp
+@item OK
+The ptwrite config parameter has been set.
 @item E.errtext
 A badly formed request or an error was encountered.
 @end table
@@ -47859,6 +47879,7 @@ The formal DTD for the branch trace configuration format is given below:
 
 <!ELEMENT pt	EMPTY>
 <!ATTLIST pt	size	CDATA	#IMPLIED>
+<!ATTLIST pt	ptwrite	(yes | no)	#IMPLIED>
 @end smallexample
 
 @include agentexpr.texi

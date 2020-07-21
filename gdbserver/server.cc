@@ -547,6 +547,23 @@ handle_btrace_conf_general_set (char *own_buf)
 
       current_btrace_conf.pt.size = (unsigned int) size;
     }
+  else if (strncmp (op, "pt:ptwrite=", strlen ("pt:ptwrite=")) == 0)
+    {
+      bool ptwrite;
+
+      op += strlen ("pt:ptwrite=");
+      if (strncmp (op, "\"yes\"", strlen ("\"yes\"")) == 0)
+	ptwrite = true;
+      else if (strncmp (op, "\"no\"", strlen ("\"no\"")) == 0)
+	ptwrite = false;
+      else
+	{
+	  strcpy (own_buf, "E.Bad ptwrite value.");
+	  return -1;
+	}
+
+      current_btrace_conf.pt.ptwrite = ptwrite;
+    }
   else
     {
       strcpy (own_buf, "E.Bad Qbtrace configuration option.");
@@ -2146,6 +2163,7 @@ supported_btrace_packets (char *buf)
   strcat (buf, ";Qbtrace-conf:bts:size+");
   strcat (buf, ";Qbtrace:pt+");
   strcat (buf, ";Qbtrace-conf:pt:size+");
+  strcat (buf, ";Qbtrace-conf:pt:ptwrite+");
   strcat (buf, ";Qbtrace:off+");
   strcat (buf, ";qXfer:btrace:read+");
   strcat (buf, ";qXfer:btrace-conf:read+");

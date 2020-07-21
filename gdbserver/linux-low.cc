@@ -6889,6 +6889,8 @@ linux_process_target::read_btrace_conf (const btrace_target_info *tinfo,
 	case BTRACE_FORMAT_PT:
 	  string_xml_appendf (*buffer, "<pt");
 	  string_xml_appendf (*buffer, " size=\"0x%x\"", conf->pt.size);
+	  string_xml_appendf (*buffer, " ptwrite=\"%s\"",
+			     conf->pt.ptwrite ? "yes" : "no");
 	  string_xml_appendf (*buffer, "/>\n");
 	  break;
 	}

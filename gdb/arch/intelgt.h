@@ -91,13 +91,32 @@ enum
 class arch_info
 {
 public:
-  arch_info (unsigned int num_grfs);
+  arch_info (unsigned int num_grfs, unsigned int num_addresses,
+	     unsigned int num_accumulators, unsigned int num_flags);
 
   /* Return the total number of registers.  */
   unsigned int num_registers ();
 
   /* The number of GRF registers.  */
   unsigned int grf_reg_count () const;
+
+  /* The number of address registers.  */
+  unsigned int address_reg_count () const;
+
+  /* The number of accumulator registers.  */
+  unsigned int acc_reg_count () const;
+
+  /* The number of flag registers.  */
+  unsigned int flag_reg_count () const;
+
+  /* The base index of address registers.  */
+  virtual unsigned int address_reg_base () const = 0;
+
+  /* The base index of accumulator registers.  */
+  virtual unsigned int acc_reg_base () const = 0;
+
+  /* The base index of flag registers.  */
+  virtual unsigned int flag_reg_base () const = 0;
 
   /* Return the register at INDEX.  */
   const gt_register &get_register (int index);
@@ -168,6 +187,12 @@ private:
 
   /* Number of registers of various categories.  */
   const unsigned int num_grfs;
+
+  const unsigned int num_addresses;
+
+  const unsigned int num_accumulators;
+
+  const unsigned int num_flags;
 };
 
 } /* namespace intelgt */

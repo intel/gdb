@@ -31,8 +31,10 @@ gt_register::gt_register (std::string name, reg_group group,
 }
 
 /* See intelgt.h.  */
-arch_info::arch_info (unsigned int num_grfs)
-  : num_grfs {num_grfs}
+arch_info::arch_info (unsigned int num_grfs, unsigned int num_addresses,
+		      unsigned int num_accumulators, unsigned int num_flags)
+  : num_grfs {num_grfs}, num_addresses {num_addresses},
+    num_accumulators {num_accumulators}, num_flags {num_flags}
 {}
 
 /* See intelgt.h.  */
@@ -49,6 +51,30 @@ unsigned int
 arch_info::grf_reg_count () const
 {
   return num_grfs;
+}
+
+/* See intelgt.h.  */
+
+unsigned int
+arch_info::address_reg_count () const
+{
+  return num_addresses;
+}
+
+/* See intelgt.h.  */
+
+unsigned int
+arch_info::acc_reg_count () const
+{
+  return num_accumulators;
+}
+
+/* See intelgt.h.  */
+
+unsigned int
+arch_info::flag_reg_count () const
+{
+  return num_flags;
 }
 
 /* See intelgt.h.  */
@@ -91,6 +117,12 @@ public:
 
   virtual int emask_regnum () const override;
 
+  virtual unsigned int address_reg_base () const override;
+
+  virtual unsigned int acc_reg_base () const override;
+
+  virtual unsigned int flag_reg_base () const override;
+
   virtual bool set_breakpoint (gdb_byte inst[]) const override;
 
   virtual bool clear_breakpoint (gdb_byte inst[]) const override;
@@ -101,7 +133,7 @@ public:
 };
 
 arch_info_gen9::arch_info_gen9 ()
-  : arch_info (128)
+  : arch_info (128, 1, 10, 2)
 {
   gdb_assert (regs.size () == 0);
 
@@ -185,6 +217,24 @@ int
 arch_info_gen9::emask_regnum () const
 {
   return grf_reg_count () + 20;
+}
+
+unsigned int
+arch_info_gen9::address_reg_base () const
+{
+  return grf_reg_count ();
+}
+
+unsigned int
+arch_info_gen9::acc_reg_base () const
+{
+  return grf_reg_count () + address_reg_count ();
+}
+
+unsigned int
+arch_info_gen9::flag_reg_base () const
+{
+  return grf_reg_count () + address_reg_count () + acc_reg_count ();
 }
 
 /* Get the bit at POS in INST.  */

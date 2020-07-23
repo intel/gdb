@@ -125,6 +125,63 @@ intelgt_register_type (gdbarch *gdbarch, int regno)
     }
 }
 
+/* Convert a DWARF register number to a GDB register number.  */
+
+static int
+intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
+{
+  constexpr unsigned int IP = 0;
+  constexpr unsigned int EMask = 1;
+  constexpr unsigned int GRFBase = 16;
+  constexpr unsigned int A0Base = 272;
+  constexpr unsigned int F0Base = 288;
+  constexpr unsigned int Acc0Base = 304;
+  constexpr unsigned int Mme0Base = 335;
+
+  intelgt::arch_info *intelgt_info = get_intelgt_arch_info (gdbarch);
+
+  const int grfs = intelgt_info->grf_reg_count ();
+  const int addresses = intelgt_info->address_reg_count ();
+  const int accumulators = intelgt_info->acc_reg_count ();
+  const int flags = intelgt_info->flag_reg_count ();
+
+  if (num < GRFBase)
+    {
+      if (num == IP)
+	return intelgt_info->pc_regnum ();
+      if (num == EMask)
+	return intelgt_info->emask_regnum ();
+    }
+  else if (num >= GRFBase && num < A0Base)
+    {
+      int regnum = num - GRFBase;
+      if (regnum < grfs)
+	return regnum;
+    }
+  else if (num >= A0Base && num < F0Base)
+    {
+      int regnum = num - A0Base;
+      if (regnum < addresses)
+	return intelgt_info->address_reg_base () + regnum;
+    }
+  else if (num >= F0Base && num < Acc0Base)
+    {
+      int regnum = num - F0Base;
+      if (regnum < flags)
+	return intelgt_info->flag_reg_base () + regnum;
+
+    }
+  else if (num >= Acc0Base && num < Mme0Base)
+    {
+      int regnum = num - Acc0Base;
+      if (regnum < accumulators)
+	return intelgt_info->acc_reg_base () + regnum;
+    }
+
+  dprintf ("Dwarf regnum %d not recognized", num);
+  return -1;
+}
+
 /* Return active lanes mask for the specified thread TP.  */
 
 static unsigned int
@@ -602,6 +659,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_sp_regnum (gdbarch, intelgt_info->sp_regnum ());
   set_gdbarch_register_name (gdbarch, intelgt_register_name);
   set_gdbarch_register_type (gdbarch, intelgt_register_type);
+  set_gdbarch_dwarf2_reg_to_regnum (gdbarch, intelgt_dwarf_reg_to_regnum);
 
   set_gdbarch_skip_prologue (gdbarch, intelgt_skip_prologue);
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);

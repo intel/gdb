@@ -258,6 +258,25 @@ public:
     return value_from_register (type, regnum, this_frame);
   }
 
+  void read_reg (gdb_byte *buf, size_t bitoffset, size_t bitsize,
+		 int dwregnum) override
+  {
+    struct gdbarch * const gdbarch = get_frame_arch (this_frame);
+    const int regnum = dwarf_reg_to_regnum_or_error (gdbarch, dwregnum);
+
+    const ULONGEST regsize = register_size (gdbarch, regnum);
+    if ((regsize * 8) <  (bitsize + bitoffset))
+      error (_("DWARF expr: error accessing %s[%" PRIu64 ":%" PRIu64 "]"),
+	     gdbarch_register_name (gdbarch, regnum),
+	     bitsize + bitoffset - 1, bitoffset);
+
+    gdb_byte * const regbuf = (gdb_byte *) alloca (regsize);
+    get_frame_register (this_frame, regnum, regbuf);
+
+    const enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+    copy_bitwise (buf, 0, regbuf, bitoffset, bitsize, byte_order);
+  }
+
   void read_mem (gdb_byte *buf, CORE_ADDR addr, size_t len) override
   {
     read_memory (addr, buf, len);

@@ -196,6 +196,10 @@ struct dwarf_expr_context
      REGNUM is a DWARF register number.  */
   virtual struct value *get_reg_value (struct type *type, int regnum) = 0;
 
+  /* Read BITSIZE bits from the register indicated by the DWARF register
+     number DWREGNUM starting at bit BITOFFSET into BUF.  */
+  virtual void read_reg (gdb_byte *buf, size_t bitoffset, size_t bitsize,
+			 int dwregnum) = 0;
   /* Read LENGTH bytes at ADDR into BUF.  */
   virtual void read_mem (gdb_byte *buf, CORE_ADDR addr, size_t length) = 0;
 

@@ -1649,6 +1649,14 @@ decode_location_expression (unsigned char * data,
 	  printf ("DW_OP_INTEL_bit_piece_stack");
 	  break;
 
+	  /* Intel wide registers extensions.  */
+	case DW_OP_INTEL_regs:
+	  printf ("DW_OP_INTEL_regs");
+	  break;
+	case DW_OP_INTEL_push_bit_piece_stack:
+	  printf ("DW_OP_INTEL_push_bit_piece_stack");
+	  break;
+
 	default:
 	  if (op >= DW_OP_lo_user
 	      && op <= DW_OP_hi_user)

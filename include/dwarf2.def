@@ -716,6 +716,12 @@ DW_OP (DW_OP_PGI_omp_thread_num, 0xf8)
    to 0 except explicitly documented for one action.  Please refer AArch64 DWARF
    ABI documentation for details.  */
 DW_OP (DW_OP_AARCH64_operation, 0xea)
+/* This is similar to DW_OP_regx except that it takes its argument from the
+   stack.  */
+DW_OP (DW_OP_INTEL_regs, 0xeb)
+/* This is similar to DW_OP_INTEL_bit_piece_stack except that it pushes the
+   extracted value onto the stack and does not end the DWARF expression.  */
+DW_OP (DW_OP_INTEL_push_bit_piece_stack, 0xec)
 /* http://dwarfstd.org/ShowIssue.php?issue=200720.1
 
   The DW_OP_push_simd_lane operation pushes the SIMD lane for which the

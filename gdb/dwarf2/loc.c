@@ -3105,18 +3105,25 @@ locexpr_describe_location_piece (struct symbol *symbol, struct ui_file *stream,
   objfile *objfile = per_objfile->objfile;
   struct gdbarch *gdbarch = objfile->arch ();
   size_t leb128_size;
+  const gdb_byte *start = data;
 
   if (data[0] >= DW_OP_reg0 && data[0] <= DW_OP_reg31)
     {
-      fprintf_filtered (stream, _("a variable in $%s"),
-			locexpr_regname (gdbarch, data[0] - DW_OP_reg0));
       data += 1;
+      if (!piece_end_p (data, end))
+	return start;
+
+      fprintf_filtered (stream, _("a variable in $%s"),
+			locexpr_regname (gdbarch, start[0] - DW_OP_reg0));
     }
   else if (data[0] == DW_OP_regx)
     {
       uint64_t reg;
 
       data = safe_read_uleb128 (data + 1, end, &reg);
+      if (!piece_end_p (data, end))
+	return start;
+
       fprintf_filtered (stream, _("a variable in $%s"),
 			locexpr_regname (gdbarch, reg));
     }
@@ -3126,14 +3133,13 @@ locexpr_describe_location_piece (struct symbol *symbol, struct ui_file *stream,
       struct symbol *framefunc;
       int frame_reg = 0;
       int64_t frame_offset;
-      const gdb_byte *base_data, *new_data, *save_data = data;
+      const gdb_byte *base_data;
       size_t base_size;
       int64_t base_offset = 0;
 
-      new_data = safe_read_sleb128 (data + 1, end, &frame_offset);
-      if (!piece_end_p (new_data, end))
-	return data;
-      data = new_data;
+      data = safe_read_sleb128 (data + 1, end, &frame_offset);
+      if (!piece_end_p (data, end))
+	return start;
 
       b = block_for_pc (addr);
 
@@ -3157,9 +3163,7 @@ locexpr_describe_location_piece (struct symbol *symbol, struct ui_file *stream,
 	  buf_end = safe_read_sleb128 (base_data + 1, base_data + base_size,
 				       &base_offset);
 	  if (buf_end != base_data + base_size)
-	    error (_("Unexpected opcode after "
-		     "DW_OP_breg%u for symbol \"%s\"."),
-		   frame_reg, symbol->print_name ());
+	    return start;
 	}
       else if (base_data[0] >= DW_OP_reg0 && base_data[0] <= DW_OP_reg31)
 	{
@@ -3171,7 +3175,7 @@ locexpr_describe_location_piece (struct symbol *symbol, struct ui_file *stream,
 	{
 	  /* We don't know what to do with the frame base expression,
 	     so we can't trace this variable; give up.  */
-	  return save_data;
+	  return start;
 	}
 
       fprintf_filtered (stream,
@@ -3185,6 +3189,8 @@ locexpr_describe_location_piece (struct symbol *symbol, struct ui_file *stream,
       int64_t offset;
 
       data = safe_read_sleb128 (data + 1, end, &offset);
+      if (!piece_end_p (data, end))
+	return start;
 
       fprintf_filtered (stream,
 			_("a variable at offset %s from base reg $%s"),

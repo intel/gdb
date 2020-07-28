@@ -870,6 +870,28 @@ dwarf_expr_context::read_mem (gdb_byte *buf, CORE_ADDR addr,
 /* See expr.h.  */
 
 void
+dwarf_expr_context::read_reg (gdb_byte *buf, size_t bitoffset,
+			      size_t bitsize, int dwregnum)
+{
+  struct gdbarch * const gdbarch = get_frame_arch (this->m_frame);
+  const int regnum = dwarf_reg_to_regnum_or_error (gdbarch, dwregnum);
+
+  const ULONGEST regsize = register_size (gdbarch, regnum);
+  if ((regsize * 8) <  (bitsize + bitoffset))
+    error (_("DWARF expr: error accessing %s[%" PRIu64 ":%" PRIu64 "]"),
+	   gdbarch_register_name (gdbarch, regnum),
+	   bitsize + bitoffset - 1, bitoffset);
+
+  gdb_byte * const regbuf = (gdb_byte *) alloca (regsize);
+  get_frame_register (this->m_frame, regnum, regbuf);
+
+  const enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  copy_bitwise (buf, 0, regbuf, bitoffset, bitsize, byte_order);
+}
+
+/* See expr.h.  */
+
+void
 dwarf_expr_context::push_dwarf_reg_entry_value (call_site_parameter_kind kind,
 						call_site_parameter_u kind_u,
 						int deref_size)
@@ -1716,6 +1738,19 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	  this->m_location = DWARF_VALUE_REGISTER;
 	  break;
 
+	case DW_OP_INTEL_regs:
+	  {
+	    value * const vregno = fetch (0);
+	    pop ();
+
+	    dwarf_require_integral (value_type (vregno));
+
+	    result = (ULONGEST) value_as_long (vregno);
+	    result_val = value_from_ulongest (address_type, result);
+	    this->m_location = DWARF_VALUE_REGISTER;
+	  }
+	  break;
+
 	case DW_OP_implicit_value:
 	  {
 	    uint64_t len;
@@ -2256,6 +2291,102 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	    this->m_location = DWARF_VALUE_MEMORY;
 	  }
 	  goto no_push;
+
+	case DW_OP_INTEL_push_bit_piece_stack:
+	  {
+	    value * const vsize = fetch (0);
+	    pop ();
+
+	    value * const voffset = fetch (0);
+	    pop ();
+
+	    dwarf_require_integral (value_type (vsize));
+	    const ULONGEST size
+	      = extract_unsigned_integer (value_contents (vsize),
+					  byte_order);
+
+	    dwarf_require_integral (value_type (voffset));
+	    const ULONGEST off
+	      = extract_unsigned_integer (value_contents (voffset),
+					  byte_order);
+
+	    const int addr_bit_size = this->m_addr_size * 8;
+	    if (addr_bit_size < size)
+	      error (_("DW_OP_INTEL_push_bit_piece_stack: "
+		       "size '%" PRIu64 "' too big."), size);
+
+	    switch (this->m_location)
+	      {
+	      case DWARF_VALUE_MEMORY:
+		{
+		  const CORE_ADDR addr = fetch_address (0);
+		  pop ();
+
+		  /* We can access memory only byte-wise.  Compute the
+		     container and the offset into that container.  */
+		  const ULONGEST boff = off & 7;
+		  const ULONGEST coff = off >> 3;
+		  const ULONGEST bsize = size + boff;
+		  const ULONGEST csize = (bsize + 7) >> 3;
+		  const CORE_ADDR caddr = addr + coff;
+
+		  gdb_byte * const buf = (gdb_byte *) alloca (csize);
+		  this->read_mem (buf, caddr, csize);
+
+		  result = 0;
+		  copy_bitwise ((gdb_byte *) &result, addr_bit_size - size,
+				buf, boff, size, byte_order);
+		}
+		break;
+
+	      case DWARF_VALUE_REGISTER:
+		{
+		  const LONGEST dwregnum = value_as_long (fetch (0));
+		  pop ();
+
+		  result = 0;
+		  read_reg ((gdb_byte *) &result, off, size, dwregnum);
+		}
+		break;
+
+	      case DWARF_VALUE_STACK:
+		/* Nothing to be done.  The value is already on the top of
+		   the stack.  */
+		goto no_push;
+
+	      case DWARF_VALUE_LITERAL:
+		{
+		  const ULONGEST bitsize = this->m_len * 8;
+		  if (bitsize < (size + off))
+		    error (_("DW_OP_INTEL_push_bit_piece_stack: underflow: "
+			     "requested '%" PRIu64 "' at  '%" PRIu64 "', "
+			     "available: '%" PRIu64 "."),
+			   size, off, bitsize);
+
+		  result = 0;
+		  copy_bitwise ((gdb_byte *) &result,
+				(this->m_addr_size * 8) - size,
+				this->m_data, off, size, byte_order);
+		}
+		break;
+
+	      case DWARF_VALUE_OPTIMIZED_OUT:
+		error (_("DW_OP_INTEL_push_bit_piece_stack: "
+			 "value optimized out"));
+		break;
+
+	      case DWARF_VALUE_IMPLICIT_POINTER:
+		error (_("DW_OP_INTEL_push_bit_piece_stack: "
+			 "pointer value is implicit"));
+		break;
+	      }
+
+	    /* We consumed the underlying location description.  Let's
+	       reset the location to its default.  */
+	    this->m_location = DWARF_VALUE_MEMORY;
+	    result_val = value_from_ulongest (address_type, result);
+	  }
+	  break;
 
 	case DW_OP_GNU_uninit:
 	  if (op_ptr != op_end)

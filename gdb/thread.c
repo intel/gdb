@@ -132,11 +132,18 @@ thread_info::has_simd_lanes ()
   if (gdbarch_active_lanes_mask_p (arch) != 0)
     return true;
 
-  const block * const blk = thread_get_current_block (this);
-  if (blk == nullptr)
-    return false;
+  try
+    {
+      const block * const blk = thread_get_current_block (this);
+      if (blk == nullptr)
+	return false;
 
-  return (BLOCK_SIMD_WIDTH (blk) > 0);
+      return (BLOCK_SIMD_WIDTH (blk) > 0);
+    }
+  catch (const gdb_exception &ex)
+    {
+      return false;
+    }
 }
 
 /* See gdbthread.h.  */

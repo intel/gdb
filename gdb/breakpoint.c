@@ -4609,16 +4609,12 @@ bpstat_do_actions_1 (bpstat *bsp)
 	  cmd = cmd->next;
 	}
 
-      unsigned int execution_mask = thread->has_simd_lanes ()
-	? bs->simd_lane_mask
-	: 0x1;
-
       while (cmd != NULL)
 	{
 	  if (bs->is_cmd_for_all_lanes)
 	    {
 	      /* Apply actions to all hit SIMD lanes.  */
-	      for_active_lanes (execution_mask, [&] (int lane)
+	      for_active_lanes (bs->simd_lane_mask, [&] (int lane)
 		{
 		  /* We switch lanes in the thread for which the commands
 		     were called.  Note, the current thread might have
@@ -4631,12 +4627,18 @@ bpstat_do_actions_1 (bpstat *bsp)
 		  return !breakpoint_proceeded;
 		});
 	    }
-	  else
+	  else if (bs->simd_lane_mask != 0)
 	    {
-	      int lane = find_first_active_simd_lane (execution_mask);
+	      int lane = find_first_active_simd_lane (bs->simd_lane_mask);
 	      thread->set_current_simd_lane (lane);
 
 	      /* Apply actions only to the first hit lane.  */
+	      execute_control_command (cmd);
+	    }
+	  else
+	    {
+	      /* This is a non-breakpoint stop.  Apply the command to the
+		 currently selected SIMD lane.  */
 	      execute_control_command (cmd);
 	    }
 

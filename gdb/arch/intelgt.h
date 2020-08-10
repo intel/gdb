@@ -52,6 +52,7 @@ enum class reg_group : unsigned short
     FlowControl,
     Grf,
     ExecMaskPseudo,
+    Mme,
   };
 
 struct gt_register
@@ -92,7 +93,8 @@ class arch_info
 {
 public:
   arch_info (unsigned int num_grfs, unsigned int num_addresses,
-	     unsigned int num_accumulators, unsigned int num_flags);
+	     unsigned int num_accumulators, unsigned int num_flags,
+	     unsigned int num_mmes);
 
   /* Return the total number of registers.  */
   unsigned int num_registers ();
@@ -109,6 +111,9 @@ public:
   /* The number of flag registers.  */
   unsigned int flag_reg_count () const;
 
+  /* The number of mme registers.  */
+  unsigned int mme_reg_count () const;
+
   /* The base index of address registers.  */
   virtual unsigned int address_reg_base () const = 0;
 
@@ -117,6 +122,9 @@ public:
 
   /* The base index of flag registers.  */
   virtual unsigned int flag_reg_base () const = 0;
+
+  /* The base index of mme registers.  */
+  virtual unsigned int mme_reg_base () const = 0;
 
   /* Return the register at INDEX.  */
   const gt_register &get_register (int index);
@@ -193,6 +201,8 @@ private:
   const unsigned int num_accumulators;
 
   const unsigned int num_flags;
+
+  const unsigned int num_mmes;
 };
 
 } /* namespace intelgt */

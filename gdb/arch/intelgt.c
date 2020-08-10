@@ -32,9 +32,11 @@ gt_register::gt_register (std::string name, reg_group group,
 
 /* See intelgt.h.  */
 arch_info::arch_info (unsigned int num_grfs, unsigned int num_addresses,
-		      unsigned int num_accumulators, unsigned int num_flags)
+		      unsigned int num_accumulators, unsigned int num_flags,
+		      unsigned int num_mmes)
   : num_grfs {num_grfs}, num_addresses {num_addresses},
-    num_accumulators {num_accumulators}, num_flags {num_flags}
+    num_accumulators {num_accumulators}, num_flags {num_flags},
+    num_mmes {num_mmes}
 {}
 
 /* See intelgt.h.  */
@@ -75,6 +77,14 @@ unsigned int
 arch_info::flag_reg_count () const
 {
   return num_flags;
+}
+
+/* See intelgt.h.  */
+
+unsigned int
+arch_info::mme_reg_count () const
+{
+  return num_mmes;
 }
 
 /* See intelgt.h.  */
@@ -123,6 +133,8 @@ public:
 
   virtual unsigned int flag_reg_base () const override;
 
+  virtual unsigned int mme_reg_base () const override;
+
   virtual bool set_breakpoint (gdb_byte inst[]) const override;
 
   virtual bool clear_breakpoint (gdb_byte inst[]) const override;
@@ -133,7 +145,7 @@ public:
 };
 
 arch_info_gen9::arch_info_gen9 ()
-  : arch_info (128, 1, 10, 2)
+  : arch_info (128, 1, 10, 2, 8)
 {
   gdb_assert (regs.size () == 0);
 
@@ -166,6 +178,14 @@ arch_info_gen9::arch_info_gen9 ()
   regs.emplace_back ("tm0", reg_group::Timestamp, 0, 16);
   regs.emplace_back ("emask", reg_group::ExecMaskPseudo, 0, 4);
   regs.emplace_back ("iemask", reg_group::ExecMaskPseudo, 1, 4);
+  regs.emplace_back ("mme0", reg_group::Mme, 0, 32);
+  regs.emplace_back ("mme1", reg_group::Mme, 1, 32);
+  regs.emplace_back ("mme2", reg_group::Mme, 2, 32);
+  regs.emplace_back ("mme3", reg_group::Mme, 3, 32);
+  regs.emplace_back ("mme4", reg_group::Mme, 4, 32);
+  regs.emplace_back ("mme5", reg_group::Mme, 5, 32);
+  regs.emplace_back ("mme6", reg_group::Mme, 6, 32);
+  regs.emplace_back ("mme7", reg_group::Mme, 7, 32);
 };
 
 unsigned int
@@ -235,6 +255,12 @@ unsigned int
 arch_info_gen9::flag_reg_base () const
 {
   return grf_reg_count () + address_reg_count () + acc_reg_count ();
+}
+
+unsigned int
+arch_info_gen9::mme_reg_base () const
+{
+  return emask_regnum () + 1 + 1;
 }
 
 /* Get the bit at POS in INST.  */

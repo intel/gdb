@@ -144,6 +144,7 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
   const int addresses = intelgt_info->address_reg_count ();
   const int accumulators = intelgt_info->acc_reg_count ();
   const int flags = intelgt_info->flag_reg_count ();
+  const int mmes = intelgt_info->mme_reg_count ();
 
   if (num < GRFBase)
     {
@@ -176,6 +177,12 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
       int regnum = num - Acc0Base;
       if (regnum < accumulators)
 	return intelgt_info->acc_reg_base () + regnum;
+    }
+  else if (num >= Mme0Base)
+    {
+      int regnum = num - Mme0Base;
+      if (regnum < mmes)
+	return intelgt_info->mme_reg_base () + regnum;
     }
 
   dprintf ("Dwarf regnum %d not recognized", num);

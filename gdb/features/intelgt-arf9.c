@@ -31,5 +31,13 @@ create_feature_intelgt_arf9 (struct target_desc *result, long regnum)
   tdesc_create_reg (feature, "tm0", regnum++, 1, NULL, 128, "uint128");
   tdesc_create_reg (feature, "emask", regnum++, 1, NULL, 32, "uint32");
   tdesc_create_reg (feature, "iemask", regnum++, 1, NULL, 32, "uint32");
+  tdesc_create_reg (feature, "mme0", regnum++, 1, NULL, 256, "uint256");
+  tdesc_create_reg (feature, "mme1", regnum++, 1, NULL, 256, "uint256");
+  tdesc_create_reg (feature, "mme2", regnum++, 1, NULL, 256, "uint256");
+  tdesc_create_reg (feature, "mme3", regnum++, 1, NULL, 256, "uint256");
+  tdesc_create_reg (feature, "mme4", regnum++, 1, NULL, 256, "uint256");
+  tdesc_create_reg (feature, "mme5", regnum++, 1, NULL, 256, "uint256");
+  tdesc_create_reg (feature, "mme6", regnum++, 1, NULL, 256, "uint256");
+  tdesc_create_reg (feature, "mme7", regnum++, 1, NULL, 256, "uint256");
   return regnum;
 }

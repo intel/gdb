@@ -35,4 +35,12 @@
   <reg name="emask"  bitsize="32"  type="uint32"/>
   <reg name="iemask" bitsize="32"  type="uint32"/>
 
+  <reg name="mme0"   bitsize="256" type="uint256"/>
+  <reg name="mme1"   bitsize="256" type="uint256"/>
+  <reg name="mme2"   bitsize="256" type="uint256"/>
+  <reg name="mme3"   bitsize="256" type="uint256"/>
+  <reg name="mme4"   bitsize="256" type="uint256"/>
+  <reg name="mme5"   bitsize="256" type="uint256"/>
+  <reg name="mme6"   bitsize="256" type="uint256"/>
+  <reg name="mme7"   bitsize="256" type="uint256"/>
 </feature>

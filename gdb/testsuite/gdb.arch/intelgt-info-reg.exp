@@ -82,3 +82,21 @@ gdb_test "stepi"
 gdb_test "info reg r$regnum" \
     "r10            0x2a                42" \
     "read the written register"
+
+# Check that MME[0-7] = ACC[2-9].
+set ws "\[ \t]+"
+for {set mme_regnum 0} {$mme_regnum < 8} {incr mme_regnum} {
+    set acc_regnum [expr $mme_regnum + 2]
+    set testname "mme${mme_regnum} equals acc${acc_regnum}"
+
+    set mme_val [get_hexadecimal_valueof "\$mme${mme_regnum}" "FAIL"]
+    set acc_val [get_hexadecimal_valueof "\$acc${acc_regnum}" "FAIL"]
+
+    if {($mme_val eq "FAIL") || ($acc_val eq "FAIL")} {
+	fail $testname
+    } elseif {$mme_val eq $acc_val} {
+	pass $testname
+    } else {
+	fail $testname
+    }
+}

@@ -139,6 +139,8 @@ igfxdbg_reg_type (intelgt::reg_group group)
       return eGrfRegister;
     case reg_group::ExecMaskPseudo:
       return eExecMaskPseudoRegister;
+    case reg_group::Mme:
+      return eArfMmeRegister;
     }
 
   return eInvalidRegisterType;

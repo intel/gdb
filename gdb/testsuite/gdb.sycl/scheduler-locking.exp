@@ -1,0 +1,77 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test the scheduler-locker for resuming inside a SYCL kernel.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-1D.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set first_line [gdb_get_line_number "kernel-first-line"]
+set second_line [expr $first_line + 1]
+set third_line [expr $first_line + 2]
+set fourth_line [expr $first_line + 3]
+gdb_breakpoint $first_line
+gdb_breakpoint $second_line
+gdb_breakpoint $third_line
+gdb_breakpoint $fourth_line
+
+gdb_continue_to_breakpoint "hit the first line" \
+    ".*$srcfile:$first_line.*"
+
+gdb_test_no_output "set scheduler-locking on"
+
+set num_threads 0
+gdb_test_multiple "info threads" "find num threads" {
+    -re "Id\[ \t\]+Target Id\[^\r\n\]+\[\r\n\]" {
+	exp_continue
+    }
+    -re "$decimal\[ \t\]+Thread\[^\r\n\]+\[\r\n\]" {
+	incr num_threads
+	exp_continue
+    }
+    -re "$gdb_prompt $" {
+	pass $gdb_test_name
+    }
+}
+
+# If this is a single-threaded program, thread id is not printed,
+# and there is no point in testing which thread hits the BPs.
+if {$num_threads > 1} {
+    # Resuming should make only the current thread move.
+    set current_thread [get_current_thread "line $first_line"]
+    gdb_test "continue" \
+	"Thread $current_thread \[^\r\n\]+$srcfile:$second_line.*" \
+	"hit the second line"
+    gdb_test "continue" \
+	"Thread $current_thread \[^\r\n\]+$srcfile:$third_line.*" \
+	"hit the third line"
+    gdb_test "continue" \
+	"Thread $current_thread \[^\r\n\]+$srcfile:$fourth_line.*" \
+	"hit the fourth line"
+}

@@ -97,6 +97,8 @@ int amd64_linux_gregset_reg_offset[] =
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1,				/* PKEYS register pkru  */
+  -1,				/* TILECFG register (AMX).  */
+  -1,			 	/* TILEDATA registers tmm0 ... tmm7 (AMX).  */
 
   /* End of hardware registers */
   21 * 8, 22 * 8,		      /* fs_base and gs_base.  */
@@ -1583,9 +1585,9 @@ const target_desc *
 amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32)
 {
   static target_desc *amd64_linux_tdescs \
-    [2/*AVX*/][2/*MPX*/][2/*AVX512*/][2/*PKRU*/] = {};
+    [2/*AVX*/][2/*MPX*/][2/*AVX512*/][2/*PKRU*/][2/*AMX*/] = {};
   static target_desc *x32_linux_tdescs \
-    [2/*AVX*/][2/*AVX512*/][2/*PKRU*/] = {};
+    [2/*AVX*/][2/*AVX512*/][2/*PKRU*/][2/*AMX*/] = {};
 
   target_desc **tdesc;
 
@@ -1593,14 +1595,16 @@ amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32)
     {
       tdesc = &x32_linux_tdescs[(xcr0_features_bit & X86_XSTATE_AVX) ? 1 : 0 ]
 	[(xcr0_features_bit & X86_XSTATE_AVX512) ? 1 : 0]
-	[(xcr0_features_bit & X86_XSTATE_PKRU) ? 1 : 0];
+	[(xcr0_features_bit & X86_XSTATE_PKRU) ? 1 : 0]
+	[(xcr0_features_bit & X86_XSTATE_AMX) ? 1 : 0];
     }
   else
     {
       tdesc = &amd64_linux_tdescs[(xcr0_features_bit & X86_XSTATE_AVX) ? 1 : 0]
 	[(xcr0_features_bit & X86_XSTATE_MPX) ? 1 : 0]
 	[(xcr0_features_bit & X86_XSTATE_AVX512) ? 1 : 0]
-	[(xcr0_features_bit & X86_XSTATE_PKRU) ? 1 : 0];
+	[(xcr0_features_bit & X86_XSTATE_PKRU) ? 1 : 0]
+	[(xcr0_features_bit & X86_XSTATE_AMX) ? 1 : 0];
     }
 
   if (*tdesc == NULL)

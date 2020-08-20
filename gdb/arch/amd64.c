@@ -22,6 +22,7 @@
 
 #include "../features/i386/64bit-avx.c"
 #include "../features/i386/64bit-avx512.c"
+#include "../features/i386/64bit-amx.c"
 #include "../features/i386/64bit-cet.c"
 #include "../features/i386/64bit-core.c"
 #include "../features/i386/64bit-linux.c"
@@ -77,6 +78,9 @@ amd64_create_target_description (uint64_t xcr0, bool is_x32, bool is_linux,
 
   if ((xcr0 & X86_XSTATE_PKRU) && !is_x32)
     regnum = create_feature_i386_64bit_pkeys (tdesc.get (), regnum);
+
+  if ((xcr0 & X86_XSTATE_AMX) && !is_x32)
+    regnum = create_feature_i386_64bit_amx (tdesc.get (), regnum);
 
   if (cet_enabled)
     regnum = create_feature_i386_64bit_cet (tdesc.get (), regnum);

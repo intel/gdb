@@ -28,6 +28,7 @@ static const int num_avx512_zmmh_high_registers = 16;
 static const int num_avx512_ymmh_registers = 16;
 static const int num_avx512_xmm_registers = 16;
 static const int num_pkeys_registers = 1;
+static const int num_amx_tile_registers = 8;
 
 /* Note: These functions preserve the reserved bits in control registers.
    However, gdbserver promptly throws away that information.  */
@@ -141,6 +142,14 @@ struct i387_xsave {
   /* Space for 1 32-bit PKRU register.  The HW XSTATE size for this feature is
      actually 64 bits, but WRPKRU/RDPKRU instructions ignore upper 32 bits.  */
   unsigned char pkru_space[8];
+
+  unsigned char reserved6[56];
+
+  /* Space for 1 TILECFG AMX register with size of 64 bytes.  */
+  unsigned char tilecfg_space[64];
+
+  /* Space for 8 TILECFG TILE registers with size of 1024 bytes.  */
+  unsigned char tmm_space[8*1024];
 };
 
 void
@@ -260,7 +269,7 @@ i387_cache_to_xsave (struct regcache *regcache, void *buf)
   unsigned long val, val2;
   unsigned long long xstate_bv = 0;
   unsigned long long clear_bv = 0;
-  char raw[64];
+  char raw[1024];
   char *p;
   /* Amd64 has 16 xmm regs; I386 has 8 xmm regs.  */
   int num_xmm_registers = register_size (regcache->tdesc, 0) == 8 ? 16 : 8;
@@ -328,6 +337,13 @@ i387_cache_to_xsave (struct regcache *regcache, void *buf)
       if ((clear_bv & X86_XSTATE_PKRU))
 	for (i = 0; i < num_pkeys_registers; i++)
 	  memset (((char *) &fp->pkru_space[0]) + i * 4, 0, 4);
+
+      if ((clear_bv & X86_XSTATE_AMX) != 0)
+	{
+	  memset (((char *) &fp->tilecfg_space[0]), 0, 64);
+	  for (i = 0; i < num_amx_tile_registers; i++)
+	    memset (((char *) &fp->tmm_space[0]) + i * 1024, 0, 1024);
+	}
     }
 
   /* Check if any x87 registers are changed.  */
@@ -513,6 +529,31 @@ i387_cache_to_xsave (struct regcache *regcache, void *buf)
 	    {
 	      xstate_bv |= X86_XSTATE_PKRU;
 	      memcpy (p, raw, 4);
+	    }
+	}
+    }
+
+  /* Check if any AMX registers are changed.  */
+  if ((x86_xcr0 & X86_XSTATE_AMX) != 0)
+    {
+      int amx_regnum = find_regno (regcache->tdesc, "tilecfg");
+      collect_register (regcache, amx_regnum, raw);
+      p = (char *) &fp->tilecfg_space[0];
+      if (memcmp (raw, p, 64) != 0)
+	{
+	  xstate_bv |= X86_XSTATE_AMX;
+	  memcpy (p, raw, 64);
+	}
+
+      amx_regnum++; /* Position on TILE 0.   */
+      for (i = 0; i < num_amx_tile_registers; i++)
+	{
+	  collect_register (regcache, i + amx_regnum, raw);
+	  p = ((char *) &fp->tmm_space[0]) + i * 1024;
+	  if (memcmp (raw, p, 1024) != 0)
+	    {
+	      xstate_bv |= X86_XSTATE_AMX;
+	      memcpy (p, raw, 1024);
 	    }
 	}
     }
@@ -884,6 +925,35 @@ i387_xsave_to_cache (struct regcache *regcache, const void *buf)
 	  p = (gdb_byte *) &fp->pkru_space[0];
 	  for (i = 0; i < num_pkeys_registers; i++)
 	    supply_register (regcache, i + pkru_regnum, p + i * 4);
+	}
+    }
+
+  if ((x86_xcr0 & X86_XSTATE_AMX) != 0)
+    {
+      /* When tilecfg is rewritten, the tiles are cleared.  Therefore
+	 we need to check tilecfg and tiledata separatly here.  */
+      int amx_regnum = find_regno (regcache->tdesc, "tilecfg");
+
+      if ((clear_bv & X86_XSTATE_XTILECFG) != 0)
+	supply_register_zeroed (regcache, amx_regnum);
+      else
+	{
+	  p = (gdb_byte *) &fp->tilecfg_space[0];
+	  supply_register (regcache, amx_regnum, p);
+	}
+
+      if ((clear_bv & X86_XSTATE_XTILEDATA) != 0)
+        {
+	  amx_regnum++; /* Position on TILE0.  */
+	  for (i = 0; i < num_amx_tile_registers; i++)
+	    supply_register_zeroed (regcache, i + amx_regnum);
+	}
+      else
+	{
+	  amx_regnum++;
+	  p = (gdb_byte *) &fp->tmm_space[0];
+	  for (i = 0; i < num_amx_tile_registers; i++)
+	    supply_register (regcache, i + amx_regnum, p + i * 1024);
 	}
     }
 

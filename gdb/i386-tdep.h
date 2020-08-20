@@ -202,6 +202,15 @@ struct gdbarch_tdep
   /* PKEYS register names.  */
   const char * const *pkeys_register_names;
 
+  /* Register number for AMX registers.  */
+  int amx_regnum;
+
+  /* Number of AMX registers.  */
+  int num_amx_regs;
+
+  /* AMX register names.  */
+  const char * const *amx_register_names;
+
   /* Register number for %fsbase.  Set this to -1 to indicate the
      absence of segment base registers.  */
   int fsbase_regnum;
@@ -314,6 +323,9 @@ enum i386_regnum
   I386_PKRU_REGNUM,
   I386_CET_U_REGNUM,
   I386_CET_PL3_SSP_REGNUM,
+  I386_AMX_TILECFG_REGNUM,
+  I386_AMX_TMM0_REGNUM,
+  I386_AMX_TMM7_REGNUM = I386_AMX_TMM0_REGNUM + 7,
   I386_FSBASE_REGNUM,
   I386_GSBASE_REGNUM
 };
@@ -359,7 +371,7 @@ enum record_i386_regnum
 #define I386_NUM_REGS		(I386_GSBASE_REGNUM + 1)
 
 /* Size of the largest register.  */
-#define I386_MAX_REGISTER_SIZE	64
+#define I386_MAX_REGISTER_SIZE	1024
 
 /* Types for i386-specific registers.  */
 extern struct type *i387_ext_type (struct gdbarch *gdbarch);
@@ -377,6 +389,7 @@ extern int i386_k_regnum_p (struct gdbarch *gdbarch, int regnum);
 extern int i386_zmm_regnum_p (struct gdbarch *gdbarch, int regnum);
 extern int i386_zmmh_regnum_p (struct gdbarch *gdbarch, int regnum);
 extern bool i386_pkru_regnum_p (struct gdbarch *gdbarch, int regnum);
+extern bool i386_amx_regnum_p (struct gdbarch *gdbarch, int regnum);
 
 extern const char *i386_pseudo_register_name (struct gdbarch *gdbarch,
 					      int regnum);

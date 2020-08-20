@@ -45,6 +45,7 @@ struct ui_file;
 #define I387_NUM_MPX_CTRL_REGS 2
 #define I387_NUM_K_REGS 8
 #define I387_NUM_PKEYS_REGS 1
+#define I387_NUM_AMX_REGS 9
 
 #define I387_PKRU_REGNUM(tdep) ((tdep)->pkru_regnum)
 #define I387_K0_REGNUM(tdep) ((tdep)->k0_regnum)
@@ -52,6 +53,7 @@ struct ui_file;
 #define I387_ZMM0H_REGNUM(tdep) ((tdep)->zmm0h_regnum)
 #define I387_NUM_YMM_AVX512_REGS(tdep) ((tdep)->num_ymm_avx512_regs)
 #define I387_YMM16H_REGNUM(tdep) ((tdep)->ymm16h_regnum)
+#define I387_AMX_REGNUM(tdep) ((tdep)->amx_regnum)
 
 #define I387_FCTRL_REGNUM(tdep) (I387_ST0_REGNUM (tdep) + 8)
 #define I387_FSTAT_REGNUM(tdep) (I387_FCTRL_REGNUM (tdep) + 1)
@@ -83,6 +85,9 @@ struct ui_file;
 
 #define I387_PKEYSEND_REGNUM(tdep) \
   (I387_PKRU_REGNUM (tdep) + I387_NUM_PKEYS_REGS)
+
+#define I387_AMX_END_REGNUM(tdep) \
+  (I387_AMX_REGNUM (tdep) + I387_NUM_AMX_REGS)
 
 /* Print out the i387 floating point state.  */
 

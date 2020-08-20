@@ -933,6 +933,23 @@ static int xsave_pkeys_offset[] =
   (xsave + (tdep)->xsave_layout.pkru_offset				\
    + xsave_pkeys_offset[regnum - I387_PKRU_REGNUM (tdep)])
 
+static int xsave_tilecfg_raw_offset[] =
+{
+  0 * 64		/* tilecfg.  */
+};
+
+#define XSAVE_TILECFG_RAW_ADDR(tdep, xsave, regnum) \
+  (xsave + (tdep)->xsave_layout.tilecfg_offset \
+   + xsave_tilecfg_raw_offset[regnum - I387_TILECFG_RAW_REGNUM (tdep)])
+
+static int xsave_tiledata_offset[] =
+{
+  0 * 8192	/* tiledata.  */
+};
+
+#define XSAVE_TILEDATA_RAW_ADDR(tdep, xsave, regnum) \
+  (xsave + (tdep)->xsave_layout.tiledata_offset \
+   + xsave_tiledata_offset[regnum - I387_TILEDATA_REGNUM (tdep)])
 
 /* See i387-tdep.h.  */
 
@@ -940,7 +957,18 @@ bool
 i387_guess_xsave_layout (uint64_t xcr0, size_t xsave_size,
 			 x86_xsave_layout &layout)
 {
-  if (HAS_PKRU (xcr0) && xsave_size == 2696)
+  if (HAS_AMX (xcr0) && xsave_size == 11008)
+    {
+      /* Intel CPUs supporting AMX.  */
+      layout.avx_offset = 576;
+      layout.k_offset = 1088;
+      layout.zmm_h_offset = 1152;
+      layout.zmm_offset = 1664;
+      layout.pkru_offset = 2688;
+      layout.tilecfg_offset = 2752;
+      layout.tiledata_offset = 2816;
+    }
+  else if (HAS_PKRU (xcr0) && xsave_size == 2696)
     {
       /* Intel CPUs supporting PKRU.  */
       layout.avx_offset = 576;
@@ -996,7 +1024,19 @@ i387_fallback_xsave_layout (uint64_t xcr0)
 {
   x86_xsave_layout layout;
 
-  if (HAS_PKRU (xcr0))
+  if (HAS_AMX (xcr0))
+    {
+      /* Intel CPUs supporting AMX.  */
+      layout.avx_offset = 576;
+      layout.k_offset = 1088;
+      layout.zmm_h_offset = 1152;
+      layout.zmm_offset = 1664;
+      layout.pkru_offset = 2688;
+      layout.tilecfg_offset = 2752;
+      layout.tiledata_offset = 2816;
+      layout.sizeof_xsave = 11008;
+    }
+  else if (HAS_PKRU (xcr0))
     {
       /* Intel CPUs supporting PKRU.  */
       layout.avx_offset = 576;
@@ -1090,8 +1130,11 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
       avx512_ymmh_avx512 = 0x100,
       avx512_xmm_avx512 = 0x200,
       pkeys = 0x400,
+      tilecfg = 0x800,
+      tiledata = 0x1600,
       all = x87 | sse | avxh | bndregs | bndcfg | avx512_k | avx512_zmm0_h
 	    | avx512_zmm16_h | avx512_ymmh_avx512 | avx512_xmm_avx512 | pkeys
+	    | tilecfg | tiledata
     } regclass;
 
   gdb_assert (regs != NULL);
@@ -1100,6 +1143,10 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
 
   if (regnum == -1)
     regclass = all;
+  else if (regnum == I387_TILECFG_RAW_REGNUM (tdep))
+    regclass = tilecfg;
+  else if (regnum == I387_TILEDATA_REGNUM (tdep))
+    regclass = tiledata;
   else if (regnum >= I387_PKRU_REGNUM (tdep)
 	   && regnum < I387_PKEYSEND_REGNUM (tdep))
     regclass = pkeys;
@@ -1151,6 +1198,26 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
     {
     case none:
       break;
+
+    case tilecfg:
+      if ((clear_bv & X86_XSTATE_TILECFG))
+	regcache->raw_supply (regnum, zero);
+      else
+	{
+	  regcache->raw_supply (regnum,
+				XSAVE_TILECFG_RAW_ADDR (tdep, regs, regnum));
+	}
+      return;
+
+    case tiledata:
+      if ((clear_bv & X86_XSTATE_TILEDATA))
+	regcache->raw_supply (regnum, zero);
+      else
+	{
+	  regcache->raw_supply (regnum,
+				XSAVE_TILEDATA_RAW_ADDR (tdep, regs, regnum));
+	}
+      return;
 
     case pkeys:
       if ((clear_bv & X86_XSTATE_PKRU))
@@ -1337,6 +1404,32 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
 		   i < I387_YMMENDH_REGNUM (tdep);
 		   i++)
 		regcache->raw_supply (i, XSAVE_AVXH_ADDR (tdep, regs, i));
+	    }
+	}
+
+      /* Handle the tilecfg register.  */
+      if ((tdep->xcr0 & X86_XSTATE_TILECFG) != 0)
+	{
+	  if ((clear_bv & X86_XSTATE_TILECFG) != 0)
+	    regcache->raw_supply (I387_TILECFG_RAW_REGNUM (tdep), zero);
+	  else
+	    {
+	      i = I387_TILECFG_RAW_REGNUM (tdep);
+	      regcache->raw_supply (i,
+				    XSAVE_TILECFG_RAW_ADDR (tdep, regs, i));
+	    }
+	}
+
+      /* Handle the tiledata register.  */
+      if ((tdep->xcr0 & X86_XSTATE_TILEDATA) != 0)
+	{
+	  if ((clear_bv & X86_XSTATE_TILEDATA) != 0)
+	    regcache->raw_supply (I387_TILEDATA_REGNUM (tdep), zero);
+	  else
+	    {
+	      i = I387_TILEDATA_REGNUM (tdep);
+	      regcache->raw_supply (i,
+				    XSAVE_TILEDATA_RAW_ADDR (tdep, regs, i));
 	    }
 	}
 
@@ -1534,8 +1627,11 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
       avx512_ymmh_avx512 = 0x200,
       avx512_xmm_avx512 = 0x400,
       pkeys = 0x800,
+      tilecfg = 0x1600,
+      tiledata = 0x3200,
       all = x87 | sse | avxh | bndregs | bndcfg | avx512_k | avx512_zmm0_h
 	    | avx512_zmm16_h | avx512_ymmh_avx512 | avx512_xmm_avx512 | pkeys
+	    | tilecfg | tiledata
     } regclass;
 
   gdb_assert (tdep->st0_regnum >= I386_ST0_REGNUM);
@@ -1543,6 +1639,10 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
 
   if (regnum == -1)
     regclass = all;
+  else if (regnum == I387_TILECFG_RAW_REGNUM (tdep))
+    regclass = tilecfg;
+  else if (regnum == I387_TILEDATA_REGNUM (tdep))
+    regclass = tiledata;
   else if (regnum >= I387_PKRU_REGNUM (tdep)
 	   && regnum < I387_PKEYSEND_REGNUM (tdep))
     regclass = pkeys;
@@ -1613,6 +1713,18 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
      seem justified at this point.  */
   if (clear_bv)
     {
+      if ((clear_bv & X86_XSTATE_TILECFG))
+	{
+	  i = I387_TILECFG_RAW_REGNUM (tdep);
+	  memset (XSAVE_TILECFG_RAW_ADDR (tdep, regs, i), 0, 64);
+	}
+
+      if ((clear_bv & X86_XSTATE_TILEDATA))
+	{
+	  i = I387_TILEDATA_REGNUM (tdep);
+	  memset (XSAVE_TILEDATA_RAW_ADDR (tdep, regs, i), 0, 8192);
+	}
+
       if ((clear_bv & X86_XSTATE_PKRU))
 	for (i = I387_PKRU_REGNUM (tdep);
 	     i < I387_PKEYSEND_REGNUM (tdep); i++)
@@ -1689,6 +1801,32 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
 
   if (regclass == all)
     {
+      /* Check if the tilecfg register is changed.  */
+      if ((tdep->xcr0 & X86_XSTATE_TILECFG))
+	{
+	  i = I387_TILECFG_RAW_REGNUM (tdep);
+	  regcache->raw_collect (i, raw);
+	  p = XSAVE_TILECFG_RAW_ADDR (tdep, regs, i);
+	  if (memcmp (raw, p, 64) != 0)
+	    {
+	      xstate_bv |= X86_XSTATE_TILECFG;
+	      memcpy (p, raw, 64);
+	    }
+	}
+
+      /* Check if the tiledata register is changed.  */
+      if ((tdep->xcr0 & X86_XSTATE_TILEDATA))
+	{
+	  i = I387_TILEDATA_REGNUM (tdep);
+	  regcache->raw_collect (i, raw);
+	  p = XSAVE_TILEDATA_RAW_ADDR (tdep, regs, i);
+	  if (memcmp (raw, p, 8192) != 0)
+	    {
+	      xstate_bv |= X86_XSTATE_TILEDATA;
+	      memcpy (p, raw, 8192);
+	    }
+	}
+
       /* Check if any PKEYS registers are changed.  */
       if ((tdep->xcr0 & X86_XSTATE_PKRU))
 	for (i = I387_PKRU_REGNUM (tdep);
@@ -1868,6 +2006,26 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
 	{
 	default:
 	  internal_error (_("invalid i387 regclass"));
+
+	case tilecfg:
+	  /* This is a tilecfg register.  */
+	  p = XSAVE_TILECFG_RAW_ADDR (tdep, regs, regnum);
+	  if (memcmp (raw, p, 64) != 0)
+	    {
+	      xstate_bv |= X86_XSTATE_TILECFG;
+	      memcpy (p, raw, 64);
+	    }
+	  break;
+
+	case tiledata:
+	  /* This is a tiledata register.  */
+	  p = XSAVE_TILEDATA_RAW_ADDR (tdep, regs, regnum);
+	  if (memcmp (raw, p, 8192) != 0)
+	    {
+	      xstate_bv |= X86_XSTATE_TILEDATA;
+	      memcpy (p, raw, 8192);
+	    }
+	  break;
 
 	case pkeys:
 	  /* This is a PKEYS register.  */

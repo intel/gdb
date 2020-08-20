@@ -3910,6 +3910,74 @@ gdb_caching_proc allow_tsx_tests {} {
     return $allow_tsx_tests
 }
 
+# Run a test on the target to see if it supports AMX.  Return 1 if so,
+# 0 if it does not.  Based on 'check_vmx_hw_available' from the GCC testsuite.
+
+gdb_caching_proc allow_amx_tests {} {
+    global srcdir subdir gdb_prompt inferior_exited_re
+
+    set me "skip_amx_tests"
+    if { ![istarget "x86_64-*-*"] } {
+	verbose "$me:  target does not support AMX" 2
+	return 0
+    }
+
+    # Compile a test program.
+    set src {
+	#include <stdint.h>
+	#include <immintrin.h>
+
+	int
+	main ()
+	{
+	   struct tileconfig_t {
+	      uint8_t  palette_id;
+	      uint8_t  startRow;
+	      uint8_t  reserved[14];
+	      uint16_t cols[16];
+	      uint8_t  rows[16];
+	   };
+
+	   struct tileconfig_t tc = {1};
+	   _tile_loadconfig (&tc);
+	   _tile_release ();
+
+	   return 0;
+	}
+    }
+    set compile_flags "additional_flags=-mamx-tile"
+    if {![gdb_simple_compile $me $src executable $compile_flags]} {
+	return 1
+    }
+
+    # No error message, compilation succeeded so now run it via gdb.
+
+    gdb_exit
+    gdb_start
+    gdb_reinitialize_dir $srcdir/$subdir
+    gdb_load "$obj"
+    gdb_run_cmd
+    gdb_expect {
+	-re ".*Illegal instruction.*${gdb_prompt} $" {
+	    verbose -log "$me:  AMX hardware not detected."
+	    set skip_amx_tests 0
+	}
+	-re ".*$inferior_exited_re normally.*${gdb_prompt} $" {
+	    verbose -log "$me:  AMX hardware detected."
+	    set skip_amx_tests 1
+	}
+	default {
+	    warning "\n$me:  default case taken."
+	    set skip_amx_tests 0
+	}
+    }
+    gdb_exit
+    remote_file build delete $obj
+
+    verbose "$me:  returning $skip_amx_tests" 2
+    return $skip_amx_tests
+}
+
 # Run a test on the target to see if it supports avx512bf16.  Return 1 if so,
 # 0 if it does not.  Based on 'check_vmx_hw_available' from the GCC testsuite.
 

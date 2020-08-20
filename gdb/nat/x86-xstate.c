@@ -63,5 +63,7 @@ x86_fetch_xsave_layout (uint64_t xcr0, int len)
   layout.zmm_h_offset = xsave_feature_offset (xcr0, X86_XSTATE_ZMM_H_ID);
   layout.zmm_offset = xsave_feature_offset (xcr0, X86_XSTATE_ZMM_ID);
   layout.pkru_offset = xsave_feature_offset (xcr0, X86_XSTATE_PKRU_ID);
+  layout.tilecfg_offset = xsave_feature_offset (xcr0, X86_XSTATE_TILECFG_ID);
+  layout.tiledata_offset = xsave_feature_offset (xcr0, X86_XSTATE_TILEDATA_ID);
   return layout;
 }

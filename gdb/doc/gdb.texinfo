@@ -45848,6 +45848,18 @@ The @samp{org.gnu.gdb.i386.cet} feature is optional.  It should
 describe two user mode registers: @samp{cet_u} and @samp{pl3_ssp}.
 These are two 64-bit registers valid for i386 and amd64.
 
+The @samp{org.gnu.gdb.i386.amx} feature is optional.  It should
+describe one config user mode register @samp{tilecfg} that has
+64 bytes and eight user mode tile registers which are 1024 bytes
+each:
+
+@itemize @minus
+@item
+@samp{tmm0} through @samp{tmm7}.
+@end itemize
+
+All AMX registers are valid only for amd64.
+
 @node MicroBlaze Features
 @subsection MicroBlaze Features
 @cindex target descriptions, MicroBlaze features

@@ -29,7 +29,7 @@
 /* Register number for the "orig_eax" pseudo-register.  If this
    pseudo-register contains a value >= 0 it is interpreted as the
    system call number that the kernel is supposed to restart.  */
-#define I386_LINUX_ORIG_EAX_REGNUM (I386_CET_PL3_SSP_REGNUM + 1)
+#define I386_LINUX_ORIG_EAX_REGNUM (I386_AMX_TMM7_REGNUM + 1)
 
 /* Total number of registers for GNU/Linux.  */
 #define I386_LINUX_NUM_REGS (I386_LINUX_ORIG_EAX_REGNUM + 1)

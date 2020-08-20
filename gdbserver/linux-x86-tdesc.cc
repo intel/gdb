@@ -33,6 +33,9 @@
 static enum x86_linux_tdesc
 xcr0_to_tdesc_idx (uint64_t xcr0, bool is_x32)
 {
+  if ( !is_x32 && ((xcr0 & X86_XSTATE_AMX) != 0))
+    return X86_TDESC_AVX_MPX_AVX512_PKU_AMX;
+
   if (xcr0 & X86_XSTATE_PKRU)
     {
       if (is_x32)

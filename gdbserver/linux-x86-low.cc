@@ -246,7 +246,9 @@ static const int x86_64_regmap[] =
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1,					/* pkru  */
-  -1, -1				/* CET registers CET_U, PL3_SSP.  */
+  -1, -1,				/* CET registers CET_U, PL3_SSP.  */
+  -1,					/* AMX TILECFG register.  */
+  -1, -1, -1, -1, -1, -1, -1, -1       /* tmm0 ... tmm7 (AMX)  */
 };
 
 #define X86_64_NUM_REGS (sizeof (x86_64_regmap) / sizeof (x86_64_regmap[0]))

@@ -33,6 +33,8 @@ get_x86_extended_feature (unsigned int feature)
     case X86_XSTATE_ZMM_H_ID:
     case X86_XSTATE_ZMM_ID:
     case X86_XSTATE_PKRU_ID:
+    case X86_XSTATE_XTILECFG_ID:
+    case X86_XSTATE_XTILEDATA_ID:
 	unsigned int eax = 0, ebx = 0, unused;
 	__get_cpuid_count (0x0D, feature, &eax, &ebx, &unused, &unused);
 	return {feature, eax, ebx};
@@ -44,7 +46,9 @@ unsigned int
 get_x86_xstate_size (uint64_t xcr0)
 {
   x86_extended_feature ef;
-  if (HAS_PKRU (xcr0))
+  if (HAS_AMX (xcr0))
+    ef = get_x86_extended_feature (X86_XSTATE_XTILEDATA_ID);
+  else if (HAS_PKRU (xcr0))
     ef = get_x86_extended_feature (X86_XSTATE_PKRU_ID);
   else if (HAS_AVX512 (xcr0))
     ef = get_x86_extended_feature (X86_XSTATE_ZMM_ID);

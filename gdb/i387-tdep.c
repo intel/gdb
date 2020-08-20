@@ -906,6 +906,23 @@ static int xsave_pkeys_offset[] =
   get_x86_extended_feature (X86_XSTATE_PKRU_ID).offset + \
   xsave_pkeys_offset[regnum - I387_PKRU_REGNUM (tdep)])
 
+static int xsave_amx_offset[] =
+{
+  0 * 64,		/* tilecfg.  */
+  64 + 0 * 1024,	/* tmm0.  */
+  64 + 1 * 1024,	/* tmm1.  */
+  64 + 2 * 1024,	/* tmm2.  */
+  64 + 3 * 1024,	/* tmm3.  */
+  64 + 4 * 1024,	/* tmm4.  */
+  64 + 5 * 1024,	/* tmm5.  */
+  64 + 6 * 1024,	/* tmm6.  */
+  64 + 7 * 1024,	/* tmm7.  */
+};
+
+#define XSAVE_AMX_ADDR(tdep, xsave, regnum) \
+  (xsave + \
+   get_x86_extended_feature (X86_XSTATE_XTILECFG_ID).offset + \
+   xsave_amx_offset[regnum - I387_AMX_REGNUM (tdep)])
 
 /* Extract from XSAVE a bitset of the features that are available on the
    target, but which have not yet been enabled.  */
@@ -958,8 +975,9 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
       avx512_ymmh_avx512 = 0x40,
       avx512_xmm_avx512 = 0x80,
       pkeys = 0x100,
+      amx = 0x200,
       all = x87 | sse | avxh | mpx | avx512_k | avx512_zmm_h
-	    | avx512_ymmh_avx512 | avx512_xmm_avx512 | pkeys
+	    | avx512_ymmh_avx512 | avx512_xmm_avx512 | pkeys | amx
     } regclass;
 
   gdb_assert (regs != NULL);
@@ -968,6 +986,9 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
 
   if (regnum == -1)
     regclass = all;
+  else if (regnum >= I387_AMX_REGNUM (tdep)
+	   && regnum < I387_AMX_END_REGNUM (tdep))
+    regclass = amx;
   else if (regnum >= I387_PKRU_REGNUM (tdep)
 	   && regnum < I387_PKEYSEND_REGNUM (tdep))
     regclass = pkeys;
@@ -1013,6 +1034,13 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
     {
     case none:
       break;
+
+    case amx:
+      if ((clear_bv & X86_XSTATE_AMX))
+	regcache->raw_supply (regnum, zero);
+      else
+	regcache->raw_supply (regnum, XSAVE_AMX_ADDR (tdep, regs, regnum));
+      return;
 
     case pkeys:
       if ((clear_bv & X86_XSTATE_PKRU))
@@ -1183,6 +1211,23 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
 		   i < I387_YMMENDH_REGNUM (tdep);
 		   i++)
 		regcache->raw_supply (i, XSAVE_AVXH_ADDR (tdep, regs, i));
+	    }
+	}
+
+      /* Handle the AMX registers.  */
+      if ((tdep->xcr0 & X86_XSTATE_XTILECFG) != 0)
+	{
+	  if ((clear_bv & X86_XSTATE_XTILECFG) != 0)
+	    {
+	      for (i = I387_AMX_REGNUM (tdep);
+		   i < I387_AMX_END_REGNUM (tdep); i++)
+		regcache->raw_supply (i, zero);
+	    }
+	  else
+	    {
+	      for (i = I387_AMX_REGNUM (tdep);
+		   i < I387_AMX_END_REGNUM (tdep); i++)
+		regcache->raw_supply (i, XSAVE_AMX_ADDR (tdep, regs, i));
 	    }
 	}
 
@@ -1378,8 +1423,9 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
       avx512_ymmh_avx512 = 0x80,
       avx512_xmm_avx512 = 0x100,
       pkeys = 0x200,
+      amx = 0x400,
       all = x87 | sse | avxh | mpx | avx512_k | avx512_zmm_h
-	    | avx512_ymmh_avx512 | avx512_xmm_avx512 | pkeys
+	    | avx512_ymmh_avx512 | avx512_xmm_avx512 | pkeys | amx
     } regclass;
 
   gdb_assert (tdep->st0_regnum >= I386_ST0_REGNUM);
@@ -1387,6 +1433,9 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
 
   if (regnum == -1)
     regclass = all;
+  else if (regnum >= I387_AMX_REGNUM (tdep)
+	   && regnum < I387_AMX_END_REGNUM (tdep))
+    regclass = amx;
   else if (regnum >= I387_PKRU_REGNUM (tdep)
 	   && regnum < I387_PKEYSEND_REGNUM (tdep))
     regclass = pkeys;
@@ -1451,6 +1500,17 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
      seem justified at this point.  */
   if (clear_bv)
     {
+      if ((clear_bv & X86_XSTATE_AMX))
+	{
+	  /* First set TILECFG.  */
+	  memset (XSAVE_AMX_ADDR (tdep, regs, I387_AMX_REGNUM (tdep)), 0, 64);
+
+	  /* Then set TMM regs.  */
+	  for (i = I387_AMX_REGNUM (tdep);
+	    i < I387_AMX_END_REGNUM (tdep); i++)
+	      memset (XSAVE_AMX_ADDR (tdep, regs, i), 0, 1024);
+	}
+
       if ((clear_bv & X86_XSTATE_PKRU))
 	for (i = I387_PKRU_REGNUM (tdep);
 	     i < I387_PKEYSEND_REGNUM (tdep); i++)
@@ -1526,6 +1586,32 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
 
   if (regclass == all)
     {
+      /* Check if any AMX registers are changed.  */
+      if ((tdep->xcr0 & X86_XSTATE_AMX))
+	for (i = I387_AMX_REGNUM (tdep);
+	     i < I387_AMX_END_REGNUM (tdep); i++)
+	  {
+	    regcache->raw_collect (i, raw);
+	    p = XSAVE_AMX_ADDR (tdep, regs, i);
+		/* TILECFG is 64 bytes.  The rest (TMM) are 1024 bytes.  */
+		if (i == I387_AMX_REGNUM (tdep))
+		  {
+		    if (memcmp (raw, p, 64) != 0)
+		      {
+			xstate_bv |= X86_XSTATE_AMX;
+			memcpy (p, raw, 64);
+		      }
+		  }
+		else
+		  {
+		    if (memcmp (raw, p, 1024) != 0)
+		      {
+			xstate_bv |= X86_XSTATE_AMX;
+			memcpy (p, raw, 1024);
+		      }
+		}
+	  }
+
       /* Check if any PKEYS registers are changed.  */
       if ((tdep->xcr0 & X86_XSTATE_PKRU))
 	for (i = I387_PKRU_REGNUM (tdep);
@@ -1694,6 +1780,29 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
 	default:
 	  internal_error (__FILE__, __LINE__,
 			  _("invalid i387 regclass"));
+
+	case amx:
+	  /* This is an AMX register.  */
+	  p = XSAVE_AMX_ADDR (tdep, regs, regnum);
+
+	  /* TILECFG is 64 bytes.  The rest (TMM) are 1024 bytes.  */
+	  if (regnum == I387_AMX_REGNUM (tdep))
+	    {
+	      if (memcmp (raw, p, 64) != 0)
+		{
+		  xstate_bv |= X86_XSTATE_AMX;
+		  memcpy (p, raw, 64);
+		}
+	    }
+	  else
+	    {
+	      if (memcmp (raw, p, 1024) != 0)
+		{
+		  xstate_bv |= X86_XSTATE_AMX;
+		  memcpy (p, raw, 1024);
+		}
+	    }
+	  break;
 
 	case pkeys:
 	  /* This is a PKEYS register.  */

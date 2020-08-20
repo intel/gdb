@@ -25649,6 +25649,43 @@ At this last step the value of bnd0 can be changed for investigation of bound
 violations caused along the execution of the call.  In order to know how to
 set the bound registers or bound table for the call consult the ABI.
 
+@subsubsection Intel @dfn{Advanced Matrix Extensions} (AMX).
+@cindex Advanced Matrix Extensions (AMX).
+
+Advanced Matrix Extensions (AMX) adds one 64 byte @samp{TILECFG} register and
+eight 1024 byte tile registers @samp{TMM0}, @samp{TMM1}, ..., @samp{TMM7}.
+The tile registers each represent a matrix, whose dimensions are configured via
+@samp{TILECFG}.  Future platforms might also partition the register area of
+8 * 1024 bytes between a different number of tiles.
+
+To present such big registers in a user friendly way, @value{GDBN} represents
+the @samp{TILECFG} and tile registers as pseudo registers.
+The @samp{TILECFG} is shown as a @code{struct}, omitting reserved bits.
+The full register can still be viewed using @samp{TILECFG_RAW}.  The tile
+registers are sized dynamically according to the configuration in
+@samp{TILECFG}.  For example:
+
+@smallexample
+	(gdb) print/x $tilecfg_raw
+	$1 = 0x203020000000000000000000000000000000000000000000000000000001000
+	10000c00000000000000000000000000000001
+	(gdb) print $tilecfg
+	$2 = @{palette = 0x1, start_row = 0x0, tile0.colsb = 0xc,
+	tile1.colsb = 0x10, tile2.colsb = 0x10, tile3.colsb = 0x0,
+	tile4.colsb = 0x0, tile5.colsb = 0x0, tile6.colsb = 0x0,
+	tile7.colsb = 0x0, tile0.rows = 0x2, tile1.rows = 0x3, tile2.rows = 0x2,
+	tile3.rows = 0x0, tile4.rows = 0x0, tile5.rows = 0x0, tile6.rows = 0x0,
+	tile7.rows = 0x0@}
+	(gdb) p $tmm0.m_int8
+	$3 = @{@{0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2@},	@{1, 1, 1, 1, 2, 2, 2,
+	2, 3, 3, 3, 3@}@}
+@end smallexample
+
+The raw register data for tiles can be seen in the register
+@samp{TILEDATA}, which represents the whole 8 * 1024 bytes available for tiles.
+Setting any pseudo register will result in changes in the corresponding raw
+register (e.g. @samp{TILECFG_RAW} and @samp{TILEDATA}).
+
 @node Alpha
 @subsection Alpha
 
@@ -46657,6 +46694,11 @@ valid for i386 and amd64.
 The @samp{org.gnu.gdb.i386.cet} feature is optional.  It should
 describe two user mode registers: @samp{cet_u} and @samp{pl3_ssp}.
 These are two 64-bit registers valid for i386 and amd64.
+
+The @samp{org.gnu.gdb.i386.amx} feature is optional.  It should
+describe one config user mode register @samp{tilecfg_raw} that has
+64 bytes and one @samp{tiledata} register that has 8192 bytes.
+All AMX registers are valid only for amd64.
 
 @node MicroBlaze Features
 @subsection MicroBlaze Features

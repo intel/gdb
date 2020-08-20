@@ -23,6 +23,8 @@
 #include "gdbarch.h"
 #include "infrun.h"
 #include "expression.h"
+#include <vector>
+#include <utility>
 
 struct frame_info;
 struct gdbarch;
@@ -202,6 +204,28 @@ struct gdbarch_tdep
   /* PKEYS register names.  */
   const char * const *pkeys_register_names;
 
+  /* Register number for AMX tilecfg register, including pseudo register.  */
+  int tilecfg_regnum;
+  int tilecfg_raw_regnum;
+
+  /* Number of tilecfg registers, including pseudo register.  */
+  int num_tilecfg_regs;
+  int num_tilecfg_raw_regs;
+
+  /* Register number for AMX tmm register, including pseudo registers.  */
+  int tmm_regnum;
+  int tiledata_regnum;
+
+  /* Number of AMX tmm registers, including pseudo registers.  */
+  int num_tmm_regs;
+  int num_tiledata_regs;
+
+  /* AMX register names.  */
+  const char * const *tilecfg_raw_register_names;
+  const char * const *tilecfg_register_names;
+  const char * const *tmm_register_names;
+  const char * const *tiledata_register_names;
+
   /* Register number for %fsbase.  Set this to -1 to indicate the
      absence of segment base registers.  */
   int fsbase_regnum;
@@ -250,6 +274,8 @@ struct gdbarch_tdep
   struct type *i386_mmx_type;
   struct type *i386_ymm_type;
   struct type *i386_zmm_type;
+  struct type *i386_tmm_type;
+  struct type *i386_tilecfg_type;
   struct type *i387_ext_type;
   struct type *i386_bnd_type;
 
@@ -314,6 +340,8 @@ enum i386_regnum
   I386_PKRU_REGNUM,
   I386_CET_U_REGNUM,
   I386_CET_PL3_SSP_REGNUM,
+  I386_AMX_TILECFG_RAW_REGNUM,
+  I386_AMX_TILEDATA_REGNUM,
   I386_FSBASE_REGNUM,
   I386_GSBASE_REGNUM
 };
@@ -359,7 +387,7 @@ enum record_i386_regnum
 #define I386_NUM_REGS		(I386_GSBASE_REGNUM + 1)
 
 /* Size of the largest register.  */
-#define I386_MAX_REGISTER_SIZE	64
+#define I386_MAX_REGISTER_SIZE	8192
 
 /* Types for i386-specific registers.  */
 extern struct type *i387_ext_type (struct gdbarch *gdbarch);
@@ -377,6 +405,8 @@ extern int i386_k_regnum_p (struct gdbarch *gdbarch, int regnum);
 extern int i386_zmm_regnum_p (struct gdbarch *gdbarch, int regnum);
 extern int i386_zmmh_regnum_p (struct gdbarch *gdbarch, int regnum);
 extern bool i386_pkru_regnum_p (struct gdbarch *gdbarch, int regnum);
+extern bool i386_tilecfg_regnum_p (struct gdbarch *gdbarch, int regnum);
+extern bool i386_tmm_regnum_p (struct gdbarch *gdbarch, int regnum);
 
 extern const char *i386_pseudo_register_name (struct gdbarch *gdbarch,
 					      int regnum);
@@ -511,5 +541,95 @@ i386_cet_set_shstk_pointer (struct gdbarch *gdbarch, const CORE_ADDR *ssp);
 /* Pushes an address to the shadow-stack and increments the ssp accordingly.  */
 extern void
 i386_cet_shstk_push (struct gdbarch *gdbarch, CORE_ADDR* new_addr);
+
+/* AMX utilities.  */
+
+/* TILECFG register.
+   0       palette
+   1       start_row
+   2-15    reserved, must be zero
+   16-17   tile0.colsb Tile 0 bytes per row.
+   18-19   tile1.colsb Tile 1 bytes per row.
+   20-21   tile2.colsb Tile 2 bytes per row.
+   ...     (sequence continues)
+   30-31   tile7.colsb Tile 7 bytes per row.
+   32-47   reserved, must be zero
+   48      tile0.rows Tile 0 rows.
+   49      tile1.rows Tile 1 rows.
+   50      tile2.rows Tile 2 rows.
+   ...     (sequence continues)
+   55      tile7.rows Tile 7 rows.
+   56-63   reserved, must be zero.  */
+
+/* TILECFG class representing the AMX Tilecfg register.  */
+
+class tilecfg_reg
+{
+public:
+  tilecfg_reg ()
+      : columns_and_rows (
+	  std::vector<std::pair<uint16_t, uint8_t>> (MAX_NAMES, { 0, 0 }))
+  {
+  }
+
+  /* Construct it from raw tilecfg data.  */
+  explicit tilecfg_reg (uint8_t *raw_tilecfg);
+
+  ~tilecfg_reg () noexcept = default;
+  tilecfg_reg (const tilecfg_reg &t) = default;
+  tilecfg_reg (tilecfg_reg &&t) noexcept = default;
+
+  tilecfg_reg &operator= (tilecfg_reg &&t) noexcept = default;
+
+  /* Get number of configured bytes per row for tile p.  */
+  inline uint16_t
+  bytes_per_row (uint8_t p) const
+  {
+    gdb_assert (columns_and_rows.size () > p);
+    return columns_and_rows[p].first;
+  }
+
+  /* Get number of configured rows for tile p.  */
+  inline uint8_t
+  rows (uint8_t p) const
+  {
+    gdb_assert (columns_and_rows.size () > p);
+    return columns_and_rows[p].second;
+  }
+
+  bool
+  operator== (const tilecfg_reg &t) const
+  {
+    return palette == t.palette && start_row == t.start_row
+	   && columns_and_rows == t.columns_and_rows;
+  }
+
+  bool
+  operator!= (const tilecfg_reg &t) const
+  {
+    return !(*this == t);
+  }
+
+  /* Offsets for reading from TILEDATA.  */
+  static const uint16_t COLUMN_MEMORY_OFFSET = 16;
+  static const uint16_t ROW_MEMORY_OFFSET = 48;
+
+  /* Maximum possible values for the current target.  */
+  static const uint16_t MAX_PALETTE = 1;
+  static const uint16_t MAX_NAMES = 8;
+  static const uint16_t MAX_ROWS = 16;
+  static const uint16_t MAX_BYTES_PER_ROW = 64;
+  static const uint16_t MAX_BYTES_PER_TILE = 1024;
+
+  /* Palette id entry.  */
+  uint8_t palette = 0;
+
+  /* start_row entry.  */
+  uint8_t start_row = 0;
+
+private:
+  /* This stores the colsb and rows entries.  */
+  std::vector<std::pair<uint16_t, uint8_t>> columns_and_rows;
+};
 
 #endif /* i386-tdep.h */

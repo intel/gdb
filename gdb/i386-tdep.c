@@ -141,6 +141,31 @@ static const char * const i386_mmx_names[] =
   "mm4", "mm5", "mm6", "mm7"
 };
 
+/* Register names for AMX registers.  */
+
+static const char * const i386_tilecfg_raw_names[] =
+{
+  "tilecfg_raw"
+};
+
+static const char * const i386_tiledata_names[] =
+{
+  "tiledata"
+};
+
+/* Register names for AMX pseudo-registers.  */
+
+static const char * const i386_tilecfg_names[] =
+{
+  "tilecfg"
+};
+
+static const char * const i386_tmm_names[] =
+{
+  "tmm0", "tmm1", "tmm2", "tmm3",
+  "tmm4", "tmm5", "tmm6", "tmm7"
+};
+
 /* Register names for byte pseudo-registers.  */
 
 static const char * const i386_byte_names[] =
@@ -435,6 +460,36 @@ i386_pkru_regnum_p (struct gdbarch *gdbarch, int regnum)
   return regnum >= 0 && regnum < I387_NUM_PKEYS_REGS;
 }
 
+/* AMX tilecfg register?  */
+
+bool
+i386_tilecfg_regnum_p (struct gdbarch *gdbarch, int regnum)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int tilecfg_regnum = tdep->tilecfg_regnum;
+
+  if (tilecfg_regnum < 0)
+    return false;
+
+  regnum -= tilecfg_regnum;
+  return regnum >= 0 && regnum < I387_NUM_TILECFG_REGS;
+}
+
+/* AMX tmm register?  */
+
+bool
+i386_tmm_regnum_p (struct gdbarch *gdbarch, int regnum)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int tmm_regnum = tdep->tmm_regnum;
+
+  if (tmm_regnum < 0)
+    return false;
+
+  regnum -= tmm_regnum;
+  return regnum >= 0 && regnum < I387_NUM_TMM_REGS;
+}
+
 /* Return the name of register REGNUM, or the empty string if it is
    an anonymous register.  */
 
@@ -474,8 +529,35 @@ i386_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
     return i386_byte_names[regnum - tdep->al_regnum];
   else if (i386_word_regnum_p (gdbarch, regnum))
     return i386_word_names[regnum - tdep->ax_regnum];
+  else if (i386_tmm_regnum_p (gdbarch, regnum))
+    return i386_tmm_names[regnum - tdep->tmm_regnum];
+  else if (i386_tilecfg_regnum_p (gdbarch, regnum))
+    return i386_tilecfg_names[regnum - tdep->tilecfg_regnum];
 
   internal_error (__FILE__, __LINE__, _("invalid regnum"));
+}
+
+/* AMX tilecfg_reg constructor.  */
+
+tilecfg_reg::tilecfg_reg (uint8_t *raw_tilecfg) : tilecfg_reg ()
+{
+  /* Use default values.  */
+  if (raw_tilecfg == nullptr)
+    return;
+
+  palette = raw_tilecfg[0];
+  start_row = raw_tilecfg[1];
+
+  /* Read TILECFG column and row values via pointers.
+     Columns are represented by 2 bytes and rows are represented
+     by 1 byte.  Column pointer which is *uint8_t needs to be converted
+     to *uint16_t pointer.  */
+  uint16_t *vec_col_pos
+      = reinterpret_cast<uint16_t *> (raw_tilecfg + COLUMN_MEMORY_OFFSET);
+  uint8_t *vec_row_pos = raw_tilecfg + ROW_MEMORY_OFFSET;
+
+  for (int i = 0; i < MAX_NAMES; i++)
+    columns_and_rows[i] = { vec_col_pos[i], vec_row_pos[i] };
 }
 
 /* Convert a dbx register number REG to the appropriate register
@@ -3274,6 +3356,142 @@ i386_mmx_type (struct gdbarch *gdbarch)
   return tdep->i386_mmx_type;
 }
 
+/* Construct vector type for TMM registers.  */
+
+static struct type *
+i386_tmm_type (struct gdbarch *gdbarch)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
+  if (!tdep->i386_tmm_type)
+    {
+      const struct builtin_type *bt = builtin_type (gdbarch);
+
+      uint8_t bytes_per_row = tilecfg_reg::MAX_BYTES_PER_ROW;
+      uint8_t max_rows = tilecfg_reg::MAX_ROWS;
+
+      /* The type we're building is this:  */
+#if 0
+      union __gdb_builtin_type_matrix1024i
+      {
+	int8_t m_int8[max_rows][bytes_per_row];
+	uint8_t m_uint8[max_rows][bytes_per_row];
+	int32_t m_int32[max_rows][bytes_per_row/4];
+	bfloat16_t m_bfloat16[max_rows][bytes_per_row/2];
+	float m_int32[max_rows][bytes_per_row/4];
+      };
+#endif
+
+      struct type *t;
+      t = arch_composite_type (gdbarch, "builtin_type_tile", TYPE_CODE_UNION);
+
+      append_composite_type_field (
+	  t, "m_int8",
+	  init_vector_type (init_vector_type (bt->builtin_int8, bytes_per_row),
+			    max_rows));
+
+      append_composite_type_field (
+	  t, "m_uint8",
+	  init_vector_type (
+	      init_vector_type (bt->builtin_uint8, bytes_per_row), max_rows));
+
+      append_composite_type_field (
+	  t, "m_int32",
+	  init_vector_type (
+	      init_vector_type (bt->builtin_int32, bytes_per_row / 4),
+	      max_rows));
+
+      append_composite_type_field (
+	  t, "m_bf16",
+	  init_vector_type (
+	      init_vector_type (bt->builtin_bfloat16, bytes_per_row / 2),
+	      max_rows));
+
+      append_composite_type_field (
+	  t, "m_fp32",
+	  init_vector_type (
+	      init_vector_type (bt->builtin_float, bytes_per_row / 4),
+	      max_rows));
+
+      t->set_is_vector (true);
+      t->set_name ("builtin_type_tile");
+      tdep->i386_tmm_type = t;
+    }
+
+  return tdep->i386_tmm_type;
+}
+
+/* Construct vector type for TILECFG registers.  */
+
+static struct type *
+i386_tilecfg_type (struct gdbarch *gdbarch)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
+  if (!tdep->i386_tilecfg_type)
+    {
+      const struct builtin_type *bt = builtin_type (gdbarch);
+
+      /* The type we're building is this:  */
+#if 0
+      struct __gdb_builtin_type_tilecfg
+	{
+	  uint8_t palette;
+	  uint8_t start_row;
+	  // Bytes 2-15 reserved
+	  uint16_t tile0.colsb;
+	  uint16_t tile1.colsb;
+	  uint16_t tile2.colsb;
+	  uint16_t tile3.colsb;
+	  uint16_t tile4.colsb;
+	  uint16_t tile5.colsb;
+	  uint16_t tile6.colsb;
+	  uint16_t tile7.colsb;
+	  // Bytes 32-47 reserved
+	  uint8_t tile0.rows;
+	  uint8_t tile1.rows;
+	  uint8_t tile2.rows;
+	  uint8_t tile3.rows;
+	  uint8_t tile4.rows;
+	  uint8_t tile5.rows;
+	  uint8_t tile6.rows;
+	  uint8_t tile7.rows;
+	  // Bytes 56-63 reserved
+	};
+#endif
+
+    struct type *t;
+    t = arch_composite_type (gdbarch, "builtin_type_tilecfg",
+			     TYPE_CODE_STRUCT);
+
+    append_composite_type_field (t, "palette", bt->builtin_uint8);
+    append_composite_type_field (t, "start_row", bt->builtin_uint8);
+    /* Note: GDBs expression evaluation cannot handle naming these
+       tile0.colsb.  */
+    append_composite_type_field (t, "tile0_colsb", bt->builtin_uint16);
+    append_composite_type_field (t, "tile1_colsb", bt->builtin_uint16);
+    append_composite_type_field (t, "tile2_colsb", bt->builtin_uint16);
+    append_composite_type_field (t, "tile3_colsb", bt->builtin_uint16);
+    append_composite_type_field (t, "tile4_colsb", bt->builtin_uint16);
+    append_composite_type_field (t, "tile5_colsb", bt->builtin_uint16);
+    append_composite_type_field (t, "tile6_colsb", bt->builtin_uint16);
+    append_composite_type_field (t, "tile7_colsb", bt->builtin_uint16);
+    append_composite_type_field (t, "tile0_rows", bt->builtin_uint8);
+    append_composite_type_field (t, "tile1_rows", bt->builtin_uint8);
+    append_composite_type_field (t, "tile2_rows", bt->builtin_uint8);
+    append_composite_type_field (t, "tile3_rows", bt->builtin_uint8);
+    append_composite_type_field (t, "tile4_rows", bt->builtin_uint8);
+    append_composite_type_field (t, "tile5_rows", bt->builtin_uint8);
+    append_composite_type_field (t, "tile6_rows", bt->builtin_uint8);
+    append_composite_type_field (t, "tile7_rows", bt->builtin_uint8);
+
+    t->set_name ("builtin_type_tilecfg");
+    tdep->i386_tilecfg_type = t;
+  }
+
+  return tdep->i386_tilecfg_type;
+}
+
 /* Return the GDB type object for the "standard" data type of data in
    register REGNUM.  */
 
@@ -3290,6 +3508,10 @@ i386_pseudo_register_type (struct gdbarch *gdbarch, int regnum)
     return i386_ymm_type (gdbarch);
   else if (i386_zmm_regnum_p (gdbarch, regnum))
     return i386_zmm_type (gdbarch);
+  else if (i386_tmm_regnum_p (gdbarch, regnum))
+    return i386_tmm_type (gdbarch);
+  else if (i386_tilecfg_regnum_p (gdbarch, regnum))
+    return i386_tilecfg_type (gdbarch);
   else
     {
       const struct builtin_type *bt = builtin_type (gdbarch);
@@ -4537,7 +4759,8 @@ i386_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
       ymm_regnum_p, ymmh_regnum_p, ymm_avx512_regnum_p, ymmh_avx512_regnum_p,
       bndr_regnum_p, bnd_regnum_p, zmm_regnum_p, zmmh_regnum_p,
       mpx_ctrl_regnum_p, xmm_avx512_regnum_p,
-      avx512_p, avx_p, sse_p, pkru_regnum_p;
+      avx512_p, avx_p, sse_p, pkru_regnum_p, tilecfg_regnum_p,
+      tmm_regnum_p;
 
   /* Don't include pseudo registers, except for MMX, in any register
      groups.  */
@@ -4564,6 +4787,8 @@ i386_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   ymm_regnum_p = i386_ymm_regnum_p (gdbarch, regnum);
   ymm_avx512_regnum_p = i386_ymm_avx512_regnum_p (gdbarch, regnum);
   zmm_regnum_p = i386_zmm_regnum_p (gdbarch, regnum);
+  tmm_regnum_p = i386_tmm_regnum_p (gdbarch, regnum);
+  tilecfg_regnum_p = i386_tilecfg_regnum_p (gdbarch, regnum);
 
   avx512_p = ((tdep->xcr0 & X86_XSTATE_AVX_AVX512_MASK)
 	      == X86_XSTATE_AVX_AVX512_MASK);
@@ -4577,7 +4802,7 @@ i386_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 	    || (zmm_regnum_p && avx512_p)
 	    || ((ymm_regnum_p || ymm_avx512_regnum_p) && avx_p)
 	    || ((xmm_regnum_p || xmm_avx512_regnum_p) && sse_p)
-	    || mxcsr_regnum_p);
+	    || mxcsr_regnum_p || tmm_regnum_p || tilecfg_regnum_p);
 
   fp_regnum_p = (i386_fp_regnum_p (gdbarch, regnum)
 		 || i386_fpc_regnum_p (gdbarch, regnum));
@@ -4627,7 +4852,9 @@ i386_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 	    && !mpx_ctrl_regnum_p
 	    && !zmm_regnum_p
 	    && !zmmh_regnum_p
-	    && !pkru_regnum_p);
+	    && !pkru_regnum_p
+	    && !tmm_regnum_p
+	    && !tilecfg_regnum_p);
 
   return default_register_reggroup_p (gdbarch, regnum, group);
 }
@@ -8218,7 +8445,7 @@ i386_validate_tdesc_p (struct gdbarch_tdep *tdep,
 
   const struct tdesc_feature *feature_sse, *feature_avx, *feature_mpx,
 			     *feature_avx512, *feature_pkeys, *feature_segments,
-			     *feature_cet;
+			     *feature_cet, *feature_amx;
   int i, num_regs, valid_p;
 
   if (! tdesc_has_registers (tdesc))
@@ -8249,6 +8476,9 @@ i386_validate_tdesc_p (struct gdbarch_tdep *tdep,
 
   /* Try CET.  */
   feature_cet = tdesc_find_feature (tdesc, "org.gnu.gdb.i386.cet");
+
+  /* Try AMX.  */
+  feature_amx = tdesc_find_feature (tdesc, "org.gnu.gdb.i386.amx");
 
   valid_p = 1;
 
@@ -8406,6 +8636,35 @@ i386_validate_tdesc_p (struct gdbarch_tdep *tdep,
       valid_p &= tdesc_numbered_register (feature_ssp, tdesc_data,
 					  tdep->cet_regnum + i,
 					  tdep->cet_register_names[i]);
+    }
+
+  if (feature_amx != nullptr)
+    {
+      tdep->xcr0 |= X86_XSTATE_TILECFG;
+
+      if (tdep->tilecfg_raw_regnum < 0)
+	{
+	  tdep->tilecfg_raw_register_names = i386_tilecfg_raw_names;
+	  tdep->tilecfg_raw_regnum = I386_AMX_TILECFG_RAW_REGNUM;
+	  tdep->num_tilecfg_raw_regs = 1;
+	}
+
+      valid_p &= tdesc_numbered_register (feature_amx, tdesc_data,
+					  tdep->tilecfg_raw_regnum,
+					  tdep->tilecfg_raw_register_names[0]);
+
+      tdep->xcr0 |= X86_XSTATE_TILEDATA;
+
+      if (tdep->tiledata_regnum < 0)
+	{
+	  tdep->tiledata_register_names = i386_tiledata_names;
+	  tdep->tiledata_regnum = I386_AMX_TILEDATA_REGNUM;
+	  tdep->num_tiledata_regs = 1;
+	}
+
+      valid_p &= tdesc_numbered_register (feature_amx, tdesc_data,
+					  tdep->tiledata_regnum,
+					  tdep->tiledata_register_names[0]);
     }
 
   return valid_p;
@@ -8686,6 +8945,16 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdep->cet_regnum = -1;
   tdep->num_cet_regs = 0;
 
+  /* No AMX registers.  */
+  tdep->tilecfg_regnum = -1;
+  tdep->num_tilecfg_regs = 0;
+  tdep->tilecfg_raw_regnum = -1;
+  tdep->num_tilecfg_raw_regs = 0;
+  tdep->tmm_regnum = -1;
+  tdep->num_tmm_regs = 0;
+  tdep->tiledata_regnum = -1;
+  tdep->num_tiledata_regs = 0;
+
   tdesc_arch_data_up tdesc_data = tdesc_data_alloc ();
 
   set_gdbarch_relocate_instruction (gdbarch, i386_relocate_instruction);
@@ -8720,7 +8989,9 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 					 + tdep->num_ymm_regs
 					 + num_bnd_cooked
 					 + tdep->num_ymm_avx512_regs
-					 + tdep->num_zmm_regs));
+					 + tdep->num_zmm_regs
+					 + tdep->num_tmm_regs
+					 + tdep->num_tilecfg_regs));
 
   /* Target description may be changed.  */
   tdesc = tdep->tdesc;
@@ -8771,6 +9042,24 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     }
   else
     tdep->zmm0_regnum = -1;
+
+  if (tdep->num_tmm_regs != 0)
+    {
+      /* Support TMM pseudo-register if it is available.  */
+      tdep->tmm_regnum = mm0_regnum;
+      mm0_regnum += tdep->num_tmm_regs;
+    }
+  else
+    tdep->num_tmm_regs = -1;
+
+  if (tdep->num_tilecfg_regs != 0)
+    {
+      /* Support TMM pseudo-register if it is available.  */
+      tdep->tilecfg_regnum = mm0_regnum;
+      mm0_regnum += tdep->num_tilecfg_regs;
+    }
+  else
+    tdep->num_tmm_regs = -1;
 
   bnd0_regnum = mm0_regnum;
   if (tdep->num_mmx_regs != 0)

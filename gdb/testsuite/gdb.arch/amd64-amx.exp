@@ -1,0 +1,231 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This file tests basic AMX functionality.
+
+if { [skip_amx_tests] } {
+    unsupported "Target does not support AMX."
+    return -1
+}
+
+standard_testfile
+
+if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} debug] } {
+    return -1
+}
+
+if { ![runto_main] } {
+    untested "could not run to main"
+    return -1
+}
+
+proc test_zeroed_tile {reg} {
+    gdb_test "print $reg.m_int8" \
+	"= \\{\\{0 <repeats 64 times>\\} <repeats 16 times>\\}"
+}
+
+set line1 [gdb_get_line_number "BP1"]
+set line2 [gdb_get_line_number "BP2"]
+gdb_breakpoint $line1
+gdb_breakpoint $line2
+
+# Registers should be displayed as zeroed before AMX enablement.
+with_test_prefix "Before AMX is enabled" {
+    gdb_test "print \$tilecfg_raw" "= 0"
+    for {set i 0} {$i < 8} {incr i} {
+	test_zeroed_tile "\$tmm$i"
+    }
+}
+
+
+# First matrix multiplication: matC1 = matA1 x matB1.
+gdb_continue_to_breakpoint "line1" ".*$srcfile:$line1.*"
+
+with_test_prefix "matC1" {
+    gdb_test "print/x \$tilecfg_raw" \
+	"= 0x202020203020{43}80008000800100010000c0{31}1"
+    gdb_test "print \$tilecfg" \
+	[join {"= \\{palette = 1" \
+	    "start_row = 0" \
+	    "tile0_colsb = 12" \
+	    "tile1_colsb = 16" \
+	    "tile2_colsb = 16" \
+	    "tile3_colsb = 8" \
+	    "tile4_colsb = 8" \
+	    "tile5_colsb = 8" \
+	    "tile6_colsb = 0" \
+	    "tile7_colsb = 0" \
+	    "tile0_rows = 2" \
+	    "tile1_rows = 3" \
+	    "tile2_rows = 2" \
+	    "tile3_rows = 2" \
+	    "tile4_rows = 2" \
+	    "tile5_rows = 2" \
+	    "tile6_rows = 0" \
+	    "tile7_rows = 0\\}"} \
+	    ", "]
+
+    gdb_test "print \$tmm0.m_uint8" \
+	[join {"= \\{\\{0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2\\}" \
+	    "\\{1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3\\}\\}"} \
+	    ", "]
+
+    gdb_test "print \$tmm1.m_uint8" \
+	[join {"= \\{\\{0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3\\}" \
+	    "\\{1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4\\}" \
+	    "\\{2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5\\}\\}"} \
+	    ", "]
+
+    gdb_test "print \$tmm2.m_int32" \
+	"= \\{\\{20, 32, 44, 56\\}, \\{32, 56, 80, 104\\}\\}"
+
+    gdb_test "print \$tmm3.m_bf16" \
+	[join {"= \\{\\{0, 0.125, 0.25, 0.375\\}" \
+	    "\\{0.5, 0.625, 0.75, 0.875\\}\\}"} \
+	    ", "]
+
+    gdb_test "print \$tmm4.m_fp32" "= \\{\\{1, 1.125\\}, \\{1.25, 1.375\\}\\}"
+
+    gdb_test "print \$tmm5.m_int8" \
+	[join {"= \\{\\{-1, -1, -1, -1, 1, 1, 1, 1\\}" \
+	    "\\{1, 1, 1, 1, -5, -5, -5, -5\\}\\}"} \
+	    ", "]
+
+    for {set i 6} {$i < 8} {incr i} {
+	test_zeroed_tile "\$tmm$i"
+    }
+}
+
+
+# Second matrix multiplication: matC2 = matA2 x matB2.
+gdb_continue_to_breakpoint "line2" ".*$srcfile:$line2.*"
+
+with_test_prefix "matC2" {
+    gdb_test "print/x \$tilecfg_raw" "= 0x102010{55}c000c00080{31}1"
+    gdb_test "print \$tilecfg" \
+	[join {"= \\{palette = 1" \
+	    "start_row = 0" \
+	    "tile0_colsb = 8" \
+	    "tile1_colsb = 12" \
+	    "tile2_colsb = 12" \
+	    "tile3_colsb = 0" \
+	    "tile4_colsb = 0" \
+	    "tile5_colsb = 0" \
+	    "tile6_colsb = 0" \
+	    "tile7_colsb = 0" \
+	    "tile0_rows = 1" \
+	    "tile1_rows = 2" \
+	    "tile2_rows = 1" \
+	    "tile3_rows = 0" \
+	    "tile4_rows = 0" \
+	    "tile5_rows = 0" \
+	    "tile6_rows = 0" \
+	    "tile7_rows = 0\\}"} \
+	    ", "]
+
+    gdb_test "print \$tmm0.m_int8" "= \\{\\{5, 5, 5, 5, 6, 6, 6, 6\\}\\}"
+
+    gdb_test "print \$tmm1.m_int8" \
+	[join {"= \\{\\{0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2\\}" \
+	    "\\{1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3\\}\\}"} \
+	    ", "]
+
+    gdb_test "print \$tmm2.m_int32" "= \\{\\{24, 68, 112\\}\\}"
+
+    for {set i 3} {$i < 8} {incr i} {
+	test_zeroed_tile "\$tmm$i"
+    }
+}
+
+
+# Test setting tiles.
+with_test_prefix "setting tiles" {
+    gdb_test_no_output "set \$tmm0.m_uint8\[0\]\[0\] = 1"
+    gdb_test "print \$tmm0.m_uint8" "= \\{\\{1, 5, 5, 5, 6, 6, 6, 6\\}\\}"
+
+    gdb_test_no_output "set \$tmm2.m_int32\[0\] = {1, 1, 1}"
+    gdb_test "print \$tmm2.m_int32" "= \\{\\{1, 1, 1\\}\\}"
+
+    gdb_test_no_output "set \$tmm0.m_bf16\[0\]\[0\] = 0.5"
+    gdb_test "print \$tmm0.m_bf16\[0\]\[0\]" "= 0.5"
+
+    gdb_test_no_output "set \$tmm0.m_fp32\[0\]\[0\] = 0.75"
+    gdb_test "print \$tmm0.m_fp32\[0\]\[0\]" "= 0.75"
+
+    gdb_test_no_output "set \$tmm0.m_int8\[0\]\[0\] = -1"
+    gdb_test "print \$tmm0.m_int8\[0\]\[0\]" "= -1"
+}
+
+set line3 [gdb_get_line_number "BP3"]
+gdb_breakpoint $line3
+gdb_continue_to_breakpoint "line3" ".*$srcfile:$line3.*"
+
+# Tilecfg modifications can lead to exceptions.  Hence, we wait with
+# testing it until after we are done with AMX computations.
+with_test_prefix "set tilecfg raw" {
+    gdb_test_no_output "set \$tilecfg_raw = 0x1"
+    gdb_test "print/x \$tilecfg_raw" "= 0x1"
+    gdb_test "print \$tilecfg" \
+	[join {"= \\{palette = 1" \
+	    "start_row = 0" \
+	    "tile0_colsb = 0" \
+	    "tile1_colsb = 0" \
+	    "tile2_colsb = 0" \
+	    "tile3_colsb = 0" \
+	    "tile4_colsb = 0" \
+	    "tile5_colsb = 0" \
+	    "tile6_colsb = 0" \
+	    "tile7_colsb = 0" \
+	    "tile0_rows = 0" \
+	    "tile1_rows = 0" \
+	    "tile2_rows = 0" \
+	    "tile3_rows = 0" \
+	    "tile4_rows = 0" \
+	    "tile5_rows = 0" \
+	    "tile6_rows = 0" \
+	    "tile7_rows = 0\\}"} \
+	    ", "]
+}
+
+with_test_prefix "set tilecfg" {
+    gdb_test_no_output "set \$tilecfg.palette = 0x2"
+    gdb_test_no_output "set \$tilecfg.start_row = 0x3"
+    gdb_test_no_output "set \$tilecfg.tile0_rows = 0x4"
+
+    gdb_test "print/x \$tilecfg_raw" "= 0x40{93}302"
+    gdb_test "print \$tilecfg" \
+	[join {"= \\{palette = 2" \
+	    "start_row = 3" \
+	    "tile0_colsb = 0" \
+	    "tile1_colsb = 0" \
+	    "tile2_colsb = 0" \
+	    "tile3_colsb = 0" \
+	    "tile4_colsb = 0" \
+	    "tile5_colsb = 0" \
+	    "tile6_colsb = 0" \
+	    "tile7_colsb = 0" \
+	    "tile0_rows = 4" \
+	    "tile1_rows = 0" \
+	    "tile2_rows = 0" \
+	    "tile3_rows = 0" \
+	    "tile4_rows = 0" \
+	    "tile5_rows = 0" \
+	    "tile6_rows = 0" \
+	    "tile7_rows = 0\\}"} \
+	    ", "]
+}
+
+gdb_test "continue" \
+    ".*\\\[Inferior $decimal \\\(process $decimal\\\) exited normally\\]"

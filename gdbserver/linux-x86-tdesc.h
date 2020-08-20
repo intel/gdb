@@ -33,7 +33,8 @@ enum x86_linux_tdesc {
   X86_TDESC_AVX_MPX = 4,
   X86_TDESC_AVX_AVX512 = 5,
   X86_TDESC_AVX_MPX_AVX512_PKU = 6,
-  X86_TDESC_LAST = 7,
+  X86_TDESC_AVX_MPX_AVX512_PKU_AMX = 7,
+  X86_TDESC_LAST = 8,
 };
 
 #if defined __i386__ || !defined IN_PROCESS_AGENT

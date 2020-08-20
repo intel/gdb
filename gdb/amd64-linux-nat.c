@@ -87,6 +87,8 @@ static int amd64_linux_gregset32_reg_offset[] =
   -1, -1, -1, -1, -1, -1, -1, -1, /* zmm0 ... zmm7 (AVX512)  */
   -1,				  /* PKEYS register PKRU  */
   -1, -1,			  /* CET user mode registers CET_U, PL3_SSP.  */
+  -1,				  /* TILECFG register (AMX).  */
+  -1,	 			  /* TILEDATA registers tmm0 ... tmm7 (AMX).  */
   ORIG_RAX * 8			  /* "orig_eax"  */
 };
 

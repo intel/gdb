@@ -137,6 +137,14 @@ struct i387_xsave {
   /* Space for 1 32-bit PKRU register.  The HW XSTATE size for this feature is
      actually 64 bits, but WRPKRU/RDPKRU instructions ignore upper 32 bits.  */
   unsigned char pkru_space[8];
+
+  unsigned char reserved6[56];
+
+  /* Space for 1 TILECFG register with size of 64 bytes.  */
+  unsigned char tilecfg_space[64];
+
+  /* Space for 1 TILEDATA register, with size of 8192 bytes.  */
+  unsigned char tiledata_space[8192];
 };
 
 void
@@ -257,7 +265,7 @@ i387_cache_to_xsave (struct regcache *regcache, void *buf)
   unsigned long val, val2;
   unsigned long long xstate_bv = 0;
   unsigned long long clear_bv = 0;
-  char raw[64];
+  char raw[8192];
   char *p;
 
   /* Amd64 has 16 xmm regs; I386 has 8 xmm regs.  */
@@ -332,6 +340,12 @@ i387_cache_to_xsave (struct regcache *regcache, void *buf)
       if ((clear_bv & X86_XSTATE_PKRU))
 	for (i = 0; i < num_pkeys_registers; i++)
 	  memset (((char *) &fp->pkru_space[0]) + i * 4, 0, 4);
+
+      if (amd64 && (clear_bv & X86_XSTATE_AMX) != 0)
+	{
+	  memset (((char *) &fp->tilecfg_space[0]), 0, 64);
+	  memset (((char *) &fp->tiledata_space[0]), 0, 8192);
+	}
     }
 
   /* Check if any x87 registers are changed.  */
@@ -524,6 +538,30 @@ i387_cache_to_xsave (struct regcache *regcache, void *buf)
 	      xstate_bv |= X86_XSTATE_PKRU;
 	      memcpy (p, raw, 4);
 	    }
+	}
+    }
+
+  /* Check if TILECFG register is changed (only for amd64).  */
+  if (amd64 && ((x86_xcr0 & X86_XSTATE_TILECFG) != 0))
+    {
+      collect_register_by_name (regcache, "tilecfg_raw", raw);
+      p = (char *) &fp->tilecfg_space;
+      if (memcmp (raw, p, 64) != 0)
+	{
+	  xstate_bv |= X86_XSTATE_TILECFG;
+	  memcpy (p, raw, 64);
+	}
+    }
+
+  /* Check if TILEDATA register is changed (only for amd64).  */
+  if (amd64 && ((x86_xcr0 & X86_XSTATE_TILEDATA) != 0))
+    {
+      collect_register_by_name (regcache, "tiledata", raw);
+      p = (char *) &fp->tiledata_space;
+      if (memcmp (raw, p, 8192) != 0)
+	{
+	  xstate_bv |= X86_XSTATE_TILEDATA;
+	  memcpy (p, raw, 8192);
 	}
     }
 
@@ -908,6 +946,30 @@ i387_xsave_to_cache (struct regcache *regcache, const void *buf)
 	  p = (gdb_byte *) &fp->pkru_space[0];
 	  for (i = 0; i < num_pkeys_registers; i++)
 	    supply_register (regcache, i + pkru_regnum, p + i * 4);
+	}
+    }
+
+  if (amd64 && (x86_xcr0 & X86_XSTATE_AMX) != 0)
+    {
+      /* When tilecfg is rewritten, the tiles are cleared.  Therefore,
+	 we need to check tilecfg and tiledata separately here.  */
+      int tilecfg_regnum = find_regno (regcache->tdesc, "tilecfg_raw");
+      int tiledata_regnum = find_regno (regcache->tdesc, "tiledata");
+
+      if ((clear_bv & X86_XSTATE_TILECFG) != 0)
+	supply_register_zeroed (regcache, tilecfg_regnum);
+      else
+	{
+	  p = (gdb_byte *) &fp->tilecfg_space[0];
+	  supply_register (regcache, tilecfg_regnum, p);
+	}
+
+      if ((clear_bv & X86_XSTATE_TILEDATA) != 0)
+	supply_register_zeroed (regcache, tiledata_regnum);
+      else
+	{
+	  p = (gdb_byte *) &fp->tiledata_space[0];
+	  supply_register (regcache, tiledata_regnum, p);
 	}
     }
 

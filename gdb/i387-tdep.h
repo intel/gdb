@@ -45,6 +45,10 @@ struct ui_file;
 #define I387_NUM_MPX_CTRL_REGS 2
 #define I387_NUM_K_REGS 8
 #define I387_NUM_PKEYS_REGS 1
+#define I387_NUM_TILECFG_REGS 1
+#define I387_NUM_TILECFG_RAW_REGS 1
+#define I387_NUM_TILEDATA_REGS 1
+#define I387_NUM_TMM_REGS 8
 
 #define I387_PKRU_REGNUM(tdep) ((tdep)->pkru_regnum)
 #define I387_K0_REGNUM(tdep) ((tdep)->k0_regnum)
@@ -52,6 +56,10 @@ struct ui_file;
 #define I387_ZMM0H_REGNUM(tdep) ((tdep)->zmm0h_regnum)
 #define I387_NUM_YMM_AVX512_REGS(tdep) ((tdep)->num_ymm_avx512_regs)
 #define I387_YMM16H_REGNUM(tdep) ((tdep)->ymm16h_regnum)
+#define I387_TILECFG_REGNUM(tdep) ((tdep)->tilecfg_regnum)
+#define I387_TILECFG_RAW_REGNUM(tdep) ((tdep)->tilecfg_raw_regnum)
+#define I387_TMM_REGNUM(tdep) ((tdep)->tmm_regnum)
+#define I387_TILEDATA_REGNUM(tdep) ((tdep)->tiledata_regnum)
 
 #define I387_FCTRL_REGNUM(tdep) (I387_ST0_REGNUM (tdep) + 8)
 #define I387_FSTAT_REGNUM(tdep) (I387_FCTRL_REGNUM (tdep) + 1)

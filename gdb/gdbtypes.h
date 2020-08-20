@@ -808,6 +808,7 @@ struct main_type
   unsigned int m_flag_fixed_instance : 1;
   unsigned int m_flag_objfile_owned : 1;
   unsigned int m_flag_endianity_not_default : 1;
+  unsigned int m_flag_dyn_register : 1;
 
   /* * True if this type was declared with "class" rather than
      "struct".  */
@@ -1220,6 +1221,17 @@ struct type
     this->main_type->m_flag_endianity_not_default = endianity_is_not_default;
   }
 
+  /* Identify a type of a dynamic registers.  These shouldn't be cached.  */
+
+  bool is_dyn_register () const
+  {
+    return this->main_type->m_flag_dyn_register;
+  }
+
+  void set_is_dyn_register (bool is_dyn_register)
+  {
+    this->main_type->m_flag_dyn_register = is_dyn_register;
+  }
 
   /* True if this type was declared using the "class" keyword.  This is
      only valid for C++ structure and enum types.  If false, a structure

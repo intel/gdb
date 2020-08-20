@@ -156,6 +156,14 @@ static const char * const amd64_pkeys_names[] = {
     "pkru"
 };
 
+static const char *amd64_tilecfg_raw_names[] = {
+    "tilecfg_raw"
+};
+
+static const char *amd64_tiledata_names[] = {
+    "tiledata"
+};
+
 /* DWARF Register Number Mapping as defined in the System V psABI,
    section 3.6.  */
 
@@ -346,6 +354,19 @@ static const char * const amd64_dword_names[] =
   "eip"
 };
 
+/* Register names for tmm pseudo-registers.  */
+
+static const char *amd64_tmm_names[] = {
+    "tmm0", "tmm1", "tmm2", "tmm3",
+    "tmm4", "tmm5", "tmm6", "tmm7"
+};
+
+/* Register name for tilecfg pseudo-register.  */
+
+static const char *amd64_tilecfg_names[] = {
+    "tilecfg"
+};
+
 /* Return the name of register REGNUM.  */
 
 static const char *
@@ -354,6 +375,10 @@ amd64_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
   i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
   if (i386_byte_regnum_p (gdbarch, regnum))
     return amd64_byte_names[regnum - tdep->al_regnum];
+  else if (i386_tilecfg_regnum_p (gdbarch, regnum))
+    return amd64_tilecfg_names[regnum - tdep->tilecfg_regnum];
+  else if (i386_tmm_regnum_p (gdbarch, regnum))
+    return amd64_tmm_names[regnum - tdep->tmm_regnum];
   else if (i386_zmm_regnum_p (gdbarch, regnum))
     return amd64_zmm_names[regnum - tdep->zmm0_regnum];
   else if (i386_ymm_regnum_p (gdbarch, regnum))
@@ -368,8 +393,71 @@ amd64_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
     return i386_pseudo_register_name (gdbarch, regnum);
 }
 
+/* A helper function to re-size AMX pseudo registers during reads.  Copies
+   the contents from RAW_BUF to BUF.  If TILECFG is nullptr, this will
+   assume the registers to be configured to their maximum dimension.  */
+
+static void
+amd64_tmm_resize_read (const tilecfg_reg *tilecfg, const gdb_byte *raw_buf,
+		       gdb_byte *buf, const int tmmnum)
+{
+  uint16_t columns = tilecfg->MAX_BYTES_PER_ROW;
+  uint8_t rows = tilecfg->MAX_ROWS;
+
+  if (tilecfg != nullptr)
+    {
+      if (tilecfg->bytes_per_row (tmmnum) != 0)
+	columns = tilecfg->bytes_per_row (tmmnum);
+      if (tilecfg->rows (tmmnum) != 0)
+	rows = tilecfg->rows (tmmnum);
+    }
+
+  /* Copy each row from raw_buf into buf.  The rows are not consecutive
+     but they are on MAX_BYTES_PER_ROW * iRow position.  */
+  const gdb_byte *raw_buf_offset
+    = raw_buf + tmmnum * tilecfg->MAX_BYTES_PER_TILE;
+  for (uint8_t iRow = 0; iRow < rows; ++iRow)
+    {
+      memcpy (buf + columns * iRow,
+	      raw_buf_offset + tilecfg->MAX_BYTES_PER_ROW * iRow,
+	      columns);
+    }
+}
+
+/* A helper function to re-size AMX pseudo registers during writes.  Copies
+   the contents from BUF to RAW_BUF.  */
+
+static void
+amd64_tmm_resize_write (const tilecfg_reg *tilecfg, gdb_byte *raw_buf,
+			const gdb_byte *buf, const int tmmnum)
+{
+  uint16_t columns = tilecfg->MAX_BYTES_PER_ROW;
+  uint8_t rows = tilecfg->MAX_ROWS;
+
+  if (tilecfg != nullptr)
+    {
+      if (tilecfg->bytes_per_row (tmmnum) != 0)
+	columns = tilecfg->bytes_per_row (tmmnum);
+      if (tilecfg->rows (tmmnum) != 0)
+	rows = tilecfg->rows (tmmnum);
+    }
+
+  /* Copy each row from buf into raw_buf.  BUF represents a tile as the user
+     would see it in the pseudo register type.  RAW_BUF represents the whole
+     tiledata section.  We therefore need to find the tile's position in
+     tiledata and find the right rows from there.  */
+  gdb_byte *raw_buf_offset = raw_buf + tmmnum * tilecfg->MAX_BYTES_PER_TILE;
+  for (uint8_t iRow = 0; iRow < rows; ++iRow)
+    {
+      memcpy (raw_buf_offset + tilecfg->MAX_BYTES_PER_ROW * iRow,
+	      buf + columns * iRow,
+	      columns);
+    }
+}
+
 static value *
-amd64_pseudo_register_read_value (gdbarch *gdbarch, const frame_info_ptr &next_frame,
+amd64_pseudo_register_read_value (gdbarch *gdbarch,
+				  const frame_info_ptr &next_frame,
 				  int regnum)
 {
   i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
@@ -394,6 +482,41 @@ amd64_pseudo_register_read_value (gdbarch *gdbarch, const frame_info_ptr &next_f
       int gpnum = regnum - tdep->eax_regnum;
 
       return pseudo_from_raw_part (next_frame, regnum, gpnum, 0);
+    }
+  else if (i386_tilecfg_regnum_p (gdbarch, regnum))
+    {
+      /* Read tilecfg.  */
+      value *pseudo_reg_val
+	= value::allocate_register (next_frame, regnum);
+      value *raw_reg_val = value_of_register (tdep->tilecfg_raw_regnum,
+					      next_frame);
+      /* Copy palette and start_row.  See tilecfg_type ().  */
+      raw_reg_val->contents_copy (pseudo_reg_val,  0,  0, 2 * 1);
+      /* Copy all colsb.  */
+      raw_reg_val->contents_copy (pseudo_reg_val,  2, 16, 2 * 8);
+      /* Copy all rows.  */
+      raw_reg_val->contents_copy (pseudo_reg_val, 18, 48, 1 * 8);
+
+      return pseudo_reg_val;
+    }
+  else if (i386_tmm_regnum_p (gdbarch, regnum))
+    {
+      value *pseudo_reg_val
+	= value::allocate_register (next_frame, regnum);
+      /* Read tilecfg.  */
+      value *tilecfg_raw_val = value_of_register (tdep->tilecfg_raw_regnum,
+						  next_frame);
+      tilecfg_reg tilecfg (tilecfg_raw_val->contents_raw ().data ());
+
+      /* Read tmm from tiledata.  */
+      value *tiledata_val = value_of_register (tdep->tiledata_regnum,
+					       next_frame);
+      const gdb_byte *raw_buf = tiledata_val->contents_raw ().data ();
+      gdb_byte *buf = pseudo_reg_val->contents_raw ().data ();
+      amd64_tmm_resize_read (&tilecfg, raw_buf, buf,
+			     regnum - tdep->tmm_regnum);
+
+      return pseudo_reg_val;
     }
   else
     return i386_pseudo_register_read_value (gdbarch, next_frame, regnum);
@@ -421,6 +544,39 @@ amd64_pseudo_register_write (gdbarch *gdbarch, const frame_info_ptr &next_frame,
     {
       int gpnum = regnum - tdep->eax_regnum;
       pseudo_to_raw_part (next_frame, buf, gpnum, 0);
+    }
+  else if (i386_tilecfg_regnum_p (gdbarch, regnum))
+    {
+      const int raw_regnum = tdep->tilecfg_raw_regnum;
+      const size_t raw_size = register_size (gdbarch, raw_regnum);
+      gdb_byte raw_buf[raw_size] = { 0 };
+      /* Copy palette and start_row.  See tilecfg_type ().  */
+      memcpy (raw_buf, buf.data (), 2 * 1);
+      /* Copy all colsb.  */
+      memcpy (raw_buf + 16, buf.data () + 2, 2 * 8);
+      /* Copy all rows.  */
+      memcpy (raw_buf + 48, buf.data () + 18, 1 * 8);
+
+      put_frame_register_bytes (next_frame, raw_regnum, 0,
+				gdb::make_array_view (raw_buf, raw_size));
+    }
+  else if (i386_tmm_regnum_p (gdbarch, regnum))
+    {
+      /* Read tilecfg.  */
+      value *tilecfg_raw_val = value_of_register (tdep->tilecfg_raw_regnum,
+						  next_frame);
+      tilecfg_reg tilecfg (tilecfg_raw_val->contents_raw ().data ());
+
+      /* Copy buf back into tiledata.  */
+      const int raw_regnum = tdep->tiledata_regnum;
+      const size_t raw_size = register_size (gdbarch, raw_regnum);
+      value *tiledata_val = value_of_register (raw_regnum, next_frame);
+      gdb_byte *raw_buf = tiledata_val->contents_raw ().data ();
+
+      amd64_tmm_resize_write (&tilecfg, raw_buf, buf.data (),
+			      regnum - tdep->tmm_regnum);
+      put_frame_register_bytes (next_frame, raw_regnum, 0,
+				gdb::make_array_view (raw_buf, raw_size));
     }
   else
     i386_pseudo_register_write (gdbarch, next_frame, regnum, buf);
@@ -3215,6 +3371,23 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
       tdep->num_pkeys_regs = 1;
     }
 
+  if (tdesc_find_feature (tdesc, "org.gnu.gdb.i386.amx") != nullptr)
+    {
+      tdep->tilecfg_raw_register_names = amd64_tilecfg_raw_names;
+      tdep->tilecfg_raw_regnum = AMD64_AMX_TILECFG_RAW_REGNUM;
+      tdep->num_tilecfg_raw_regs = 1;
+
+      tdep->tilecfg_register_names = amd64_tilecfg_names;
+      tdep->num_tilecfg_regs = 1;
+
+      tdep->tiledata_register_names = amd64_tiledata_names;
+      tdep->tiledata_regnum = AMD64_AMX_TILEDATA_REGNUM;
+      tdep->num_tiledata_regs = 1;
+
+      tdep->tmm_register_names = amd64_tmm_names;
+      tdep->num_tmm_regs = 8;
+    }
+
   tdep->num_byte_regs = 20;
   tdep->num_word_regs = 16;
   tdep->num_dword_regs = 16;
@@ -3377,13 +3550,14 @@ const struct target_desc *
 amd64_target_description (uint64_t xcr0, bool segments)
 {
   static target_desc *amd64_tdescs \
-    [2/*AVX*/][2/*MPX*/][2/*AVX512*/][2/*PKRU*/][2/*segments*/] = {};
+    [2/*AVX*/][2/*MPX*/][2/*AVX512*/][2/*PKRU*/][2/*AMX*/][2/*segments*/] = {};
   target_desc **tdesc;
 
   tdesc = &amd64_tdescs[(xcr0 & X86_XSTATE_AVX) ? 1 : 0]
     [(xcr0 & X86_XSTATE_MPX) ? 1 : 0]
     [(xcr0 & X86_XSTATE_AVX512) ? 1 : 0]
     [(xcr0 & X86_XSTATE_PKRU) ? 1 : 0]
+    [(xcr0 & X86_XSTATE_AMX) ? 1 : 0]
     [segments ? 1 : 0];
 
   if (*tdesc == NULL)

@@ -155,6 +155,12 @@ static const char *amd64_pkeys_names[] = {
     "pkru"
 };
 
+static const char *amd64_amx_names[] = {
+    "tilecfg",
+    "tmm0", "tmm1", "tmm2", "tmm3",
+    "tmm4", "tmm5", "tmm6", "tmm7"
+};
+
 /* DWARF Register Number Mapping as defined in the System V psABI,
    section 3.6.  */
 
@@ -333,6 +339,8 @@ amd64_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   if (i386_byte_regnum_p (gdbarch, regnum))
     return amd64_byte_names[regnum - tdep->al_regnum];
+  else if (i386_amx_regnum_p (gdbarch, regnum))
+    return amd64_amx_names[regnum - tdep->amx_regnum];
   else if (i386_zmm_regnum_p (gdbarch, regnum))
     return amd64_zmm_names[regnum - tdep->zmm0_regnum];
   else if (i386_ymm_regnum_p (gdbarch, regnum))
@@ -3183,6 +3191,13 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
       tdep->num_pkeys_regs = 1;
     }
 
+  if (tdesc_find_feature (tdesc, "org.gnu.gdb.i386.amx") != NULL)
+    {
+      tdep->amx_register_names = amd64_amx_names;
+      tdep->amx_regnum = AMD64_AMX_TILECFG_REGNUM;
+      tdep->num_amx_regs = 9;
+    }
+
   if (tdesc_find_feature (tdesc, "org.gnu.gdb.i386.cet") != NULL)
     {
       tdep->cet_register_names = x86_cet_names;
@@ -3347,13 +3362,14 @@ const struct target_desc *
 amd64_target_description (uint64_t xcr0, bool segments)
 {
   static target_desc *amd64_tdescs \
-    [2/*AVX*/][2/*MPX*/][2/*AVX512*/][2/*PKRU*/][2/*segments*/] = {};
+    [2/*AVX*/][2/*MPX*/][2/*AVX512*/][2/*PKRU*/][2/*AMX*/][2/*segments*/] = {};
   target_desc **tdesc;
 
   tdesc = &amd64_tdescs[(xcr0 & X86_XSTATE_AVX) ? 1 : 0]
     [(xcr0 & X86_XSTATE_MPX) ? 1 : 0]
     [(xcr0 & X86_XSTATE_AVX512) ? 1 : 0]
     [(xcr0 & X86_XSTATE_PKRU) ? 1 : 0]
+    [(xcr0 & X86_XSTATE_AMX) ? 1 : 0]
     [segments ? 1 : 0];
 
   if (*tdesc == NULL)

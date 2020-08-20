@@ -39,16 +39,18 @@ struct x86_extended_feature
 x86_extended_feature get_x86_extended_feature (unsigned int feature);
 
 /* The extended state feature IDs in the state component bitmap.  */
-#define X86_XSTATE_X87_ID     0
-#define X86_XSTATE_SSE_ID     1
-#define X86_XSTATE_AVX_ID     2
-#define X86_XSTATE_BNDREGS_ID 3
-#define X86_XSTATE_BNDCFG_ID  4
-#define X86_XSTATE_K_ID       5
-#define X86_XSTATE_ZMM_H_ID   6
-#define X86_XSTATE_ZMM_ID     7
-#define X86_XSTATE_PT_ID      8
-#define X86_XSTATE_PKRU_ID    9
+#define X86_XSTATE_X87_ID		0
+#define X86_XSTATE_SSE_ID		1
+#define X86_XSTATE_AVX_ID		2
+#define X86_XSTATE_BNDREGS_ID		3
+#define X86_XSTATE_BNDCFG_ID		4
+#define X86_XSTATE_K_ID			5
+#define X86_XSTATE_ZMM_H_ID		6
+#define X86_XSTATE_ZMM_ID		7
+#define X86_XSTATE_PT_ID		8
+#define X86_XSTATE_PKRU_ID		9
+#define X86_XSTATE_XTILECFG_ID		17
+#define X86_XSTATE_XTILEDATA_ID		18
 
 /* The extended state feature bits.  */
 #define X86_XSTATE_X87		(1ULL << X86_XSTATE_X87_ID)
@@ -67,17 +69,24 @@ x86_extended_feature get_x86_extended_feature (unsigned int feature);
 
 #define X86_XSTATE_PKRU		(1ULL << X86_XSTATE_PKRU_ID)
 
+/* AMX adds two feature bits.  Both must be enabled.  */
+#define X86_XSTATE_XTILECFG	(1ULL << X86_XSTATE_XTILECFG_ID)
+#define X86_XSTATE_XTILEDATA	(1ULL << X86_XSTATE_XTILEDATA_ID)
+#define X86_XSTATE_AMX		(X86_XSTATE_XTILECFG | X86_XSTATE_XTILEDATA)
+
 /* Supported mask and size of the extended state.  */
 #define X86_XSTATE_X87_MASK	X86_XSTATE_X87
 #define X86_XSTATE_SSE_MASK	(X86_XSTATE_X87 | X86_XSTATE_SSE)
 #define X86_XSTATE_AVX_MASK	(X86_XSTATE_SSE_MASK | X86_XSTATE_AVX)
 #define X86_XSTATE_MPX_MASK	(X86_XSTATE_SSE_MASK | X86_XSTATE_MPX)
+#define X86_XSTATE_AMX_MASK	X86_XSTATE_AMX
 #define X86_XSTATE_AVX_MPX_MASK	(X86_XSTATE_AVX_MASK | X86_XSTATE_MPX)
 #define X86_XSTATE_AVX_AVX512_MASK	(X86_XSTATE_AVX_MASK | X86_XSTATE_AVX512)
-#define X86_XSTATE_AVX_MPX_AVX512_PKU_MASK 	(X86_XSTATE_AVX_MPX_MASK\
-					| X86_XSTATE_AVX512 | X86_XSTATE_PKRU)
+#define X86_XSTATE_AVX_MPX_AVX512_PKU_AMX_MASK 	(X86_XSTATE_AVX_MPX_MASK\
+					| X86_XSTATE_AVX512 | X86_XSTATE_PKRU\
+					| X86_XSTATE_AMX_MASK)
 
-#define X86_XSTATE_ALL_MASK		(X86_XSTATE_AVX_MPX_AVX512_PKU_MASK)
+#define X86_XSTATE_ALL_MASK		(X86_XSTATE_AVX_MPX_AVX512_PKU_AMX_MASK)
 
 #define X86_XSTATE_SSE_SIZE	576
 
@@ -86,7 +95,7 @@ x86_extended_feature get_x86_extended_feature (unsigned int feature);
 #define HAS_AVX(XCR0) (((XCR0) & X86_XSTATE_AVX) != 0)
 #define HAS_AVX512(XCR0) (((XCR0) & X86_XSTATE_AVX512) != 0)
 #define HAS_PKRU(XCR0) (((XCR0) & X86_XSTATE_PKRU) != 0)
-
+#define HAS_AMX(XCR0) (((XCR0) & X86_XSTATE_AMX) != 0)
 
 /* Initial value for fctrl register, as defined in the X86 manual, and
    confirmed in the (Linux) kernel source.  When the x87 floating point

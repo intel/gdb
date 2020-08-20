@@ -1,0 +1,54 @@
+# Copyright 2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This file tests basic AMX functionality.
+
+
+if { [skip_amx_tests] } {
+    unsupported "Target does not support AMX. Skipping AMX tests.  "
+    return -1
+}
+
+standard_testfile
+
+if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
+     debug] } {
+    return -1
+}
+
+if { ![runto_main] } {
+    untested "could not run to main"
+    return -1
+}
+
+gdb_test "break [gdb_get_line_number "breakpoint here"]" \
+    "Breakpoint .* at .*amd64-amx.c.*"
+gdb_continue_to_breakpoint "continue to first breakpoint in main"
+
+gdb_test "print/x \$tilecfg" \
+    "= .*0x20302.*100010000c.*1" \
+    "check contents of tilecfg"
+
+gdb_test "print \$tmm0.m_int8" \
+    "= \\{\\{0, 0, 0, 0\\}, .*, \\{3, 3, 3, 3\\}.*" \
+    "check int8 contents of tmm0"
+
+gdb_test "print \$tmm1.m_int8" \
+    "= \\{\\{0, 0, 0, 0\\}, .*, \\{5, 5, 5, 5\\}.*" \
+    "check int8 contents of tmm1"
+
+gdb_test "print \$tmm2.m_int32" \
+    "= \\{\\{20, 32, 44, 56,.*, \\{32, 56, 80, 104,.*<repeats 14 times>\\}" \
+    "check int32 contents of tmm2"

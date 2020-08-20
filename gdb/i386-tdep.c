@@ -139,6 +139,12 @@ static const char *i386_mmx_names[] =
   "mm4", "mm5", "mm6", "mm7"
 };
 
+static const char *i386_amx_names[] = {
+  "tilecfg",
+  "tmm0", "tmm1", "tmm2", "tmm3",
+  "tmm4", "tmm5", "tmm6", "tmm7"
+};
+
 /* Register names for byte pseudo-registers.  */
 
 static const char *i386_byte_names[] =
@@ -431,6 +437,21 @@ i386_pkru_regnum_p (struct gdbarch *gdbarch, int regnum)
 
   regnum -= pkru_regnum;
   return regnum >= 0 && regnum < I387_NUM_PKEYS_REGS;
+}
+
+/* AMX register?  */
+
+bool
+i386_amx_regnum_p (struct gdbarch *gdbarch, int regnum)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int amx_regnum = tdep->amx_regnum;
+
+  if (amx_regnum < 0)
+    return false;
+
+  regnum -= amx_regnum;
+  return regnum >= 0 && regnum < I387_NUM_AMX_REGS;
 }
 
 /* Return the name of register REGNUM, or the empty string if it is
@@ -3603,6 +3624,12 @@ i386_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 	  regcache->raw_write (I387_XMM16_REGNUM (tdep) + regnum, buf);
 	  /* ... Write upper 128bits.  */
 	  regcache->raw_write (tdep->ymm16h_regnum + regnum, buf + 16);
+	}
+      else if (i386_amx_regnum_p (gdbarch, regnum))
+	{
+	  regnum -= tdep->amx_regnum;
+
+	  regcache->raw_write (I387_AMX_REGNUM (tdep) + regnum, buf);
 	}
       else if (i386_word_regnum_p (gdbarch, regnum))
 	{
@@ -8259,7 +8286,7 @@ i386_validate_tdesc_p (struct gdbarch_tdep *tdep,
 
   const struct tdesc_feature *feature_sse, *feature_avx, *feature_mpx,
 			     *feature_avx512, *feature_pkeys, *feature_segments,
-			     *feature_cet;
+			     *feature_cet, *feature_amx;
   int i, num_regs, valid_p;
 
   if (! tdesc_has_registers (tdesc))
@@ -8290,6 +8317,9 @@ i386_validate_tdesc_p (struct gdbarch_tdep *tdep,
 
   /* Try CET.  */
   feature_cet = tdesc_find_feature (tdesc, "org.gnu.gdb.i386.cet");
+
+  /* Try AMX.  */
+  feature_amx = tdesc_find_feature (tdesc, "org.gnu.gdb.i386.amx");
 
   valid_p = 1;
 
@@ -8436,6 +8466,22 @@ i386_validate_tdesc_p (struct gdbarch_tdep *tdep,
 	valid_p &= tdesc_numbered_register (feature_cet, tdesc_data,
 					    tdep->cet_regnum + i,
 					    tdep->cet_register_names[i]);
+    }
+
+  if (feature_amx != nullptr)
+    {
+      tdep->xcr0 |= X86_XSTATE_AMX;
+      if (tdep->amx_regnum < 0)
+	{
+	  tdep->amx_register_names = i386_amx_names;
+	  tdep->amx_regnum = I386_AMX_TILECFG_REGNUM;
+	  tdep->num_amx_regs = 9;
+	}
+
+      for (i = 0; i < tdep->num_amx_regs; i++)
+	valid_p &= tdesc_numbered_register (feature_amx, tdesc_data,
+					    tdep->amx_regnum + i,
+					    tdep->amx_register_names[i]);
     }
 
   return valid_p;
@@ -8716,6 +8762,10 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* No CET registers.  */
   tdep->cet_regnum = -1;
   tdep->num_cet_regs = 0;
+
+  /* No AMX registers.  */
+  tdep->amx_regnum = -1;
+  tdep->num_amx_regs = 0;
 
   tdesc_data = tdesc_data_alloc ();
 

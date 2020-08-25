@@ -2176,6 +2176,14 @@ user_visible_resume_ptid (int step)
 	 mode.  */
       resume_ptid = inferior_ptid;
     }
+  else if (inferior_ptid != null_ptid
+	   && inferior_thread ()->control.in_cond_eval)
+    {
+      /* The inferior thread is evaluating a BP condition.  Other threads
+	 might be stopped or running and we do not want to change their
+	 state, thus, resume only the current thread.  */
+      resume_ptid = inferior_ptid;
+    }
   else if (!sched_multi && target_supports_multi_process ())
     {
       /* Resume all threads of the current process (and none of other

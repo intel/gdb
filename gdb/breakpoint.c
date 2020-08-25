@@ -5764,11 +5764,13 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
 	      for_active_lanes (lanes_mask, [&] (int lane)
 		{
 		  thread->set_current_simd_lane (lane);
+		  thread->control.in_cond_eval = true;
 		  if (breakpoint_cond_eval (cond))
 		    {
 		      /* Unmask the lane if the condition is true.  */
 		      condition_mask = condition_mask | (0x1 << lane);
 		    }
+		  thread->control.in_cond_eval = false;
 
 		  return true;
 		});
@@ -5781,6 +5783,7 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
 	    }
 	  catch (const gdb_exception_error &ex)
 	    {
+	      thread->control.in_cond_eval = false;
 	      int locno = bpstat_locno (bs);
 	      if (locno != 0)
 		exception_fprintf

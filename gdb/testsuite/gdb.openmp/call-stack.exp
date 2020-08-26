@@ -62,6 +62,10 @@ if {[require_openmp_device "GPU"]} {
 }
 gdb_continue_to_breakpoint "break_at_first" ".*$srcfile:$middle_loc.*"
 
+# Test breaking on function names inside the kernel.
+gdb_breakpoint "first"
+gdb_continue_to_breakpoint "break_at_first" ".*$srcfile:$middle_loc.*"
+
 # Set breakpoint inside the kernel.
 gdb_breakpoint "$srcfile:$inner_loc"
 gdb_continue_to_breakpoint "innermost-body" ".*$srcfile:$inner_loc.*"

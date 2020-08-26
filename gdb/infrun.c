@@ -3683,11 +3683,22 @@ do_target_wait (execution_control_state *ecs, target_wait_flags options)
   /* For fairness, we pick the first inferior/target to poll at random
      out of all inferiors that may report events, and then continue
      polling the rest of the inferior list starting from that one in a
-     circular fashion until the whole list is polled once.  */
+     circular fashion until the whole list is polled once.
 
-  auto inferior_matches = [] (inferior *inf)
+     If the thread is in the middle of condition evaluation, wait for
+     the event from the current inferior.  Otherwise, a pending event
+     from another thread might be taken and the inferior call is
+     abandoned.  */
+  ptid_t waiton_ptid = minus_one_ptid;
+  if (inferior_ptid != null_ptid
+      && inferior_thread ()->control.in_cond_eval)
+    waiton_ptid = inferior_ptid;
+
+  ptid_t match_ptid {waiton_ptid.pid ()};
+  auto inferior_matches = [&match_ptid] (inferior *inf)
     {
-      return inf->process_target () != nullptr;
+      return (inf->process_target () != nullptr
+	      && ptid_t (inf->pid).matches (match_ptid));
     };
 
   /* First see how many matching inferiors we have.  */
@@ -3724,11 +3735,13 @@ do_target_wait (execution_control_state *ecs, target_wait_flags options)
   gdb_assert (selected);
 
   /* Now poll for events out of each of the matching inferior's
-     targets, starting from the selected one.  */
+     targets, starting from the selected one.  Note that we use
+     WAITON_PTID here again to account for inferior calls in condition
+     evaluations.  */
 
   auto do_wait = [&] (inferior *inf)
   {
-    ecs->ptid = do_target_wait_1 (inf, minus_one_ptid, &ecs->ws, options);
+    ecs->ptid = do_target_wait_1 (inf, waiton_ptid, &ecs->ws, options);
     ecs->target = inf->process_target ();
     return (ecs->ws.kind () != TARGET_WAITKIND_IGNORE);
   };

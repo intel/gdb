@@ -3592,10 +3592,11 @@ do_target_wait (ptid_t wait_ptid, execution_control_state *ecs, int options)
      polling the rest of the inferior list starting from that one in a
      circular fashion until the whole list is polled once.  */
 
-  auto inferior_matches = [&wait_ptid] (inferior *inf)
+  ptid_t wait_pid_ptid {wait_ptid.pid ()};
+  auto inferior_matches = [&wait_pid_ptid] (inferior *inf)
     {
       return (inf->process_target () != NULL
-	      && ptid_t (inf->pid).matches (wait_ptid));
+	      && ptid_t (inf->pid).matches (wait_pid_ptid));
     };
 
   /* First see how many matching inferiors we have.  */
@@ -3941,7 +3942,15 @@ fetch_inferior_event ()
       = make_scoped_restore (&execution_direction,
 			     target_execution_direction ());
 
-    if (!do_target_wait (minus_one_ptid, ecs, TARGET_WNOHANG))
+    ptid_t waiton_ptid = minus_one_ptid;
+
+    /* If the thread is in the middle of the condition evaluation,
+       wait for the event from the current inferior.  */
+    if (inferior_ptid != null_ptid
+	&& inferior_thread ()->control.in_cond_eval)
+      waiton_ptid = inferior_ptid;
+
+    if (!do_target_wait (waiton_ptid, ecs, TARGET_WNOHANG))
       return;
 
     gdb_assert (ecs->ws.kind != TARGET_WAITKIND_IGNORE);

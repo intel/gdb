@@ -124,6 +124,7 @@ bool
 producer_is_llvm (const char *producer)
 {
   return ((producer != NULL) && (startswith (producer, "clang ")
+				 || startswith (producer, "spirv")
 				 || startswith (producer, " F90 Flang ")));
 }
 

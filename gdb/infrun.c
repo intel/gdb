@@ -3998,9 +3998,15 @@ prepare_for_detach (void)
    the user.  */
 
 static void
-stop_all_threads_if_all_stop_mode ()
+stop_all_threads_if_all_stop_mode (const execution_control_state &ecs)
 {
-  if (!non_stop)
+  /* Do not stop, if the event thread is evaluating a BP condition.
+     This will be handled elsewhere depending on the result of the
+     condition.  */
+  bool in_cond_eval = (ecs.event_thread != nullptr)
+    && ecs.event_thread->control.in_cond_eval;
+
+  if (!non_stop && !in_cond_eval)
     stop_all_threads ("presenting stop to user in all-stop");
 }
 
@@ -4046,10 +4052,11 @@ wait_for_inferior (inferior *inf)
       handle_inferior_event (&ecs);
 
       if (!ecs.wait_some_more)
-	break;
+	{
+	  stop_all_threads_if_all_stop_mode (ecs);
+	  break;
+	}
     }
-
-  stop_all_threads_if_all_stop_mode ();
 
   /* No error, don't finish the state yet.  */
   finish_state.release ();
@@ -4273,7 +4280,7 @@ fetch_inferior_event ()
 	    bool should_notify_stop = true;
 	    int proceeded = 0;
 
-	    stop_all_threads_if_all_stop_mode ();
+	    stop_all_threads_if_all_stop_mode (ecs);
 
 	    clean_up_just_stopped_threads_fsms (&ecs);
 

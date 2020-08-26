@@ -7864,9 +7864,14 @@ stop_waiting (struct execution_control_state *ecs)
   /* Let callers know we don't want to wait for the inferior anymore.  */
   ecs->wait_some_more = 0;
 
+  bool in_cond_eval = ecs->event_thread != nullptr
+    && ecs->event_thread->control.in_cond_eval;
+
   /* If all-stop, stop all threads now that we're presenting the stop
-     to the user.  */
-  if (!non_stop)
+     to the user.  Do not stop, if the event thread is evaluating
+     a BP condition.  This will be handled elsewhere depending on
+     the result of the condition.  */
+  if (!non_stop && !in_cond_eval)
     stop_all_threads ();
 }
 

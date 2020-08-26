@@ -687,6 +687,9 @@ run_inferior_call (struct call_thread_fsm *sm,
 
   call_thread->control.in_infcall = saved_in_infcall;
 
+  if (call_thread->control.in_cond_eval && target_can_async_p ())
+    target_async (true);
+
   return caught_error;
 }
 

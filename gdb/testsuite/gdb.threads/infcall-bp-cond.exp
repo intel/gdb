@@ -1,0 +1,73 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Tests inferior calls executed from a breakpoint condition in
+# a multi-threaded program.
+
+standard_testfile
+
+if { [prepare_for_testing "failed to prepare" ${binfile} "${srcfile}" \
+	  {debug pthreads}] } {
+    return
+}
+
+set bp_line [gdb_get_line_number "breakpoint-here"]
+
+proc run_condition_test {message n_expected_hits condition} {
+    with_test_prefix $message {
+	global binfile gdb_prompt srcfile bp_line
+
+	clean_restart ${binfile}
+
+	if {![runto_main]} {
+	    fail "run to main"
+	    return
+	}
+
+	gdb_test "set \$n_cond_eval = 0"
+	gdb_breakpoint "$srcfile:$bp_line if (++\$n_cond_eval) $condition"
+
+	set n_hit_condition 0
+	set should_continue true
+	set iteration 0
+
+	while {$should_continue} {
+	    incr iteration
+	    with_test_prefix "continue iteration $iteration" {
+		gdb_test_multiple "continue" "continue" {
+		    -re "$srcfile:$bp_line.*$gdb_prompt" {
+			incr n_hit_condition
+		    }
+		    -re "$gdb_prompt" {
+			set should_continue false
+		    }
+		}
+	    }
+	}
+
+	set test_condition "expected number of hits"
+	if {$n_hit_condition == $n_expected_hits} {
+	    pass $test_condition
+	} else {
+	    fail $test_condition
+	}
+
+	gdb_test "print \$n_cond_eval" "= 2" "condition was evaluated twice"
+    }
+}
+
+run_condition_test "exactly one thread is hit" 1 "&& is_one (*(int*)arg)"
+run_condition_test "exactly two threads are hit" 2 "|| return_true ()"
+run_condition_test "no thread is hit" 0 "&& return_false ()"

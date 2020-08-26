@@ -709,6 +709,9 @@ run_inferior_call (std::unique_ptr<call_thread_fsm> sm,
 	breakpoint_auto_delete (call_thread->control.stop_bpstat);
     }
 
+  if (call_thread->control.in_cond_eval && target_can_async_p ())
+    target_async (true);
+
   return caught_error;
 }
 

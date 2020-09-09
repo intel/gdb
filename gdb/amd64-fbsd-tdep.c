@@ -201,7 +201,8 @@ amd64fbsd_iterate_over_regset_sections (struct gdbarch *gdbarch,
       cb_data);
   cb (".reg2", tdep->sizeof_fpregset, tdep->sizeof_fpregset, &amd64_fpregset,
       NULL, cb_data);
-  cb (".reg-xstate", X86_XSTATE_SIZE (tdep->xcr0), X86_XSTATE_SIZE (tdep->xcr0),
+  unsigned int xstate_size = get_x86_xstate_size (tdep->xcr0);
+  cb (".reg-xstate", xstate_size, xstate_size,
       &amd64fbsd_xstateregset, "XSAVE extended state", cb_data);
 }
 

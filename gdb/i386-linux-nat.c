@@ -331,19 +331,21 @@ store_fpregs (const struct regcache *regcache, int tid, int regno)
 static int
 fetch_xstateregs (struct regcache *regcache, int tid)
 {
-  char xstateregs[X86_XSTATE_MAX_SIZE];
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  unsigned int xstate_size = get_x86_xstate_size (tdep->xcr0);
+  std::unique_ptr<char[]> xstateregs (new char[xstate_size]);
   struct iovec iov;
 
   if (have_ptrace_getregset != TRIBOOL_TRUE)
     return 0;
 
-  iov.iov_base = xstateregs;
-  iov.iov_len = sizeof(xstateregs);
+  iov.iov_base = xstateregs.get ();
+  iov.iov_len = xstate_size;
   if (ptrace (PTRACE_GETREGSET, tid, (unsigned int) NT_X86_XSTATE,
 	      &iov) < 0)
     perror_with_name (_("Couldn't read extended state status"));
 
-  i387_supply_xsave (regcache, -1, xstateregs);
+  i387_supply_xsave (regcache, -1, xstateregs.get ());
   return 1;
 }
 
@@ -354,19 +356,21 @@ fetch_xstateregs (struct regcache *regcache, int tid)
 static int
 store_xstateregs (const struct regcache *regcache, int tid, int regno)
 {
-  char xstateregs[X86_XSTATE_MAX_SIZE];
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  unsigned int xstate_size = get_x86_xstate_size (tdep->xcr0);
+  std::unique_ptr<char[]> xstateregs (new char[xstate_size]);
   struct iovec iov;
 
   if (have_ptrace_getregset != TRIBOOL_TRUE)
     return 0;
   
-  iov.iov_base = xstateregs;
-  iov.iov_len = sizeof(xstateregs);
+  iov.iov_base = xstateregs.get ();
+  iov.iov_len = xstate_size;
   if (ptrace (PTRACE_GETREGSET, tid, (unsigned int) NT_X86_XSTATE,
 	      &iov) < 0)
     perror_with_name (_("Couldn't read extended state status"));
 
-  i387_collect_xsave (regcache, regno, xstateregs, 0);
+  i387_collect_xsave (regcache, regno, xstateregs.get (), 0);
 
   if (ptrace (PTRACE_SETREGSET, tid, (unsigned int) NT_X86_XSTATE,
 	      (int) &iov) < 0)

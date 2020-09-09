@@ -981,7 +981,7 @@ x86_linux_read_description (void)
 	  for (regset = x86_regsets;
 	       regset->fill_function != NULL; regset++)
 	    if (regset->get_request == PTRACE_GETREGSET)
-	      regset->size = X86_XSTATE_SIZE (xcr0);
+	      regset->size = get_x86_xstate_size (xcr0);
 	    else if (regset->type != GENERAL_REGS)
 	      regset->size = 0;
 	}

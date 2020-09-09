@@ -158,7 +158,7 @@ am_libgdbsupport_a_OBJECTS = agent.$(OBJEXT) btrace-common.$(OBJEXT) \
 	run-time-clock.$(OBJEXT) safe-strerror.$(OBJEXT) \
 	scoped_mmap.$(OBJEXT) signals.$(OBJEXT) \
 	signals-state-save-restore.$(OBJEXT) tdesc.$(OBJEXT) \
-	thread-pool.$(OBJEXT) xml-utils.$(OBJEXT) $(am__objects_1)
+	thread-pool.$(OBJEXT) xml-utils.$(OBJEXT) x86-xstate.$(OBJEXT) $(am__objects_1)
 libgdbsupport_a_OBJECTS = $(am_libgdbsupport_a_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -393,6 +393,7 @@ libgdbsupport_a_SOURCES = \
     tdesc.cc \
     thread-pool.cc \
     xml-utils.cc \
+    x86-xstate.cc \
     $(selftest)
 
 all: config.h
@@ -498,6 +499,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tdesc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/thread-pool.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/xml-utils.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/x86-xstate.Po@am__quote@
 
 .cc.o:
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

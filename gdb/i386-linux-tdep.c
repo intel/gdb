@@ -651,7 +651,7 @@ i386_linux_core_read_xcr0 (bfd *abfd)
       size_t size = bfd_section_size (xstate);
 
       /* Check extended state size.  */
-      if (size < X86_XSTATE_AVX_SIZE)
+      if (size < X86_XSTATE_SSE_SIZE)
 	xcr0 = X86_XSTATE_SSE_MASK;
       else
 	{
@@ -768,8 +768,8 @@ i386_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
   cb (".reg", 68, 68, &i386_gregset, NULL, cb_data);
 
   if (tdep->xcr0 & X86_XSTATE_AVX)
-    cb (".reg-xstate", X86_XSTATE_SIZE (tdep->xcr0),
-	X86_XSTATE_SIZE (tdep->xcr0), &i386_linux_xstateregset,
+    cb (".reg-xstate", get_x86_xstate_size (tdep->xcr0),
+	get_x86_xstate_size (tdep->xcr0), &i386_linux_xstateregset,
 	"XSAVE extended state", cb_data);
   else if (tdep->xcr0 & X86_XSTATE_SSE)
     cb (".reg-xfp", 512, 512, &i386_fpregset, "extended floating-point",

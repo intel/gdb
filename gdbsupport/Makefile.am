@@ -70,6 +70,7 @@ libgdbsupport_a_SOURCES = \
     tdesc.cc \
     thread-pool.cc \
     xml-utils.cc \
+    x86-xstate.cc \
     $(selftest)
 
 # Double-check that no defines are missing from our configury.

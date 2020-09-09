@@ -1655,7 +1655,8 @@ amd64_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
 
   cb (".reg", 27 * 8, 27 * 8, &i386_gregset, NULL, cb_data);
   cb (".reg2", 512, 512, &amd64_fpregset, NULL, cb_data);
-  cb (".reg-xstate", X86_XSTATE_SIZE (tdep->xcr0), X86_XSTATE_SIZE (tdep->xcr0),
+  unsigned int xstate_size = get_x86_xstate_size (tdep->xcr0);
+  cb (".reg-xstate", xstate_size, xstate_size,
       &amd64_linux_xstateregset, "XSAVE extended state", cb_data);
 }
 

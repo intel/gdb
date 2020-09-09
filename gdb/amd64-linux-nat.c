@@ -245,7 +245,9 @@ amd64_linux_nat_target::fetch_registers (struct regcache *regcache, int regnum)
 
       if (have_ptrace_getregset == TRIBOOL_TRUE)
 	{
-	  char xstateregs[X86_XSTATE_MAX_SIZE];
+	  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+	  unsigned int xstate_size = get_x86_xstate_size (tdep->xcr0);
+	  std::unique_ptr<char[]> xstateregs (new char[xstate_size]);
 	  struct iovec iov;
 
 	  /* Pre-4.14 kernels have a bug (fixed by commit 0852b374173b
@@ -253,14 +255,14 @@ amd64_linux_nat_target::fetch_registers (struct regcache *regcache, int regnum)
 	     Intel Skylake CPUs") that sometimes causes the mxcsr location in
 	     xstateregs not to be copied by PTRACE_GETREGSET.  Make sure that
 	     the location is at least initialized with a defined value.  */
-	  memset (xstateregs, 0, sizeof (xstateregs));
-	  iov.iov_base = xstateregs;
-	  iov.iov_len = sizeof (xstateregs);
+	  memset (xstateregs.get (), 0, xstate_size);
+	  iov.iov_base = xstateregs.get ();
+	  iov.iov_len = xstate_size;
 	  if (ptrace (PTRACE_GETREGSET, tid,
 		      (unsigned int) NT_X86_XSTATE, (long) &iov) < 0)
 	    perror_with_name (_("Couldn't get extended state status"));
 
-	  amd64_supply_xsave (regcache, -1, xstateregs);
+	  amd64_supply_xsave (regcache, -1, xstateregs.get ());
 	}
       else
 	{
@@ -317,16 +319,18 @@ amd64_linux_nat_target::store_registers (struct regcache *regcache, int regnum)
 
       if (have_ptrace_getregset == TRIBOOL_TRUE)
 	{
-	  char xstateregs[X86_XSTATE_MAX_SIZE];
+	  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+	  unsigned int xstate_size = get_x86_xstate_size (tdep->xcr0);
+	  std::unique_ptr<char[]> xstateregs (new char[xstate_size]);
 	  struct iovec iov;
 
-	  iov.iov_base = xstateregs;
-	  iov.iov_len = sizeof (xstateregs);
+	  iov.iov_base = xstateregs.get ();
+	  iov.iov_len = xstate_size;
 	  if (ptrace (PTRACE_GETREGSET, tid,
 		      (unsigned int) NT_X86_XSTATE, (long) &iov) < 0)
 	    perror_with_name (_("Couldn't get extended state status"));
 
-	  amd64_collect_xsave (regcache, regnum, xstateregs, 0);
+	  amd64_collect_xsave (regcache, regnum, xstateregs.get (), 0);
 
 	  if (ptrace (PTRACE_SETREGSET, tid,
 		      (unsigned int) NT_X86_XSTATE, (long) &iov) < 0)

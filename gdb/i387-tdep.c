@@ -733,26 +733,28 @@ i387_collect_fxsave (const struct regcache *regcache, int regnum, void *fxsave)
 
 static int xsave_avxh_offset[] =
 {
-  576 + 0 * 16,		/* Upper 128bit of %ymm0 through ...  */
-  576 + 1 * 16,
-  576 + 2 * 16,
-  576 + 3 * 16,
-  576 + 4 * 16,
-  576 + 5 * 16,
-  576 + 6 * 16,
-  576 + 7 * 16,
-  576 + 8 * 16,
-  576 + 9 * 16,
-  576 + 10 * 16,
-  576 + 11 * 16,
-  576 + 12 * 16,
-  576 + 13 * 16,
-  576 + 14 * 16,
-  576 + 15 * 16		/* Upper 128bit of ... %ymm15 (128 bits each).  */
+  0 * 16,		/* Upper 128bit of %ymm0 through...  */
+  1 * 16,
+  2 * 16,
+  3 * 16,
+  4 * 16,
+  5 * 16,
+  6 * 16,
+  7 * 16,
+  8 * 16,
+  9 * 16,
+  10 * 16,
+  11 * 16,
+  12 * 16,
+  13 * 16,
+  14 * 16,
+  15 * 16		/* Upper 128bit of... %ymm15 (128 bits each).  */
 };
 
 #define XSAVE_AVXH_ADDR(tdep, xsave, regnum) \
-  (xsave + xsave_avxh_offset[regnum - I387_YMM0H_REGNUM (tdep)])
+  (xsave + \
+   get_x86_extended_feature (X86_XSTATE_AVX_ID).offset + \
+   xsave_avxh_offset[regnum - I387_YMM0H_REGNUM (tdep)])
 
 /* At xsave_ymm_avx512_offset[REGNUM] you'll find the offset to the location in
    the upper 128bit of ZMM register data structure used by the "xsave"
@@ -761,61 +763,67 @@ static int xsave_avxh_offset[] =
 static int xsave_ymm_avx512_offset[] =
 {
   /* HI16_ZMM_area + 16 bytes + regnum* 64 bytes.  */
-  1664 + 16 + 0 * 64,		/* %ymm16 through...  */
-  1664 + 16 + 1 * 64,
-  1664 + 16 + 2 * 64,
-  1664 + 16 + 3 * 64,
-  1664 + 16 + 4 * 64,
-  1664 + 16 + 5 * 64,
-  1664 + 16 + 6 * 64,
-  1664 + 16 + 7 * 64,
-  1664 + 16 + 8 * 64,
-  1664 + 16 + 9 * 64,
-  1664 + 16 + 10 * 64,
-  1664 + 16 + 11 * 64,
-  1664 + 16 + 12 * 64,
-  1664 + 16 + 13 * 64,
-  1664 + 16 + 14 * 64,
-  1664 + 16 + 15 * 64		/* ...  %ymm31 (128 bits each).  */
+  16 + 0 * 64,		/* %ymm16 through...  */
+  16 + 1 * 64,
+  16 + 2 * 64,
+  16 + 3 * 64,
+  16 + 4 * 64,
+  16 + 5 * 64,
+  16 + 6 * 64,
+  16 + 7 * 64,
+  16 + 8 * 64,
+  16 + 9 * 64,
+  16 + 10 * 64,
+  16 + 11 * 64,
+  16 + 12 * 64,
+  16 + 13 * 64,
+  16 + 14 * 64,
+  16 + 15 * 64		/* ...  %ymm31 (128 bits each).  */
 };
 
 #define XSAVE_YMM_AVX512_ADDR(tdep, xsave, regnum) \
-  (xsave + xsave_ymm_avx512_offset[regnum - I387_YMM16H_REGNUM (tdep)])
+  (xsave + \
+   get_x86_extended_feature (X86_XSTATE_ZMM_ID).offset + \
+   xsave_ymm_avx512_offset[regnum - I387_YMM16H_REGNUM (tdep)])
 
 static int xsave_xmm_avx512_offset[] =
 {
-  1664 + 0 * 64,		/* %ymm16 through...  */
-  1664 + 1 * 64,
-  1664 + 2 * 64,
-  1664 + 3 * 64,
-  1664 + 4 * 64,
-  1664 + 5 * 64,
-  1664 + 6 * 64,
-  1664 + 7 * 64,
-  1664 + 8 * 64,
-  1664 + 9 * 64,
-  1664 + 10 * 64,
-  1664 + 11 * 64,
-  1664 + 12 * 64,
-  1664 + 13 * 64,
-  1664 + 14 * 64,
-  1664 + 15 * 64		/* ...  %ymm31 (128 bits each).  */
+  0 * 64,		/* %ymm16 through...  */
+  1 * 64,
+  2 * 64,
+  3 * 64,
+  4 * 64,
+  5 * 64,
+  6 * 64,
+  7 * 64,
+  8 * 64,
+  9 * 64,
+  10 * 64,
+  11 * 64,
+  12 * 64,
+  13 * 64,
+  14 * 64,
+  15 * 64		/* ...  %ymm31 (128 bits each).  */
 };
 
 #define XSAVE_XMM_AVX512_ADDR(tdep, xsave, regnum) \
-  (xsave + xsave_xmm_avx512_offset[regnum - I387_XMM16_REGNUM (tdep)])
+  (xsave + \
+   get_x86_extended_feature (X86_XSTATE_ZMM_ID).offset + \
+   xsave_xmm_avx512_offset[regnum - I387_XMM16_REGNUM (tdep)])
 
 static int xsave_mpx_offset[] = {
-  960 + 0 * 16,			/* bnd0r...bnd3r registers.  */
-  960 + 1 * 16,
-  960 + 2 * 16,
-  960 + 3 * 16,
-  1024 + 0 * 8,			/* bndcfg ... bndstatus.  */
-  1024 + 1 * 8,
+  0 * 16,			/* bnd0r...bnd3r registers.  */
+  1 * 16,
+  2 * 16,
+  3 * 16,
+  4 * 16 + 0 * 8,			/* bndcfg... bndstatus.  */
+  4 * 16 + 1 * 8,
 };
 
 #define XSAVE_MPX_ADDR(tdep, xsave, regnum) \
-  (xsave + xsave_mpx_offset[regnum - I387_BND0R_REGNUM (tdep)])
+  (xsave + \
+   get_x86_extended_feature (X86_XSTATE_BNDREGS_ID).offset + \
+   xsave_mpx_offset[regnum - I387_BND0R_REGNUM (tdep)])
 
   /* At xsave_avx512__h_offset[REGNUM] you find the offset to the location
    of the AVX512 opmask register data structure used by the "xsave"
@@ -823,18 +831,20 @@ static int xsave_mpx_offset[] = {
 
 static int xsave_avx512_k_offset[] =
 {
-  1088 + 0 * 8,			/* %k0 through...  */
-  1088 + 1 * 8,
-  1088 + 2 * 8,
-  1088 + 3 * 8,
-  1088 + 4 * 8,
-  1088 + 5 * 8,
-  1088 + 6 * 8,
-  1088 + 7 * 8     		/* %k7 (64 bits each).  */
+  0 * 8,			/* %k0 through...  */
+  1 * 8,
+  2 * 8,
+  3 * 8,
+  4 * 8,
+  5 * 8,
+  6 * 8,
+  7 * 8     		/* %k7 (64 bits each).  */
 };
 
 #define XSAVE_AVX512_K_ADDR(tdep, xsave, regnum) \
-  (xsave + xsave_avx512_k_offset[regnum - I387_K0_REGNUM (tdep)])
+  (xsave + \
+  get_x86_extended_feature (X86_XSTATE_K_ID).offset + \
+  xsave_avx512_k_offset[regnum - I387_K0_REGNUM (tdep)])
 
 /* At xsave_avx512_zmm_h_offset[REGNUM] you find the offset to the location in
    the upper 256bit of AVX512 ZMMH register data structure used by the "xsave"
@@ -842,42 +852,44 @@ static int xsave_avx512_k_offset[] =
 
 static int xsave_avx512_zmm_h_offset[] =
 {
-  1152 + 0 * 32,
-  1152 + 1 * 32,	/* Upper 256bit of %zmmh0 through...  */
-  1152 + 2 * 32,
-  1152 + 3 * 32,
-  1152 + 4 * 32,
-  1152 + 5 * 32,
-  1152 + 6 * 32,
-  1152 + 7 * 32,
-  1152 + 8 * 32,
-  1152 + 9 * 32,
-  1152 + 10 * 32,
-  1152 + 11 * 32,
-  1152 + 12 * 32,
-  1152 + 13 * 32,
-  1152 + 14 * 32,
-  1152 + 15 * 32,	/* Upper 256bit of...  %zmmh15 (256 bits each).  */
-  1664 + 32 + 0 * 64,   /* Upper 256bit of...  %zmmh16 (256 bits each).  */
-  1664 + 32 + 1 * 64,
-  1664 + 32 + 2 * 64,
-  1664 + 32 + 3 * 64,
-  1664 + 32 + 4 * 64,
-  1664 + 32 + 5 * 64,
-  1664 + 32 + 6 * 64,
-  1664 + 32 + 7 * 64,
-  1664 + 32 + 8 * 64,
-  1664 + 32 + 9 * 64,
-  1664 + 32 + 10 * 64,
-  1664 + 32 + 11 * 64,
-  1664 + 32 + 12 * 64,
-  1664 + 32 + 13 * 64,
-  1664 + 32 + 14 * 64,
-  1664 + 32 + 15 * 64   /* Upper 256bit of... %zmmh31 (256 bits each).  */
+  0 * 32,
+  1 * 32,	/* Upper 256bit of %zmmh0 through...  */
+  2 * 32,
+  3 * 32,
+  4 * 32,
+  5 * 32,
+  6 * 32,
+  7 * 32,
+  8 * 32,
+  9 * 32,
+  10 * 32,
+  11 * 32,
+  12 * 32,
+  13 * 32,
+  14 * 32,
+  15 * 32,	/* Upper 256bit of...  %zmmh15 (256 bits each).  */
+  512 + 32 + 0 * 64,   /* Upper 256bit of...  %zmmh16 (256 bits each).  */
+  512 + 32 + 1 * 64,
+  512 + 32 + 2 * 64,
+  512 + 32 + 3 * 64,
+  512 + 32 + 4 * 64,
+  512 + 32 + 5 * 64,
+  512 + 32 + 6 * 64,
+  512 + 32 + 7 * 64,
+  512 + 32 + 8 * 64,
+  512 + 32 + 9 * 64,
+  512 + 32 + 10 * 64,
+  512 + 32 + 11 * 64,
+  512 + 32 + 12 * 64,
+  512 + 32 + 13 * 64,
+  512 + 32 + 14 * 64,
+  512 + 32 + 15 * 64   /* Upper 256bit of... %zmmh31 (256 bits each).  */
 };
 
 #define XSAVE_AVX512_ZMM_H_ADDR(tdep, xsave, regnum) \
-  (xsave + xsave_avx512_zmm_h_offset[regnum - I387_ZMM0H_REGNUM (tdep)])
+  (xsave + \
+   get_x86_extended_feature (X86_XSTATE_ZMM_H_ID).offset + \
+   xsave_avx512_zmm_h_offset[regnum - I387_ZMM0H_REGNUM (tdep)])
 
 /* At xsave_pkeys_offset[REGNUM] you find the offset to the location
    of the PKRU register data structure used by the "xsave"
@@ -885,12 +897,14 @@ static int xsave_avx512_zmm_h_offset[] =
 
 static int xsave_pkeys_offset[] =
 {
-2688 + 0 * 8		/* %pkru (64 bits in XSTATE, 32-bit actually used by
+  0 * 8		/* %pkru (64 bits in XSTATE, 32-bit actually used by
 			   instructions and applications).  */
 };
 
 #define XSAVE_PKEYS_ADDR(tdep, xsave, regnum) \
-  (xsave + xsave_pkeys_offset[regnum - I387_PKRU_REGNUM (tdep)])
+  (xsave + \
+  get_x86_extended_feature (X86_XSTATE_PKRU_ID).offset + \
+  xsave_pkeys_offset[regnum - I387_PKRU_REGNUM (tdep)])
 
 
 /* Extract from XSAVE a bitset of the features that are available on the
@@ -1410,7 +1424,7 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
   if (gcore)
     {
       /* Clear XSAVE extended state.  */
-      memset (regs, 0, X86_XSTATE_SIZE (tdep->xcr0));
+      memset (regs, 0, get_x86_xstate_size (tdep->xcr0));
 
       /* Update XCR0 and `xstate_bv' with XCR0 for gcore.  */
       if (tdep->xsave_xcr0_offset != -1)

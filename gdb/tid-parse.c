@@ -52,7 +52,8 @@ get_non_negative_number_trailer (const char **pp, int *parsed_value,
 /* See tid-parse.h.  */
 
 struct thread_info *
-parse_thread_id (const char *tidstr, const char **end, int *simd_lane_num)
+parse_thread_id (const char *tidstr, const char **end, int *simd_lane_num,
+		 bool is_global_id)
 {
   const char *number = tidstr;
   const char *dot, *p1;
@@ -64,31 +65,36 @@ parse_thread_id (const char *tidstr, const char **end, int *simd_lane_num)
 
   dot = strchr (number, '.');
 
-  if (dot != NULL)
+  if (!is_global_id)
     {
-      /* Parse number to the left of the dot.  */
-      int inf_num;
+      if (dot != nullptr)
+	{
+	  /* Parse number to the left of the dot.  */
+	  int inf_num;
 
-      p1 = number;
-      if (!get_non_negative_number_trailer (&p1, &inf_num, '.', number))
-	invalid_thread_id_error (number);
+	  p1 = number;
+	  if (!get_non_negative_number_trailer (&p1, &inf_num, '.', number))
+	    invalid_thread_id_error (number);
 
-      if (inf_num == 0)
-	invalid_thread_id_error (number);
+	  if (inf_num == 0)
+	    invalid_thread_id_error (number);
 
-      inf = find_inferior_id (inf_num);
-      if (inf == NULL)
-	error (_("No inferior number '%d'"), inf_num);
+	  inf = find_inferior_id (inf_num);
+	  if (inf == nullptr)
+	    error (_("No inferior number '%d'"), inf_num);
 
-      explicit_inf_id = 1;
-      p1 = dot + 1;
+	  explicit_inf_id = 1;
+	  p1 = dot + 1;
+	}
+      else
+	{
+	  inf = current_inferior ();
+
+	  p1 = number;
+	}
     }
   else
-    {
-      inf = current_inferior ();
-
-      p1 = number;
-    }
+    p1 = number;
 
   dot = strchr (p1, ':');
 
@@ -104,19 +110,31 @@ parse_thread_id (const char *tidstr, const char **end, int *simd_lane_num)
       if (thr_num == 0)
 	invalid_thread_id_error (number);
 
-      for (thread_info *it : inf->threads ())
-	if (it->per_inf_num == thr_num)
-	  {
-	    tp = it;
-	    break;
-	  }
-
-      if (tp == nullptr)
+      if (is_global_id)
 	{
-	  if (show_inferior_qualified_tids () || explicit_inf_id)
-	    error (_("Unknown thread %d.%d."), inf->num, thr_num);
-	  else
-	    error (_("Unknown thread %d."), thr_num);
+	  /* We are looking for a thread via its global ID.  */
+	  tp = find_thread_global_id (thr_num);
+
+	  if (tp == nullptr)
+	    error (_("Thread global ID %d not known."), thr_num);
+	}
+      else
+	{
+	  /* We are looking for a thread via its number within
+	     the inferior.  */
+	  for (thread_info *it : inf->threads ())
+	    if (it->per_inf_num == thr_num)
+	      {
+		tp = it;
+		break;
+	      }
+	  if (tp == nullptr)
+	    {
+	      if (show_inferior_qualified_tids () || explicit_inf_id)
+		error (_("Unknown thread %d.%d."), inf->num, thr_num);
+	      else
+		error (_("Unknown thread %d."), thr_num);
+	    }
 	}
     }
   else
@@ -155,6 +173,14 @@ parse_thread_id (const char *tidstr, const char **end, int *simd_lane_num)
     *end = p1;
 
   return tp;
+}
+
+/* See tid-parse.h.  */
+
+thread_info *
+parse_global_thread_id (const char *tidstr, int *simd_lane_num)
+{
+  return parse_thread_id (tidstr, nullptr, simd_lane_num, true);
 }
 
 /* See tid-parse.h.  */

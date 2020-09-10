@@ -1977,6 +1977,12 @@ struct user_selected_context
     : m_previous_ptid (inferior_ptid)
   {
     save_selected_frame (&m_previous_frame_id, &m_previous_frame_level);
+
+    /* Save selected SIMD lane.  */
+    if (inferior_ptid != null_ptid)
+      m_previous_simd_lane = inferior_thread ()->current_simd_lane ();
+    else
+      m_previous_simd_lane = -1;
   }
 
   /* Return true if the user selected context has changed since this object
@@ -1985,7 +1991,8 @@ struct user_selected_context
   {
     /* Did the selected thread change?  */
     if (m_previous_ptid != null_ptid && inferior_ptid != null_ptid
-	&& m_previous_ptid != inferior_ptid)
+	&& (m_previous_ptid != inferior_ptid
+	    || m_previous_simd_lane != inferior_thread ()->current_simd_lane ()))
       return true;
 
     /* Grab details of the currently selected frame, for comparison.  */
@@ -2013,6 +2020,9 @@ private:
   /* The previously selected thread.  This might be null_ptid if there was
      no previously selected thread.  */
   ptid_t m_previous_ptid;
+
+  /* The previously selected SIMD lane.  */
+  int m_previous_simd_lane;
 
   /* The previously selected frame.  If the innermost frame is selected, or
      no frame is selected, then the frame_id will be null_frame_id, and the
@@ -2078,6 +2088,43 @@ mi_cmd_execute (struct mi_parse *parse)
 	thread_saver.emplace ();
 
       switch_to_thread (tp);
+
+      if (tp->state == THREAD_STOPPED)
+	tp->set_default_simd_lane ();
+    }
+
+  gdb::optional<scoped_restore_current_simd_lane> lane_saver;
+  if (parse->simd_lane != -1)
+    {
+      /* SIMD lane number is specified.  */
+      thread_info *tp = nullptr;
+      if (has_inferior_thread ())
+	tp = inferior_thread ();
+
+      if (tp == nullptr)
+	error (_("No current thread found"));
+
+      if (parse->cmd->preserve_user_selected_context ())
+	lane_saver.emplace ();
+
+      /* Check that the number is valid.  */
+      if (parse->simd_lane >= (sizeof (unsigned int)) * 8)
+	error (_("Incorrect SIMD lane number: %d."), parse->simd_lane);
+
+      /* Check, that the thread has SIMD lanes.  */
+      if (!tp->has_simd_lanes ())
+	error (_("Thread %d has no SIMD lanes."), tp->global_num);
+
+      /* Check that thread is stopped.  */
+      if (tp->state != THREAD_STOPPED)
+	error (_("Thread %d is not stopped."), tp->global_num);
+
+      /* Check, that the lane is active.  */
+      if (!tp->is_simd_lane_active (parse->simd_lane))
+	error (_("SIMD lane %d is inactive in thread %d."),
+	       parse->simd_lane, tp->global_num);
+
+      tp->set_current_simd_lane (parse->simd_lane);
     }
 
   gdb::optional<scoped_restore_selected_frame> frame_saver;

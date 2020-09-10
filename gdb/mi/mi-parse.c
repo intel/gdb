@@ -220,6 +220,7 @@ mi_parse::mi_parse ()
     all (0),
     thread_group (-1),
     thread (-1),
+    simd_lane (-1),
     frame (-1),
     language (language_unknown)
 {
@@ -331,6 +332,12 @@ mi_parse (const char *cmd, char **token)
 	    error (_("Duplicate '--thread' option"));
 	  chp += ts;
 	  parse->thread = strtol (chp, &endp, 10);
+	  if (endp[0] == ':')
+	    {
+	      chp = endp + 1;
+	      parse->simd_lane = strtol (chp, &endp, 10);
+	    }
+
 	  chp = endp;
 	}
       else if (strncmp (chp, "--frame ", fs) == 0)

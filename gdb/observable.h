@@ -145,8 +145,9 @@ extern observable<ptid_t /* ptid */> thread_stop_requested;
    resumed.  */
 extern observable<ptid_t /* ptid */> target_resumed;
 
-/* The target is about to be proceeded.  */
-extern observable<> about_to_proceed;
+/* The target is about to be proceeded.  STEP parameter specifies that
+   proceed will be a stepping action.  */
+extern observable<bool /* step */> about_to_proceed;
 
 /* A new breakpoint B has been created.  */
 extern observable<struct breakpoint */* b */> breakpoint_created;

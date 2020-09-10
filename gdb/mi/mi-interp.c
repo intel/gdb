@@ -78,7 +78,7 @@ static void mi_inferior_removed (struct inferior *inf);
 static void mi_on_resume (ptid_t ptid);
 static void mi_solib_loaded (struct so_list *solib);
 static void mi_solib_unloaded (struct so_list *solib);
-static void mi_about_to_proceed (void);
+static void mi_about_to_proceed (bool);
 static void mi_traceframe_changed (int tfnum, int tpnum);
 static void mi_tsv_created (const struct trace_state_variable *tsv);
 static void mi_tsv_deleted (const struct trace_state_variable *tsv);
@@ -684,8 +684,12 @@ mi_on_normal_stop (struct bpstats *bs, int print_frame)
     }
 }
 
+
+/* Callback function attached to the gdb::observers::about_to_proceed
+   observable.  */
+
 static void
-mi_about_to_proceed (void)
+mi_about_to_proceed (bool step)
 {
   /* Suppress output while calling an inferior function.  */
 

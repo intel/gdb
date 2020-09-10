@@ -1992,6 +1992,9 @@ mi_execute_command (const char *cmd, int from_tty)
 	      struct thread_info *ti = inferior_thread ();
 
 	      report_change = (ti->global_num != command->thread);
+
+	      if (!report_change && command->simd_lane >= 0)
+		report_change = ti->current_simd_lane () != command->simd_lane;
 	    }
 
 	  if (report_change)
@@ -2054,6 +2057,38 @@ mi_cmd_execute (struct mi_parse *parse)
 	error (_("Thread id: %d has terminated"), parse->thread);
 
       switch_to_thread (tp);
+
+      if (tp->state == THREAD_STOPPED)
+	tp->set_default_simd_lane ();
+    }
+
+  if (parse->simd_lane != -1)
+    {
+      /* SIMD lane number is specified.  */
+
+      thread_info *tp = inferior_thread ();
+
+      if (tp == nullptr)
+	error (_("No current thread found"));
+
+      /* Check that the number is valid.  */
+      if (parse->simd_lane >= (sizeof (unsigned int)) * 8)
+	error (_("Incorrect SIMD lane number: %d."), parse->simd_lane);
+
+      /* Check, that the thread has SIMD lanes.  */
+      if (!tp->has_simd_lanes ())
+	error (_("Thread %d has no SIMD lanes."), tp->global_num);
+
+      /* Check that thread is stopped.  */
+      if (tp->state != THREAD_STOPPED)
+	error (_("Thread %d is not stopped."), tp->global_num);
+
+      /* Check, that the lane is active.  */
+      if (!tp->is_simd_lane_active (parse->simd_lane))
+	error (_("SIMD lane %d is inactive in thread %d."),
+	       parse->simd_lane, tp->global_num);
+
+      tp->set_current_simd_lane (parse->simd_lane);
     }
 
   if (parse->frame != -1)

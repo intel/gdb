@@ -116,7 +116,7 @@ parse_thread_id (const char *tidstr, const char **end, int *simd_lane_num,
 	  tp = find_thread_global_id (thr_num);
 
 	  if (tp == nullptr)
-	    error (_("Thread global ID %d not known."), thr_num);
+	    error (_("Unknown thread global ID %d."), thr_num);
 	}
       else
 	{

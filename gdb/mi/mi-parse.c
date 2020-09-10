@@ -265,6 +265,16 @@ mi_parse::set_thread (const char *arg, char **endp)
 /* See mi-parse.h.  */
 
 void
+mi_parse::set_simd_lane (const char *arg, char **endp)
+{
+  if (simd_lane != -1)
+    error (_("Duplicate '--lane' option"));
+  simd_lane = strtol (arg, endp, 10);
+}
+
+/* See mi-parse.h.  */
+
+void
 mi_parse::set_frame (const char *arg, char **endp)
 {
   if (frame != -1)
@@ -343,6 +353,7 @@ mi_parse::mi_parse (const char *cmd, std::string *token)
       size_t as = sizeof ("--all ") - 1;
       size_t tgs = sizeof ("--thread-group ") - 1;
       size_t ts = sizeof ("--thread ") - 1;
+      size_t lns = sizeof ("--lane ") - 1;
       size_t fs = sizeof ("--frame ") - 1;
       size_t ls = sizeof ("--language ") - 1;
 
@@ -373,6 +384,16 @@ mi_parse::mi_parse (const char *cmd, std::string *token)
 	  option = "--thread";
 	  chp += ts;
 	  this->set_thread (chp, &endp);
+	  chp = endp;
+	}
+      else if (strncmp (chp, "--lane ", lns) == 0)
+	{
+	  char *endp;
+
+	  option = "--lane";
+	  chp += lns;
+	  this->set_simd_lane (chp, &endp);
+
 	  chp = endp;
 	}
       else if (strncmp (chp, "--frame ", fs) == 0)

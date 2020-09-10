@@ -57,6 +57,7 @@ struct mi_parse
     int all;
     int thread_group; /* At present, the same as inferior number.  */
     int thread;
+    int simd_lane;
     int frame;
 
     /* The language that should be used to evaluate the MI command.

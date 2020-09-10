@@ -53,6 +53,7 @@
 #include "observable.h"
 #include "gdbsupport/gdb_optional.h"
 #include "gdbsupport/byte-vector.h"
+#include "tid-parse.h"
 
 #include <ctype.h>
 #include "gdbsupport/run-time-clock.h"
@@ -544,20 +545,24 @@ mi_cmd_thread_select (const char *command, char **argv, int argc)
   if (argc != 1)
     error (_("-thread-select: USAGE: threadnum."));
 
-  int num = value_as_long (parse_and_eval (argv[0]));
-  thread_info *thr = find_thread_global_id (num);
-  if (thr == NULL)
-    error (_("Thread ID %d not known."), num);
+  int simd_lane_num = -1;
+  thread_info *thr = parse_global_thread_id (argv[0], &simd_lane_num);
 
   ptid_t previous_ptid = inferior_ptid;
+  int prev_simd_lane = -1;
 
-  thread_select (argv[0], thr);
+  if (inferior_ptid != null_ptid)
+    prev_simd_lane = inferior_thread ()->current_simd_lane ();
+
+  thread_select (argv[0], thr, simd_lane_num);
 
   print_selected_thread_frame (current_uiout,
 			       USER_SELECTED_THREAD | USER_SELECTED_FRAME);
 
-  /* Notify if the thread has effectively changed.  */
-  if (inferior_ptid != previous_ptid)
+  /* Notify if the thread or the SIMD lane has effectively changed.  */
+  if (inferior_ptid != previous_ptid
+      || (simd_lane_num >= 0
+	  && inferior_thread ()->current_simd_lane () != prev_simd_lane))
     {
       gdb::observers::user_selected_context_changed.notify
 	(USER_SELECTED_THREAD | USER_SELECTED_FRAME);
@@ -1984,6 +1989,9 @@ mi_execute_command (const char *cmd, int from_tty)
 	      struct thread_info *ti = inferior_thread ();
 
 	      report_change = (ti->global_num != command->thread);
+
+	      if (!report_change && command->simd_lane >= 0)
+		report_change = ti->current_simd_lane () != command->simd_lane;
 	    }
 
 	  if (report_change)
@@ -2039,11 +2047,41 @@ mi_cmd_execute (struct mi_parse *parse)
     {
       thread_info *tp = find_thread_global_id (parse->thread);
 
-      if (tp == NULL)
-	error (_("Invalid thread id: %d"), parse->thread);
-
+      if (tp == nullptr)
+	{
+	  if (parse->simd_lane >= 0 && inferior_ptid != null_ptid)
+	    {
+	      /* If SIMD syntax is used, a thread ID might have been
+		 skipped.  In this case, use the current thread.  */
+	      tp = inferior_thread ();
+	    }
+	  else
+	    error (_("Invalid thread id: %d"), parse->thread);
+	}
       if (tp->state == THREAD_EXITED)
 	error (_("Thread id: %d has terminated"), parse->thread);
+
+      if (parse->simd_lane >= 0)
+	{
+	  /* SIMD lane number is specified.  */
+
+	  /* Check that the number is valid.  */
+	  if (parse->simd_lane >= (sizeof (unsigned int)) * 8)
+	    error (_("Incorrect SIMD lane number: %d."), parse->simd_lane);
+
+	  /* Check, that the thread has SIMD lanes.  */
+	  if (!tp->has_simd_lanes ())
+	    error (_("Thread %d has no SIMD lanes."), parse->thread);
+
+	  /* Check, that the lane is active.  */
+	  if (!tp->is_simd_lane_active (parse->simd_lane))
+	      error (_("SIMD lane %d is inactive in thread %d."),
+		     parse->simd_lane, parse->thread);
+
+	  tp->set_current_simd_lane (parse->simd_lane);
+	}
+      else
+	tp->set_default_simd_lane ();
 
       switch_to_thread (tp);
     }

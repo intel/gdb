@@ -2962,10 +2962,10 @@ clear_proceed_status_thread (struct thread_info *tp)
    proceed.  */
 
 static void
-notify_about_to_proceed ()
+notify_about_to_proceed (int step)
 {
   top_level_interpreter ()->on_about_to_proceed ();
-  gdb::observers::about_to_proceed.notify ();
+  gdb::observers::about_to_proceed.notify (step);
 }
 
 void
@@ -3013,7 +3013,7 @@ clear_proceed_status (int step)
       inferior->control.stop_soon = NO_STOP_QUIETLY;
     }
 
-  notify_about_to_proceed ();
+  notify_about_to_proceed (step);
 }
 
 /* Returns true if TP is still stopped at a breakpoint that needs

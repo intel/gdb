@@ -320,10 +320,21 @@ breakpoint_commands (struct breakpoint *b)
   return b->commands ? b->commands.get () : NULL;
 }
 
-/* Flag indicating that a command has proceeded the inferior past the
-   current breakpoint.  */
+/* The context for a breakpoint commands list.  */
 
-static bool breakpoint_proceeded;
+struct breakpoint_commands_context
+{
+  /* The thread that has hit the breakpoint.  */
+  thread_info *thread = nullptr;
+
+  /* Flag indicating that a command has proceeded the thread past the
+     current breakpoint.  */
+  bool breakpoint_proceeded = false;
+};
+
+/* The context of the breakpoint whose commands we are executing.  */
+
+static breakpoint_commands_context bp_commands_context;
 
 const char *
 bpdisp_text (enum bpdisp disp)
@@ -4528,6 +4539,12 @@ bpstat_clear_actions (void)
 static void
 breakpoint_about_to_proceed (bool step)
 {
+  /* If the context does not have a thread, do nothing.  This happens
+     when proceeding outside the context of executing breakpoint
+     commands.  */
+  if (bp_commands_context.thread == nullptr)
+    return;
+
   if (inferior_ptid != null_ptid)
     {
       struct thread_info *tp = inferior_thread ();
@@ -4538,9 +4555,31 @@ breakpoint_about_to_proceed (bool step)
 	 breakpoint as if nothing happened.  */
       if (tp->control.in_infcall)
 	return;
-    }
 
-  breakpoint_proceeded = 1;
+      /* Also do not interrupt the command list if the thread that had
+	 hit the breakpoint will not be proceeded.  */
+      ptid_t resume_ptid = user_visible_resume_ptid (step);
+      process_stratum_target *resume_target
+	= user_visible_resume_target (resume_ptid);
+      process_stratum_target *eventing_target
+	= bp_commands_context.thread->inf->process_target ();
+
+      if (resume_target != nullptr && resume_target != eventing_target)
+	return;
+
+      if (!bp_commands_context.thread->ptid.matches (resume_ptid))
+	return;
+
+      bp_commands_context.breakpoint_proceeded = true;
+    }
+  else
+    {
+      /* If inferior_ptid is null_ptid, it is not possible that the
+	 thread of the BP context will proceed, because
+	 user_visible_resume_ptid relies on inferior_thread, which
+	 requires having a non-null inferior_ptid.  So, do
+	 nothing.  */
+    }
 }
 
 /* Return non-zero iff CMD as the first line of a command sequence is `silent'
@@ -4555,7 +4594,8 @@ command_line_is_silent (struct command_line *cmd)
 /* Execute all the commands associated with all the breakpoints at
    this location.  Any of these commands could cause the process to
    proceed beyond this point, etc.  We look out for such changes by
-   checking the global "breakpoint_proceeded" after each command.
+   checking "breakpoint_proceeded" in the
+   "breakpoint_commands_context" after each command.
 
    Returns true if a breakpoint command resumed the inferior.  In that
    case, it is the caller's responsibility to recall it again with the
@@ -4580,7 +4620,10 @@ bpstat_do_actions_1 (bpstat *bsp)
   /* This pointer will iterate over the list of bpstat's.  */
   bs = *bsp;
 
-  breakpoint_proceeded = 0;
+  scoped_restore bp_commands_context_restore
+    = make_scoped_restore (&bp_commands_context);
+  bp_commands_context.thread = inferior_thread ();
+  bp_commands_context.breakpoint_proceeded = false;
 
   /* After all actions are done, restore the original SIMD lane.  */
   thread_info *thread = inferior_thread ();
@@ -4625,7 +4668,7 @@ bpstat_do_actions_1 (bpstat *bsp)
 
 		  execute_control_command (cmd);
 
-		  return !breakpoint_proceeded;
+		  return !bp_commands_context.breakpoint_proceeded;
 		});
 	    }
 	  else if (bs->simd_lane_mask != 0)
@@ -4643,13 +4686,13 @@ bpstat_do_actions_1 (bpstat *bsp)
 	      execute_control_command (cmd);
 	    }
 
-	  if (breakpoint_proceeded)
+	  if (bp_commands_context.breakpoint_proceeded)
 	    break;
 	  else
 	    cmd = cmd->next;
 	}
 
-      if (breakpoint_proceeded)
+      if (bp_commands_context.breakpoint_proceeded)
 	{
 	  if (current_ui->async)
 	    /* If we are in async mode, then the target might be still

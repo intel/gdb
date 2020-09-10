@@ -4522,10 +4522,11 @@ bpstat_clear_actions (void)
     }
 }
 
-/* Called when a command is about to proceed the inferior.  */
+/* Called when a command is about to proceed the inferior.  Attached
+   to the gdb::observers::about_to_proceed observable.  */
 
 static void
-breakpoint_about_to_proceed (void)
+breakpoint_about_to_proceed (bool step)
 {
   if (inferior_ptid != null_ptid)
     {

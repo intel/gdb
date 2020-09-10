@@ -2804,7 +2804,7 @@ clear_proceed_status (int step)
       inferior->control.stop_soon = NO_STOP_QUIETLY;
     }
 
-  gdb::observers::about_to_proceed.notify ();
+  gdb::observers::about_to_proceed.notify (step);
 }
 
 /* Returns true if TP is still stopped at a breakpoint that needs

@@ -2404,15 +2404,21 @@ thread_command (const char *tidstr, int from_tty)
   else
     {
       ptid_t previous_ptid = inferior_ptid;
+      int previous_simd_lane = inferior_ptid != null_ptid
+	? inferior_thread ()->current_simd_lane ()
+	: 0;
 
       int simd_lane_num;
       thread_info *tp = parse_thread_id (tidstr, NULL, &simd_lane_num);
 
       thread_select (tidstr, tp, simd_lane_num);
+      if (inferior_ptid == null_ptid)
+	error (_("No thread selected"));
 
       /* Print if the thread has not changed, otherwise an event will
 	 be sent.  */
-      if (inferior_ptid == previous_ptid)
+      if (inferior_ptid == previous_ptid
+	  && previous_simd_lane == inferior_thread ()->current_simd_lane ())
 	{
 	  print_selected_thread_frame (current_uiout,
 				       USER_SELECTED_THREAD

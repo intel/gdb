@@ -465,6 +465,11 @@ public:
 
   /* Return true if LANE is active in this thread.  */
   bool is_simd_lane_active (int lane);
+
+  /* Return a string with the thread's global number.  If the thread has
+     SIMD lanes, the result also includes the current SIMD lane number after
+     ':' sign, e.g. thread_id:lane_id.  */
+  std::string get_global_id_mi_str ();
 };
 
 /* A gdb::ref_ptr pointer to a thread_info.  */

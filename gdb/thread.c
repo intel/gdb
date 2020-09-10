@@ -219,6 +219,19 @@ thread_info::is_simd_lane_active (int lane)
   return (mask & (0x1 << lane)) != 0;
 }
 
+/*  See gdbthread.h.  */
+
+std::string
+thread_info::get_global_id_mi_str ()
+{
+  std::string result = std::to_string (global_num);
+
+  if (has_simd_lanes ())
+    result += ":" + std::to_string (current_simd_lane ());
+
+  return result;
+}
+
 /* See gdbthread.h.  */
 
 int

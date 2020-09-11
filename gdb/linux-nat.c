@@ -4213,7 +4213,7 @@ linux_nat_target::thread_address_space (ptid_t ptid)
       /* An (lwpid,0,0) ptid.  Look up the lwp object to get at the
 	 tgid.  */
       lwp = find_lwp_pid (ptid);
-      pid = lwp->ptid.pid ();
+      pid = lwp != nullptr ? lwp->ptid.pid () : ptid.pid ();
     }
   else
     {

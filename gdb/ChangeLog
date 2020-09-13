@@ -1,3 +1,8 @@
+2020-09-13  Pedro Alves  <pedro@palves.net>
+
+	* NEWS: Document "-break-insert --qualified".
+	* mi/mi-cmd-break.c (mi_cmd_break_insert_1): Handle "--qualified".
+
 2021-04-20  Felix Willgerodt  <felix.willgerodt@intel.com>
 
 	* c-exp.y (qualifier_seq_noopt): Replace qualifier_seq with

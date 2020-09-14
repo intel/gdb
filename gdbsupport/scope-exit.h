@@ -65,7 +65,16 @@ public:
     if (!m_released)
       {
 	auto *self = static_cast<CRTP *> (this);
-	self->on_exit ();
+	try
+	  {
+	    self->on_exit ();
+	  }
+	catch (const gdb_exception_error &e)
+	  {
+	    // save a formatted message on stack for the core dump
+	    __attribute__ ((unused)) const char* unused = e.what ();
+	    gdb_assert_not_reached ("unhandled exception in a SCOPE_EXIT");
+	  }
       }
   }
 

@@ -18,6 +18,11 @@
 
 load_lib openmp.exp
 
+if {[require_openmp_device "GPU"]} {
+    unsupported "test is not supported on GPUs"
+    return 0
+}
+
 if {[skip_openmp_tests]} {
     untested "skipping openmp test"
     return 0

@@ -24,6 +24,11 @@ if {[skip_sycl_tests]} {
     return 0
 }
 
+if {[require_sycl_device "gpu" "Intel*"]} {
+    unsupported "test is not supported on Intel GPUs"
+    return 0
+}
+
 if {[prepare_sycl_for_testing $binfile $srcfile]} {
     return -1
 }

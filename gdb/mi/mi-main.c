@@ -2721,6 +2721,16 @@ mi_cmd_fix_multi_location_breakpoint_output (const char *command, char **argv,
   fix_multi_location_breakpoint_output_globally = true;
 }
 
+bool mi_simd_lanes_output_supported = false;
+
+/* See mi/mi-main.h.  */
+
+void
+mi_cmd_simd_lanes_output_enable (const char *command, char **argv, int argc)
+{
+  mi_simd_lanes_output_supported = true;
+}
+
 /* Implement the "-complete" command.  */
 
 void

@@ -145,6 +145,7 @@ static struct mi_cmd mi_cmds[] =
   DEF_MI_CMD_MI ("list-target-features", mi_cmd_list_target_features),
   DEF_MI_CMD_MI ("list-thread-groups", mi_cmd_list_thread_groups),
   DEF_MI_CMD_MI ("remove-inferior", mi_cmd_remove_inferior),
+  DEF_MI_CMD_MI ("simd-lanes-output-enable", mi_cmd_simd_lanes_output_enable),
   DEF_MI_CMD_MI ("stack-info-depth", mi_cmd_stack_info_depth),
   DEF_MI_CMD_MI ("stack-info-frame", mi_cmd_stack_info_frame),
   DEF_MI_CMD_MI ("stack-list-arguments", mi_cmd_stack_list_args),

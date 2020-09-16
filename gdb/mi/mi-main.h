@@ -59,4 +59,11 @@ extern struct mi_suppress_notification mi_suppress_notification;
 extern void mi_cmd_fix_multi_location_breakpoint_output (const char *command,
 							 char **argv, int argc);
 
+/* Implementation of -simd-lanes-enable.  */
+
+extern void mi_cmd_simd_lanes_output_enable (const char *command, char **argv,
+					     int argc);
+
+extern bool mi_simd_lanes_output_supported;
+
 #endif /* MI_MI_MAIN_H */

@@ -73,7 +73,15 @@ print_varobj (struct varobj *var, enum print_values print_values,
 
   thread_id = varobj_get_thread_id (var);
   if (thread_id > 0)
-    uiout->field_signed ("thread-id", thread_id);
+    {
+      std::string thread_id_str = std::to_string (thread_id);
+      int simd_lane = varobj_get_simd_lane (var);
+
+      if (mi_simd_lanes_output_supported && simd_lane >= 0)
+	thread_id_str += ":" + std::to_string (simd_lane);
+
+      uiout->field_string ("thread-id", thread_id_str);
+    }
 
   if (varobj_get_frozen (var))
     uiout->field_signed ("frozen", 1);

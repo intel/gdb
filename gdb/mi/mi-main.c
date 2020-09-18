@@ -576,7 +576,7 @@ mi_cmd_thread_list_ids (const char *command, char **argv, int argc)
     error (_("-thread-list-ids: No arguments required."));
 
   int num = 0;
-  int current_thread = -1;
+  thread_info *current_thread = nullptr;
 
   update_thread_list ();
 
@@ -586,15 +586,18 @@ mi_cmd_thread_list_ids (const char *command, char **argv, int argc)
     for (thread_info *tp : all_non_exited_threads ())
       {
 	if (tp->ptid == inferior_ptid)
-	  current_thread = tp->global_num;
+	  current_thread = tp;
 
 	num++;
-	current_uiout->field_signed ("thread-id", tp->global_num);
+	current_uiout->field_string ("thread-id",
+				     tp->get_global_id_mi_str ().c_str ());
       }
+
   }
 
-  if (current_thread != -1)
-    current_uiout->field_signed ("current-thread-id", current_thread);
+  if (current_thread != nullptr)
+    current_uiout->field_string ("current-thread-id",
+				 current_thread->get_global_id_mi_str ());
   current_uiout->field_signed ("number-of-threads", num);
 }
 

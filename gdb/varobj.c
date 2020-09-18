@@ -85,6 +85,10 @@ struct varobj_root
      was created.  */
   int thread_id = 0;
 
+  /*  The field is valid only if the thread THREAD_ID has SIMD lanes.
+      When not -1, indicates the currently selected SIMD lane.  */
+  int simd_lane = -1;
+
   /* If true, the -var-update always recomputes the value in the
      current thread and frame.  Otherwise, variable object is
      always updated in the specific scope/thread/frame.  */
@@ -355,7 +359,12 @@ varobj_create (const char *objname,
 	    error (_("Failed to find the specified frame"));
 
 	  var->root->frame = get_frame_id (fi);
-	  var->root->thread_id = inferior_thread ()->global_num;
+	  thread_info *current_thread = inferior_thread ();
+	  var->root->thread_id = current_thread->global_num;
+
+	  if (current_thread->has_simd_lanes ())
+	    var->root->simd_lane = inferior_thread ()->current_simd_lane ();
+
 	  old_id = get_frame_id (get_selected_frame (NULL));
 	  select_frame (fi);	 
 	}
@@ -574,6 +583,17 @@ varobj_get_thread_id (const struct varobj *var)
 {
   if (var->root->valid_block && var->root->thread_id > 0)
     return var->root->thread_id;
+  else
+    return -1;
+}
+
+int
+varobj_get_simd_lane (const struct varobj *var)
+{
+  if (var->root->valid_block
+      && var->root->thread_id > 0
+      && var->root->simd_lane >= 0)
+    return var->root->simd_lane;
   else
     return -1;
 }

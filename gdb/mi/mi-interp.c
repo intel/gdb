@@ -339,8 +339,8 @@ mi_new_thread (struct thread_info *t)
       target_terminal::ours_for_output ();
 
       fprintf_unfiltered (mi->event_channel,
-			  "thread-created,id=\"%d\",group-id=\"i%d\"",
-			  t->global_num, t->inf->num);
+			  "thread-created,id=\"%s\",group-id=\"i%d\"",
+			  t->get_global_id_mi_str ().c_str (), t->inf->num);
       gdb_flush (mi->event_channel);
     }
 }
@@ -361,8 +361,8 @@ mi_thread_exit (struct thread_info *t, int silent)
       target_terminal::scoped_restore_terminal_state term_state;
       target_terminal::ours_for_output ();
       fprintf_unfiltered (mi->event_channel,
-			  "thread-exited,id=\"%d\",group-id=\"i%d\"",
-			  t->global_num, t->inf->num);
+			  "thread-exited,id=\"%s\",group-id=\"i%d\"",
+			  t->get_global_id_mi_str ().c_str (), t->inf->num);
       gdb_flush (mi->event_channel);
     }
 }
@@ -649,12 +649,13 @@ mi_on_normal_stop_1 (struct bpstats *bs, int print_frame)
       if (console_print)
 	print_stop_event (mi->cli_uiout);
 
-      mi_uiout->field_signed ("thread-id", tp->global_num);
+      mi_uiout->field_string ("thread-id",
+			      tp->get_global_id_mi_str ().c_str ());
       if (non_stop)
 	{
 	  ui_out_emit_list list_emitter (mi_uiout, "stopped-threads");
 
-	  mi_uiout->field_signed (NULL, tp->global_num);
+	  mi_uiout->field_string (NULL, tp->get_global_id_mi_str ().c_str ());
 	}
       else
 	mi_uiout->field_string ("stopped-threads", "all");
@@ -954,8 +955,8 @@ mi_output_running (struct thread_info *thread)
 	continue;
 
       fprintf_unfiltered (mi->raw_stdout,
-			  "*running,thread-id=\"%d\"\n",
-			  thread->global_num);
+			  "*running,thread-id=\"%s\"\n",
+			  thread->get_global_id_mi_str ().c_str ());
     }
 }
 
@@ -1255,8 +1256,8 @@ mi_user_selected_context_changed (user_selected_what selection)
 	  print_selected_thread_frame (mi->cli_uiout, selection);
 
 	  fprintf_unfiltered (mi->event_channel,
-			      "thread-selected,id=\"%d\"",
-			      tp->global_num);
+			      "thread-selected,id=\"%s\"",
+			      tp->get_global_id_mi_str ().c_str ());
 
 	  if (tp->state != THREAD_RUNNING)
 	    {

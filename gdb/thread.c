@@ -33,6 +33,7 @@
 #include "btrace.h"
 #include "gdbarch.h"
 #include "block.h"
+#include "mi/mi-main.h"
 
 #include <ctype.h>
 #include <sys/types.h>
@@ -226,7 +227,7 @@ thread_info::get_global_id_mi_str ()
 {
   std::string result = std::to_string (global_num);
 
-  if (has_simd_lanes ())
+  if (mi_simd_lanes_output_supported && has_simd_lanes ())
     result += ":" + std::to_string (current_simd_lane ());
 
   return result;
@@ -1229,8 +1230,10 @@ print_thread_row (struct ui_out *uiout, thread_info *tp,
       uiout->field_string ("id-in-tg", print_thread_id (tp, &lanes));
     }
 
-  if (show_global_ids || uiout->is_mi_like_p ())
+  if (show_global_ids && !uiout->is_mi_like_p ())
     uiout->field_signed ("id", tp->global_num);
+  else if (uiout->is_mi_like_p ())
+    uiout->field_string ("id", tp->get_global_id_mi_str ());
 
   /* For the CLI, we stuff everything into the target-id field.
      This is a gross hack to make the output come out looking
@@ -1465,8 +1468,9 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 
   if (pid == -1 && requested_threads == NULL)
     {
-      if (uiout->is_mi_like_p () && inferior_ptid != null_ptid)
-	uiout->field_signed ("current-thread-id", current_thread->global_num);
+      if (uiout->is_mi_like_p () && current_thread != nullptr)
+	uiout->field_string ("current-thread-id",
+			     current_thread->get_global_id_mi_str ().c_str ());
 
       if (inferior_ptid != null_ptid && current_exited)
 	uiout->message ("\n\
@@ -2559,8 +2563,8 @@ print_selected_thread_frame (struct ui_out *uiout,
     {
       if (uiout->is_mi_like_p ())
 	{
-	  uiout->field_signed ("new-thread-id",
-			       inferior_thread ()->global_num);
+	  uiout->field_string ("new-thread-id",
+			       tp->get_global_id_mi_str ().c_str ());
 	}
       else
 	{

@@ -41,26 +41,20 @@ if { [start_sycl_program] < 0 } {
     return -1
 }
 
-set first_line [gdb_get_line_number "kernel-first-line"]
 set line_dim0_defined [gdb_get_line_number "kernel-dim0-defined"]
 set third_line [gdb_get_line_number "kernel-third-line"]
-set condition_line [gdb_get_line_number "kernel-condition-line"]
 set fourth_line [gdb_get_line_number "kernel-fourth-line"]
 set fifth_line [gdb_get_line_number "kernel-fifth-line"]
+set sixth_line [gdb_get_line_number "kernel-sixth-line"]
+set condition_line [gdb_get_line_number "kernel-condition-line"]
 set even_branch [gdb_get_line_number "kernel-even-branch"]
 set odd_branch [gdb_get_line_number "kernel-odd-branch"]
 
-gdb_breakpoint "$line_dim0_defined if dim0 == 7"
+gdb_breakpoint "$line_dim0_defined" {temporary}
 
-# The SIMD lane have to be 7.
-gdb_test "continue" ".* with SIMD lane 7,.*$srcfile:$line_dim0_defined.*" \
-    "hit the BP after dim0 defined"
-
-# The current SIMD lane has to be 7.
-gdb_test "thread" ".*:7.*" "Check lane at BP with condition."
+gdb_continue_to_breakpoint "hit the BP after dim0 defined"
 
 set first_thread [get_current_thread "$line_dim0_defined"]
-
 if { $first_thread eq "2.2" } {
     set second_thread "2.3"
     set third_thread "2.4"
@@ -73,97 +67,151 @@ if { $first_thread eq "2.2" } {
     }
 }
 
-gdb_breakpoint "$third_line thread $second_thread:3" {temporary}
-gdb_breakpoint "$fourth_line thread $first_thread:5 if dim0 == 5"
+proc get_dim0_for_lane {lane_num} {
+    global decimal
+    global gdb_prompt
 
-# Switch to the third thread, which is not equal neither to the first
-# nor the second.
-gdb_test "thread $third_thread" ".*$third_thread.*"\
-    "Switch to third thread ($third_thread)"
+    gdb_test "thread :$lane_num" ":$lane_num.*" "switch the current thread to lane $lane_num"
 
-set hit_third_line false
-set hit_fourth_line false
-set i 0
-
-while {!($hit_third_line && $hit_fourth_line) && ($i < 3)} {
-    set i [incr $i]
-    gdb_test_multiple "continue" "continue $i" {
-	-re ".*$srcfile:$third_line.*\r\n$gdb_prompt" {
-	    # Thread should be $second_thread, SIMD lane 3.
-	    gdb_test "thread" ".*$second_thread:3.*"\
-		"second thread ($second_thread) after BP with thread clause"
-	    set hit_third_line true
+    gdb_test_multiple "print dim0" "get dim0 value for the current thread, lane $lane_num " {
+	-re "= ($decimal).*$gdb_prompt" {
+	    pass $gdb_test_name
+	    return $expect_out(1,string)
 	}
-	-re ".*$srcfile:$fourth_line.*\r\n$gdb_prompt" {
-	    # The thread should be first_thread, SIMD lane have to be 5.
-	    gdb_test "thread" ".*$first_thread:5.*"\
-		"first thread ($first_thread) after hit BP with thread clause and condition "
-	    set hit_fourth_line true
+	-re "$gdb_prompt" {
+	    fail $gdb_test_name
+	    return -1
 	}
     }
 }
 
+set dim0_first_thread_5 [get_dim0_for_lane 5]
+set dim0_first_thread_7 [get_dim0_for_lane 7]
+
+set test_lane_clause "should stop on a BP with a lane clause"
+set n_hit_lane_clause 0
+gdb_breakpoint "$third_line thread $second_thread:3"
+
+set test_lane_clause_condition "should stop on a BP with a lane clause and condition"
+set n_hit_lane_clause_condition 0
+gdb_breakpoint "$fourth_line thread $first_thread:5 if dim0 == $dim0_first_thread_5"
+
+set test_condition "should stop on a BP with a condition"
+set n_hit_condition 0
+gdb_breakpoint "$sixth_line if dim0 == $dim0_first_thread_7"
+
 # Should not stop here, because only odd SIMD lanes are active.
 set test_odd "no stop if condition is true for inactive SIMD lane"
-set hit_odd false
+set hit_cond_for_inactive_lane false
 gdb_breakpoint "$odd_branch if dim0 == 6"
 
 # Should not stop here, since only even SIMD lanes are active.
 set test_even "no stop if thread clause includes inactive SIMD lane"
-set hit_even false
+set hit_lane_clause_for_inactive_lane false
 gdb_breakpoint "$even_branch thread 5:3"
 
 # Should not stop here, the condition and thread do not match.
-set test_condition "no stop if condition does not match SIMD lane"
-set hit_condition false
-gdb_breakpoint "$condition_line thread $first_thread:6 if dim0 == 4"
+set test_condition_lane_mismatch "no stop if condition does not match SIMD lane"
+set hit_condition_lane_mismatch false
+gdb_breakpoint "$condition_line thread $first_thread:7 if dim0 == $dim0_first_thread_5"
 
-# No stop for false condition
+# No stop for false condition.
 set test_false_condition "no stop for false condition"
 set hit_false_condition false
 gdb_breakpoint "$fifth_line if false"
 
+set test_terminated "program terminated normally"
+
+# Switch to the third thread, which is equal to neither the first nor the second.
+gdb_test "thread $third_thread" ".*$third_thread.*"\
+    "Switch to third thread ($third_thread)"
+
 set should_continue true
-while {$should_continue} {
-    gdb_test_multiple "continue" "continue until termination" {
-	-re ".*$srcfile:$odd_branch.*" {
-	    set hit_odd true
+set i 0
+
+while {$should_continue && $i < 10} {
+    incr i
+    with_test_prefix "iteration $i" { gdb_test_multiple "continue" "continue" {
+	-re "$srcfile:$third_line.*$gdb_prompt" {
+	    # Thread should be $second_thread, SIMD lane 3.
+	    gdb_test "thread" ".*$second_thread:3.*"\
+		"second thread ($second_thread) after BP with lane clause"
+	    incr n_hit_lane_clause
+	}
+	-re "$srcfile:$fourth_line.*$gdb_prompt" {
+	    # The thread should be first_thread, SIMD lane have to be 5.
+	    gdb_test "thread" ".*$first_thread:5.*"\
+		"first thread ($first_thread) after hit BP with lane clause and condition "
+	    incr n_hit_lane_clause_condition
+	}
+	-re "$srcfile:$sixth_line.*$gdb_prompt" {
+	    # Thread should be $first_thread, SIMD lane 7.
+	    gdb_test "thread" ".*$first_thread:7.*"\
+		"first thread ($first_thread) after BP with condition"
+
+	    incr n_hit_condition
+	}
+	-re "$srcfile:$odd_branch.*$gdb_prompt" {
+	    set hit_cond_for_inactive_lane true
+	    gdb_test "p/t \$emask" "= \[01\]+" "odd branch emask"
 	    fail $test_odd
 	}
-	-re ".*$srcfile:$even_branch.*" {
-	    set hit_even true
+	-re "$srcfile:$even_branch.*$gdb_prompt" {
+	    set hit_lane_clause_for_inactive_lane true
+	    gdb_test "p/t \$emask" "= \[01\]+" "even branch emask"
 	    fail $test_even
 	}
-	-re ".*$srcfile:$condition_line.*" {
-	    set hit_condition true
-	    fail $test_condition
+	-re "$srcfile:$condition_line.*$gdb_prompt" {
+	    set hit_condition_lane_mismatch true
+	    gdb_test "print dim0" "= $dim0_first_thread_5" "check condition"
+	    gdb_test "thread" "$first_thread:7" "check lane"
+	    fail $test_condition_lane_mismatch
 	}
-	-re ".*$srcfile:$fifth_line.*" {
+	-re "$srcfile:$fifth_line.*$gdb_prompt" {
 	    set hit_false_condition true
 	    fail $test_false_condition
 	}
 	-re -wrap "$inferior_exited_re normally.*" {
 	    set should_continue false
-	    pass "program terminated normally"
+	    pass $test_terminated
 	}
 	-re -wrap "$inferior_exited_re with code 01.*" {
 	    set should_continue false
-	    fail "program terminated normally"
+	    pass $test_terminated
 	}
-    }
+    }}
 }
 
-if { !$hit_even } {
+if { $n_hit_lane_clause == 1} {
+    pass $test_lane_clause
+} else {
+    fail $test_lane_clause
+}
+
+if { $n_hit_lane_clause_condition == 1 } {
+    pass $test_lane_clause_condition
+} else {
+    fail $test_lane_clause_condition
+}
+
+if { $n_hit_condition == 1 } {
+    pass $test_condition
+} else {
+    fail $test_condition
+}
+
+if { !$hit_lane_clause_for_inactive_lane } {
     pass $test_even
 }
 
-if { !$hit_odd } {
+if { !$hit_cond_for_inactive_lane } {
     pass $test_odd
 }
 
-if { !$hit_condition } {
-    pass $test_condition
+if { !$hit_condition_lane_mismatch } {
+    pass $test_condition_lane_mismatch
 }
+
 if { !$hit_false_condition } {
     pass $test_false_condition
 }

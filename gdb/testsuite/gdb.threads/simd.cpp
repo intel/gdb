@@ -63,11 +63,12 @@ main (int argc, char *argv[])
 	in_elem = add_one (in_elem); /* kernel-third-line */
 	in_elem = add_one (in_elem); /* kernel-fourth-line */
 	in_elem = add_one (in_elem); /* kernel-fifth-line */
+	in_elem = add_one (in_elem); /* kernel-sixth-line */
 
 	if (dim0 % 2 == 0) /* kernel-condition-line */
-	  accessorOut[wiID] = in_elem + 197; /* kernel-even-branch */
+	  accessorOut[wiID] = in_elem + 196; /* kernel-even-branch */
 	else
-	  accessorOut[wiID] = in_elem + 297; /* kernel-odd-branch */
+	  accessorOut[wiID] = in_elem + 296; /* kernel-odd-branch */
 
       });
     });

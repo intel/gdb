@@ -1,0 +1,142 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests for SIMD support in breakpoints, multi SIMD lane hit.
+
+# This is a generic test, however, SIMD lanes are not supported by all
+# targets.  For convenience, to test this functionality, a SYCL
+# program with the offload to Intel GPU is used here.
+
+load_lib sycl.exp
+
+standard_testfile simd.cpp
+
+if { [skip_sycl_tests] } {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if { ![require_sycl_device "gpu" "Intel*"] } {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if { [prepare_sycl_for_testing $binfile $srcfile] } {
+    return -1
+}
+
+if { [start_sycl_program] < 0 } {
+    return -1
+}
+
+set first_line [gdb_get_line_number "kernel-first-line"]
+set line_dim0_defined [gdb_get_line_number "kernel-dim0-defined"]
+set third_line [gdb_get_line_number "kernel-third-line"]
+set condition_line [gdb_get_line_number "kernel-condition-line"]
+set fourth_line [gdb_get_line_number "kernel-fourth-line"]
+set even_branch [gdb_get_line_number "kernel-even-branch"]
+
+gdb_breakpoint "$first_line if true" {temporary}
+gdb_test_multiple "continue" "condition that hits all lanes" {
+    -re "\\\[0-($decimal)\\\].*$srcfile:$first_line.*$gdb_prompt" {
+	set max_simd_lane $expect_out(1,string)
+	if { $max_simd_lane >= 7 } {
+	    pass $gdb_test_name
+	} else {
+	    fail $gdb_test_name
+	}
+    }
+    -re "$gdb_prompt" {
+	set max_simd_lane 99999
+	fail $gdb_test_name
+    }
+}
+
+set first_thread [get_current_thread "get first thread"]
+
+if { $first_thread eq "2.2" } {
+    set second_thread "2.3"
+} else {
+    set second_thread "2.2"
+}
+
+# Set 2 BP in the same location.  Both breakpoints are hit by the same thread,
+# however, the lane sets are different.
+gdb_breakpoint "$line_dim0_defined if dim0 > 3 && dim0 < 8" {temporary}
+gdb_breakpoint "$line_dim0_defined if dim0 > 5 && dim0 < 8" {temporary}
+
+# Set a counter of how many times the condition was evaluated.
+gdb_test "set \$i = 0"
+gdb_breakpoint "$third_line thread $second_thread if ((++\$i) > 0 && dim0 % 2 == 0)"
+
+# For the above Bp (at third line) we prepare the state of the second thread:
+# * it is focused on non-zero even lane
+# * the second thread is not the current thread.
+
+proc prepare_second_thread {} {
+    global first_thread
+    global second_thread
+    # Set the current SIMD lane for the second thread to 2.  When the thread hits
+    # the BP, we expect this lane to be preserved.
+    gdb_test "thread $second_thread:2" ".*$second_thread:2.*" \
+	"Switch to the second thread ($second_thread), lane 2."
+
+    # Go back to the first thread.
+    gdb_test "thread $first_thread" ".*$first_thread.*" \
+	"Go back to the first thread ($first_thread)"
+}
+
+prepare_second_thread
+
+# Thread clause, lane clause, condition for several lanes and threads.
+gdb_breakpoint "$fourth_line thread $first_thread:6 if dim0 % 2 == 0"
+
+foreach iter {1 2 3} {
+    with_test_prefix "iteration $iter" {
+	gdb_test_multiple "continue" "continue to conditional BP" {
+	    -re "\\\[4-7\\\].*$srcfile:$line_dim0_defined.*$gdb_prompt" {
+		# The current SIMD lane has to be 4, not 6.
+		gdb_test "thread" ".*:4.*" "Check lane after hit 2 BPs with conditions."
+
+		# In case if this BP was also hit by the second thread, ensure
+		# that the second thread is ready for the next test.
+		prepare_second_thread
+		pass $gdb_test_name
+	    }
+	    -re "Thread $second_thread.*with SIMD lanes \\\[0 2 4 6.*\\\].*$srcfile:$third_line.*.*$gdb_prompt" {
+		# The current SIMD lane has to be 2, not 0.
+		gdb_test "thread" ".*$second_thread:2.*" "current lane not changed (matches BP conditions)"
+
+		# Condition has been evaluated for each lane, ($max_simd_lane + 1) times.
+		gdb_test "print \$i" "= [expr $max_simd_lane + 1]" \
+		    "condition is evaluated for all active lanes."
+
+		pass $gdb_test_name
+	    }
+
+	    -re "Thread $first_thread.* with SIMD lane 6,.*$srcfile:$fourth_line.*.*$gdb_prompt" {
+		# Check the condition.
+		gdb_test "print dim0 % 2" "= 0" \
+		    "Check condition after the hit at line $fourth_line"
+
+		# Check the thread and the lane.
+		gdb_test "thread" ".*$first_thread:6.*" \
+		    "Check lane ($first_thread:6) after hit BP at fourth line ($srcfile:$fourth_line)"
+
+		pass $gdb_test_name
+	    }
+	}
+    }
+}

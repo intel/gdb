@@ -85,10 +85,6 @@ public:
 
   virtual bool is_compacted_inst (const gdb_byte inst[]) const override;
 
-  virtual const gdb_byte *breakpoint_inst () override;
-
-  virtual unsigned int breakpoint_inst_length () override;
-
   virtual int pc_regnum () const override;
 
   virtual int sp_regnum () const override;
@@ -171,25 +167,6 @@ arch_info_gen9::is_compacted_inst (const gdb_byte inst[]) const
 {
   /* Check the CmptCtrl flag (bit 29).  */
   return inst[3] & 0x20;
-}
-
-const gdb_byte *
-arch_info_gen9::breakpoint_inst ()
-{
-  /* An arbitrary compacted instruction with its DebugCtrl (bit 7) and
-     CmptCtrl (bit 29) flags set.  */
-  static const gdb_byte compacted[] = {
-    (0x40 | 0x80), 0x00, 0x60, (0x00 | 0x20), 0x28, 0x4b, 0x80, 0x25,
-  };
-
-  return compacted;
-}
-
-unsigned int
-arch_info_gen9::breakpoint_inst_length ()
-{
-  /* Use a compacted instruction for inserting traps.  */
-  return inst_length_compacted ();
 }
 
 int

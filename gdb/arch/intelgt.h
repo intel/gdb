@@ -119,12 +119,6 @@ public:
   /* Return true if the given INST is compacted; false otherwise.  */
   virtual bool is_compacted_inst (const gdb_byte inst[]) const = 0;
 
-  /* The breakpoint instruction used for this arch.  */
-  virtual const gdb_byte *breakpoint_inst () = 0;
-
-  /* The length of the breakpoint instruction.  */
-  virtual unsigned int breakpoint_inst_length () = 0;
-
   /* The index of the PC register.  */
   virtual int pc_regnum () const = 0;
 

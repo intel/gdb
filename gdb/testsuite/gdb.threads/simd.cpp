@@ -34,7 +34,7 @@ add_one (int to_number)
 int
 main (int argc, char *argv[])
 {
-  constexpr size_t DIM0 = 128;
+  constexpr size_t DIM0 = 1024;
 
   int in[DIM0];
   int out[DIM0];
@@ -63,11 +63,12 @@ main (int argc, char *argv[])
 	in_elem = add_one (in_elem); /* kernel-third-line */
 	in_elem = add_one (in_elem); /* kernel-fourth-line */
 	in_elem = add_one (in_elem); /* kernel-fifth-line */
+	in_elem = add_one (in_elem); /* kernel-sixth-line */
 
 	if (dim0 % 2 == 0) /* kernel-condition-line */
-	  accessorOut[wiID] = in_elem + 197; /* kernel-even-branch */
+	  accessorOut[wiID] = in_elem + 196; /* kernel-even-branch */
 	else
-	  accessorOut[wiID] = in_elem + 297; /* kernel-odd-branch */
+	  accessorOut[wiID] = in_elem + 296; /* kernel-odd-branch */
 
       });
     });

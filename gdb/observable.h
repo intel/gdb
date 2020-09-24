@@ -114,6 +114,8 @@ extern observable<struct so_list */* solib */> solib_loaded;
    been unloaded yet, and thus are still available.  */
 extern observable<struct so_list */* solib */> solib_unloaded;
 
+extern observable<objfile */* objfile */> jit_object_unloaded;
+
 /* The symbol file specified by OBJFILE has been loaded.  Called
    with OBJFILE equal to NULL to indicate previously loaded symbol
    table data has now been invalidated.  */

@@ -8125,9 +8125,13 @@ disable_breakpoints_in_shlibs (void)
    disabled ones can just stay disabled.  */
 
 static void
-disable_breakpoints_in_unloaded_shlib (program_space *pspace, so_list *solib)
+disable_breakpoints_in_unloaded_objfile (program_space *pspace,
+					 objfile *objfile)
 {
   bool disabled_shlib_breaks = false;
+
+  if (objfile == nullptr)
+    return;
 
   for (bp_location *loc : all_bp_locations ())
     {
@@ -8142,7 +8146,7 @@ disable_breakpoints_in_unloaded_shlib (program_space *pspace, so_list *solib)
 	       && (loc->loc_type == bp_loc_hardware_breakpoint
 		   || loc->loc_type == bp_loc_software_breakpoint))
 	      || is_tracepoint (b))
-	  && solib_contains_address_p (solib, loc->address))
+	  && is_addr_in_objfile (loc->address, objfile))
 	{
 	  loc->shlib_disabled = 1;
 	  /* At this point, we cannot rely on remove_breakpoint
@@ -8158,11 +8162,29 @@ disable_breakpoints_in_unloaded_shlib (program_space *pspace, so_list *solib)
 	      target_terminal::ours_for_output ();
 	      warning (_("Temporarily disabling breakpoints "
 			 "for unloaded shared library \"%s\""),
-		       solib->so_name);
+		       objfile->original_name);
 	    }
 	  disabled_shlib_breaks = true;
 	}
     }
+}
+
+/* Disable any breakpoints and tracepoints that are in SOLIB upon
+   notification of unloaded_shlib.  Only apply to enabled breakpoints,
+   disabled ones can just stay disabled.  */
+
+static void
+disable_breakpoints_in_unloaded_shlib (program_space *pspace,
+				       struct so_list *solib)
+{
+  disable_breakpoints_in_unloaded_objfile (pspace, solib->objfile);
+}
+
+static void
+disable_breakpoints_in_unloaded_jit_object (program_space *pspace,
+					    objfile *objfile)
+{
+  disable_breakpoints_in_unloaded_objfile (pspace, objfile);
 }
 
 /* Disable any breakpoints and tracepoints in OBJFILE upon
@@ -14831,6 +14853,8 @@ _initialize_breakpoint ()
 
   gdb::observers::solib_unloaded.attach (disable_breakpoints_in_unloaded_shlib,
 					 "breakpoint");
+  gdb::observers::jit_object_unloaded.attach
+    (disable_breakpoints_in_unloaded_jit_object, "breakpoint");
   gdb::observers::free_objfile.attach (disable_breakpoints_in_freed_objfile,
 				       "breakpoint");
   gdb::observers::memory_changed.attach (invalidate_bp_value_on_memory_change,

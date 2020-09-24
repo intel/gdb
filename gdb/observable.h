@@ -107,6 +107,9 @@ extern observable<struct so_list */* solib */> solib_loaded;
 extern observable<struct program_space */* pspace */, struct so_list */* solib */>
   solib_unloaded;
 
+extern observable<struct program_space */* pspace */, objfile */* objfile */>
+  jit_object_unloaded;
+
 /* The symbol file specified by OBJFILE has been loaded.  */
 extern observable<struct objfile */* objfile */> new_objfile;
 

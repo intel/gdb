@@ -7855,17 +7855,20 @@ disable_breakpoints_in_shlibs (void)
    disabled ones can just stay disabled.  */
 
 static void
-disable_breakpoints_in_unloaded_shlib (struct so_list *solib)
+disable_breakpoints_in_unloaded_objfile (objfile *objfile)
 {
   struct bp_location *loc, **locp_tmp;
   int disabled_shlib_breaks = 0;
+
+  if (objfile == nullptr)
+    return;
 
   ALL_BP_LOCATIONS (loc, locp_tmp)
   {
     /* ALL_BP_LOCATIONS bp_location has LOC->OWNER always non-NULL.  */
     struct breakpoint *b = loc->owner;
 
-    if (solib->pspace == loc->pspace
+    if (objfile->pspace == loc->pspace
 	&& !loc->shlib_disabled
 	&& (((b->type == bp_breakpoint
 	      || b->type == bp_jit_event
@@ -7873,7 +7876,7 @@ disable_breakpoints_in_unloaded_shlib (struct so_list *solib)
 	     && (loc->loc_type == bp_loc_hardware_breakpoint
 		 || loc->loc_type == bp_loc_software_breakpoint))
 	    || is_tracepoint (b))
-	&& solib_contains_address_p (solib, loc->address))
+	&& is_addr_in_objfile (loc->address, objfile))
       {
 	loc->shlib_disabled = 1;
 	/* At this point, we cannot rely on remove_breakpoint
@@ -7889,11 +7892,27 @@ disable_breakpoints_in_unloaded_shlib (struct so_list *solib)
 	    target_terminal::ours_for_output ();
 	    warning (_("Temporarily disabling breakpoints "
 		       "for unloaded shared library \"%s\""),
-		     solib->so_name);
+		     objfile->original_name);
 	  }
 	disabled_shlib_breaks = 1;
       }
   }
+}
+
+/* Disable any breakpoints and tracepoints that are in SOLIB upon
+   notification of unloaded_shlib.  Only apply to enabled breakpoints,
+   disabled ones can just stay disabled.  */
+
+static void
+disable_breakpoints_in_unloaded_shlib (struct so_list *solib)
+{
+  disable_breakpoints_in_unloaded_objfile (solib->objfile);
+}
+
+static void
+disable_breakpoints_in_unloaded_jit_object (objfile *objfile)
+{
+  disable_breakpoints_in_unloaded_objfile (objfile);
 }
 
 /* Disable any breakpoints and tracepoints in OBJFILE upon
@@ -15993,6 +16012,7 @@ _initialize_breakpoint ()
   initialize_breakpoint_ops ();
 
   gdb::observers::solib_unloaded.attach (disable_breakpoints_in_unloaded_shlib);
+  gdb::observers::jit_object_unloaded.attach (disable_breakpoints_in_unloaded_jit_object);
   gdb::observers::free_objfile.attach (disable_breakpoints_in_freed_objfile);
   gdb::observers::memory_changed.attach (invalidate_bp_value_on_memory_change);
 

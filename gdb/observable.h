@@ -106,6 +106,9 @@ extern observable<solib &/* solib */> solib_loaded;
    been unloaded yet, and thus are still available.  */
 extern observable<program_space *, const solib &/* solib */> solib_unloaded;
 
+extern observable<struct program_space */* pspace */, objfile */* objfile */>
+  jit_object_unloaded;
+
 /* The symbol file specified by OBJFILE has been loaded.  */
 extern observable<struct objfile */* objfile */> new_objfile;
 

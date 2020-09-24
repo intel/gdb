@@ -1232,10 +1232,18 @@ AC_SUBST(SRCHIGH_LIBS)
 AC_SUBST(SRCHIGH_CFLAGS)
 
 # Check for Intel(R) Graphics Technology assembler library
+
+# Workaround the issue that AC_LIB_HAVE_LINKFLAGS doesn't use the outcome of
+# AX_CXX_COMPILE_STDCXX
+old_LDFLAGS="$LDFLAGS"
+LDFLAGS="$LDFLAGS -std=c++11"
+
+AC_LANG_PUSH([C++])
 AC_LIB_HAVE_LINKFLAGS([iga64], [],
   [#include "assert.h"
    #include "iga.h"],
   [iga_version_string();])
+AC_LANG_POP([C++])
 
 intelgt_target=false
 
@@ -1268,6 +1276,8 @@ else
   LIBIGA64=
   LTLIBIGA64=
 fi
+
+LDFLAGS="$old_LDFLAGS"
 
 # ------------------------- #
 # Checks for header files.  #

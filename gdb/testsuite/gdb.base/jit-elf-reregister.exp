@@ -1,0 +1,82 @@
+# Copyright 2019 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+#
+# Tests global symbol lookup in case a symbol's name in the kernel
+# coincides with another in the main executable.
+
+if {[use_gdb_stub]} {
+    return 0
+}
+
+if {[skip_shlib_tests]} {
+    untested "skipping shared library tests"
+    return -1
+}
+
+load_lib jit-elf-helpers.exp
+
+# The main code that loads and registers JIT objects.
+set main_basename "jit-elf-reregister"
+set main_srcfile ${srcdir}/${subdir}/${main_basename}.c
+set main_binfile [standard_output_file ${main_basename}]
+
+# The shared library that gets loaded as JIT objects.
+set jit_solib_basename jit-elf-solib
+set jit_solib_srcfile ${srcdir}/${subdir}/${jit_solib_basename}.c
+
+# Compile one shared library to use as JIT object.
+set jit_solibs_target [compile_and_download_n_jit_so \
+		      $jit_solib_basename $jit_solib_srcfile 1 {debug}]
+if { $jit_solibs_target == -1 } {
+    return
+}
+
+proc test_inferior_initial {num} {
+    global jit_solibs_target main_srcfile main_binfile jit_solib_basename
+
+    gdb_test "inferior ${num}"
+
+    if { ![runto_main] } {
+	fail "can't run to main for the inferior ${num}"
+	return
+    }
+
+    # Poke desired values directly into inferior instead of using "set args"
+    # because "set args" does not work under gdbserver.
+    gdb_test_no_output "set var argc=1" "forging argc in inferior ${num}"
+    gdb_test_no_output "set var argv=fake_argv" "forging argv in inferior ${num}"
+    set jit_solib_target [lindex $jit_solibs_target 0]
+    gdb_test_no_output "set var argv\[1\]=\"${jit_solib_target}\"" \
+    "forging argv\[1\] in inferior ${num}"
+
+    gdb_breakpoint [gdb_get_line_number "first-call" $main_srcfile] {temporary}
+    gdb_continue_to_breakpoint "first-call in inferior ${num}"
+    gdb_breakpoint "jit_function_0001"
+    gdb_continue_to_breakpoint "hit before reload inferior ${num}" ".*$jit_solib_basename.*"
+}
+
+# Compile the main code (which loads the JIT objects).
+if { [compile_jit_main ${main_srcfile} ${main_binfile} {}] != 0 } {
+    return
+}
+
+clean_restart ${main_binfile}
+gdb_test "add-inferior -exec ${main_binfile}" "Added inferior 2.*" \
+"Add second inferior"
+test_inferior_initial 1
+test_inferior_initial 2
+gdb_continue_to_breakpoint "hit after reload inferior 2" ".*$jit_solib_basename.*"
+gdb_test "inferior 1" "Switching to inferior 1.*" "finishing another inferior"
+gdb_continue_to_breakpoint "hit after reload inferior 1" ".*$jit_solib_basename.*"

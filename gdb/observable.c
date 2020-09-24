@@ -47,6 +47,7 @@ DEFINE_OBSERVABLE (inferior_execd);
 DEFINE_OBSERVABLE (record_changed);
 DEFINE_OBSERVABLE (solib_loaded);
 DEFINE_OBSERVABLE (solib_unloaded);
+DEFINE_OBSERVABLE (jit_object_unloaded);
 DEFINE_OBSERVABLE (new_objfile);
 DEFINE_OBSERVABLE (free_objfile);
 DEFINE_OBSERVABLE (new_thread);

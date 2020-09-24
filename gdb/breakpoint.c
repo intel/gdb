@@ -6568,7 +6568,8 @@ print_breakpoint_location (const breakpoint *b, const bp_location *loc)
       gdb_assert (b->locspec != nullptr
 		  || (!user_breakpoint_p (b)
 		      && (b->type == bp_shlib_event
-			  || b->type == bp_thread_event)));
+			  || b->type == bp_thread_event
+			  || b->type == bp_jit_event)));
       const char *locspec_str
 	= (b->locspec != nullptr ? b->locspec->to_string () : "");
       uiout->field_string ("pending", locspec_str);
@@ -8218,17 +8219,21 @@ create_and_insert_solib_event_breakpoint (struct gdbarch *gdbarch, CORE_ADDR add
    notification of unloaded_shlib.  Only apply to enabled breakpoints,
    disabled ones can just stay disabled.
 
-   When STILL_IN_USE is true, SOLIB hasn't really been unmapped from
+   When STILL_IN_USE is true, OBJFILE hasn't really been unmapped from
    the inferior.  In this case, don't disable anything.
 
    When SILENT is false notify the user if any breakpoints are disabled,
    otherwise, still disable the breakpoints, but don't tell the user.  */
 
 static void
-disable_breakpoints_in_unloaded_shlib (program_space *pspace, const solib &solib,
-				       bool still_in_use, bool silent)
+disable_breakpoints_in_unloaded_objfile (program_space *pspace,
+					 objfile *objfile,
+					 bool still_in_use, bool silent)
 {
   if (still_in_use)
+    return;
+
+  if (objfile == nullptr)
     return;
 
   bool disabled_shlib_breaks = false;
@@ -8247,7 +8252,7 @@ disable_breakpoints_in_unloaded_shlib (program_space *pspace, const solib &solib
 	      && !is_tracepoint (&b))
 	    continue;
 
-	  if (!solib_contains_address_p (solib, loc.address))
+	  if (!is_addr_in_objfile (loc.address, objfile))
 	    continue;
 
 	  loc.shlib_disabled = 1;
@@ -8275,7 +8280,7 @@ disable_breakpoints_in_unloaded_shlib (program_space *pspace, const solib &solib
 	      target_terminal::ours_for_output ();
 	      warning (_("Temporarily disabling breakpoints "
 			 "for unloaded shared library \"%s\""),
-		       solib.name.c_str ());
+		       objfile->original_name);
 	      disabled_shlib_breaks = true;
 	    }
 	}
@@ -8283,6 +8288,32 @@ disable_breakpoints_in_unloaded_shlib (program_space *pspace, const solib &solib
       if (bp_modified)
 	notify_breakpoint_modified (&b);
     }
+}
+
+/* Disable any breakpoints and tracepoints that are in SOLIB upon
+   notification of unloaded_shlib.  Only apply to enabled breakpoints,
+   disabled ones can just stay disabled.
+
+   When STILL_IN_USE is true, SOLIB hasn't really been unmapped from
+   the inferior.  In this case, don't disable anything.
+
+   When SILENT is false notify the user if any breakpoints are disabled,
+   otherwise, still disable the breakpoints, but don't tell the user.  */
+
+static void
+disable_breakpoints_in_unloaded_shlib (program_space *pspace,
+				       const solib &solib, bool still_in_use,
+				       bool silent)
+{
+  disable_breakpoints_in_unloaded_objfile (pspace, solib.objfile, still_in_use,
+					   silent);
+}
+
+static void
+disable_breakpoints_in_unloaded_jit_object (program_space *pspace,
+					    objfile *objfile)
+{
+  disable_breakpoints_in_unloaded_objfile (pspace, objfile, false, false);
 }
 
 /* Disable any breakpoints and tracepoints in OBJFILE upon
@@ -14918,6 +14949,8 @@ INIT_GDB_FILE (breakpoint)
 
   gdb::observers::solib_unloaded.attach (disable_breakpoints_in_unloaded_shlib,
 					 "breakpoint");
+  gdb::observers::jit_object_unloaded.attach
+    (disable_breakpoints_in_unloaded_jit_object, "breakpoint");
   gdb::observers::free_objfile.attach (disable_breakpoints_in_freed_objfile,
 				       "breakpoint");
   gdb::observers::memory_changed.attach (invalidate_bp_value_on_memory_change,

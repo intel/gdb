@@ -11745,6 +11745,18 @@ fi
 
 # Check for Intel(R) Graphics Technology assembler library
 
+# Workaround the issue that AC_LIB_HAVE_LINKFLAGS doesn't use the outcome of
+# AX_CXX_COMPILE_STDCXX
+old_LDFLAGS="$LDFLAGS"
+LDFLAGS="$LDFLAGS -std=c++11"
+
+ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+
 
 
 
@@ -12189,7 +12201,7 @@ iga_version_string();
   return 0;
 }
 _ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
+if ac_fn_cxx_try_link "$LINENO"; then :
   ac_cv_libiga64=yes
 else
   ac_cv_libiga64=no
@@ -12221,6 +12233,12 @@ $as_echo "$LIBIGA64" >&6; }
 
 
 
+
+ac_ext=c
+ac_cpp='$CPP $CPPFLAGS'
+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
 intelgt_target=false
@@ -12255,6 +12273,8 @@ else
   LIBIGA64=
   LTLIBIGA64=
 fi
+
+LDFLAGS="$old_LDFLAGS"
 
 # ------------------------- #
 # Checks for header files.  #

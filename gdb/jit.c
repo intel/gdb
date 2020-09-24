@@ -846,6 +846,27 @@ jit_find_objf_with_entry_addr (CORE_ADDR entry_addr)
   return NULL;
 }
 
+/* This function unregisters JITed code and does the necessary cleanup.  */
+
+static void
+jit_unregister_code (struct gdbarch *gdbarch, CORE_ADDR entry_addr)
+{
+  objfile *jited = jit_find_objf_with_entry_addr (entry_addr);
+  if (jit_debug)
+    fprintf_unfiltered (gdb_stdlog, "jit_unregister_code (%s)\n",
+			host_address_to_string (jited));
+  if (jited == nullptr)
+    fprintf_unfiltered (gdb_stderr,
+			_ ("Unable to find JITed code "
+			   "entry at address: %s\n"),
+			paddress (gdbarch, entry_addr));
+  else
+    {
+      gdb::observers::jit_object_unloaded.notify (jited);
+      jited->unlink ();
+    }
+}
+
 /* This is called when a breakpoint is deleted.  It updates the
    inferior's cache, if needed.  */
 
@@ -1276,15 +1297,7 @@ jit_event_handler (gdbarch *gdbarch, objfile *jiter)
 
     case JIT_UNREGISTER:
       {
-	objfile *jited = jit_find_objf_with_entry_addr (entry_addr);
-	if (jited == nullptr)
-	  fprintf_unfiltered (gdb_stderr,
-			      _("Unable to find JITed code "
-				"entry at address: %s\n"),
-			      paddress (gdbarch, entry_addr));
-	else
-	  jited->unlink ();
-
+	jit_unregister_code (gdbarch, entry_addr);
 	break;
       }
 

@@ -277,6 +277,11 @@
 
 	* gdbtypes.c (init_complex_type): Check target type name.
 
+2020-10-07  Tankut Baris Aktemur  <tankut.baris.aktemur@intel.com>
+
+	* infcmd.c (attach_command): Remove the redundant call to
+	`clear_proceed_status`.
+
 2020-10-22  Simon Marchi  <simon.marchi@polymtl.ca>
 
 	PR gdb/26693

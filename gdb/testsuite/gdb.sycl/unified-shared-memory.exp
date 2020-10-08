@@ -1,0 +1,81 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for the unified shared memory support in SYCL.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set last_line [gdb_get_line_number "kernel-last-line"]
+gdb_breakpoint $last_line
+
+gdb_continue_to_breakpoint "hit the last line" ".*$srcfile:$last_line.*"
+
+# Access the array from inside the kernel.
+with_test_prefix "inside" {
+    gdb_test "print in\[0\]"   "= 123"
+    gdb_test "print out\[0\]"  "= 123"
+    gdb_test "print in\[20\]"  "= 143"
+}
+
+delete_breakpoints
+
+set end_marker [gdb_get_line_number "end-marker"]
+gdb_breakpoint $end_marker
+
+gdb_test_multiple "continue" "hit the end marker" {
+    -re -wrap "Breakpoint .*$srcfile:$end_marker.*" {
+	pass $gdb_test_name
+    }
+    -re -wrap "signal SIGSEGV, Segmentation fault.*" {
+	# The GPU runtime uses SIGSEGV to migrate data between the
+	# device and host on some platforms.  Just pass the signal
+	# back to the host.  Account for two instances of SIGSEGV; one
+	# for the "in" variable, the other for "out".
+	set original_test_name $gdb_test_name
+	gdb_test_multiple "signal SIGSEGV" "send the signal back" {
+	    -re -wrap "Breakpoint .*$srcfile:$end_marker.*" {
+		pass $original_test_name
+	    }
+	    -re -wrap "signal SIGSEGV, Segmentation fault.*" {
+		gdb_test "signal SIGSEGV" \
+		    "Breakpoint .*$srcfile:$end_marker.*" \
+		    $original_test_name
+	    }
+	}
+    }
+}
+
+# Access the array from the host.
+with_test_prefix "outside" {
+    gdb_test "print in\[0\]"   "= 123"
+    gdb_test "print out\[0\]"  "= 223"
+    gdb_test "print in\[20\]"  "= 143"
+    gdb_test "print out\[20\]" "= 243"
+}

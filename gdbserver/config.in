@@ -164,6 +164,9 @@
 /* Define if you have the xxhash library. */
 #undef HAVE_LIBXXHASH
 
+/* Define if you have the ze_loader library. */
+#undef HAVE_LIBZE_LOADER
+
 /* Define if the target supports branch tracing. */
 #undef HAVE_LINUX_BTRACE
 

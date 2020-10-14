@@ -46,7 +46,7 @@ struct thread_info : public intrusive_list_node<thread_info>
       m_regcache->thread = this;
   }
 
-  void *target_data ()
+  void *target_data () const
   { return m_target_data; }
 
   /* The id of this thread.  */

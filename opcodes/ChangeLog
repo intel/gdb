@@ -21,6 +21,23 @@
 	* i386-init.h: Regenerate.
 	* i386-tbl.h: Likewise.
 
+2020-10-13  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* i386-gen.c (opcode_modifiers): Replace VexOpcode with
+	OpcodePrefix.
+	* i386-opc.h (VexOpcode): Renamed to ...
+	(OpcodePrefix): This.
+	(PREFIX_NONE): New.
+	(PREFIX_0X66): Likewise.
+	(PREFIX_0XF2): Likewise.
+	(PREFIX_0XF3): Likewise.
+	* i386-opc.tbl (Prefix_0X66): New.
+	(Prefix_0XF2): Likewise.
+	(Prefix_0XF3): Likewise.
+	Replace VexOpcode= with OpcodePrefix=.  Use Prefix_0X66 on xorpd.
+	Use Prefix_0XF3 on cvtdq2pd.  Use Prefix_0XF2 on cvtpd2dq.
+	* i386-tbl.h: Regenerated.
+
 2020-09-24  Lili Cui  <lili.cui@intel.com>
 
 	* i386-dis.c (enum): Add PREFIX_0F01_REG_1_RM_5,

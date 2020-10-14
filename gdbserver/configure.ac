@@ -453,6 +453,24 @@ if $want_ipa ; then
    fi
 fi
 
+dnl check for the ze loader
+AC_LIB_HAVE_LINKFLAGS([ze_loader], [], [#include "level_zero/zet_api.h"],
+  [zeInit (0);],)
+
+case "${target}" in
+  intelgt-*-zebin)
+    if test "$HAVE_LIBZE_LOADER" != yes; then
+      AC_MSG_ERROR([libze_loader is missing or unusable])
+    fi
+    ;;
+  *)
+    # Do not link libze_loader spuriously
+    HAVE_LIBZE_LOADER=no
+    LIBZE_LOADER=
+    LTLIBZE_LOADER=
+    ;;
+esac
+
 AC_SUBST(GDBSERVER_DEPFILES)
 AC_SUBST(GDBSERVER_LIBS)
 AC_SUBST(srv_xmlbuiltin)

@@ -126,6 +126,10 @@ case "${gdbserver_host}" in
 			srv_tgtobj="$srv_linux_obj linux-ia64-low.o"
 			srv_linux_usrregs=yes
 			;;
+  intelgt-*-zebin)	srv_regobj=""
+			srv_xmlfiles=""
+			srv_tgtobj="ze-low.o intelgt-ze-low.o arch/intelgt.o"
+			;;
   loongarch*-*-linux*)	srv_tgtobj="arch/loongarch.o linux-loongarch-low.o"
 			srv_tgtobj="${srv_tgtobj} ${srv_linux_obj}"
 			srv_linux_regsets=yes

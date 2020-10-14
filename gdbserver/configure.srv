@@ -124,6 +124,10 @@ case "${gdbserver_host}" in
 			srv_xmlfiles=""
 			srv_tgtobj="nonstop-low.o intelgt-low.o arch/intelgt.o"
 			;;
+  intelgt-*-zebin)	srv_regobj=""
+			srv_xmlfiles=""
+			srv_tgtobj="ze-low.o intelgt-ze-low.o arch/intelgt.o"
+			;;
   m68*-*-linux*)	if test "$gdb_cv_m68k_is_coldfire" = yes; then
                           srv_regobj=reg-cf.o
                         else

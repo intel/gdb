@@ -127,6 +127,8 @@ ustinc = @ustinc@
 # This will be empty if libigfxdbg was not available.
 LIBIGFXDBG = @LIBIGFXDBG@
 
+LIBZE_LOADER = @LIBZE_LOADER@
+
 # gnulib
 GNULIB_PARENT_DIR = ..
 include $(GNULIB_PARENT_DIR)/gnulib/Makefile.gnulib.inc
@@ -376,7 +378,8 @@ gdbserver$(EXEEXT): $(sort $(OBS)) ${CDEPS} $(LIBGNU) $(LIBIBERTY) \
 		$(CXXFLAGS) \
 		-o gdbserver$(EXEEXT) $(OBS) $(GDBSUPPORT) $(LIBGNU) \
 		$(LIBGNU_EXTRA_LIBS) $(LIBIBERTY) $(INTL) \
-		$(GDBSERVER_LIBS) $(XM_CLIBS) $(WIN32APILIBS) $(LIBIGFXDBG)
+		$(GDBSERVER_LIBS) $(XM_CLIBS) $(WIN32APILIBS) \
+		$(LIBIGFXDBG) $(LIBZE_LOADER)
 
 gdbreplay$(EXEEXT): $(sort $(GDBREPLAY_OBS)) $(LIBGNU) $(LIBIBERTY) \
 		$(INTL_DEPS) $(GDBSUPPORT)

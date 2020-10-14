@@ -388,7 +388,7 @@ AC_LIB_HAVE_LINKFLAGS([igfxdbg], [], [#include "igfxdbg.h"],
 AC_LANG_POP([C++])
 
 case "${target}" in
-  intelgt-*)
+  intelgt-*-elf)
     if test "$HAVE_LIBIGFXDBG" != yes; then
       AC_MSG_ERROR([libigfxdbg is missing or unusable])
     fi
@@ -471,6 +471,24 @@ if $want_ipa ; then
      AC_MSG_ERROR([inprocess agent not supported for this target])
    fi
 fi
+
+dnl check for the ze loader
+AC_LIB_HAVE_LINKFLAGS([ze_loader], [], [#include "level_zero/zet_api.h"],
+  [zeInit (0);],)
+
+case "${target}" in
+  intelgt-*-zebin)
+    if test "$HAVE_LIBZE_LOADER" != yes; then
+      AC_MSG_ERROR([libze_loader is missing or unusable])
+    fi
+    ;;
+  *)
+    # Do not link libze_loader spuriously
+    HAVE_LIBZE_LOADER=no
+    LIBZE_LOADER=
+    LTLIBZE_LOADER=
+    ;;
+esac
 
 AC_SUBST(GDBSERVER_DEPFILES)
 AC_SUBST(GDBSERVER_LIBS)

@@ -2,7 +2,7 @@
 # Configuration validation subroutine script.
 #   Copyright 1992-2021 Free Software Foundation, Inc.
 
-timestamp='2021-04-30'
+timestamp='2022-02-16'
 
 # This file is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -1730,7 +1730,7 @@ case $os in
 	     | skyos* | haiku* | rdos* | toppers* | drops* | es* \
 	     | onefs* | tirtos* | phoenix* | fuchsia* | redox* | bme* \
 	     | midnightbsd* | amdhsa* | unleashed* | emscripten* | wasi* \
-	     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx*)
+	     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx* | zebin*)
 		;;
 	# This one is extra strict with allowed versions
 	sco3.2v2 | sco3.2v[4-9]* | sco5v6*)
@@ -1747,7 +1747,7 @@ esac
 # As a final step for OS-related things, validate the OS-kernel combination
 # (given a valid OS), if there is a kernel.
 case $kernel-$os in
-	linux-gnu* | linux-dietlibc* | linux-android* | linux-newlib* | linux-musl* | linux-uclibc* )
+	linux-gnu* | linux-dietlibc* | linux-android* | linux-newlib* | linux-musl* | linux-uclibc* | linux-zebin*)
 		;;
 	uclinux-uclibc* )
 		;;

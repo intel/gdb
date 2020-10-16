@@ -2103,7 +2103,12 @@ static struct {
   bool eval = true;
 } scheduler_locking;
 
+#if not defined (USE_WIN32API)
 static const char *scheduler_mode = schedlock_replay;
+#else
+static const char *scheduler_mode = schedlock_step;
+#endif
+
 static void
 show_scheduler_mode (struct ui_file *file, int from_tty,
 		     struct cmd_list_element *c, const char *value)

@@ -277,6 +277,10 @@
 
 	* gdbtypes.c (init_complex_type): Check target type name.
 
+2020-10-19  Tankut Baris Aktemur  <tankut.baris.aktemur@intel.com>
+
+	* frame.c: Remove the unused 'uinteger_option_def' type alias.
+
 2020-10-07  Tankut Baris Aktemur  <tankut.baris.aktemur@intel.com>
 
 	* infcmd.c (attach_command): Remove the redundant call to

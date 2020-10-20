@@ -37,17 +37,16 @@ remote_exec target "kill -9 ${testpid}"
 # Give it some time to die.
 sleep 2
 
-set no_such_process_msg "Couldn't get registers: No such process\."
+set no_pc_available_msg "PC register is not available"
 set thread_exited_msg ".Thread \[^\n\r\]* exited."
 set killed_msg "Program terminated with signal SIGKILL, Killed\."
 set no_longer_exists_msg "The program no longer exists\."
 set not_being_run_msg "The program is not being run\."
 
 gdb_test_multiple "continue" "prompt after first continue" {
-    -re "Continuing\.\r\n$no_such_process_msg\r\n" {
+    -re "Continuing\.\r\n$no_pc_available_msg\r\n" {
 	pass $gdb_test_name
-	# Occurrence of $no_such_process_msg.  The bug condition was triggered, go
-	# check for it.
+	# The bug condition was triggered, go check for it.
 	gdb_test_multiple "" "messages" {
 	    -re "$thread_exited_msg\r\n\r\n$killed_msg.*$no_longer_exists_msg\r\n$gdb_prompt $" {
 		pass $gdb_test_name

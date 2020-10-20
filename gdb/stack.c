@@ -1110,7 +1110,38 @@ print_frame_info (const frame_print_options &fp_opts,
      the next frame is a SIGTRAMP_FRAME or a DUMMY_FRAME, then the
      next frame was not entered as the result of a call, and we want
      to get the line containing FRAME->pc.  */
-  symtab_and_line sal = find_frame_sal (frame);
+  symtab_and_line sal;
+  try
+    {
+      sal = find_frame_sal (frame);
+    }
+  catch (const gdb_exception_error &ex)
+    {
+      if (ex.error == NOT_AVAILABLE_ERROR)
+	{
+	  ui_out_emit_tuple tuple_emitter (uiout, "frame");
+
+	  annotate_frame_begin (print_level ? frame_relative_level (frame) : 0,
+				gdbarch, 0);
+
+	  if (print_level)
+	    {
+	      uiout->text ("#");
+	      uiout->field_fmt_signed (2, ui_left, "level",
+				       frame_relative_level (frame));
+	    }
+
+	  std::string frame_info = "<";
+	  frame_info += ex.what ();
+	  frame_info += ">";
+	  uiout->field_string ("func", frame_info.c_str (),
+			       metadata_style.style ());
+	  uiout->text ("\n");
+	  annotate_frame_end ();
+	  return;
+	}
+      throw;
+    }
 
   location_print = (print_what == LOCATION
 		    || print_what == SRC_AND_LOC

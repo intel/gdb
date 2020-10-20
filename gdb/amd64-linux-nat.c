@@ -224,7 +224,8 @@ amd64_linux_nat_target::fetch_registers (struct regcache *regcache, int regnum)
       elf_gregset_t regs;
 
       if (ptrace (PTRACE_GETREGS, tid, 0, (long) &regs) < 0)
-	perror_with_name (_("Couldn't get registers"));
+	throw_perror_with_name (NOT_AVAILABLE_ERROR,
+				_("Couldn't get registers"));
 
       amd64_supply_native_gregset (regcache, &regs, -1);
       if (regnum != -1)

@@ -8065,10 +8065,14 @@ remote_target::fetch_register_using_p (struct regcache *regcache,
     case PACKET_UNKNOWN:
       return 0;
     case PACKET_ERROR:
-      error (_("Could not fetch register \"%s\"; remote failure reply '%s'"),
-	     gdbarch_register_name (regcache->arch (), 
-				    reg->regnum), 
-	     buf);
+      {
+	const char *regname = gdbarch_register_name (regcache->arch (),
+						     reg->regnum);
+	std::string msg
+	  = string_printf (_("Could not fetch register \"%s\"; remote "
+			     "failure reply '%s'"), regname, buf);
+	throw_perror_with_name (NOT_AVAILABLE_ERROR, msg.c_str ());
+      }
     }
 
   /* If this register is unfetchable, tell the regcache.  */
@@ -8105,8 +8109,12 @@ remote_target::send_g_packet ()
   putpkt (rs->buf);
   getpkt (&rs->buf, 0);
   if (packet_check_result (rs->buf) == PACKET_ERROR)
-    error (_("Could not read registers; remote failure reply '%s'"),
-           rs->buf.data ());
+    {
+      std::string msg
+	= string_printf (_("Could not read registers; remote failure reply "
+			   "'%s'"), rs->buf.data ());
+      throw_perror_with_name (NOT_AVAILABLE_ERROR, msg.c_str ());
+    }
 
   /* We can get out of synch in various cases.  If the first character
      in the buffer is not a hex character, assume that has happened

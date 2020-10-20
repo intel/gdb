@@ -594,7 +594,16 @@ enum register_status
 readable_regcache::raw_read (int regnum, gdb_byte *buf)
 {
   gdb_assert (buf != NULL);
-  raw_update (regnum);
+  try
+    {
+      raw_update (regnum);
+    }
+  catch (const gdb_exception_error &ex)
+    {
+      if (ex.error == NOT_AVAILABLE_ERROR)
+	return REG_UNAVAILABLE;
+      throw;
+    }
 
   if (m_register_status[regnum] != REG_VALID)
     memset (buf, 0, m_descr->sizeof_register[regnum]);

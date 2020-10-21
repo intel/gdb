@@ -448,7 +448,8 @@ typedef void (catch_command_errors_const_ftype) (const char *, int);
 
 static int
 catch_command_errors (catch_command_errors_const_ftype command,
-		      const char *arg, int from_tty)
+		      const char *arg, int from_tty,
+		      bool do_bp_actions = false)
 {
   try
     {
@@ -457,6 +458,10 @@ catch_command_errors (catch_command_errors_const_ftype command,
       command (arg, from_tty);
 
       maybe_wait_sync_command_done (was_sync);
+
+      /* Do any commands attached to breakpoint we stopped at.  */
+      if (do_bp_actions)
+	bpstat_do_actions ();
     }
   catch (const gdb_exception &e)
     {
@@ -1090,7 +1095,7 @@ captured_main_1 (struct captured_main_args *context)
 	  break;
 	case CMDARG_INIT_COMMAND:
 	  ret = catch_command_errors (execute_command, cmdarg_p.string,
-				      !batch_flag);
+				      !batch_flag, true);
 	  break;
 	}
     }
@@ -1216,7 +1221,7 @@ captured_main_1 (struct captured_main_args *context)
 	  break;
 	case CMDARG_COMMAND:
 	  ret = catch_command_errors (execute_command, cmdarg_p.string,
-				      !batch_flag);
+				      !batch_flag, true);
 	  break;
 	}
     }

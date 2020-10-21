@@ -1,0 +1,46 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Checks that a SYCL program offloading to the Intel GT device can run
+# until completion in the TUI mode.
+
+load_lib sycl.exp
+load_lib tuiterm.exp
+
+standard_testfile single-task.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {![require_sycl_device "gpu" "Intel*"]} {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+Term::clean_restart 200 180 $testfile
+if {![Term::enter_tui]} {
+    unsupported "TUI not supported"
+}
+
+# Run until the end.  This used to crash GDB.
+Term::command "set args '$device_type' '$device_name'"
+Term::command "run"
+Term::check_contents "did not crash" ".*Result is 42.*"

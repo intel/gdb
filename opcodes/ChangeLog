@@ -1,3 +1,7 @@
+2020-10-26  Lili Cui  <lili.cui@intel.com>
+
+	* i386-dis.c: Change "XV" to print "{vex}" pseudo prefix.
+
 2020-10-16  Lili Cui  <lili.cui@intel.com>
 
 	* i386-opc.tbl: Rename CpuVEX_PREFIX to PseudoVexPrefix

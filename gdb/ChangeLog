@@ -1,3 +1,9 @@
+2020-10-29  Tankut Baris Aktemur  <tankut.baris.aktemur@intel.com>
+
+	PR gdb/19318
+	* inferior.c (detach_inferior_command): Restore the current thread.
+	(kill_inferior_command): Ditto.
+
 2021-04-23  Tom Tromey  <tromey@adacore.com>
 
 	PR gdb/27743:

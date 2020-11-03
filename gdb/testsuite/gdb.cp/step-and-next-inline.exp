@@ -107,22 +107,77 @@ proc do_test { use_header } {
     gdb_test "step" ".*if \\(t->x != i\\).*" "step 2"
     gdb_test "bt" "\\s*\\#0\\s+\[^\r\]*tree_check\[^\r\]*${hdrfile}:.*" \
 	"in inline 1 pass 2"
-    gdb_test "step" ".*TREE_TYPE.*" "step 3"
+    gdb_test "step" ".*return x.*" "step 3"
+    gdb_test "bt" "\\s*\\#0\\s+\[^\r\]*tree_check\[^\r\]*${hdrfile}:.*" \
+	"return from inline 1 pass 2"
+    gdb_test "step" ".*TREE_TYPE.*" "step 4"
     gdb_test "bt" "\\s*\\#0\\s+get_alias_set\[^\r\]*${srcfile}:.*" \
 	"not in inline 2 pass 2"
-    gdb_test "step" ".*if \\(t->x != i\\).*" "step 4"
+    gdb_test "step" ".*if \\(t->x != i\\).*" "step 5"
     gdb_test "bt" "\\s*\\#0\\s+\[^\r\]*tree_check\[^\r\]*${hdrfile}:.*" \
 	"in inline 2 pass 2"
-    gdb_test "step" ".*TREE_TYPE.*" "step 5"
+    gdb_test "step" ".*return x.*" "step 6"
+    gdb_test "bt" "\\s*\\#0\\s+\[^\r\]*tree_check\[^\r\]*${hdrfile}:.*" \
+	"return from inline 2 pass 2"
+    gdb_test "step" ".*TREE_TYPE.*" "step 7"
     gdb_test "bt" "\\s*\\#0\\s+get_alias_set\[^\r\]*${srcfile}:.*" \
 	"not in inline 3 pass 2"
-    gdb_test "step" ".*if \\(t->x != i\\).*" "step 6"
+    gdb_test "step" ".*if \\(t->x != i\\).*" "step 8"
     gdb_test "bt" "\\s*\\#0\\s+\[^\r\]*tree_check\[^\r\]*${hdrfile}:.*" \
 	"in inline 3 pass 2"
-    gdb_test "step" "return 0.*" "step 7"
+    gdb_test "step" ".*return x.*" "step 9"
+    gdb_test "bt" "\\s*\\#0\\s+\[^\r\]*tree_check\[^\r\]*${hdrfile}:.*" \
+	"return from inline 3 pass 2"
+    gdb_test "step" "return 0.*" "step 10"
     gdb_test "bt" \
 	"\\s*\\#0\\s+(main|get_alias_set)\[^\r\]*${srcfile}:.*" \
 	"not in inline 4 pass 2"
+
+    clean_restart ${executable}
+
+    if ![runto_main] {
+	fail "can't run to main pass 3"
+	return
+    }
+
+    gdb_test "bt" "\\s*\\#0\\s+main.*" "in main pass 3"
+    gdb_test "step" ".*" "step into get_alias_set pass 3"
+    gdb_test "bt" "\\s*\\#0\\s+get_alias_set\[^\r\]*${srcfile}:.*" \
+	"in get_alias_set pass 3"
+    gdb_test "step" ".*TREE_TYPE.*" "step 1 pass 3"
+    gdb_test "bt" "\\s*\\#0\\s+get_alias_set\[^\r\]*${srcfile}:.*" \
+	"not in inline 1 pass 3"
+    gdb_test "step" ".*if \\(t->x != i\\).*" "step 2 pass 3"
+    gdb_test "bt" "\\s*\\#0\\s+\[^\r\]*tree_check\[^\r\]*${hdrfile}:.*" \
+	"in inline 1 pass 3"
+    gdb_test "p t->x = 2" ".* = 2.*" "change value pass 3"
+    gdb_test "step" ".*abort.*" "step 4, pass 3"
+    gdb_test "bt" "\\s*\\#0\\s+\[^\r\]*tree_check\[^\r\]*${hdrfile}:.*" \
+	"abort from inline 1 pass 3"
+
+    if ![runto_main] {
+	fail "can't run to main pass 4"
+	return
+    }
+
+    gdb_test "bt" "\\s*\\#0\\s+main.*" "in main pass 4"
+    gdb_test "skip tree_check" ".*" "skip tree_check pass 4"
+    gdb_test "step" ".*" "step into get_alias_set pass 4"
+    gdb_test "bt" "\\s*\\#0\\s+get_alias_set\[^\r\]*${srcfile}:.*" \
+	"in get_alias_set pass 4"
+    gdb_test "step" ".*TREE_TYPE.*" "step 1 pass 4"
+    gdb_test "bt" "\\s*\\#0\\s+get_alias_set\[^\r\]*${srcfile}:.*" \
+	"not in inline 1 pass 4"
+    gdb_test "step" ".*TREE_TYPE.*" "step 2 pass 4"
+    gdb_test "bt" "\\s*\\#0\\s+get_alias_set\[^\r\]*${srcfile}:.*" \
+	"not in inline 2 pass 4"
+    gdb_test "step" ".*TREE_TYPE.*" "step 3 pass 4"
+    gdb_test "bt" "\\s*\\#0\\s+get_alias_set\[^\r\]*${srcfile}:.*" \
+	"not in inline 3 pass 4"
+    gdb_test "step" "return 0.*" "step 4 pass 4"
+    gdb_test "bt" \
+	"\\s*\\#0\\s+(main|get_alias_set)\[^\r\]*${srcfile}:.*" \
+	"not in inline 4 pass 4"
     }
 }
 

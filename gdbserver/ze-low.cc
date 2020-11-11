@@ -320,6 +320,23 @@ ze_target::attach_to_device (uint32_t pid, ze_device_handle_t device)
   if (nattached > 0)
     return nattached;
 
+  /* Allow affecting the normal attach behaviour via environment variables by
+     disallowing attaching to devices or sub-devices.  */
+  if (properties.flags & ZE_DEVICE_PROPERTY_FLAG_SUBDEVICE)
+    {
+      const char * const disallow_sub_dev
+	= std::getenv ("ZE_GDB_DO_NOT_ATTACH_TO_SUB_DEVICE");
+      if (disallow_sub_dev != nullptr && *disallow_sub_dev != 0)
+	return nattached;
+    }
+  else
+    {
+      const char * const disallow_dev
+	= std::getenv ("ZE_GDB_DO_NOT_ATTACH_TO_DEVICE");
+      if (disallow_dev != nullptr && *disallow_dev != 0)
+	return nattached;
+    }
+
   uint32_t nregsets = 0;
   status = zetDebugGetRegisterSetProperties (device, &nregsets, nullptr);
   if (status != ZE_RESULT_SUCCESS)

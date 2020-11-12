@@ -425,10 +425,6 @@ execute_control_commands_to_string (struct command_line *commands,
     current_uiout->redirect (&str_file);
     ui_out_redirect_pop redirect_popper (current_uiout);
 
-    ui_out *uiout = top_level_interpreter ()->interp_ui_out ();
-    uiout->redirect (&str_file);
-    ui_out_redirect_pop redirect_popper2 (uiout);
-
     scoped_restore save_stdout
       = make_scoped_restore (&gdb_stdout, &str_file);
     scoped_restore save_stderr

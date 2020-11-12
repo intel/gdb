@@ -136,7 +136,7 @@ typedef void cmd_const_cfunc_ftype (const char *args, int from_tty);
 struct cli_suppress_notification
 {
   /* Inferior, thread, frame selected notification suppressed?  */
-  int user_selected_context;
+  bool user_selected_context = false;
 };
 
 extern struct cli_suppress_notification cli_suppress_notification;
@@ -172,7 +172,7 @@ extern struct cmd_list_element *add_cmd_suppress_notification
 			(const char *name, enum command_class theclass,
 			 cmd_const_cfunc_ftype *fun, const char *doc,
 			 struct cmd_list_element **list,
-			 int *suppress_notification);
+			 bool *suppress_notification);
 
 extern struct cmd_list_element *add_alias_cmd (const char *, const char *,
 					       enum command_class, int,
@@ -211,7 +211,7 @@ extern struct cmd_list_element *add_prefix_cmd_suppress_notification
 			 const char *doc, struct cmd_list_element **prefixlist,
 			 const char *prefixname, int allow_unknown,
 			 struct cmd_list_element **list,
-			 int *suppress_notification);
+			 bool *suppress_notification);
 
 extern struct cmd_list_element *add_abbrev_prefix_cmd (const char *,
 						       enum command_class,
@@ -304,7 +304,7 @@ extern struct cmd_list_element *add_com_alias (const char *, const char *,
 extern struct cmd_list_element *add_com_suppress_notification
 		       (const char *name, enum command_class theclass,
 			cmd_const_cfunc_ftype *fun, const char *doc,
-			int *supress_notification);
+			bool *supress_notification);
 
 extern struct cmd_list_element *add_info (const char *,
 					  cmd_const_cfunc_ftype *fun,

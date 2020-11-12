@@ -5926,6 +5926,10 @@ gdbtypes_post_init (struct gdbarch *gdbarch)
     = arch_integer_type (gdbarch, 256, 0, "int256_t");
   builtin_type->builtin_uint256
     = arch_integer_type (gdbarch, 256, 1, "uint256_t");
+  builtin_type->builtin_int512
+    = arch_integer_type (gdbarch, 512, 0, "int512_t");
+  builtin_type->builtin_uint512
+    = arch_integer_type (gdbarch, 512, 1, "uint512_t");
   TYPE_INSTANCE_FLAGS (builtin_type->builtin_int8) |=
     TYPE_INSTANCE_FLAG_NOTTEXT;
   TYPE_INSTANCE_FLAGS (builtin_type->builtin_uint8) |=

@@ -2124,6 +2124,8 @@ struct builtin_type
   struct type *builtin_uint128 = nullptr;
   struct type *builtin_int256 = nullptr;
   struct type *builtin_uint256 = nullptr;
+  struct type *builtin_int512 = nullptr;
+  struct type *builtin_uint512 = nullptr;
 
   /* Wide character types.  */
   struct type *builtin_char16 = nullptr;

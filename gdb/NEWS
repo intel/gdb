@@ -116,6 +116,11 @@
 
 * New commands
 
+maint set suppress-notification-cli (on|off)
+maint show suppress-notification-cli
+  This controls whether printing the notification events is suppressed
+  for CLI.
+
 set exec-file-mismatch -- Set exec-file-mismatch handling (ask|warn|off).
 show exec-file-mismatch -- Show exec-file-mismatch handling (ask|warn|off).
   Set or show the option 'exec-file-mismatch'.  When GDB attaches to a

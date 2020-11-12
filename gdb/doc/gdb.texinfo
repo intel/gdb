@@ -46431,6 +46431,7 @@ Boolean type, occupying a single bit.
 @itemx int64
 @itemx int128
 @itemx int256
+@itemx int512
 Signed integer types holding the specified number of bits.
 
 @item uint8
@@ -46440,6 +46441,7 @@ Signed integer types holding the specified number of bits.
 @itemx uint64
 @itemx uint128
 @itemx uint256
+@itemx uint512
 Unsigned integer types holding the specified number of bits.
 
 @item code_ptr

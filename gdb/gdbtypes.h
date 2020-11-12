@@ -1888,6 +1888,8 @@ struct builtin_type
   struct type *builtin_uint128;
   struct type *builtin_int256;
   struct type *builtin_uint256;
+  struct type *builtin_int512;
+  struct type *builtin_uint512;
 
   /* Wide character types.  */
   struct type *builtin_char16;

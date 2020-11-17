@@ -150,6 +150,11 @@ struct ze_thread_info
 
   /* The thread's execution state.  */
   enum ze_thread_exec_state_t exec_state = ze_thread_state_unknown;
+
+  /* The waitstatus for this thread's last event.
+
+     TARGET_WAITKIND_IGNORE means that there is no last event.  */
+  target_waitstatus waitstatus = { TARGET_WAITKIND_IGNORE };
 };
 
 /* Return the ZE thread info for TP.  */
@@ -231,6 +236,17 @@ struct process_info_private
   /* The state of this process.  */
   ze_process_state state;
 
+  /* The waitstatus for this process's last event.
+
+     While stop events are reported on threads, module loads and unloads
+     as well as entry and exit are reports on the process itself.
+
+     Neither of these events implies that any of the process' threads
+     stopped or is even available.
+
+     TARGET_WAITKIND_IGNORE means that there is nothing to report.  */
+  target_waitstatus waitstatus = { TARGET_WAITKIND_IGNORE };
+
   process_info_private (ze_device_info *dev, ze_process_state st)
     : device (dev), state (st)
     {}
@@ -306,6 +322,9 @@ private:
   /* Attach to all available devices for process PID and store them in
      this object.  Returns the number of devices we attached to.  */
   int attach_to_devices (uint32_t pid);
+
+  /* Fetch and process events from DEVICE.  Return number of events.  */
+  uint64_t fetch_events (ze_device_info &device);
 
 protected:
   /* Check whether a device is supported by this target.  */

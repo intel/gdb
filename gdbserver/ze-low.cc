@@ -26,6 +26,7 @@
 #include <sstream>
 #include <iomanip>
 #include <cstring> /* For snprintf.  */
+#include <thread>
 
 #ifndef USE_WIN32API
 #  include <signal.h>
@@ -179,6 +180,17 @@ ze_process_state_str (ze_process_state state)
   return "unknown";
 }
 
+/* Return the pid for DEVICE.  */
+
+static int
+ze_device_pid (const ze_device_info &device)
+{
+  if (device.process != nullptr)
+    return pid_of (device.process);
+
+  return 0;
+}
+
 /* Add a process for DEVICE.  */
 
 static process_info *
@@ -278,6 +290,162 @@ ze_attach (ze_device_info *device)
       error (_("Failed to attach to %s (%x)."), device->properties.name,
 	     status);
     }
+}
+
+/* Return a human-readable detach reason string.  */
+
+static std::string
+ze_detach_reason_str (zet_debug_detach_reason_t reason)
+{
+  switch (reason)
+    {
+    case ZET_DEBUG_DETACH_REASON_INVALID:
+      return std::string (_("invalid"));
+
+    case ZET_DEBUG_DETACH_REASON_HOST_EXIT:
+      return std::string (_("the host process exited"));
+    }
+
+  return std::string (_("unknown"));
+}
+
+/* Return a human-readable module debug information format string.  */
+
+static std::string
+ze_debug_info_format_str (zet_module_debug_info_format_t format)
+{
+  switch (format)
+    {
+    case ZET_MODULE_DEBUG_INFO_FORMAT_ELF_DWARF:
+      return std::string (_("DWARF"));
+    }
+
+  return std::string (_("unknown"));
+}
+
+/* Return a human-readable event string.  */
+
+static std::string
+ze_event_str (const zet_debug_event_t &event)
+{
+  std::stringstream sstream;
+
+  switch (event.type)
+    {
+    case ZET_DEBUG_EVENT_TYPE_INVALID:
+      sstream << "invalid";
+      return sstream.str ();
+
+    case ZET_DEBUG_EVENT_TYPE_DETACHED:
+      sstream << "detached, reason="
+	      << ze_detach_reason_str (event.info.detached.reason);
+      return sstream.str ();
+
+    case ZET_DEBUG_EVENT_TYPE_PROCESS_ENTRY:
+      sstream << "process entry";
+      return sstream.str ();
+
+    case ZET_DEBUG_EVENT_TYPE_PROCESS_EXIT:
+      sstream << "process exit";
+      return sstream.str ();
+
+    case ZET_DEBUG_EVENT_TYPE_MODULE_LOAD:
+      sstream << "module load, format="
+	      << ze_debug_info_format_str (event.info.module.format)
+	      << ", module=[" << std::hex << event.info.module.moduleBegin
+	      << "; " << std::hex << event.info.module.moduleEnd
+	      << "), addr=" << std::hex << event.info.module.load;
+      return sstream.str ();
+
+    case ZET_DEBUG_EVENT_TYPE_MODULE_UNLOAD:
+      sstream << "module unload, format="
+	      << ze_debug_info_format_str (event.info.module.format)
+	      << ", module=[" << std::hex << event.info.module.moduleBegin
+	      << "; " << std::hex << event.info.module.moduleEnd
+	      << "), addr=" << std::hex << event.info.module.load;
+      return sstream.str ();
+
+    case ZET_DEBUG_EVENT_TYPE_THREAD_STOPPED:
+      sstream << "thread stopped, thread="
+	      << ze_thread_id_str (event.info.thread.thread);
+      return sstream.str ();
+
+    case ZET_DEBUG_EVENT_TYPE_THREAD_UNAVAILABLE:
+      sstream << "thread unavailable, thread="
+	      << ze_thread_id_str (event.info.thread.thread);
+      return sstream.str ();
+    }
+
+  sstream << "unknown, code=" << event.type;
+  return sstream.str ();
+}
+
+/* Acknowledge an event, if necessary.  */
+
+static void
+ze_ack_event (const ze_device_info &device, const zet_debug_event_t &event)
+{
+  /* There is nothing to do for events that do not need acknowledging.  */
+  if ((event.flags & ZET_DEBUG_EVENT_FLAG_NEED_ACK) == 0)
+    return;
+
+  ze_result_t status = zetDebugAcknowledgeEvent (device.session, &event);
+  switch (status)
+    {
+    case ZE_RESULT_SUCCESS:
+      break;
+
+    default:
+      error (_("error acknowledging event: %s: %x."),
+	     ze_event_str (event).c_str (), status);
+    }
+}
+
+/* Return whether TP has a pending event.  */
+
+static bool
+ze_has_waitstatus (const thread_info *tp)
+{
+  const ze_thread_info *zetp = ze_thread (tp);
+  if (zetp == nullptr)
+    return false;
+
+  return (zetp->waitstatus.kind != TARGET_WAITKIND_IGNORE);
+}
+
+/* Return whether TP has a pending priority event.  */
+
+static bool
+ze_has_priority_waitstatus (const thread_info *tp)
+{
+  const ze_thread_info *zetp = ze_thread (tp);
+  if (zetp == nullptr)
+    return false;
+
+  switch (zetp->waitstatus.kind)
+    {
+    case TARGET_WAITKIND_IGNORE:
+    case TARGET_WAITKIND_UNAVAILABLE:
+      return false;
+
+    default:
+      return true;
+    }
+}
+
+/* Return TP's waitstatus and clear it in TP.  */
+
+static target_waitstatus
+ze_move_waitstatus (thread_info *tp)
+{
+  ze_thread_info *zetp = ze_thread (tp);
+  if (zetp == nullptr)
+    return { TARGET_WAITKIND_IGNORE };
+
+  target_waitstatus status = zetp->waitstatus;
+  zetp->waitstatus = { TARGET_WAITKIND_IGNORE };
+
+  return status;
 }
 
 int
@@ -479,6 +647,71 @@ ze_target::attach_to_devices (uint32_t pid)
   return nattached;
 }
 
+uint64_t
+ze_target::fetch_events (ze_device_info &device)
+{
+  /* There are no events if we're not attached.  */
+  if (device.session == nullptr)
+    return 0;
+
+  uint64_t nevents = 0;
+  for (;;)
+    {
+      zet_debug_event_t event = {};
+      ze_result_t status = zetDebugReadEvent (device.session, 0ull, &event);
+      switch (status)
+	{
+	case ZE_RESULT_SUCCESS:
+	  nevents += 1;
+	  break;
+
+	case ZE_RESULT_NOT_READY:
+	  return nevents;
+
+	default:
+	  error (_("error fetching events from %s: %x."),
+		 device.properties.name, status);
+	}
+
+      dprintf ("received event: %s", ze_event_str (event).c_str ());
+
+      switch (event.type)
+	{
+	case ZET_DEBUG_EVENT_TYPE_INVALID:
+	  break;
+
+	case ZET_DEBUG_EVENT_TYPE_DETACHED:
+	  break;
+
+	case ZET_DEBUG_EVENT_TYPE_PROCESS_ENTRY:
+	  break;
+
+	case ZET_DEBUG_EVENT_TYPE_PROCESS_EXIT:
+	  break;
+
+	case ZET_DEBUG_EVENT_TYPE_MODULE_LOAD:
+	  break;
+
+	case ZET_DEBUG_EVENT_TYPE_MODULE_UNLOAD:
+	  break;
+
+	case ZET_DEBUG_EVENT_TYPE_THREAD_STOPPED:
+	  break;
+
+	case ZET_DEBUG_EVENT_TYPE_THREAD_UNAVAILABLE:
+	  break;
+	}
+
+      /* We only get here if we have not processed EVENT.  */
+      warning (_("ignoring event '%s' on %s."),
+	       ze_event_str (event).c_str (),
+	       device.properties.name);
+
+      /* Acknowledge the ignored event so we don't get stuck.  */
+      ze_ack_event (device, event);
+    }
+}
+
 void
 ze_target::init ()
 {
@@ -637,7 +870,116 @@ ptid_t
 ze_target::wait (ptid_t ptid, target_waitstatus *status,
 		 target_wait_flags options)
 {
-  error (_("%s: tbd"), __FUNCTION__);
+  /* We need to wait for further events.  */
+  ze_async_mark ();
+
+  do
+    {
+      /* We start by fetching all events.
+
+	 This will mark threads stopped and also process solist updates.  We may
+	 get solist updates even if all device threads are running.
+
+	 For all-stop, we anyway want to stop all threads and drain events
+	 before reporting the stop to GDB.
+
+	 For non-stop, this will allow us to group stop events for multiple
+	 threads.  */
+      uint64_t nevents;
+      do
+	{
+	  nevents = 0;
+
+	  for (ze_device_info *device : devices)
+	    {
+	      gdb_assert (device != nullptr);
+
+	      ptid_t devid = ptid_t (ze_device_pid (*device));
+	      if (devid.matches (ptid))
+		nevents += fetch_events (*device);
+	    }
+	}
+      while (nevents > 0);
+
+      /* Next, find a matching entity, whose event we'll report.
+
+	 We prioritize process events since they are typically a lot rarer and
+	 further have higher impact and should be handled before any thread
+	 events of that process.  */
+      process_info *process
+	= find_process ([ptid, this] (process_info *proc)
+	  {
+	    if (!ptid_t (pid_of (proc)).matches (ptid))
+	      return false;
+
+	    process_info_private *zeproc = proc->priv;
+	    gdb_assert (zeproc != nullptr);
+
+	    return (zeproc->waitstatus.kind != TARGET_WAITKIND_IGNORE);
+	  });
+
+      /* If we found a process event, we're done.
+
+	 We do not take any special care about fairness as we expect process
+	 events to be rather rare.  */
+      if (process != nullptr)
+	{
+	  process_info_private *zeproc = process->priv;
+	  gdb_assert (zeproc != nullptr);
+
+	  *status = zeproc->waitstatus;
+	  zeproc->waitstatus = { TARGET_WAITKIND_IGNORE };
+
+	  return ptid_t (pid_of (process));
+	}
+
+      /* We defer reporting THREAD_UNAVAILABLE events until there are no
+	 other events to report on the target.
+
+	 In all-stop mode, we will ignore unavailable threads when
+	 resuming the target.  So, unless we explicitly try to interact
+	 with them, unavailable threads should be transparent to an
+	 all-stop target.
+
+	 In non-stop mode, we give more time for unavailable threads to
+	 become available and report an event.  */
+      thread_info *thread
+	= find_thread_in_random ([ptid, this] (thread_info *tp)
+	  {
+	    if (!tp->id.matches (ptid))
+	      return false;
+
+	    return ze_has_priority_waitstatus (tp);
+	  });
+
+      if (thread == nullptr)
+	thread = find_thread_in_random ([ptid, this] (thread_info *tp)
+	  {
+	    if (!tp->id.matches (ptid))
+	      return false;
+
+	    return ze_has_waitstatus (tp);
+	  });
+
+      if (thread != nullptr)
+	{
+	  *status = ze_move_waitstatus (thread);
+
+	  /* FIXME: switch_to_thread
+
+	     Why isn't the caller switching based on the returned ptid?  */
+	  switch_to_thread (thread);
+	  return ptid_of (thread);
+	}
+
+      std::this_thread::yield ();
+    }
+  while ((options & TARGET_WNOHANG) == 0);
+
+  /* We only get here if we did not find any event to report.  */
+
+  *status = { TARGET_WAITKIND_IGNORE };
+  return null_ptid;
 }
 
 void

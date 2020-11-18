@@ -3707,6 +3707,20 @@ do_target_wait_1 (inferior *inf, ptid_t ptid,
   return event_ptid;
 }
 
+/* Returns true if INF has any resumed thread with a status
+   pending.  */
+
+static bool
+threads_are_resumed_pending_p (inferior *inf)
+{
+  for (thread_info *tp : inf->non_exited_threads ())
+    if (tp->resumed
+	&& tp->suspend.waitstatus_pending_p)
+      return true;
+
+  return false;
+}
+
 /* Wrapper for target_wait that first checks whether threads have
    pending statuses to report before actually asking the target for
    more events.  Polls for events from all inferiors/targets.  */
@@ -3735,10 +3749,12 @@ do_target_wait (execution_control_state *ecs, target_wait_flags options)
   auto inferior_matches = [&match_ptid] (inferior *inf)
     {
       return (inf->process_target () != nullptr
+	      && (threads_are_executing (inf->process_target ())
+		  || threads_are_resumed_pending_p (inf))
 	      && ptid_t (inf->pid).matches (match_ptid));
     };
 
-  /* First see how many matching inferiors we have.  */
+  /* First see how many resumed inferiors we have.  */
   for (inferior *inf : all_inferiors ())
     if (inferior_matches (inf))
       num_inferiors++;
@@ -3749,7 +3765,7 @@ do_target_wait (execution_control_state *ecs, target_wait_flags options)
       return false;
     }
 
-  /* Now randomly pick an inferior out of those that matched.  */
+  /* Now randomly pick an inferior out of those that were resumed.  */
   random_selector = (int)
     ((num_inferiors * (double) rand ()) / (RAND_MAX + 1.0));
 
@@ -3757,7 +3773,7 @@ do_target_wait (execution_control_state *ecs, target_wait_flags options)
     infrun_debug_printf ("Found %d inferiors, starting at #%d",
 			 num_inferiors, random_selector);
 
-  /* Select the Nth inferior that matched.  */
+  /* Select the Nth inferior that was resumed.  */
 
   inferior *selected = nullptr;
 
@@ -3783,8 +3799,8 @@ do_target_wait (execution_control_state *ecs, target_wait_flags options)
     return (ecs->ws.kind != TARGET_WAITKIND_IGNORE);
   };
 
-  /* Needed in 'all-stop + target-non-stop' mode, because we end up
-     here spuriously after the target is all stopped and we've already
+  /* Needed in all-stop+target-non-stop mode, because we end up here
+     spuriously after the target is all stopped and we've already
      reported the stop to the user, polling for events.  */
   scoped_restore_current_thread restore_thread;
 

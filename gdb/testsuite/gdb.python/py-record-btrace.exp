@@ -43,8 +43,8 @@ if ![runto_main ] then {
 with_test_prefix "no or double record" {
     gdb_test "python print(gdb.current_recording())" "None"
 
-    gdb_test_no_output "python gdb.start_recording(\"btrace\")"
-    gdb_test "python gdb.start_recording(\"btrace\")" ".*gdb\.error: The process is already being recorded\..*"
+    gdb_test_no_output "python gdb.start_recording(\"btrace\")" "first start"
+    gdb_test "python gdb.start_recording(\"btrace\")" ".*gdb\.error: The process is already being recorded\..*" "second start"
 
     gdb_test_no_output "python gdb.stop_recording()" "first"
     gdb_test "python gdb.stop_recording()" ".*gdb\.error: No record target is currently active\..*" "second"

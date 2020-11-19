@@ -251,6 +251,44 @@ ze_add_process (ze_device_info *device, ze_process_state state)
   return process;
 }
 
+/* Remove a level-zero PROCESS.  */
+
+static void
+ze_remove_process (process_info *process)
+{
+  gdb_assert (process != nullptr);
+
+  for_each_thread (pid_of (process), [] (thread_info *thread)
+    {
+      delete (ze_thread_info *) thread->target_data;
+      thread->target_data = nullptr;
+
+      remove_thread (thread);
+    });
+
+  process_info_private *zeinfo = process->priv;
+  gdb_assert (zeinfo != nullptr);
+
+  /* We may or may not have a device.
+
+     When we got detached, we will remove the device first, and remove the
+     process when we select an event from one of its threads.
+
+     When we get a process exit event, the device will remain after the process
+     has been removed.  */
+  ze_device_info *device = zeinfo->device;
+  if (device != nullptr)
+    {
+      gdb_assert (device->process == process);
+      device->process = nullptr;
+    }
+
+  process->priv = nullptr;
+  delete zeinfo;
+
+  remove_process (process);
+}
+
 /* Attach to DEVICE and create a hidden process for it.
 
    Modifies DEVICE as a side-effect.
@@ -288,6 +326,31 @@ ze_attach (ze_device_info *device)
 
     default:
       error (_("Failed to attach to %s (%x)."), device->properties.name,
+	     status);
+    }
+}
+
+/* Detach from DEVICE.  */
+
+static void
+ze_detach (ze_device_info *device)
+{
+  gdb_assert (device != nullptr);
+
+  zet_debug_session_handle_t session = device->session;
+  if (session == nullptr)
+    error (_("Already detached from %s."), device->properties.name);
+
+  ze_result_t status  = zetDebugDetach (session);
+  switch (status)
+    {
+    case ZE_RESULT_ERROR_DEVICE_LOST:
+    case ZE_RESULT_SUCCESS:
+      device->session = nullptr;
+      break;
+
+    default:
+      error (_("Failed to detach from %s (%x)."), device->properties.name,
 	     status);
     }
 }
@@ -837,8 +900,17 @@ ze_target::attach (unsigned long pid)
 int
 ze_target::detach (process_info *proc)
 {
-  error (_("%s: tbd"), __FUNCTION__);
-  return -1;
+  gdb_assert (proc != nullptr);
+
+  process_info_private *priv = proc->priv;
+  gdb_assert (priv != nullptr);
+
+  ze_device_info *device = priv->device;
+  if (device != nullptr)
+    ze_detach (device);
+
+  mourn (proc);
+  return 0;
 }
 
 int
@@ -851,13 +923,13 @@ ze_target::kill (process_info *proc)
 void
 ze_target::mourn (process_info *proc)
 {
-  error (_("%s: tbd"), __FUNCTION__);
+  ze_remove_process (proc);
 }
 
 void
 ze_target::join (int pid)
 {
-  error (_("%s: tbd"), __FUNCTION__);
+  /* Nothing to do for level-zero targets.  */
 }
 
 void

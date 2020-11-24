@@ -52,8 +52,13 @@ struct so_list
      map we've already loaded.  */
   char so_original_name[SO_NAME_MAX_PATH_SIZE];
 
-  /* Shared object file name, expanded to something GDB can open.  */
+  /* Shared object file name, expanded to something GDB can open.  This is
+     an empty string for in-memory shared objects.  */
   char so_name[SO_NAME_MAX_PATH_SIZE];
+
+  /* The address range of an in-memory shared object.  Both BEGIN and END
+     are zero for on-disk shared objects.  */
+  CORE_ADDR begin, end;
 
   /* Program space this shared library belongs to.  */
   struct program_space *pspace;
@@ -161,6 +166,12 @@ struct target_so_ops
      NULL, in which case no specific preprocessing is necessary
      for this target.  */
   void (*handle_event) (void);
+
+  /* Open an in-memory shared library at ADDR of at most SIZE bytes.  The
+     TARGET string is used to identify the target.  */
+  gdb_bfd_ref_ptr (*bfd_open_from_target_memory) (CORE_ADDR addr,
+						  CORE_ADDR size,
+						  const char *target);
 };
 
 using so_list_range = next_range<so_list>;

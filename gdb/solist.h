@@ -52,8 +52,13 @@ struct so_list
      map we've already loaded.  */
   char so_original_name[SO_NAME_MAX_PATH_SIZE];
 
-  /* Shared object file name, expanded to something GDB can open.  */
+  /* Shared object file name, expanded to something GDB can open.  This is
+     an empty string for in-memory shared objects.  */
   char so_name[SO_NAME_MAX_PATH_SIZE];
+
+  /* The address range of an in-memory shared object.  Both BEGIN and END
+     are zero for on-disk shared objects.  */
+  CORE_ADDR begin, end;
 
   /* Program space this shared library belongs to.  */
   struct program_space *pspace;
@@ -133,6 +138,14 @@ struct target_so_ops
   int (*find_and_open_solib) (const char *soname,
 			      unsigned o_flags,
 			      gdb::unique_xmalloc_ptr<char> *temp_pathname);
+
+  /* Open an in-memory shared library at ADDR of at most SIZE bytes.  The
+     TARGET string is used to identify the target and the FILENAME string
+     is used to distinguish different shared libraries.  */
+  gdb_bfd_ref_ptr (*bfd_open_from_target_memory) (CORE_ADDR addr,
+						  CORE_ADDR size,
+						  const char *target,
+						  const char *filename);
 
   /* Given two so_list objects, one from the GDB thread list
      and another from the list returned by current_sos, return 1

@@ -41,6 +41,17 @@ loaded_dll (process_info *proc, const char *name, CORE_ADDR base_addr)
   proc->dlls_changed = true;
 }
 
+/* Record a newly loaded in-memory DLL at BASE_ADDR for PROC.  */
+
+void
+loaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
+	    CORE_ADDR base_addr)
+{
+  gdb_assert (proc != nullptr);
+  proc->all_dlls.emplace_back (begin, end, base_addr);
+  proc->dlls_changed = true;
+}
+
 /* Record that the DLL with NAME and BASE_ADDR has been unloaded
    from the current process.  */
 
@@ -59,6 +70,9 @@ unloaded_dll (process_info *proc, const char *name, CORE_ADDR base_addr)
   gdb_assert (proc != nullptr);
   auto pred = [&] (const dll_info &dll)
     {
+      if (dll.location != dll_info::on_disk)
+	return false;
+
       if (base_addr != UNSPECIFIED_CORE_ADDR
 	  && base_addr == dll.base_addr)
 	return true;
@@ -88,6 +102,51 @@ unloaded_dll (process_info *proc, const char *name, CORE_ADDR base_addr)
 	 resources.  */
       proc->all_dlls.erase (iter);
       proc->dlls_changed = true;
+    }
+}
+
+/* Record that the in-memory DLL from BEGIN to END loaded at BASE_ADDR has been
+   unloaded.  */
+
+void
+unloaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
+	      CORE_ADDR base_addr)
+{
+  gdb_assert (proc != nullptr);
+  auto pred = [&] (const dll_info &dll)
+    {
+      if (dll.location != dll_info::in_memory)
+	return false;
+
+      if (base_addr != UNSPECIFIED_CORE_ADDR
+	  && base_addr == dll.base_addr)
+	return true;
+
+      /* We do not require the end address to be specified - we don't
+	 support partially unloaded libraries, anyway.  */
+      if (begin != UNSPECIFIED_CORE_ADDR
+	  && begin == dll.begin
+	  && (end == UNSPECIFIED_CORE_ADDR
+	      || end == dll.end))
+	return true;
+
+      return false;
+    };
+
+  auto iter = std::find_if (proc->all_dlls.begin (), proc->all_dlls.end (),
+			    pred);
+
+  if (iter == proc->all_dlls.end ())
+    /* For some inferiors we might get unloaded_dll events without having
+       a corresponding loaded_dll.  In that case, the dll cannot be found
+       in ALL_DLL, and there is nothing further for us to do.  */
+    return;
+  else
+    {
+      /* DLL has been found so remove the entry and free associated
+	 resources.  */
+      proc->all_dlls.erase (iter);
+      proc->dlls_changed = 1;
     }
 }
 

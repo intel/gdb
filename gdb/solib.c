@@ -541,8 +541,29 @@ solib_map_sections (struct so_list *so)
 {
   const struct target_so_ops *ops = gdbarch_so_ops (target_gdbarch ());
 
-  gdb::unique_xmalloc_ptr<char> filename (tilde_expand (so->so_name));
-  gdb_bfd_ref_ptr abfd (ops->bfd_open (filename.get ()));
+  gdb_bfd_ref_ptr abfd;
+  if (so->so_name[0] != '\0')
+    {
+      gdb::unique_xmalloc_ptr<char> filename (tilde_expand (so->so_name));
+      abfd = ops->bfd_open (filename.get ());
+    }
+  else if (so->begin != 0 && so->end != 0)
+    {
+      if (ops->bfd_open_from_target_memory == nullptr)
+	error (_("Target does not support in-memory shared libraries."));
+
+      if (so->end <= so->begin)
+	error (_("Bad address range [%s; %s) for in-memory shared library."),
+	       core_addr_to_string_nz (so->begin),
+	       core_addr_to_string_nz (so->end));
+
+      abfd = ops->bfd_open_from_target_memory (so->begin,
+					       so->end - so->begin,
+					       gnutarget);
+    }
+  else
+    internal_error (_("bad so_list"));
+
   gdb::unique_xmalloc_ptr<char> build_id_hexstr
     = get_cbfd_soname_build_id (current_program_space->cbfd, so->so_name);
 
@@ -562,6 +583,7 @@ solib_map_sections (struct so_list *so)
 	}
       if (abfd == nullptr || mismatch)
 	{
+	  gdb::unique_xmalloc_ptr<char> filename;
 	  scoped_fd fd = debuginfod_exec_query ((const unsigned char*)
 						build_id_hexstr.get (),
 						0, so->so_name, &filename);

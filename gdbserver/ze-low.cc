@@ -511,6 +511,33 @@ ze_move_waitstatus (thread_info *tp)
   return status;
 }
 
+/* Indicate that we have been detached from the device corresponding to
+   PROCESS.  */
+
+static void
+ze_device_detached (process_info *process, zet_debug_detach_reason_t reason)
+{
+  gdb_assert (process != nullptr);
+
+  /* We model getting detached from a device as the corresponding device process
+     exiting with the detach reason as exit status.
+
+     In the first step, we mark all threads of that process exited.  We already
+     use the process exit wait status as all threads will exit together.
+
+     In the second step, when one of those threads gets selected for reporting
+     its event, we will remove the process as part of the reporting flow.  */
+
+  for_each_thread (pid_of (process), [reason] (thread_info *tp)
+    {
+      ze_thread_info *zetp = ze_thread (tp);
+      gdb_assert (zetp != nullptr);
+
+      zetp->waitstatus = { TARGET_WAITKIND_EXITED };
+      zetp->waitstatus.value.integer = (int) reason;
+    });
+}
+
 int
 ze_target::attach_to_device (uint32_t pid, ze_device_handle_t device)
 {
@@ -744,7 +771,15 @@ ze_target::fetch_events (ze_device_info &device)
 	  break;
 
 	case ZET_DEBUG_EVENT_TYPE_DETACHED:
-	  break;
+	  {
+	    process_info *process = device.process;
+	    if (process != nullptr)
+	      ze_device_detached (process, event.info.detached.reason);
+
+	    /* We're detached, now.  */
+	    device.session = nullptr;
+	  }
+	  return nevents;
 
 	case ZET_DEBUG_EVENT_TYPE_PROCESS_ENTRY:
 	  break;

@@ -27,6 +27,7 @@
 #include <iomanip>
 #include <cstring> /* For snprintf.  */
 #include <thread>
+#include <utility>
 
 #ifndef USE_WIN32API
 #  include <signal.h>
@@ -189,6 +190,33 @@ ze_device_pid (const ze_device_info &device)
     return pid_of (device.process);
 
   return 0;
+}
+
+/* Return the device for PROCESS.  */
+
+static ze_device_info *
+ze_process_device (process_info *process)
+{
+  if (process == nullptr)
+    return nullptr;
+
+  process_info_private *zeproc = process->priv;
+  if (zeproc == nullptr)
+    return nullptr;
+
+  return zeproc->device;
+}
+
+/* Return the device for THREAD.  */
+
+static ze_device_info *
+ze_thread_device (thread_info *thread)
+{
+  if (thread == nullptr)
+    return nullptr;
+
+  process_info *process = get_thread_process (thread);
+  return ze_process_device (process);
 }
 
 /* Add a process for DEVICE.  */
@@ -512,6 +540,18 @@ ze_ack_event (const ze_device_info &device, const zet_debug_event_t &event)
       error (_("error acknowledging event: %s: %x."),
 	     ze_event_str (event).c_str (), status);
     }
+}
+
+/* Return TP's execution state.  */
+
+static enum ze_thread_exec_state_t
+ze_exec_state (const thread_info *tp)
+{
+  const ze_thread_info *zetp = ze_thread (tp);
+  if (zetp == nullptr)
+    return ze_thread_state_unknown;
+
+  return zetp->exec_state;
 }
 
 /* Return whether TP has a pending event.  */
@@ -1155,18 +1195,99 @@ ze_target::store_registers (regcache *regcache, int regno)
   error (_("%s: tbd"), __FUNCTION__);
 }
 
+/* Determine the thread id and device context for accessing ADDR_SPACE
+   from THREAD.  */
+static std::pair<ze_device_thread_t, ze_device_info *>
+ze_memory_access_context (thread_info *thread, unsigned int addr_space)
+{
+  /* With a stopped thread, we can access all address spaces, and we
+     should be able to determine the device for that thread.  */
+  enum ze_thread_exec_state_t state = ze_exec_state (thread);
+  if (state == ze_thread_state_stopped)
+    return std::pair<ze_device_thread_t, ze_device_info *>
+      { ze_thread_id (thread), ze_thread_device (thread) };
+
+  /* Without a stopped thread, we may only access the default address
+     space and only in the context of thread ALL.  */
+  if (addr_space != ZET_DEBUG_MEMORY_SPACE_TYPE_DEFAULT)
+    error (_("need thread to access non-default address space."));
+
+  /* Try to determine the device using THREAD but fall back to the current
+     process' device, e.g. if THREAD is nullptr.  */
+  ze_device_info *device = ze_thread_device (thread);
+  if (device == nullptr)
+    {
+      process_info *process = current_process ();
+      device = ze_process_device (process);
+
+      if (device == nullptr)
+	error (_("cannot determine device for memory access."));
+    }
+
+  return std::pair<ze_device_thread_t, ze_device_info *>
+    { ze_thread_id_all (), device };
+}
+
 int
 ze_target::read_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len,
 			unsigned int addr_space)
 {
-  error (_("%s: tbd"), __FUNCTION__);
+  zet_debug_memory_space_desc_t desc
+    = { ZET_STRUCTURE_TYPE_DEBUG_MEMORY_SPACE_DESC };
+  desc.type = (zet_debug_memory_space_type_t) addr_space;
+  desc.address = (uint64_t) memaddr;
+
+  std::pair<ze_device_thread_t, ze_device_info *> context
+    = ze_memory_access_context (current_thread, addr_space);
+  ze_device_thread_t thread = context.first;
+  ze_device_info *device = context.second;
+  gdb_assert (device != nullptr);
+
+  ze_result_t status = zetDebugReadMemory (device->session, thread, &desc,
+					   len, myaddr);
+  switch (status)
+    {
+    case ZE_RESULT_SUCCESS:
+      return 0;
+
+    default:
+      dprintf ("error reading %d bytes of memory from %s with %s: %x",
+	       len, core_addr_to_string_nz (memaddr),
+	       ze_thread_id_str (thread).c_str (), status);
+
+      return EIO;
+    }
 }
 
 int
 ze_target::write_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
 			 int len, unsigned int addr_space)
 {
-  error (_("%s: tbd"), __FUNCTION__);
+  zet_debug_memory_space_desc_t desc
+    = { ZET_STRUCTURE_TYPE_DEBUG_MEMORY_SPACE_DESC };
+  desc.type = (zet_debug_memory_space_type_t) addr_space;
+  desc.address = (uint64_t) memaddr;
+
+  std::pair<ze_device_thread_t, ze_device_info *> context
+    = ze_memory_access_context (current_thread, addr_space);
+  ze_device_thread_t thread = context.first;
+  ze_device_info *device = context.second;
+  gdb_assert (device != nullptr);
+
+  ze_result_t status = zetDebugWriteMemory (device->session, thread, &desc,
+					    len, myaddr);
+  switch (status)
+    {
+    case ZE_RESULT_SUCCESS:
+      return 0;
+
+    default:
+      dprintf ("error writing %d bytes of memory to %s with %s: %x",
+	       len, core_addr_to_string_nz (memaddr),
+	       ze_thread_id_str (thread).c_str (), status);
+
+      return EIO;
+    }
 }
 
 bool

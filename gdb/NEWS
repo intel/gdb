@@ -52,6 +52,14 @@ info devices
      of '-thread-info' for such a thread contains 'execution-mask' and
      'simd-width' fields.
 
+* New remote packets
+
+qXfer:libraries:read's response
+
+  The qXfer:libraries:read query supports reporting in-memory libraries.  GDB
+  indicates support by supplying qXfer:libraries:read:in-memory-library+ in the
+  qSupported packet.
+
 *** Changes in GDB 14
 
 * GDB now supports the AArch64 Scalable Matrix Extension 2 (SME2), which

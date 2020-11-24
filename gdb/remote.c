@@ -5586,6 +5586,9 @@ remote_target::remote_query_supported ()
 	  != AUTO_BOOLEAN_FALSE)
 	remote_query_supported_append (&q, "R+");
 
+      remote_query_supported_append
+	(&q, "qXfer:libraries:read:in-memory-library+");
+
       /* Keep this one last to work around a gdbserver <= 7.10 bug in
 	 the qSupported:xmlRegisters=i386 handling.  */
       if (remote_support_xml != NULL

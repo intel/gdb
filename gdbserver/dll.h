@@ -24,11 +24,24 @@ struct process_info;
 
 struct dll_info
 {
+  enum location_t
+  {
+    on_disk,
+    in_memory
+  };
+
   dll_info (const std::string &name_, CORE_ADDR base_addr_)
-  : name (name_), base_addr (base_addr_)
+    : location (on_disk), name (name_), base_addr (base_addr_)
   {}
 
+  dll_info (CORE_ADDR begin_, CORE_ADDR end_, CORE_ADDR base_addr_)
+    : location (in_memory), begin (begin_), end (end_), base_addr (base_addr_)
+  {}
+
+  location_t location;
   std::string name;
+  CORE_ADDR begin;
+  CORE_ADDR end;
   CORE_ADDR base_addr;
 };
 
@@ -36,8 +49,12 @@ extern void clear_dlls (void);
 extern void loaded_dll (const char *name, CORE_ADDR base_addr);
 extern void loaded_dll (process_info *proc, const char *name,
 			CORE_ADDR base_addr);
+extern void loaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
+			CORE_ADDR base_addr);
 extern void unloaded_dll (const char *name, CORE_ADDR base_addr);
 extern void unloaded_dll (process_info *proc, const char *name,
+			  CORE_ADDR base_addr);
+extern void unloaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
 			  CORE_ADDR base_addr);
 
 #endif /* GDBSERVER_DLL_H */

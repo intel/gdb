@@ -5,11 +5,15 @@
      notice and this notice are preserved.  -->
 
 <!-- library-list: Root element with versioning -->
-<!ELEMENT library-list  (library)*>
-<!ATTLIST library-list  version CDATA   #FIXED  "1.0">
+<!ELEMENT library-list  (library | in-memory-library)*>
+<!ATTLIST library-list  version CDATA   #FIXED  "1.1">
 
 <!ELEMENT library       (segment*, section*)>
 <!ATTLIST library       name    CDATA   #REQUIRED>
+
+<!ELEMENT in-memory-library       (segment*, section*)>
+<!ATTLIST in-memory-library       begin    CDATA   #REQUIRED
+                                  end      CDATA   #REQUIRED>
 
 <!ELEMENT segment       EMPTY>
 <!ATTLIST segment       address CDATA   #REQUIRED>

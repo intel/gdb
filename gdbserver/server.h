@@ -175,6 +175,9 @@ struct client_state
   /* Whether we support an address_space argument for memory accesses.  */
   int multi_addr_space = 1;
 
+  /* True if qXfer:libraries:read supports in-memory-library.  */
+  bool in_memory_library_supported = false;
+
   int pass_signals[GDB_SIGNAL_LAST];
   int program_signals[GDB_SIGNAL_LAST];
   int program_signals_p = 0;

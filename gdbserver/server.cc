@@ -1569,6 +1569,97 @@ handle_qxfer_features (const char *annex,
   return len;
 }
 
+static std::string
+dll_to_tmpfile (dll_info &dll)
+{
+  if (dll.end <= dll.begin)
+    error (_("bad in-memory-library location: begin=%s, end=%s"),
+	   core_addr_to_string_nz (dll.begin),
+	   core_addr_to_string_nz (dll.end));
+
+  gdb::byte_vector buffer (dll.end - dll.begin);
+  int errcode = gdb_read_memory (dll.begin, buffer.data (), buffer.size ());
+  if (errcode != 0)
+    error (_("failed to read in-memory library at %s..%s"),
+	   core_addr_to_string_nz (dll.begin),
+	   core_addr_to_string_nz (dll.end));
+
+  std::string name
+    = std::string ("gdb-in-memory-solib-")
+    + core_addr_to_string_nz (dll.begin)
+    + "-"
+    + core_addr_to_string_nz (dll.end);
+
+  FILE *file = gdb_create_tmpfile (name);
+
+  size_t written = fwrite (buffer.data (), buffer.size (), 1, file);
+  if (written != 1)
+    error (_("failed to write into %s"), name.c_str ());
+
+  return name;
+}
+
+/* Print a qXfer:libraries:read entry for DLL.  */
+
+static std::string
+print_qxfer_libraries_entry (dll_info &dll)
+{
+  switch (dll.location)
+    {
+    case dll_info::in_memory:
+      if (get_client_state ().in_memory_library_supported)
+	return string_printf
+	  ("  <in-memory-library begin=\"0x%s\" end=\"0x%s\">"
+	   "<segment address=\"0x%s\"/></in-memory-library>\n",
+	   paddress (dll.begin), paddress (dll.end),
+	   paddress (dll.base_addr));
+
+      /* GDB does not support in-memory-library.  Fall back to storing it in a
+	 temporary file and report that file to GDB.  */
+      dll.name = dll_to_tmpfile (dll);
+
+      /* fall through.  */
+    case dll_info::on_disk:
+      return string_printf
+	("  <library name=\"%s\"><segment address=\"0x%s\"/></library>\n",
+	 dll.name.c_str (), paddress (dll.base_addr));
+    }
+
+  warning (_("unknown dll location: %x"), dll.location);
+  return std::string ();
+}
+
+/* Determine the library-list version required for communicating the shared
+   libraries.  */
+
+static std::string
+library_list_version_needed (const std::list<dll_info> &dlls)
+{
+  const client_state &cs = get_client_state ();
+  int major = 1, minor = 0;
+
+  for (const dll_info &dll : dlls)
+    {
+      switch (dll.location)
+	{
+	case dll_info::on_disk:
+	  major = std::max (major, 1);
+	  minor = std::max (minor, 0);
+	  break;
+
+	case dll_info::in_memory:
+	  if (cs.in_memory_library_supported)
+	    {
+	      major = std::max (major, 1);
+	      minor = std::max (minor, 1);
+	    }
+	  break;
+	}
+    }
+
+  return std::to_string (major) + std::string (".") + std::to_string (minor);
+}
+
 /* Handle qXfer:libraries:read.  */
 
 static int
@@ -1582,13 +1673,13 @@ handle_qxfer_libraries (const char *annex,
   if (annex[0] != '\0' || !has_current_process ())
     return -1;
 
-  std::string document = "<library-list version=\"1.0\">\n";
-
   process_info *proc = current_process ();
-  for (const dll_info &dll : proc->all_dlls)
-    document += string_printf
-      ("  <library name=\"%s\"><segment address=\"0x%s\"/></library>\n",
-       dll.name.c_str (), paddress (dll.base_addr));
+  std::string document = "<library-list version=\""
+    + library_list_version_needed (proc->all_dlls)
+    + "\">\n";
+
+  for (dll_info &dll : proc->all_dlls)
+    document += print_qxfer_libraries_entry (dll);
 
   document += "</library-list>\n";
 
@@ -2437,6 +2528,8 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 		  if (target_supports_memory_tagging ())
 		    cs.memory_tagging_feature = true;
 		}
+	      else if (feature == "qXfer:libraries:read:in-memory-library+")
+		cs.in_memory_library_supported = true;
 	      else
 		{
 		  /* Move the unknown features all together.  */
@@ -2467,6 +2560,7 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 	  /* We do not have any hook to indicate whether the non-SVR4 target
 	     backend supports qXfer:libraries:read, so always report it.  */
 	  strcat (own_buf, ";qXfer:libraries:read+");
+	  strcat (own_buf, ";qXfer:libraries:read:in-memory-library+");
 	}
 
       if (the_target->supports_read_auxv ())

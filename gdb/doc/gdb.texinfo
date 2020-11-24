@@ -45749,9 +45749,10 @@ queries the target's operating system and reports which libraries
 are loaded.
 
 The @samp{qXfer:libraries:read} packet returns an XML document which
-lists loaded libraries and their offsets.  Each library has an
-associated name and one or more segment or section base addresses,
-which report where the library was loaded in memory.
+lists loaded libraries and their offsets.  Each library has either an
+associated name or begin and end addresses and one or more segment or
+section base addresses, which report where the library was loaded in
+memory.
 
 For the common case of libraries that are fully linked binaries, the
 library should have a list of segments.  If the target supports
@@ -45763,12 +45764,26 @@ depend on the library's link-time base addresses.
 @value{GDBN} must be linked with the Expat library to support XML
 library lists.  @xref{Expat}.
 
+@value{GDBN} indicates support for in-memory library elements by
+supplying the @code{qXfer:libraries:read:in-memory-library+}
+@samp{qSupported} feature (@pxref{qSupported}).
+
 A simple memory map, with one loaded library relocated by a single
 offset, looks like this:
 
 @smallexample
 <library-list>
   <library name="/lib/libc.so.6">
+    <segment address="0x10000000"/>
+  </library>
+</library-list>
+@end smallexample
+
+A corresponding memory map for an in-memory library looks like this:
+
+@smallexample
+<library-list>
+  <in-memory-library begin="0xa000000" end="0xa001000">
     <segment address="0x10000000"/>
   </library>
 </library-list>
@@ -45791,14 +45806,17 @@ The format of a library list is described by this DTD:
 
 @smallexample
 <!-- library-list: Root element with versioning -->
-<!ELEMENT library-list  (library)*>
-<!ATTLIST library-list  version CDATA   #FIXED  "1.0">
-<!ELEMENT library       (segment*, section*)>
-<!ATTLIST library       name    CDATA   #REQUIRED>
-<!ELEMENT segment       EMPTY>
-<!ATTLIST segment       address CDATA   #REQUIRED>
-<!ELEMENT section       EMPTY>
-<!ATTLIST section       address CDATA   #REQUIRED>
+<!ELEMENT library-list            (library | in-memory-library)*>
+<!ATTLIST library-list            version CDATA   #FIXED  "1.1">
+<!ELEMENT library                 (segment*, section*)>
+<!ATTLIST library                 name    CDATA   #REQUIRED>
+<!ELEMENT in-memory-library       (segment*, section*)>
+<!ATTLIST in-memory-library       begin    CDATA   #REQUIRED
+                                  end      CDATA   #REQUIRED>
+<!ELEMENT segment                 EMPTY>
+<!ATTLIST segment                 address CDATA   #REQUIRED>
+<!ELEMENT section                 EMPTY>
+<!ATTLIST section                 address CDATA   #REQUIRED>
 @end smallexample
 
 In addition, segments and section descriptors cannot be mixed within a

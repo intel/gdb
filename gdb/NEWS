@@ -65,6 +65,14 @@ maint jit dump
   ** '-thread-info' result output includes new fields: execution-mask and
      simd-width, if the thread has SIMD lanes.
 
+* New remote packets
+
+qXfer:libraries:read's response
+
+  The qXfer:libraries:read query supports reporting in-memory libraries.  GDB
+  indicates support by supplying qXfer:libraries:read:in-memory-library+ in the
+  qSupported packet.
+
 *** Changes in GDB 11
 
 * The 'set disassembler-options' command now supports specifying options

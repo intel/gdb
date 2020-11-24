@@ -533,8 +533,29 @@ solib_map_sections (struct so_list *so)
 {
   const struct target_so_ops *ops = solib_ops (target_gdbarch ());
 
-  gdb::unique_xmalloc_ptr<char> filename (tilde_expand (so->so_name));
-  gdb_bfd_ref_ptr abfd (ops->bfd_open (filename.get ()));
+  gdb_bfd_ref_ptr abfd;
+  if (so->so_name[0] != '\0')
+    {
+      gdb::unique_xmalloc_ptr<char> filename (tilde_expand (so->so_name));
+      abfd = ops->bfd_open (filename.get ());
+    }
+  else if (so->begin != 0 && so->end != 0)
+    {
+      if (ops->bfd_open_from_target_memory == nullptr)
+	error (_("Target does not support in-memory shared libraries."));
+
+      if (so->end <= so->begin)
+	error (_("Bad address range [%s; %s) for in-memory shared library."),
+	       core_addr_to_string_nz (so->begin),
+	       core_addr_to_string_nz (so->end));
+
+      abfd = ops->bfd_open_from_target_memory (so->begin,
+					       so->end - so->begin,
+					       gnutarget,
+					       so->so_original_name);
+    }
+  else
+    internal_error (__FILE__, __LINE__, _("bad so_list"));
 
   if (abfd == NULL)
     return 0;

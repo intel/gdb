@@ -24,15 +24,35 @@
 #include "symfile.h"
 #include "target.h"
 #include "solib-target.h"
+#include "gdbsupport/filestuff.h"
+#include "gdb_bfd.h"
 #include <vector>
 #include "inferior.h"
+
+/* The location of a loaded library.  */
+
+enum lm_location_t
+{
+  lm_on_disk,
+  lm_in_memory
+};
 
 /* Private data for each loaded library.  */
 struct lm_info_target : public lm_info_base
 {
+  /* The library's location.  */
+  lm_location_t location;
+
   /* The library's name.  The name is normally kept in the struct
-     so_list; it is only here during XML parsing.  */
+     so_list; it is only here during XML parsing.
+
+     This is only valid if location == lm_on_disk.  */
   std::string name;
+
+  /* The library's begin and end memory addresses.
+
+     This is only valid if location == lm_in_memory.  */
+  CORE_ADDR begin = 0ull, end = 0ull;
 
   /* The target can either specify segment bases or section bases, not
      both.  */
@@ -123,8 +143,28 @@ library_list_start_library (struct gdb_xml_parser *parser,
 {
   lm_info_vector *list = (lm_info_vector *) user_data;
   lm_info_target *item = new lm_info_target;
+  item->location = lm_on_disk;
   item->name
     = (const char *) xml_find_attribute (attributes, "name")->value.get ();
+
+  list->emplace_back (item);
+}
+
+/* Handle the start of a <in-memory-library> element.  */
+
+static void
+in_memory_library_list_start_library (struct gdb_xml_parser *parser,
+				      const struct gdb_xml_element *element,
+				      void *user_data,
+				      std::vector<gdb_xml_value> &attributes)
+{
+  lm_info_vector *list = (lm_info_vector *) user_data;
+  lm_info_target *item = new lm_info_target;
+  item->location = lm_in_memory;
+  item->begin = (CORE_ADDR) *(ULONGEST *)
+    xml_find_attribute (attributes, "begin")->value.get ();
+  item->end = (CORE_ADDR) *(ULONGEST *)
+    xml_find_attribute (attributes, "end")->value.get ();
 
   list->emplace_back (item);
 }
@@ -157,7 +197,7 @@ library_list_start_list (struct gdb_xml_parser *parser,
     {
       const char *string = (const char *) version->value.get ();
 
-      if (strcmp (string, "1.0") != 0)
+      if ((strcmp (string, "1.0") != 0) && (strcmp (string, "1.1") != 0))
 	gdb_xml_error (parser,
 		       _("Library list has unsupported version \"%s\""),
 		       string);
@@ -192,10 +232,19 @@ static const struct gdb_xml_attribute library_attributes[] = {
   { NULL, GDB_XML_AF_NONE, NULL, NULL }
 };
 
+static const struct gdb_xml_attribute in_memory_library_attributes[] = {
+  { "begin", GDB_XML_AF_NONE, gdb_xml_parse_attr_ulongest, NULL },
+  { "end", GDB_XML_AF_NONE, gdb_xml_parse_attr_ulongest, NULL },
+  { NULL, GDB_XML_AF_NONE, NULL, NULL }
+};
+
 static const struct gdb_xml_element library_list_children[] = {
   { "library", library_attributes, library_children,
     GDB_XML_EF_REPEATABLE | GDB_XML_EF_OPTIONAL,
     library_list_start_library, library_list_end_library },
+  { "in-memory-library", in_memory_library_attributes, library_children,
+    GDB_XML_EF_REPEATABLE | GDB_XML_EF_OPTIONAL,
+    in_memory_library_list_start_library, library_list_end_library },
   { NULL, NULL, NULL, GDB_XML_EF_NONE, NULL, NULL }
 };
 
@@ -250,15 +299,43 @@ solib_target_current_sos (void)
   for (auto &&info : library_list)
     {
       new_solib = XCNEW (struct so_list);
-      strncpy (new_solib->so_name, info->name.c_str (),
-	       SO_NAME_MAX_PATH_SIZE - 1);
-      new_solib->so_name[SO_NAME_MAX_PATH_SIZE - 1] = '\0';
-      strncpy (new_solib->so_original_name, info->name.c_str (),
-	       SO_NAME_MAX_PATH_SIZE - 1);
-      new_solib->so_original_name[SO_NAME_MAX_PATH_SIZE - 1] = '\0';
+      switch (info->location)
+	{
+	case lm_on_disk:
+	  strncpy (new_solib->so_name, info->name.c_str (),
+		   SO_NAME_MAX_PATH_SIZE - 1);
+	  new_solib->so_name[SO_NAME_MAX_PATH_SIZE - 1] = '\0';
+	  strncpy (new_solib->so_original_name, info->name.c_str (),
+		   SO_NAME_MAX_PATH_SIZE - 1);
+	  new_solib->so_original_name[SO_NAME_MAX_PATH_SIZE - 1] = '\0';
 
-      /* We no longer need this copy of the name.  */
-      info->name.clear ();
+	  /* We no longer need this copy of the name.  */
+	  info->name.clear ();
+	  break;
+
+	case lm_in_memory:
+	  {
+	    if (info->end <= info->begin)
+	      error (_("bad in-memory-library location: begin=%s, end=%s"),
+		     core_addr_to_string_nz (info->begin),
+		     core_addr_to_string_nz (info->end));
+
+	    /* Give it a name although this isn't really needed.  */
+	    std::string orig_name
+	      = std::string ("in-memory-")
+	      + core_addr_to_string_nz (info->begin)
+	      + "-"
+	      + core_addr_to_string_nz (info->end);
+
+	    strncpy (new_solib->so_original_name, orig_name.c_str (),
+		     SO_NAME_MAX_PATH_SIZE - 1);
+	    new_solib->so_original_name[SO_NAME_MAX_PATH_SIZE - 1] = '\0';
+
+	    new_solib->begin = info->begin;
+	    new_solib->end = info->end;
+	  }
+	  break;
+	}
 
       new_solib->lm_info = info.release ();
 
@@ -453,6 +530,8 @@ _initialize_solib_target ()
   solib_target_so_ops.in_dynsym_resolve_code
     = solib_target_in_dynsym_resolve_code;
   solib_target_so_ops.bfd_open = solib_bfd_open;
+  solib_target_so_ops.bfd_open_from_target_memory
+    = gdb_bfd_open_from_target_memory;
 
   /* Set current_target_so_ops to solib_target_so_ops if not already
      set.  */

@@ -81,6 +81,12 @@ struct gdb_file_deleter
 
 typedef std::unique_ptr<FILE, gdb_file_deleter> gdb_file_up;
 
+/* Create a temporary file that will automatically get deleted when GDB
+   terminates (normally).  NAME needs to be a template filename and will
+   be modified to contain the actual template filename on return.  */
+
+extern FILE *gdb_create_tmpfile (std::string &name, int flags = 0);
+
 /* Like 'fopen', but ensures that the returned file descriptor has the
    close-on-exec flag set.  */
 

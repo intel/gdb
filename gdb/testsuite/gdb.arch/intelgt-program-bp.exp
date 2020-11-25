@@ -1,0 +1,96 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test that GDB steps over program breakpoints (i.e. breakpoints
+# manually inserted by the user by modifying an instruction) on an
+# Intel GT target.
+
+load_lib sycl.exp
+
+standard_testfile sycl-simple.cpp
+
+if {![require_sycl_device "gpu" "Intel*"]} {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Return non-zero if the instruction at ADDRESS is compact, 0 otherwise.
+
+proc is_compact_insn {address} {
+    # Check the CmptCtrl flag (bit 29).
+    set test "is compact insn"
+    set is_compact [get_integer_valueof \
+			"((unsigned char *)${address})\[3\] & 0x20" 0 $test]
+    return $is_compact
+}
+
+# Set the breakpoint bit of the instruction at ADDRESS.
+
+proc_with_prefix set_breakpoint_bit {address} {
+    # Set Bit 7 on a compacted instruction, Bit 30 on a full instruction.
+    set test "set bp bit"
+    if {[is_compact_insn $address]} {
+	gdb_test "print/x ((unsigned char *)${address})\[0\] |= 0x80" "" $test
+    } else {
+	gdb_test "print/x ((unsigned char *)${address})\[3\] |= 0x40" "" $test
+    }
+}
+
+set kernel_line [gdb_get_line_number "inside-kernel"]
+# Make the BP temporary, so that GDB will remove it.  We will
+# then set it manually.
+gdb_breakpoint $kernel_line {temporary}
+gdb_continue_to_breakpoint "inside kernel" ".*$srcfile:$kernel_line.*"
+
+# Manually set the BP bit on the current PC and the next one.
+with_test_prefix "current pc" {
+    set first_pc [get_hexadecimal_valueof "\$pc" 0 "first stop pc"]
+    set_breakpoint_bit $first_pc
+}
+
+with_test_prefix "next pc" {
+    if {[is_compact_insn $first_pc]} {
+	# A compacted instruction is 8 bytes.
+	set next_pc [format 0x%x [expr $first_pc + 0x08]]
+    } else {
+	# A full instruction is 16 bytes.
+	set next_pc [format 0x%x [expr $first_pc + 0x10]]
+    }
+    set_breakpoint_bit $next_pc
+}
+
+# We should now step-over the current PC and hit the manually-inserted
+# BP on the next PC.
+gdb_test "continue" \
+    "Thread \[^\r\n\]+ received signal SIGTRAP.*" \
+    "continue to the manual BP"
+set second_pc [get_hexadecimal_valueof "\$pc" 0 "second stop pc"]
+gdb_assert {$second_pc == $next_pc}
+
+# Resuming should not hit the manual BP again.  Expect to terminate.
+continue_sycl_program_to_termination

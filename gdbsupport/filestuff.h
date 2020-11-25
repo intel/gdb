@@ -71,6 +71,12 @@ gdb_open_cloexec (const std::string &filename, int flags,
   return gdb_open_cloexec (filename.c_str (), flags, mode);
 }
 
+/* Create a temporary file that will automatically get deleted when GDB
+   terminates (normally).  NAME needs to be a template filename and will
+   be modified to contain the actual template filename on return.  */
+
+extern gdb_file_up gdb_create_tmpfile (std::string &name, int flags = 0);
+
 /* Like 'fopen', but ensures that the returned file descriptor has the
    close-on-exec flag set.  */
 

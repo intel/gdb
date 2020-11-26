@@ -61,6 +61,10 @@ typedef std::vector<ze_regset_info> ze_regset_info_t;
    terminated with a single nullptr entry.  */
 typedef std::vector<const char *> expedite_t;
 
+/* A list of debug events.  */
+
+typedef std::list<zet_debug_event_t> events_t;
+
 /* Information about devices we're attached to.
 
    This is pretty similar to process_info.  The difference is that we only
@@ -103,6 +107,9 @@ struct ze_device_info
 
      If we are not attached to this device, PROCESS will be nullptr.  */
   process_info *process = nullptr;
+
+  /* A list of to-be-acknowledged events.  */
+  events_t ack_pending;
 };
 
 /* A thread's resume state.
@@ -342,6 +349,10 @@ public:
 
   bool supports_pid_to_exec_file () override { return true; }
   const char *pid_to_exec_file (int pid) override { return ""; }
+
+  void ack_library (process_info *process, const char *name) override;
+  void ack_in_memory_library (process_info *process, CORE_ADDR begin,
+			      CORE_ADDR end) override;
 
 private:
   typedef std::list<ze_device_info *> devices_t;

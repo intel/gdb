@@ -169,6 +169,10 @@ struct target_so_ops
   gdb_bfd_ref_ptr (*bfd_open_from_target_memory) (CORE_ADDR addr,
 						  CORE_ADDR size,
 						  const char *target);
+
+  /* Acknowledge a library.  This is called from add_solib after loading
+     symbols and placing breakpoints.  */
+  void (*ack_library) (so_list *so);
 };
 
 using so_list_range = next_range<so_list>;
@@ -201,5 +205,8 @@ extern gdb_bfd_ref_ptr solib_bfd_fopen (const char *pathname, int fd);
 
 /* Find solib binary file and open it.  */
 extern gdb_bfd_ref_ptr solib_bfd_open (const char *in_pathname);
+
+/* Acknowledge a library.  */
+extern void solib_ack_library (so_list *so);
 
 #endif

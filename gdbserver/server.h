@@ -201,6 +201,9 @@ struct client_state
   /* If true, memory tagging features are supported.  */
   bool memory_tagging_feature = false;
 
+  /* Track supported packets.  */
+  bool vack_library_supported = false;
+  bool vack_in_memory_library_supported = false;
 };
 
 client_state &get_client_state ();

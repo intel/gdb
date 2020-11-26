@@ -512,6 +512,20 @@ process_stratum_target::store_memtags (CORE_ADDR address, size_t len,
   gdb_assert_not_reached ("target op store_memtags not supported");
 }
 
+void
+process_stratum_target::ack_library (process_info *process, const char *name)
+{
+  gdb_assert_not_reached ("target op ack_library not supported");
+}
+
+void
+process_stratum_target::ack_in_memory_library (process_info *process,
+					       CORE_ADDR begin,
+					       CORE_ADDR end)
+{
+  gdb_assert_not_reached ("target op ack_in_memory_library not supported");
+}
+
 int
 process_stratum_target::read_offsets (CORE_ADDR *text, CORE_ADDR *data)
 {

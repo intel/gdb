@@ -54,6 +54,11 @@ struct lm_info_target : public lm_info_base
      This is only valid if location == lm_in_memory.  */
   CORE_ADDR begin = 0ull, end = 0ull;
 
+  /* A flag saying whether library load and unload need to be acknowledged
+     to the target after processing the library and placing/removing
+     breakpoints.  */
+  bool need_ack = false;
+
   /* The target can either specify segment bases or section bases, not
      both.  */
 
@@ -133,6 +138,24 @@ library_list_start_section (struct gdb_xml_parser *parser,
   last->section_bases.push_back (address);
 }
 
+/* Handle the 'ack' attribute of <library> and <in-memory-library>.  */
+
+static void
+library_ack (lm_info_target &item, std::vector<gdb_xml_value> &attributes)
+{
+  gdb_xml_value *ack = xml_find_attribute (attributes, "ack");
+  if (ack != nullptr)
+    {
+      const char *value = (const char *) ack->value.get ();
+      if (strcmp (value, "yes") == 0)
+	item.need_ack = true;
+      else if (strcmp (value, "no") == 0)
+	item.need_ack = false;
+      else
+	warning (_("bad attribute value for library:ack"));
+    }
+}
+
 /* Handle the start of a <library> element.  */
 
 static void
@@ -146,6 +169,8 @@ library_list_start_library (struct gdb_xml_parser *parser,
   item->location = lm_on_disk;
   item->name
     = (const char *) xml_find_attribute (attributes, "name")->value.get ();
+
+  library_ack (*item, attributes);
 
   list->emplace_back (item);
 }
@@ -165,6 +190,8 @@ in_memory_library_list_start_library (struct gdb_xml_parser *parser,
     xml_find_attribute (attributes, "begin")->value.get ();
   item->end = (CORE_ADDR) *(ULONGEST *)
     xml_find_attribute (attributes, "end")->value.get ();
+
+  library_ack (*item, attributes);
 
   list->emplace_back (item);
 }
@@ -197,7 +224,8 @@ library_list_start_list (struct gdb_xml_parser *parser,
     {
       const char *string = (const char *) version->value.get ();
 
-      if ((strcmp (string, "1.0") != 0) && (strcmp (string, "1.1") != 0))
+      if ((strcmp (string, "1.0") != 0) && (strcmp (string, "1.1") != 0)
+	  && (strcmp (string, "1.2") != 0))
 	gdb_xml_error (parser,
 		       _("Library list has unsupported version \"%s\""),
 		       string);
@@ -229,12 +257,14 @@ static const struct gdb_xml_element library_children[] = {
 
 static const struct gdb_xml_attribute library_attributes[] = {
   { "name", GDB_XML_AF_NONE, NULL, NULL },
+  { "ack", GDB_XML_AF_OPTIONAL, NULL, NULL },
   { NULL, GDB_XML_AF_NONE, NULL, NULL }
 };
 
 static const struct gdb_xml_attribute in_memory_library_attributes[] = {
   { "begin", GDB_XML_AF_NONE, gdb_xml_parse_attr_ulongest, NULL },
   { "end", GDB_XML_AF_NONE, gdb_xml_parse_attr_ulongest, NULL },
+  { "ack", GDB_XML_AF_OPTIONAL, NULL, NULL },
   { NULL, GDB_XML_AF_NONE, NULL, NULL }
 };
 
@@ -512,6 +542,30 @@ solib_target_in_dynsym_resolve_code (CORE_ADDR pc)
   return in_plt_section (pc);
 }
 
+static void
+solib_target_ack_library (so_list *so)
+{
+  lm_info_target *lm = (lm_info_target *) so->lm_info;
+  if (!lm->need_ack)
+    return;
+
+  /* Try only once, whether we succeed or not.  */
+  lm->need_ack = false;
+  switch (lm->location)
+    {
+    case lm_on_disk:
+      target_ack_library (so->so_original_name);
+      return;
+
+    case lm_in_memory:
+      target_ack_in_memory_library (lm->begin, lm->end);
+      return;
+    }
+
+  warning (_("bad solib location '%d' for %s."), lm->location,
+	   so->so_original_name);
+}
+
 struct target_so_ops solib_target_so_ops;
 
 void _initialize_solib_target ();
@@ -532,6 +586,7 @@ _initialize_solib_target ()
   solib_target_so_ops.bfd_open = solib_bfd_open;
   solib_target_so_ops.bfd_open_from_target_memory
     = gdb_bfd_open_from_target_memory;
+  solib_target_so_ops.ack_library = solib_target_ack_library;
 
   /* Set current_target_so_ops to solib_target_so_ops if not already
      set.  */

@@ -30,12 +30,15 @@ struct dll_info
     in_memory
   };
 
-  dll_info (const std::string &name_, CORE_ADDR base_addr_)
-    : location (on_disk), name (name_), base_addr (base_addr_)
+  dll_info (const std::string &name_, CORE_ADDR base_addr_, bool need_ack_)
+    : location (on_disk), name (name_), base_addr (base_addr_),
+      need_ack (need_ack_)
   {}
 
-  dll_info (CORE_ADDR begin_, CORE_ADDR end_, CORE_ADDR base_addr_)
-    : location (in_memory), begin (begin_), end (end_), base_addr (base_addr_)
+  dll_info (CORE_ADDR begin_, CORE_ADDR end_, CORE_ADDR base_addr_,
+	    bool need_ack_)
+    : location (in_memory), begin (begin_), end (end_), base_addr (base_addr_),
+      need_ack (need_ack_)
   {}
 
   location_t location;
@@ -43,18 +46,26 @@ struct dll_info
   CORE_ADDR begin;
   CORE_ADDR end;
   CORE_ADDR base_addr;
+  bool need_ack;
 };
 
 extern void clear_dlls (void);
-extern void loaded_dll (const char *name, CORE_ADDR base_addr);
+/* Throws NOT_SUPPORTED_ERROR if library acknowledgement is requested
+  (NEED_ACK = TRUE) and not supported.  */
+extern void loaded_dll (const char *name, CORE_ADDR base_addr,
+			bool need_ack = false);
 extern void loaded_dll (process_info *proc, const char *name,
-			CORE_ADDR base_addr);
+			CORE_ADDR base_addr, bool need_ack = false);
 extern void loaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
-			CORE_ADDR base_addr);
+			CORE_ADDR base_addr, bool need_ack = false);
 extern void unloaded_dll (const char *name, CORE_ADDR base_addr);
 extern void unloaded_dll (process_info *proc, const char *name,
 			  CORE_ADDR base_addr);
 extern void unloaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
 			  CORE_ADDR base_addr);
+extern void ack_dll (const char *name);
+extern void ack_dll (process_info *proc, const char *name);
+extern void ack_dll (CORE_ADDR begin, CORE_ADDR end);
+extern void ack_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end);
 
 #endif /* GDBSERVER_DLL_H */

@@ -171,6 +171,8 @@ struct dummy_target : public target_ops
   void call_history_from (ULONGEST arg0, int arg1, record_print_flags arg2) override;
   void call_history_range (ULONGEST arg0, ULONGEST arg1, record_print_flags arg2) override;
   bool augmented_libraries_svr4_read () override;
+  void ack_library (const char *arg0) override;
+  void ack_in_memory_library (CORE_ADDR arg0, CORE_ADDR arg1) override;
   const struct frame_unwind *get_unwinder () override;
   const struct frame_unwind *get_tailcall_unwinder () override;
   void prepare_to_generate_core () override;
@@ -347,6 +349,8 @@ struct debug_target : public target_ops
   void call_history_from (ULONGEST arg0, int arg1, record_print_flags arg2) override;
   void call_history_range (ULONGEST arg0, ULONGEST arg1, record_print_flags arg2) override;
   bool augmented_libraries_svr4_read () override;
+  void ack_library (const char *arg0) override;
+  void ack_in_memory_library (CORE_ADDR arg0, CORE_ADDR arg1) override;
   const struct frame_unwind *get_unwinder () override;
   const struct frame_unwind *get_tailcall_unwinder () override;
   void prepare_to_generate_core () override;
@@ -4379,6 +4383,52 @@ debug_target::augmented_libraries_svr4_read ()
   target_debug_print_bool (result);
   fputs_unfiltered ("\n", gdb_stdlog);
   return result;
+}
+
+void
+target_ops::ack_library (const char *arg0)
+{
+  this->beneath ()->ack_library (arg0);
+}
+
+void
+dummy_target::ack_library (const char *arg0)
+{
+  tcomplain ();
+}
+
+void
+debug_target::ack_library (const char *arg0)
+{
+  fprintf_unfiltered (gdb_stdlog, "-> %s->ack_library (...)\n", this->beneath ()->shortname ());
+  this->beneath ()->ack_library (arg0);
+  fprintf_unfiltered (gdb_stdlog, "<- %s->ack_library (", this->beneath ()->shortname ());
+  target_debug_print_const_char_p (arg0);
+  fputs_unfiltered (")\n", gdb_stdlog);
+}
+
+void
+target_ops::ack_in_memory_library (CORE_ADDR arg0, CORE_ADDR arg1)
+{
+  this->beneath ()->ack_in_memory_library (arg0, arg1);
+}
+
+void
+dummy_target::ack_in_memory_library (CORE_ADDR arg0, CORE_ADDR arg1)
+{
+  tcomplain ();
+}
+
+void
+debug_target::ack_in_memory_library (CORE_ADDR arg0, CORE_ADDR arg1)
+{
+  fprintf_unfiltered (gdb_stdlog, "-> %s->ack_in_memory_library (...)\n", this->beneath ()->shortname ());
+  this->beneath ()->ack_in_memory_library (arg0, arg1);
+  fprintf_unfiltered (gdb_stdlog, "<- %s->ack_in_memory_library (", this->beneath ()->shortname ());
+  target_debug_print_CORE_ADDR (arg0);
+  fputs_unfiltered (", ", gdb_stdlog);
+  target_debug_print_CORE_ADDR (arg1);
+  fputs_unfiltered (")\n", gdb_stdlog);
 }
 
 const struct frame_unwind *

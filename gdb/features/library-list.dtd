@@ -6,14 +6,16 @@
 
 <!-- library-list: Root element with versioning -->
 <!ELEMENT library-list  (library | in-memory-library)*>
-<!ATTLIST library-list  version CDATA   #FIXED  "1.1">
+<!ATTLIST library-list  version CDATA   #FIXED  "1.2">
 
 <!ELEMENT library       (segment*, section*)>
-<!ATTLIST library       name    CDATA   #REQUIRED>
+<!ATTLIST library       name    CDATA        #REQUIRED
+                        ack     (yes | no)   'no'>
 
 <!ELEMENT in-memory-library       (segment*, section*)>
-<!ATTLIST in-memory-library       begin    CDATA   #REQUIRED
-                                  end      CDATA   #REQUIRED>
+<!ATTLIST in-memory-library       begin    CDATA       #REQUIRED
+                                  end      CDATA       #REQUIRED
+                                  ack      (yes | no)  'no'>
 
 <!ELEMENT segment       EMPTY>
 <!ATTLIST segment       address CDATA   #REQUIRED>

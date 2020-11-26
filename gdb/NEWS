@@ -73,6 +73,13 @@ qXfer:libraries:read's response
   indicates support by supplying qXfer:libraries:read:in-memory-library+ in the
   qSupported packet.
 
+vAck:library
+vAck:in-memory-library
+
+  Acknowledge libraries to gdbserver when requested.  Libraries are acknowledged
+  after the initial processing by GDB such as loading symbols and placing
+  breakpoints.
+
 *** Changes in GDB 11
 
 * The 'set disassembler-options' command now supports specifying options

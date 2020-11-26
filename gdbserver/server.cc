@@ -1604,25 +1604,33 @@ dll_to_tmpfile (dll_info &dll)
 static std::string
 print_qxfer_libraries_entry (dll_info &dll)
 {
+  const client_state &cs = get_client_state ();
+
   switch (dll.location)
     {
     case dll_info::in_memory:
-      if (get_client_state ().in_memory_library_supported)
+      if (cs.in_memory_library_supported
+	  && (!dll.need_ack || cs.vack_in_memory_library_supported))
 	return string_printf
-	  ("  <in-memory-library begin=\"0x%s\" end=\"0x%s\">"
+	  ("  <in-memory-library begin=\"0x%s\" end=\"0x%s\"%s>"
 	   "<segment address=\"0x%s\"/></in-memory-library>\n",
 	   paddress (dll.begin), paddress (dll.end),
-	   paddress (dll.base_addr));
+	   dll.need_ack ? " ack=\"yes\"" : "", paddress (dll.base_addr));
 
-      /* GDB does not support in-memory-library.  Fall back to storing it in a
-	 temporary file and report that file to GDB.  */
+      /* GDB does not support in-memory-library or acknowledging in-memory
+	 libraries.  Fall back to storing it in a temporary file and report that
+	 file to GDB.  */
       dll.name = dll_to_tmpfile (dll);
 
       /* fall through.  */
     case dll_info::on_disk:
+      /* We checked this when requesting acknowledgement for DLL.  */
+      gdb_assert (!dll.need_ack || cs.vack_library_supported);
+
       return string_printf
-	("  <library name=\"%s\"><segment address=\"0x%s\"/></library>\n",
-	 dll.name.c_str (), paddress (dll.base_addr));
+	("  <library name=\"%s\"%s><segment address=\"0x%s\"/></library>\n",
+	 dll.name.c_str (), dll.need_ack ? " ack=\"yes\"" : "",
+	 paddress (dll.base_addr));
     }
 
   warning (_("unknown dll location: %x"), dll.location);
@@ -1654,6 +1662,18 @@ library_list_version_needed (const std::list<dll_info> &dlls)
 	      minor = std::max (minor, 1);
 	    }
 	  break;
+	}
+
+      if (dll.need_ack)
+	{
+	  /* We checked support for acknowledgement when we inserted DLL.
+
+	     It suffices to assert support for on-disk library acknowledgement
+	     since we can fall back to that.  */
+	  gdb_assert (!dll.need_ack || cs.vack_library_supported);
+
+	  major = std::max (major, 1);
+	  minor = std::max (minor, 2);
 	}
     }
 
@@ -2530,6 +2550,10 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 		}
 	      else if (feature == "qXfer:libraries:read:in-memory-library+")
 		cs.in_memory_library_supported = true;
+	      else if (feature == "vAck:library+")
+		cs.vack_library_supported = true;
+	      else if (feature == "vAck:in-memory-library+")
+		cs.vack_in_memory_library_supported = true;
 	      else
 		{
 		  /* Move the unknown features all together.  */
@@ -2660,6 +2684,9 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 
       if (target_supports_memory_tagging ())
 	strcat (own_buf, ";memory-tagging+");
+
+      strcat (own_buf, ";vAck:library+");
+      strcat (own_buf, ";vAck:in-memory-library+");
 
       /* Reinitialize components as needed for the new connection.  */
       hostio_handle_new_gdb_connection ();
@@ -3050,6 +3077,66 @@ err:
   return;
 }
 
+/* Parse vAck packets.  */
+
+static void
+handle_v_ack (char *own_buf)
+{
+  client_state &cs = get_client_state ();
+  char *p;
+
+  /* Move past vAck: to the first type string.  */
+  p = &own_buf[5];
+  do
+    {
+      if (cs.vack_library_supported
+	  && (strncmp (p, "library:", strlen ("library:")) == 0))
+	{
+	  p += strlen ("library:");
+
+	  /* We expect a single argument: the filename.  */
+	  const char *name = p;
+	  p = strchr (p, ';');
+	  if (p != nullptr)
+	    *p++ = '\0';
+
+	  ack_dll (name);
+	}
+      else if (cs.vack_in_memory_library_supported
+	       && (strncmp (p, "in-memory-library:",
+			    strlen ("in-memory-library:")) == 0))
+	{
+	  p += strlen ("in-memory-library:");
+
+	  /* We expect two arguments: begin and end address.  */
+	  CORE_ADDR begin, end;
+
+	  begin = (CORE_ADDR) strtoull (p, &p, 16);
+	  if (*p != ',')
+	    break;
+
+	  end = (CORE_ADDR) strtoull (p+1, &p, 16);
+	  if (*p == ';')
+	    p += 1;
+	  else if (*p != 0)
+	    break;
+
+	  ack_dll (begin, end);
+	}
+      else
+	break;
+    }
+  while (p != nullptr && *p != 0);
+
+  if (p == nullptr || *p == 0)
+    write_ok (own_buf);
+  else
+    {
+      std::string junk { p };
+      sprintf (own_buf, "E.junk in vAck: '%s'.", junk.c_str ());
+    }
+}
+
 /* Resume target with ACTIONS, an array of NUM_ACTIONS elements.  */
 
 static void
@@ -3392,6 +3479,12 @@ handle_v_requests (char *own_buf, int packet_len, int *new_packet_len)
 	  return;
 	}
       handle_v_kill (own_buf);
+      return;
+    }
+
+  if (startswith (own_buf, "vAck:"))
+    {
+      handle_v_ack (own_buf);
       return;
     }
 

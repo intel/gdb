@@ -1283,6 +1283,21 @@ struct target_ops
     virtual bool augmented_libraries_svr4_read ()
       TARGET_DEFAULT_RETURN (false);
 
+    /* Acknowledge a library reported by name.
+
+       Libraries are acknowledged after initial processing like loading
+       symbols and placing breakpoints on request from the target.  */
+    virtual void ack_library (const char *name)
+      TARGET_DEFAULT_NORETURN (tcomplain ());
+
+    /* Acknowledge an in-memory library reported by begin and end target
+       addresses.
+
+       Libraries are acknowledged after initial processing like loading
+       symbols and placing breakpoints on request from the target.  */
+    virtual void ack_in_memory_library (CORE_ADDR begin, CORE_ADDR end)
+      TARGET_DEFAULT_NORETURN (tcomplain ());
+
     /* Those unwinders are tried before any other arch unwinders.  If
        SELF doesn't have unwinders, it should delegate to the
        "beneath" target.  */
@@ -2595,5 +2610,11 @@ extern void target_prepare_to_generate_core (void);
 
 /* See to_done_generating_core.  */
 extern void target_done_generating_core (void);
+
+/* See target_ops::ack_library.  */
+extern void target_ack_library (const char *name);
+
+/* See target_ops::ack_in_memory_library.  */
+extern void target_ack_in_memory_library (CORE_ADDR begin, CORE_ADDR end);
 
 #endif /* !defined (TARGET_H) */

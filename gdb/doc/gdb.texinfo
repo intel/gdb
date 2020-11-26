@@ -41206,6 +41206,36 @@ for success (@pxref{Stop Reply Packets})
 @cindex @samp{vStopped} packet
 @xref{Notification Packets}.
 
+@item vAck:@var{type}:@var{arg}[,@var{arg}@dots{}][;@var{type}:@var{arg}[,@var{arg}@dots{}]]@dots{}
+@cindex @samp{vAck} packet
+@anchor{vAck packet}
+
+Acknowledge a @var{;}-separated list of remote stub responses, each
+with a @var{,}-separated list of arguments defined by its @var{type}.
+The following @var{type}s with their respective arguments are
+supported:
+
+@table @samp
+@item library:@var{name}
+Acknowledge the shared library that had been reported as
+@samp{<library name="name" ack="yes">} in the remote stub's
+@samp{qXfer:libraries:read} response.  @value{GDBN} acknowledges
+libraries after initial processing like loading symbols and placing
+breakpoints.
+
+@item in-memory-library:@var{begin},@var{end}
+Acknowledge the shared library that had been reported as
+@samp{<in-memory-library begin="begin" end="end" ack="yes">} in the
+remote stub's @samp{qXfer:libraries:read} response.  @value{GDBN}
+acknowledges libraries after initial processing like loading symbols
+and placing breakpoints.
+
+@end table
+
+@value{GDBN} indicates support for acknowledging individual types of
+responses by supplying an appropriate @samp{qSupported} feature
+(@pxref{qSupported}) for each type that it supports.
+
 @item X @var{addr}@r{[}@@@var{addr_space}@r{]},@var{length}:@var{XX@dots{}}
 @anchor{X packet}
 @cindex @samp{X} packet
@@ -42526,6 +42556,14 @@ including @samp{exec-events+} in its @samp{qSupported} reply.
 @item vContSupported
 This feature indicates whether @value{GDBN} wants to know the
 supported actions in the reply to @samp{vCont?} packet.
+
+@item vAck:library
+This feature indicates whether @value{GDBN} supports acknowledging
+libraries reported by name.
+
+@item vAck:in-memory-library
+This feature indicates whether @value{GDBN} supports acknowledging
+in-memory libraries reported by begin and end target address.
 @end table
 
 Stubs should ignore any unknown values for
@@ -45754,6 +45792,13 @@ associated name or begin and end addresses and one or more segment or
 section base addresses, which report where the library was loaded in
 memory.
 
+It may optionally contain a request for acknowledging that library.
+@value{GDBN} indicates support for acknowledging libraries by
+supplying an appropriate @samp{qSupported} feature
+(@pxref{qSupported}).  The remote stub must not request
+acknowledgement of libraries unless @value{GDBN} indicated support for
+it.
+
 For the common case of libraries that are fully linked binaries, the
 library should have a list of segments.  If the target supports
 dynamic linking of a relocatable object file, its library XML element
@@ -45779,15 +45824,20 @@ offset, looks like this:
 </library-list>
 @end smallexample
 
-A corresponding memory map for an in-memory library looks like this:
+A corresponding memory map for an in-memory library with a request for
+acknowledgement looks like this:
 
 @smallexample
 <library-list>
-  <in-memory-library begin="0xa000000" end="0xa001000">
+  <in-memory-library begin="0xa000000" end="0xa001000" ack="yes">
     <segment address="0x10000000"/>
   </library>
 </library-list>
 @end smallexample
+
+GDB will acknowledge the library with a @samp{vAck;library} or, as in
+this case, a @samp{vAck;in-memory-library} packet.  @xref{vAck
+packet}.
 
 Another simple memory map, with one loaded library with three
 allocated sections (.text, .data, .bss), looks like this:
@@ -45807,16 +45857,18 @@ The format of a library list is described by this DTD:
 @smallexample
 <!-- library-list: Root element with versioning -->
 <!ELEMENT library-list            (library | in-memory-library)*>
-<!ATTLIST library-list            version CDATA   #FIXED  "1.1">
+<!ATTLIST library-list            version CDATA        #FIXED  "1.2">
 <!ELEMENT library                 (segment*, section*)>
-<!ATTLIST library                 name    CDATA   #REQUIRED>
+<!ATTLIST library                 name    CDATA        #REQUIRED
+                                  ack     (yes | no)   'no'>
 <!ELEMENT in-memory-library       (segment*, section*)>
-<!ATTLIST in-memory-library       begin    CDATA   #REQUIRED
-                                  end      CDATA   #REQUIRED>
+<!ATTLIST in-memory-library       begin    CDATA       #REQUIRED
+                                  end      CDATA       #REQUIRED
+                                  ack      (yes | no)  'no'>
 <!ELEMENT segment                 EMPTY>
-<!ATTLIST segment                 address CDATA   #REQUIRED>
+<!ATTLIST segment                 address CDATA        #REQUIRED>
 <!ELEMENT section                 EMPTY>
-<!ATTLIST section                 address CDATA   #REQUIRED>
+<!ATTLIST section                 address CDATA        #REQUIRED>
 @end smallexample
 
 In addition, segments and section descriptors cannot be mixed within a

@@ -4250,6 +4250,22 @@ target_done_generating_core (void)
   current_inferior ()->top_target ()->done_generating_core ();
 }
 
+/* See target.h.  */
+
+void
+target_ack_library (const char *name)
+{
+  current_inferior ()->top_target ()->ack_library (name);
+}
+
+/* See target.h.  */
+
+void
+target_ack_in_memory_library (CORE_ADDR begin, CORE_ADDR end)
+{
+  current_inferior ()->top_target ()->ack_in_memory_library (begin, end);
+}
+
 
 
 static char targ_desc[] =

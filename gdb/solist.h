@@ -174,6 +174,10 @@ struct target_so_ops
      NULL, in which case no specific preprocessing is necessary
      for this target.  */
   void (*handle_event) (void);
+
+  /* Acknowledge a library.  This is called from add_solib after loading
+     symbols and placing breakpoints.  */
+  void (*ack_library) (so_list *so);
 };
 
 /* Free the memory associated with a (so_list *).  */
@@ -207,5 +211,8 @@ extern gdb_bfd_ref_ptr solib_bfd_open (const char *in_pathname);
 
 /* FIXME: gdbarch needs to control this variable.  */
 extern struct target_so_ops *current_target_so_ops;
+
+/* Acknowledge a library.  */
+extern void solib_ack_library (so_list *so);
 
 #endif

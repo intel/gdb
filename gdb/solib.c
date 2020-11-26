@@ -1045,6 +1045,7 @@ solib_add (const char *pattern, int from_tty, int readsyms)
     if (from_tty)
 	add_flags |= SYMFILE_VERBOSE;
 
+    std::list<so_list *> added_solibs;
     for (struct so_list *gdb : current_program_space->solibs ())
       if (! pattern || re_exec (gdb->so_name))
 	{
@@ -1067,13 +1068,22 @@ solib_add (const char *pattern, int from_tty, int readsyms)
 		    gdb_printf (_("Symbols already loaded for %s\n"),
 				gdb->so_name);
 		}
-	      else if (solib_read_symbols (gdb, add_flags))
-		loaded_any_symbols = true;
+	      else
+		added_solibs.emplace_back (gdb);
 	    }
 	}
 
+    for (so_list *gdb : added_solibs)
+      if (solib_read_symbols (gdb, add_flags))
+	loaded_any_symbols = true;
+
     if (loaded_any_symbols)
       breakpoint_re_set ();
+
+    /* Acknowledge loading of new solibs.  This must be called after
+       breakpoints have been set in this newly loaded solib.  */
+    for (so_list *gdb : added_solibs)
+      solib_ack_library (gdb);
 
     if (from_tty && pattern && ! any_matches)
       gdb_printf
@@ -1767,6 +1777,16 @@ remove_user_added_objfile (struct objfile *objfile)
 	if (so->objfile == objfile)
 	  so->objfile = NULL;
     }
+}
+
+/* See solist.h.  */
+
+void solib_ack_library (so_list *so)
+{
+  const struct target_so_ops *ops = gdbarch_so_ops (target_gdbarch ());
+
+  if (ops->ack_library != nullptr)
+    (*ops->ack_library) (so);
 }
 
 void _initialize_solib ();

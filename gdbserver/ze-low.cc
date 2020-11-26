@@ -20,6 +20,7 @@
 
 #include "server.h"
 #include "ze-low.h"
+#include "dll.h"
 
 #include <level_zero/zet_api.h>
 #include <exception>
@@ -28,6 +29,7 @@
 #include <cstring> /* For snprintf.  */
 #include <thread>
 #include <utility>
+#include <algorithm>
 
 #ifndef USE_WIN32API
 #  include <signal.h>
@@ -1252,10 +1254,65 @@ ze_target::fetch_events (ze_device_info &device)
 	  continue;
 
 	case ZET_DEBUG_EVENT_TYPE_MODULE_LOAD:
-	  break;
+	  {
+	    /* We would not remain attached without a process.  */
+	    process_info *process = device.process;
+	    gdb_assert (process != nullptr);
+
+	    bool need_ack
+	      = ((event.flags & ZET_DEBUG_EVENT_FLAG_NEED_ACK) != 0);
+	    loaded_dll (process, event.info.module.moduleBegin,
+			event.info.module.moduleEnd,
+			event.info.module.load, need_ack);
+
+	    /* If level-zero is not requesting the event to be
+	       acknowledged, we're done.
+
+	       This happens when attaching to an already running process,
+	       for example.  We will receive module load events for
+	       modules that have already been loaded.
+
+	       No need to inform GDB, either, as we expect GDB to query
+	       shared libraries after attach.  */
+	    if (!need_ack)
+	      continue;
+
+	    device.ack_pending.emplace_back (event);
+
+	    /* Loading a new module is a process event.  We do not want to
+	       overwrite other process events, however, as module loads
+	       can also be communicated as part of other events.  */
+	    process_info_private *zeproc = process->priv;
+	    gdb_assert (zeproc != nullptr);
+
+	    if (zeproc->waitstatus.kind != TARGET_WAITKIND_IGNORE)
+	      continue;
+
+	    /* We use UNAVAILABLE rather than LOADED as the latter implies
+	       that the target has stopped.  */
+	    zeproc->waitstatus = { TARGET_WAITKIND_UNAVAILABLE };
+	  }
+	  continue;
 
 	case ZET_DEBUG_EVENT_TYPE_MODULE_UNLOAD:
-	  break;
+	  {
+	    /* We would not remain attached without a process.  */
+	    process_info *process = device.process;
+	    gdb_assert (process != nullptr);
+
+	    unloaded_dll (process, event.info.module.moduleBegin,
+			  event.info.module.moduleEnd,
+			  event.info.module.load);
+
+	    /* We don't need an ack, here, but maybe level-zero does.  */
+	    ze_ack_event (device, event);
+
+	    /* We do not notify GDB immediately about the module unload.
+	       This is harmless until we reclaim the memory for something
+	       else.  In our case, this can only be another module and we
+	       will notify GDB in that case.  */
+	  }
+	  continue;
 
 	case ZET_DEBUG_EVENT_TYPE_THREAD_STOPPED:
 	  {
@@ -2236,4 +2293,55 @@ ze_target::unpause_all (bool unfreeze)
 	  ze_resume (*device, all);
 	}
     }
+}
+
+void
+ze_target::ack_library (process_info *process, const char *name)
+{
+  /* All libraries are in-memory.  */
+  warning (_("unexpected acknowledgement requested for library %s."), name);
+}
+
+void
+ze_target::ack_in_memory_library (process_info *process,
+				  CORE_ADDR begin, CORE_ADDR end)
+{
+  gdb_assert (process != nullptr);
+
+  process_info_private *zeproc = process->priv;
+  gdb_assert (zeproc != nullptr);
+
+  /* The only reason why we would not have a device is if we got detached.
+
+     There is nothing to acknowledge in that case.  */
+  ze_device_info *device = zeproc->device;
+  if (device == nullptr)
+    {
+      dprintf ("[%s;%s) device not found.", core_addr_to_string_nz (begin),
+	       core_addr_to_string_nz (end));
+      return;
+    }
+
+  events_t &events = device->ack_pending;
+  events_t::iterator it
+    = std::find_if (events.begin (), events.end (),
+		    [begin, end] (const zet_debug_event_t &ev)
+	{
+	  return ((ev.type == ZET_DEBUG_EVENT_TYPE_MODULE_LOAD)
+		  && (ev.info.module.moduleBegin == begin)
+		  && (ev.info.module.moduleEnd == end));
+	});
+
+  if (it == events.end ())
+    {
+      dprintf ("[%s;%s) not found.", core_addr_to_string_nz (begin),
+	       core_addr_to_string_nz (end));
+      return;
+    }
+
+  ze_ack_event (*device, *it);
+  events.erase (it);
+
+  dprintf ("[%s;%s) acknowledged.", core_addr_to_string_nz (begin),
+	   core_addr_to_string_nz (end));
 }

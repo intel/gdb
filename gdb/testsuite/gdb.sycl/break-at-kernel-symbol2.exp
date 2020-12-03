@@ -1,0 +1,81 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test being able to set a breakpoint at the kernel symbol for a
+# parallel-for kernel.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-1D.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[require_sycl_device "host" "*"]} {
+    unsupported "test is not aimed at host-executed code"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Define the breakpoints.
+set kernel_symbol "_ZTSZZ4mainENKUlRN2cl4sycl7handlerEE46_25clES2_E6kernel"
+gdb_breakpoint $kernel_symbol {allow-pending}
+set kernel_line [gdb_get_line_number "kernel-last-line"]
+gdb_breakpoint $kernel_line
+set program_end [gdb_get_line_number "end-marker"]
+gdb_breakpoint $program_end
+
+# Count the number of times we hit the breakpoint defined on the
+# symbol vs. the bp defined inside the kernel.  The number of hits
+# should be equal.  Because the number of threads depends on the
+# vectorization level (i.e.  SIMD width), we do not have a hard-coded
+# check on the number of hits.
+
+set num_body_hits 0
+set num_symbol_hits 0
+set keep_going 1
+while {$keep_going} {
+    # Assume we won't continue, to avoid an infinite loop.
+    set keep_going 0
+
+    gdb_test_multiple "continue" "continue" {
+	-re "Breakpoint .*${kernel_symbol}.*$gdb_prompt $" {
+	    incr num_symbol_hits
+	    set keep_going 1
+	}
+	-re "Breakpoint .*$srcfile:$kernel_line.*$gdb_prompt $" {
+	    incr num_body_hits
+	    set keep_going 1
+	}
+	-re "Breakpoint .*$srcfile:$program_end.*$gdb_prompt $" {
+	    gdb_assert {$num_body_hits > 0}
+	    gdb_assert {$num_symbol_hits > 0}
+	    gdb_assert {$num_body_hits == $num_symbol_hits} "bp hits equal"
+	    verbose -log "body: $num_body_hits, symbol: $num_symbol_hits"
+	}
+	-re "$gdb_prompt $" {
+	    fail "hit bps"
+	}
+    }
+}

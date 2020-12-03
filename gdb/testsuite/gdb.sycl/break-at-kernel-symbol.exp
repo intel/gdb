@@ -1,0 +1,82 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test being able to set a breakpoint at the kernel symbol.
+
+load_lib sycl.exp
+
+standard_testfile single-task.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[require_sycl_device "host" "*"]} {
+    unsupported "test is not aimed at host-executed code"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Find out the symbol for the kernel.
+set inside_kernel_1 [gdb_get_line_number "kernel-line-1"]
+gdb_breakpoint "$srcfile:$inside_kernel_1" {temporary}
+gdb_continue_to_breakpoint "kernel line 1" ".*$srcfile:$inside_kernel_1.*"
+
+gdb_test_no_output "set print demangle off"
+set kernel_symbol ""
+gdb_test_multiple "backtrace 1" "find kernel symbol" {
+    -re -wrap "#0  (\[A-Za-z0-9_\]+) \\(.*" {
+	set kernel_symbol $expect_out(1,string)
+	pass $gdb_test_name
+    }
+}
+
+verbose -log "Kernel symbol: $kernel_symbol" 2
+if {$kernel_symbol eq ""} {
+    return -1
+}
+
+# Now restart with a pending BP defined on the kernel symbol.
+clean_restart $binfile
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# On GPU, stop at the solib load event to insert the BP.
+if {[require_sycl_device "gpu" "Intel*"]} {
+    set before_kernel [gdb_get_line_number "line-before-kernel"]
+    gdb_breakpoint "$srcfile:$before_kernel" {temporary}
+    gdb_continue_to_breakpoint "before kernel" ".*$srcfile:$before_kernel.*"
+    gdb_test_no_output "set stop-on-solib-events 1"
+    gdb_test "continue" "Stopped due to shared library event.*" \
+	"continue until solib load"
+}
+
+gdb_breakpoint $kernel_symbol {allow-pending}
+set bpnum [get_integer_valueof "\$bpnum" 0 "get bpnum"]
+
+gdb_test_no_output "set print demangle off" "no demangling"
+gdb_test "continue" ".*reakpoint ${bpnum}.* ${kernel_symbol} .*"
+
+# The BP should be hit once only.
+continue_sycl_program_to_termination

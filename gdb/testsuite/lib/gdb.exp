@@ -4431,6 +4431,27 @@ proc gdb_compile {source dest type options} {
         }
     }
 
+    # In case we are trying to get compiler info for Intel dpcpp we currently
+    # have to specify -fsycl-device-only.  The reason here is that dpcpp will
+    # try to generate preprocessed code for both, the offload device and the
+    # host device - regardless of whether or not there is any offload code in
+    # the cpp file.  For the host code to be preprocessed dpcpp needs to do a
+    # full compile of the device code.  This means that invalid cpp files
+    # cannot be preprocessed completely (since the device compilation fails but
+    # instead dpcpp currently throws a compiler error.  See CMPLRLLVM-31782.
+    global CXX_FOR_TARGET
+    if { $getting_compiler_info && [lsearch -exact $options c++] != -1 } {
+	set cpp_compiler "none"
+	if {[info exists CXX_FOR_TARGET]} {
+	    set cpp_compiler $CXX_FOR_TARGET
+	} elseif {[board_info [target_info name] exists compiler]} {
+	    set cpp_compiler [target_info compiler]
+	}
+	if {[regexp ".*dpcpp.*" "$cpp_compiler"]} {
+	    lappend new_options "additional_flags=-fsycl-device-only"
+	}
+    }
+
     # Ensure stack protector is disabled for GCC, as this causes problems with
     # DWARF line numbering.
     # See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=88432

@@ -240,11 +240,10 @@ mem_bfd_iovec_close (struct bfd *abfd, void *stream)
    values.  */
 
 static file_ptr
-mem_bfd_iovec_pread (struct bfd *abfd, void *stream, void *buf,
+mem_bfd_iovec_pread (bfd *abfd, void *stream, void *buf,
 		     file_ptr nbytes, file_ptr offset)
 {
-  int err;
-  struct target_buffer *buffer = (struct target_buffer *) stream;
+  target_buffer *buffer = (target_buffer *) stream;
 
   /* If this read will read all of the file, limit it to just the rest.  */
   if (offset + nbytes > buffer->size)
@@ -254,8 +253,8 @@ mem_bfd_iovec_pread (struct bfd *abfd, void *stream, void *buf,
   if (nbytes == 0)
     return 0;
 
-  err = target_read_memory (buffer->base + offset, (gdb_byte *) buf, nbytes);
-  if (err)
+  int err = target_read_memory (buffer->base + offset, (gdb_byte *) buf, nbytes);
+  if (err != 0)
     return -1;
 
   return nbytes;
@@ -265,9 +264,9 @@ mem_bfd_iovec_pread (struct bfd *abfd, void *stream, void *buf,
    support the st_size attribute.  */
 
 static int
-mem_bfd_iovec_stat (struct bfd *abfd, void *stream, struct stat *sb)
+mem_bfd_iovec_stat (bfd *abfd, void *stream, struct stat *sb)
 {
-  struct target_buffer *buffer = (struct target_buffer*) stream;
+  target_buffer *buffer = (target_buffer*) stream;
 
   memset (sb, 0, sizeof (struct stat));
   sb->st_size = buffer->size;
@@ -278,18 +277,15 @@ mem_bfd_iovec_stat (struct bfd *abfd, void *stream, struct stat *sb)
 
 gdb_bfd_ref_ptr
 gdb_bfd_open_from_target_memory (CORE_ADDR addr, ULONGEST size,
-				 const char *target,
-				 const char *filename)
+				 const char *target, const char *filename)
 {
-  struct target_buffer *buffer = XNEW (struct target_buffer);
+  target_buffer *buffer = XNEW (target_buffer);
 
   buffer->base = addr;
   buffer->size = size;
-  return gdb_bfd_openr_iovec (filename ? filename : "<in-memory>", target,
-			      mem_bfd_iovec_open,
-			      buffer,
-			      mem_bfd_iovec_pread,
-			      mem_bfd_iovec_close,
+  return gdb_bfd_openr_iovec (filename != nullptr ? filename : "<in-memory>",
+			      target, mem_bfd_iovec_open, buffer,
+			      mem_bfd_iovec_pread, mem_bfd_iovec_close,
 			      mem_bfd_iovec_stat);
 }
 

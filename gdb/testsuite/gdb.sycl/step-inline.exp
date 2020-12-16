@@ -1,0 +1,80 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for stepping over inlined functions.
+
+load_lib sycl.exp
+
+standard_testfile step-inline.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+# Disable for a particular NEO version.
+if {$sycl_driver_version eq "20.35.0"} {
+    unsupported "test not supported with this driver version"
+    return -1
+}
+
+# CPU threads hit just one branch, while GPU threads hit both branches.
+set number_branches_to_hit 2
+if { ![require_sycl_device "gpu" "Intel*"] } {
+    set number_branches_to_hit 1
+}
+
+set breakpoint_line [gdb_get_line_number "breakpoint-here"]
+set before_branch_line [gdb_get_line_number "before-branch"]
+set condition_line [gdb_get_line_number "condition"]
+set then_branch_line [gdb_get_line_number "then-branch"]
+set else_branch_line [gdb_get_line_number "else-branch"]
+gdb_breakpoint $breakpoint_line {temporary}
+
+gdb_continue_to_breakpoint "before inlined calls" \
+    ".*$srcfile:$breakpoint_line.*"
+
+# Set scheduler locking to step so we can step w/o switching threads.
+gdb_test "set scheduler-locking step"
+
+# Step through the program.
+
+gdb_test "next" "before-branch.*" "step to \"before-branch\""
+gdb_test "next" "condition.*" "step to \"condition\""
+
+set i 0
+while { $i < $number_branches_to_hit } {
+    with_test_prefix "through branch iteration $i" {
+	incr i
+	gdb_test_multiple "next" "step into branch" {
+	    -re "then-branch.*$gdb_prompt" {
+		pass "$gdb_test_name then"
+	    }
+	    -re "else-branch.*$gdb_prompt" {
+		pass "$gdb_test_name else"
+	    }
+	    -re "$gdb_prompt" {
+		fail "$gdb_test_name"
+	    }
+	}
+    }
+}

@@ -1,3 +1,8 @@
+2021-03-03  Markus Metzger  <markus.t.metzger@intel.com>
+
+	* README (Note): Add nopie_ldflag.
+	* lib/gdb.exp (gdb_compile): Extend nopie handling.
+
 2020-11-24  Tankut Baris Aktemur  <tankut.baris.aktemur@intel.com>
 
 	* gdb.base/condbreak-multi-context.exp: Do not hard-code location

@@ -8195,8 +8195,7 @@ add_partial_subprogram (struct partial_die_info *pdi,
 	    *highpc = pdi->highpc;
 	}
 
-      if (pdi->has_pc_info || pdi->has_range_info
-	  || (!pdi->is_external && pdi->may_be_inlined))
+      if (pdi->has_pc_info || pdi->has_range_info || pdi->may_be_inlined)
 	{
 	  if (!pdi->is_declaration)
 	    /* Ignore subprogram DIEs that do not have a name, they are

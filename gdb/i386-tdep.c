@@ -145,6 +145,8 @@ static const char *i386_amx_names[] = {
   "tmm4", "tmm5", "tmm6", "tmm7"
 };
 
+static tilecfg_reg amx_tilecfg {};
+
 /* Register names for byte pseudo-registers.  */
 
 static const char *i386_byte_names[] =
@@ -8476,6 +8478,7 @@ i386_validate_tdesc_p (struct gdbarch_tdep *tdep,
 	  tdep->amx_register_names = i386_amx_names;
 	  tdep->amx_regnum = I386_AMX_TILECFG_REGNUM;
 	  tdep->num_amx_regs = 9;
+	  tdep->amx_tilecfg = &amx_tilecfg;
 	}
 
       for (i = 0; i < tdep->num_amx_regs; i++)
@@ -8766,6 +8769,7 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* No AMX registers.  */
   tdep->amx_regnum = -1;
   tdep->num_amx_regs = 0;
+  tdep->amx_tilecfg = &amx_tilecfg;
 
   tdesc_data = tdesc_data_alloc ();
 

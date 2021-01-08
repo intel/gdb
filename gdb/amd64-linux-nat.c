@@ -28,6 +28,7 @@
 #include <sys/reg.h>
 #include "gregset.h"
 #include "gdb_proc_service.h"
+#include "arch-utils.h"
 
 #include "amd64-nat.h"
 #include "amd64-tdep.h"
@@ -54,6 +55,8 @@ struct amd64_linux_nat_target final : public x86_linux_nat_target
 
   bool low_siginfo_fixup (siginfo_t *ptrace, gdb_byte *inf, int direction)
     override;
+
+  struct gdbarch *thread_architecture (ptid_t) override;
 };
 
 static amd64_linux_nat_target the_amd64_linux_nat_target;
@@ -445,6 +448,41 @@ amd64_linux_nat_target::low_siginfo_fixup (siginfo_t *ptrace,
 					     FIXUP_X32);
   else
     return false;
+}
+
+/* Implement the "thread_architecture" target_ops method.  */
+
+struct gdbarch *
+amd64_linux_nat_target::thread_architecture (ptid_t ptid)
+{
+  inferior *inf = find_inferior_ptid (this, ptid);
+  gdb_assert (inf != NULL);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (inf->gdbarch);
+
+  if (tdep->xcr0 & X86_XSTATE_AMX)
+    {
+      pid_t tid = get_ptrace_pid (ptid);
+      tilecfg_reg tilecfg {tid};
+
+      if (tdep->amx_tilecfg == nullptr
+	  || (tdep->amx_tilecfg != nullptr && tilecfg == *tdep->amx_tilecfg))
+	return inf->gdbarch;
+      else
+	{
+	  struct gdbarch_info info;
+	  gdbarch_info_init (&info);
+
+	  scoped_restore save_inferior_ptid
+	    = make_scoped_restore (&inferior_ptid);
+	  inferior_ptid = ptid;
+	  info.target_desc = read_description ();
+
+	  *tdep->amx_tilecfg = std::move (tilecfg);
+	  gdbarch_update_p (info);
+	}
+    }
+
+  return inf->gdbarch;
 }
 
 void _initialize_amd64_linux_nat ();

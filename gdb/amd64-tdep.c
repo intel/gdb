@@ -161,6 +161,8 @@ static const char *amd64_amx_names[] = {
     "tmm4", "tmm5", "tmm6", "tmm7"
 };
 
+static tilecfg_reg amx_tilecfg {};
+
 /* DWARF Register Number Mapping as defined in the System V psABI,
    section 3.6.  */
 
@@ -3196,6 +3198,7 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
       tdep->amx_register_names = amd64_amx_names;
       tdep->amx_regnum = AMD64_AMX_TILECFG_REGNUM;
       tdep->num_amx_regs = 9;
+      tdep->amx_tilecfg = &amx_tilecfg;
     }
 
   if (tdesc_find_feature (tdesc, "org.gnu.gdb.i386.cet") != NULL)

@@ -23,6 +23,7 @@
 #include "gdbarch.h"
 #include "infrun.h"
 #include "expression.h"
+#include "gdbsupport/x86-amx.h"
 
 struct frame_info;
 struct gdbarch;
@@ -207,6 +208,8 @@ struct gdbarch_tdep
 
   /* Number of AMX registers.  */
   int num_amx_regs;
+
+  tilecfg_reg *amx_tilecfg;
 
   /* AMX register names.  */
   const char * const *amx_register_names;

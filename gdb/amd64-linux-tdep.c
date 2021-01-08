@@ -34,6 +34,8 @@
 #include "i386-linux-tdep.h"
 #include "linux-tdep.h"
 #include "gdbsupport/x86-xstate.h"
+#include "gdbsupport/x86-amx.h"
+#include "x86-linux-nat.h"
 
 #include "amd64-tdep.h"
 #include "solib-svr4.h"
@@ -42,6 +44,7 @@
 #include "arch/amd64.h"
 #include "target-descriptions.h"
 #include "expop.h"
+#include "inferior.h"
 
 /* The syscall's XML filename for i386.  */
 #define XML_SYSCALL_FILENAME_AMD64 "syscalls/amd64-linux.xml"
@@ -1575,9 +1578,37 @@ amd64_linux_record_signal (struct gdbarch *gdbarch,
   return 0;
 }
 
+static tilecfg_reg
+amd64_linux_core_read_tilecfg (bfd *abfd)
+{
+  asection *xstate = bfd_get_section_by_name (abfd, ".reg-xstate");
+
+  /* If we have no AMX, this function just returns a default.  */
+  if (xstate == nullptr)
+    return tilecfg_reg {};
+
+  gdb_byte contents[64];
+  size_t size = bfd_section_size (xstate);
+
+  /* Check extended state size.  */
+  if (size < X86_XSTATE_TILECFG_SIZE)
+    return tilecfg_reg {};
+
+  if (!bfd_get_section_contents (abfd, xstate, contents,
+				 I386_LINUX_XSAVE_TILECFG_OFFSET,
+				 64))
+    {
+      warning (_("Couldn't read `tilecfg' bytes from "
+		 "`.reg-xstate' section in core file."));
+      return tilecfg_reg {};
+    }
+
+  return tilecfg_reg {contents};
+}
+
 const target_desc *
 amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32,
-			      bool cet_enabled)
+			      bool cet_enabled, tilecfg_reg *tilecfg)
 {
   static target_desc *amd64_linux_tdescs \
     [2/*AVX*/][2/*MPX*/][2/*AVX512*/][2/*PKRU*/][2/*AMX*/] = {};
@@ -1600,9 +1631,25 @@ amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32,
 	[(xcr0_features_bit & X86_XSTATE_AMX) ? 1 : 0];
     }
 
-  if (*tdesc == NULL)
+  if (tdesc != nullptr && (xcr0_features_bit & X86_XSTATE_AMX)
+      && tilecfg == nullptr)
+    {
+      /* GNU/Linux LWP ID's are process ID's.  */
+      int tid = inferior_ptid.lwp ();
+      if (tid == 0)
+	tid = inferior_ptid.pid (); /* Not a threaded program.  */
+
+      /* TODO: Cache AMX descriptions for easier access.  */
+      uint8_t tilecfg_buf[64] = {0};
+      x86_ptrace_tilecfg_raw (tid, tilecfg_buf);
+      tilecfg_reg tcfg {tilecfg_buf};
+
+      *tdesc = amd64_create_target_description (xcr0_features_bit, is_x32, true,
+						true, cet_enabled, &tcfg);
+    }
+  else if (tdesc != nullptr && *tdesc == nullptr)
     *tdesc = amd64_create_target_description (xcr0_features_bit, is_x32, true,
-					      true, cet_enabled);
+					      true, cet_enabled, tilecfg);
 
   return *tdesc;
 }
@@ -1617,10 +1664,11 @@ amd64_linux_core_read_description (struct gdbarch *gdbarch,
   /* Linux/x86-64.  */
   uint64_t xcr0 = i386_linux_core_read_xcr0 (abfd);
   bool cet_enabled = i386_linux_core_read_cet_state_p (abfd);
+  tilecfg_reg tilecfg = amd64_linux_core_read_tilecfg (abfd);
 
   return amd64_linux_read_description (xcr0 & X86_XSTATE_ALL_MASK,
 				       gdbarch_ptr_bit (gdbarch) == 32,
-				       cet_enabled);
+				       cet_enabled, &tilecfg);
 }
 
 /* Similar to amd64_supply_fpregset, but use XSAVE extended state.  */

@@ -934,6 +934,145 @@ i387_xsave_get_clear_bv (struct gdbarch *gdbarch, const void *xsave)
   return clear_bv;
 }
 
+/* Fill REGCACHE with the amx registers from XSAVE.  */
+
+static void
+i387_supply_amx (regcache *regcache, int regnum, const gdb_byte *xsave,
+		 struct gdbarch_tdep *tdep)
+{
+  if (xsave != nullptr)
+    {
+      /* Read and supply tilecfg.  */
+      regcache->raw_supply (regnum, xsave);
+      uint8_t tilecfg_buf[64] = { 0 };
+      memcpy (tilecfg_buf, xsave, 64);
+      tilecfg_reg tilecfg {tilecfg_buf};
+
+      /* This reads from XSAVE.  So we need to read all tiles, not just the
+	 ones that are currently configured.  Empty tiles should be read
+	 completely.  */
+      for (uint8_t i = 0; i < tilecfg.num_of_tiles (); ++i)
+	{
+	  ++regnum;
+	  uint8_t rows = tilecfg.rows (i);
+	  uint16_t bytes_per_row = tilecfg.bytes_per_row (i);
+	  uint16_t matrix_size = (uint16_t) rows * bytes_per_row;
+
+	  /* If the matrix size is 0 we need to read the whole tile.  */
+	  if (matrix_size == 0)
+	    {
+	      rows = tilecfg_reg::COLUMN_MEMORY_OFFSET;
+	      bytes_per_row = tilecfg_reg::MAX_BYTES_PER_TILE_ROW;
+	      matrix_size = (uint16_t) rows * bytes_per_row;
+	    }
+
+	  gdb_assert (tilecfg_reg::MAX_BYTES_PER_TILE >= matrix_size);
+
+	  std::unique_ptr<uint8_t[]> tile_buf (new uint8_t[matrix_size] ());
+
+	  /* Copy each row from XSAVE into buffer.
+	     TILE0 is on position xsave + 64 because TILECFG is
+	     always 64 bytes.  */
+	  const gdb_byte *tile_offset = xsave + 64
+					+ tilecfg_reg::MAX_BYTES_PER_TILE * i;
+
+	  for (uint8_t row = 0; row < rows; ++row)
+	    {
+	      memcpy (
+		(gdb_byte*) tile_buf.get () + bytes_per_row * row,
+		tile_offset + tilecfg_reg::MAX_BYTES_PER_TILE_ROW * row,
+		bytes_per_row);
+	    }
+	  regcache->raw_supply (regnum, tile_buf.get ());
+	}
+
+      *tdep->amx_tilecfg = std::move (tilecfg);
+    }
+}
+
+/* Fill P with the amx tile register from REGCACHE.  P corresponds to the
+   starting position of each TMM register in XSAVE.  */
+
+static void
+i387_collect_amx_tile (const regcache *regcache, int regnum,
+		       ULONGEST *xstate_bv, gdb_byte *p, tilecfg_reg *tilecfg,
+		       unsigned int tmmnum)
+{
+  if (p != nullptr)
+    {
+      gdb_byte compact_tile[tilecfg_reg::MAX_BYTES_PER_TILE] = { 0 };
+      gdb_byte raw_tile[tilecfg_reg::MAX_BYTES_PER_TILE] = { 0 };
+      regcache->raw_collect (regnum, compact_tile);
+
+      uint8_t rows = tilecfg->rows (tmmnum);
+      uint16_t bytes_per_row = tilecfg->bytes_per_row (tmmnum);
+      uint16_t matrix_size = (uint16_t) rows * bytes_per_row;
+
+      /* If the matrix size is 0 we need to read the whole tile.
+	 HACK:
+	 Gdbserver doesn't implement dynamic resizing of tiles.
+	 Hence, the registers are not compacted according to tilecfg and
+	 we need to read the whole register.  As we want to avoid adding
+	 communication for target description updates to gdbserver, we will
+	 only get rid of this hack once we switch to the new pseudo
+	 register approach.  So we crudely check for a remote target
+	 here, which is the only target to implement connection_string
+	 currently.  */
+      if (matrix_size == 0
+	  || regcache->target ()->connection_string () != nullptr)
+	{
+	  rows = tilecfg_reg::COLUMN_MEMORY_OFFSET;
+	  bytes_per_row = tilecfg_reg::MAX_BYTES_PER_TILE_ROW;
+	  matrix_size = (uint16_t) rows * bytes_per_row;
+	}
+
+      /* Copy each row from compact_tile into raw_tile.  */
+      for (uint8_t row = 0; row < rows; ++row)
+	{
+	  memcpy (raw_tile + tilecfg_reg::MAX_BYTES_PER_TILE_ROW * row,
+		  compact_tile + bytes_per_row * row,
+		  bytes_per_row);
+	}
+
+      /* Only compare and copy after uncompressing the tile.  */
+      if (memcmp (raw_tile, p, tilecfg_reg::MAX_BYTES_PER_TILE) != 0)
+	{
+	  *xstate_bv |= X86_XSTATE_AMX;
+	  memcpy (p, raw_tile, tilecfg_reg::MAX_BYTES_PER_TILE);
+	}
+    }
+}
+
+/* Fill P with all amx registers from REGCACHE.  P corresponds to the
+   starting position of XTILECFG in XSAVE.  */
+
+static void
+i387_collect_amx (const regcache *regcache, int regnum,
+		  ULONGEST *xstate_bv, gdb_byte *p)
+{
+  if (p != nullptr)
+    {
+      /* Write tilecfg.  */
+      uint8_t tilecfg_buf[64] = { 0 };
+      regcache->raw_collect (regnum, tilecfg_buf);
+      if (memcmp (tilecfg_buf, p, 64) != 0)
+	{
+	  *xstate_bv |= X86_XSTATE_AMX;
+	  memcpy (p, tilecfg_buf, 64);
+	}
+
+      tilecfg_reg tilecfg {tilecfg_buf};
+
+      for (uint8_t i = 0; i < tilecfg_reg::NUM_OF_TILES; ++i)
+	{
+	  ++regnum;
+	  i387_collect_amx_tile (regcache, regnum, xstate_bv,
+				 p + 64 + i * tilecfg_reg::MAX_BYTES_PER_TILE,
+				 &tilecfg, i);
+	}
+    }
+}
+
 /* Similar to i387_supply_fxsave, but use XSAVE extended state.  */
 
 void
@@ -1029,6 +1168,8 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
       if ((clear_bv & X86_XSTATE_AMX))
 	regcache->raw_supply (regnum, zero);
       else
+      /* FIXME: This should also change, but this code path seems unused and
+	with the new approach for AMX any changes here become obsolete.  */
 	regcache->raw_supply (regnum, XSAVE_AMX_ADDR (tdep, regs, regnum));
       return;
 
@@ -1215,9 +1356,10 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
 	    }
 	  else
 	    {
-	      for (i = I387_AMX_REGNUM (tdep);
-		   i < I387_AMX_END_REGNUM (tdep); i++)
-		regcache->raw_supply (i, XSAVE_AMX_ADDR (tdep, regs, i));
+	      int tilecfg_regnum = I387_AMX_REGNUM (tdep);
+	      i387_supply_amx (regcache, tilecfg_regnum,
+			       XSAVE_AMX_ADDR (tdep, regs, tilecfg_regnum),
+			       tdep);
 	    }
 	}
 
@@ -1578,29 +1720,11 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
     {
       /* Check if any AMX registers are changed.  */
       if ((tdep->xcr0 & X86_XSTATE_AMX))
-	for (i = I387_AMX_REGNUM (tdep);
-	     i < I387_AMX_END_REGNUM (tdep); i++)
-	  {
-	    regcache->raw_collect (i, raw);
-	    p = XSAVE_AMX_ADDR (tdep, regs, i);
-	    /* TILECFG is 64 bytes.  The rest (TMM) are 1024 bytes.  */
-	    if (i == I387_AMX_REGNUM (tdep))
-	      {
-		if (memcmp (raw, p, 64) != 0)
-		  {
-		    xstate_bv |= X86_XSTATE_AMX;
-		    memcpy (p, raw, 64);
-		  }
-	      }
-	    else
-	      {
-		if (memcmp (raw, p, 1024) != 0)
-		  {
-		    xstate_bv |= X86_XSTATE_AMX;
-		    memcpy (p, raw, 1024);
-		  }
-	      }
-	  }
+	{
+	  int tilecfg_regnum = I387_AMX_REGNUM (tdep);
+	  i387_collect_amx (regcache, tilecfg_regnum, &xstate_bv,
+			    XSAVE_AMX_ADDR (tdep, regs, tilecfg_regnum));
+	}
 
       /* Check if any PKEYS registers are changed.  */
       if ((tdep->xcr0 & X86_XSTATE_PKRU))
@@ -1786,11 +1910,13 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
 	    }
 	  else
 	    {
-	      if (memcmp (raw, p, 1024) != 0)
-		{
-		  xstate_bv |= X86_XSTATE_AMX;
-		  memcpy (p, raw, 1024);
-		}
+	      gdb_byte tilecfg_buf[64] = { 0 };
+	      regcache->raw_collect (I387_AMX_REGNUM (tdep), tilecfg_buf);
+
+	      tilecfg_reg tilecfg {tilecfg_buf};
+	      i387_collect_amx_tile (regcache, regnum, &xstate_bv,
+				     p, &tilecfg,
+				     regnum - (I387_AMX_REGNUM (tdep) + 1));
 	    }
 	  break;
 

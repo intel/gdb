@@ -70,6 +70,7 @@ libgdbsupport_a_SOURCES = \
     signals-state-save-restore.cc \
     tdesc.cc \
     thread-pool.cc \
+    x86-amx.cc \
     xml-utils.cc \
     $(selftest)
 

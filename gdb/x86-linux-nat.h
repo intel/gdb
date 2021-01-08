@@ -97,4 +97,6 @@ extern void x86_linux_fetch_cet_regs (regcache *regcache, const int tid);
 extern void x86_linux_store_cet_regs (const regcache *regcache,
 				      const int tid);
 
+extern void x86_ptrace_tilecfg_raw (const int tid, gdb_byte* tilecfg_raw);
+
 #endif

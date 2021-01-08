@@ -358,6 +358,31 @@ x86_linux_store_cet_regs (const regcache *regcache, const int tid)
     perror_with_name (_("Couldn't write CET registers"));
 }
 
+
+/* Get the tilecfg register for a specific thread from ptrace and write
+   it to TILECFG_RAW.  */
+
+void
+x86_ptrace_tilecfg_raw (const int tid, gdb_byte* tilecfg_raw)
+{
+  if (tid == 0 && tilecfg_raw == nullptr)
+    return; /* Use default values.  */
+
+  unsigned int xstate_size = X86_XSTATE_TILEDATA_SIZE;
+  std::unique_ptr<uint8_t[]> xstateregs (new uint8_t[xstate_size]);
+  iovec iov;
+
+  iov.iov_base = xstateregs.get ();
+  iov.iov_len = xstate_size;
+
+  if (ptrace (PTRACE_GETREGSET, tid, NT_X86_XSTATE, &iov) < 0)
+    perror_with_name (_("Couldn't read extended state status"));
+
+  unsigned int tilecfg_offset = X86_XSTATE_TILECFG_SIZE - 64;
+  memcpy (tilecfg_raw, xstateregs.get () + tilecfg_offset, 64);
+}
+
+
 void _initialize_x86_linux_nat ();
 void
 _initialize_x86_linux_nat ()

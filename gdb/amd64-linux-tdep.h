@@ -20,6 +20,8 @@
 #ifndef AMD64_LINUX_TDEP_H
 #define AMD64_LINUX_TDEP_H
 
+#include "gdbsupport/x86-amx.h"
+
 /* Like for i386 GNU/Linux, there is an extra "register"
    used to control syscall restarting.  */
 
@@ -48,7 +50,8 @@ extern struct target_desc *tdesc_x32_avx_avx512_linux;
 
 const target_desc *amd64_linux_read_description (uint64_t xcr0_features_bit,
 						 bool is_x32,
-						 bool cet_enabled = false);
+						 bool cet_enabled = false,
+						 tilecfg_reg *tcfg = nullptr);
 
 /* Enum that defines the syscall identifiers for amd64 linux.
    Used for process record/replay, these will be translated into

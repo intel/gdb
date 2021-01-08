@@ -66,6 +66,8 @@ i386_linux_read_description (uint64_t xcr0, bool cet_enabled = false);
 	  avx512_zmmh_regs8-15[1408..1663]
 	  avx512_zmm_regs16-31[1664..2687]
 	  pkru[2688..2752]
+	  tilecfg[2752..2816]
+	  tmm0-8[2816..11008]
 	  future_state etc
 	};
 
@@ -79,6 +81,8 @@ i386_linux_read_description (uint64_t xcr0, bool cet_enabled = false);
   states the processor/OS supports and what state, used or initialized,
   the process/thread is in.  */ 
 #define I386_LINUX_XSAVE_XCR0_OFFSET 464
+
+#define I386_LINUX_XSAVE_TILECFG_OFFSET 2752
 
 extern int i386_linux_gregset_reg_offset[];
 

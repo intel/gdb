@@ -1225,9 +1225,9 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
 	    }
 	  else
 	    {
-	      for (i = I387_AMX_REGNUM (tdep);
-		   i < I387_AMX_END_REGNUM (tdep); i++)
-		regcache->raw_supply (i, XSAVE_AMX_ADDR (tdep, regs, i));
+	      int tilecfg_regnum = I387_AMX_REGNUM (tdep);
+	      regcache->raw_supply_amx (
+		tilecfg_regnum, XSAVE_AMX_ADDR (tdep, regs, tilecfg_regnum));
 	    }
 	}
 

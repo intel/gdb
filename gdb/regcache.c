@@ -29,6 +29,7 @@
 #include "reggroups.h"
 #include "observable.h"
 #include "regset.h"
+#include "nat/x86-linux-amx.h"
 #include <unordered_map>
 
 /*
@@ -1077,6 +1078,57 @@ reg_buffer::raw_supply (int regnum, const void *buf)
 	 to a bug, no less).  */
       memset (regbuf, 0, size);
       m_register_status[regnum] = REG_UNAVAILABLE;
+    }
+}
+
+void
+reg_buffer::raw_supply_amx (int regnum, const gdb_byte* xsave)
+{
+  void *regbuf;
+
+  assert_regnum (regnum);
+
+  if (xsave)
+    {
+      raw_supply (regnum, xsave); // tilecfg
+
+      uint8_t *vec_col_pos8 = const_cast<uint8_t*>
+	(xsave + tilecfg_reg::COLUMN_MEMORY_OFFSET);
+      uint16_t *vec_col_pos
+	= reinterpret_cast<uint16_t*> (vec_col_pos8);
+      uint8_t *vec_row_pos = const_cast<uint8_t*>
+	(xsave + tilecfg_reg::ROW_MEMORY_OFFSET);
+
+      for (uint8_t i = 0; i < tilecfg_reg::NUM_OF_TILES; i++)
+	{
+	  regnum++; // positioning to TILE i
+	  gdb_assert (m_descr->sizeof_register[regnum]
+	    >= vec_row_pos[i] * vec_col_pos[i]);
+
+	  regbuf = register_buffer (regnum);
+
+	  /* Copy each row from XSAVE into buffer.
+	     TILE0 is on position xsave + 64 because TILECFG is
+	     always 64 bytes.  TILE0 is TILE1_position + 1024.
+	     The rows are not consecutive but they are on
+	     64 * iRow position.  */
+	  for (uint8_t iRow = 0; iRow < vec_row_pos[i]; iRow++)
+	    {
+	      memcpy (
+		(gdb_byte*)regbuf + vec_col_pos[i] * iRow,
+		xsave + 64 + tilecfg_reg::BYTES_PER_TILE * i
+		  + tilecfg_reg::BYTES_PER_TILE_ROW * iRow,
+		vec_col_pos[i]);
+	    }
+	  m_register_status[regnum] = REG_VALID;
+	}
+    }
+  else
+    {
+      /* Iterate to NUM_OF_TILES + 1 because we want to set
+	 all TILES and also Tilecfg to be UNAVAILABLE.  */
+      for (int i = 0; i < tilecfg_reg::NUM_OF_TILES + 1; i++)
+	m_register_status[regnum + i] = REG_UNAVAILABLE;
     }
 }
 

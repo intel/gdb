@@ -247,7 +247,7 @@ case ${gdb_host} in
 		# Host: Intel 386 running GNU/Linux.
 		NATDEPFILES="${NATDEPFILES} x86-nat.o nat/x86-dregs.o \
 		i386-linux-nat.o x86-linux-nat.o nat/linux-btrace.o \
-		nat/x86-linux.o nat/x86-linux-dregs.o"
+		nat/x86-linux.o nat/x86-linux-dregs.o nat/x86-linux-amx.o"
 		;;
 	    ia64)
 		# Host: Intel IA-64 running GNU/Linux
@@ -306,6 +306,7 @@ case ${gdb_host} in
 		amd64-nat.o amd64-linux-nat.o x86-linux-nat.o \
 		nat/linux-btrace.o \
 		nat/x86-linux.o nat/x86-linux-dregs.o \
+		nat/x86-linux-amx.o \
 		nat/amd64-linux-siginfo.o"
 		;;
 	    sparc)

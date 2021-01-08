@@ -228,6 +228,8 @@ public:
      only LEN, without editing the rest of the register.  */
   void raw_supply_part (int regnum, int offset, int len, const gdb_byte *in);
 
+  void raw_supply_amx (int regnum, const gdb_byte* xsave);
+
   void invalidate (int regnum);
 
   virtual ~reg_buffer () = default;

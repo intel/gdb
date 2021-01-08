@@ -17,11 +17,12 @@
 
 
 if { [skip_amx_tests] } {
-    unsupported "Target does not support AMX. Skipping AMX tests.  "
+    unsupported "Target does not support AMX. Skipping AMX tests."
     return -1
 }
 
 standard_testfile
+
 
 if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
      debug] } {
@@ -33,22 +34,83 @@ if { ![runto_main] } {
     return -1
 }
 
-gdb_test "break [gdb_get_line_number "breakpoint here"]" \
-    "Breakpoint .* at .*amd64-amx.c.*"
-gdb_continue_to_breakpoint "continue to first breakpoint in main"
+set line1 [gdb_get_line_number "BP1"]
+set line2 [gdb_get_line_number "BP2"]
+gdb_breakpoint $line1
+gdb_breakpoint $line2
+
+# First matrix multiplication: matC1 = matA1 x matB1
+gdb_continue_to_breakpoint "line1" ".*$srcfile:$line1.*"
 
 gdb_test "print/x \$tilecfg" \
-    "= .*0x20302.*100010000c.*1" \
-    "check contents of tilecfg"
+    "= 0x203020{54}100010000c0{31}1" \
+    "tilecfg read 1"
 
 gdb_test "print \$tmm0.m_int8" \
-    "= \\{\\{0, 0, 0, 0\\}, .*, \\{3, 3, 3, 3\\}.*" \
-    "check int8 contents of tmm0"
+    [join {"= \\{\\{0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2\\}" \
+             "\\{1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3\\}\\}"} \
+             ", "] \
+    "check int8 contents of tmm0 from first matrix"
 
 gdb_test "print \$tmm1.m_int8" \
-    "= \\{\\{0, 0, 0, 0\\}, .*, \\{5, 5, 5, 5\\}.*" \
-    "check int8 contents of tmm1"
+    [join {"= \\{\\{0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3\\}" \
+             "\\{1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4\\}"
+             "\\{2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5\\}\\}"} \
+             ", "] \
+    "check int8 contents of tmm1 from first matrix"
 
 gdb_test "print \$tmm2.m_int32" \
-    "= \\{\\{20, 32, 44, 56,.*, \\{32, 56, 80, 104,.*<repeats 14 times>\\}" \
-    "check int32 contents of tmm2"
+    "= \\{\\{20, 32, 44, 56\\}, \\{32, 56, 80, 104\\}\\}" \
+    "check int32 contents of tmm2 from first matrix"
+
+
+# Second matrix multiplication: matC2 = matA2 x matB2
+gdb_continue_to_breakpoint "line2" ".*$srcfile:$line2.*"
+
+gdb_test "print/x \$tilecfg" \
+    "= 0x102010{55}c000c00080{31}1" \
+    "tilecfg read 2"
+
+gdb_test "print \$tmm0.m_int8" \
+    "= \\{\\{5, 5, 5, 5, 6, 6, 6, 6\\}\\}" \
+    "check int8 contents of tmm0 from second matrix"
+
+gdb_test "print \$tmm1.m_int8" \
+    [join {"= \\{\\{0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2\\}" \
+             "\\{1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3\\}\\}"} \
+             ", "] \
+    "check int8 contents of tmm1 from second matrix"
+
+gdb_test "print \$tmm2.m_int32" \
+    "= \\{\\{24, 68, 112\\}\\}" \
+    "check int32 contents of tmm2 from second matrix"
+
+
+# Check set and get values
+gdb_test_no_output "set \$tmm0.m_int8 = {{3, 3, 3, 3, 4, 4, 4, 4}}" \
+    "set new tmm0 value"
+
+gdb_test "print \$tmm0.m_int8" \
+    "= \\{\\{3, 3, 3, 3, 4, 4, 4, 4\\}\\}" \
+    "check new int8 contents of tmm0"
+
+gdb_test_no_output "set \$tmm2.m_int32\[0\]\[1\] = 10" \
+    "set new value for one tmm2 element"
+
+gdb_test "print \$tmm2.m_int32" \
+    "= \\{\\{24, 10, 112\\}\\}" \
+    "check new int32 contents of tmm2"
+
+
+# Tilecfg update and manipulation
+set line3 [gdb_get_line_number "BP3"]
+gdb_breakpoint $line3
+gdb_continue_to_breakpoint "line3" ".*$srcfile:$line3.*"
+
+gdb_test "print/x \$tilecfg" \
+    "= 0x101010{55}1000100010{31}1" \
+    "tilecfg read 3"
+
+gdb_test_no_output "set \$tilecfg = 42" "set tilecfg"
+
+gdb_test "print/x \$tilecfg" "= 0x2a" "tilecfg read 4"

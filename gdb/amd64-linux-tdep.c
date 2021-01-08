@@ -41,6 +41,7 @@
 #include "glibc-tdep.h"
 #include "arch/amd64.h"
 #include "target-descriptions.h"
+#include "inferior.h"
 
 /* The syscall's XML filename for i386.  */
 #define XML_SYSCALL_FILENAME_AMD64 "syscalls/amd64-linux.xml"
@@ -1599,7 +1600,19 @@ amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32,
 	[(xcr0_features_bit & X86_XSTATE_AMX) ? 1 : 0];
     }
 
-  if (*tdesc == NULL)
+  if (xcr0_features_bit & X86_XSTATE_AMX)
+    {
+      /* GNU/Linux LWP ID's are process ID's.  */
+      int tid = inferior_ptid.lwp ();
+      if (tid == 0)
+	tid = inferior_ptid.pid (); /* Not a threaded program.  */
+
+      /* TODO: Cache AMX descriptions for easier access.  */
+      tilecfg_reg tilecfg {tid};
+      *tdesc = amd64_create_target_description (xcr0_features_bit, is_x32, true,
+	true, cet_enabled, &tilecfg);
+    }
+  else if (tdesc != nullptr && *tdesc == nullptr)
     *tdesc = amd64_create_target_description (xcr0_features_bit, is_x32, true,
 					      true, cet_enabled);
 

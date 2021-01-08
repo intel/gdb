@@ -19,10 +19,12 @@
 #define ARCH_AMD64_H
 
 #include "gdbsupport/tdesc.h"
+#include "nat/x86-linux-amx.h"
 #include <stdint.h>
 
 target_desc *amd64_create_target_description (uint64_t xcr0, bool is_x32,
 					      bool is_linux, bool segments,
-					      bool cet_enabled = false);
+					      bool cet_enabled = false,
+					      tilecfg_reg *tilecfg = nullptr);
 
 #endif /* ARCH_AMD64_H */

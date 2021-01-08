@@ -25,32 +25,50 @@
 
 #define TILE int
 
-#define N 2
-#define K 3
-#define M 4
+#define N1 2
+#define K1 3
+#define M1 4
 
-uint8_t memA[N][4 * K] = {
+#define N2 1
+#define K2 2
+#define M2 3
+
+uint8_t memA1[N1][4 * K1] = {
   {0,0,0,0, 1,1,1,1, 2,2,2,2},
   {1,1,1,1, 2,2,2,2, 3,3,3,3}
 };
 
-uint8_t memB[K][4 * M] = {
+uint8_t memB1[K1][4 * M1] = {
   {0,0,0,0, 1,1,1,1, 2,2,2,2, 3,3,3,3},
   {1,1,1,1, 2,2,2,2, 3,3,3,3, 4,4,4,4},
   {2,2,2,2, 3,3,3,3, 4,4,4,4, 5,5,5,5},
 };
 
-uint32_t memC[N][M] = {0};
+uint32_t memC1[N1][M1] = {0};
 
-int
-main (int argc, char **argv)
+
+uint8_t memA2[N2][4 * K2] = {
+  {5,5,5,5, 6,6,6,6}
+};
+
+uint8_t memB2[K2][4 * M2] = {
+  {0,0,0,0, 1,1,1,1, 2,2,2,2 },
+  {1,1,1,1, 2,2,2,2, 3,3,3,3 }
+};
+
+uint32_t memC2[N2][M2] = {0};
+
+
+void
+tfmaps_calc (int whichMatrix, int N, int K, int M)
 {
-  /* Calculate memC.  */
   int strideA = 4 * K;
   int strideB = 4 * M;
   int strideC = 4 * M;
 
-  struct tileconfig_t {
+  /* Configure */
+  struct tileconfig_t
+  {
     uint8_t  palette_id;
     uint8_t  startRow;
     uint8_t  reserved[14];
@@ -69,12 +87,37 @@ main (int argc, char **argv)
   tc.rows[C] = N;  tc.cols[C] = M * 4;
 
   /* Compute */
-  _tile_loadconfig (&tc);
-  _tile_loadd (A, memA, strideA);
-  _tile_loadd (B, memB, strideB);
-  _tile_dpbusd (C, A, B);
-  _tile_stored (C, memC, strideC);
-  _tile_release (); /* breakpoint here  */
+  _tile_loadconfig(&tc);
+
+  if (whichMatrix == 1)
+  {
+    _tile_loadd (A, memA1, strideA);
+    _tile_loadd (B, memB1, strideB);
+    _tile_dpbuud (C, A, B);
+    _tile_stored (C, memC1, strideC); /* BP1.  */
+  } else
+  {
+    _tile_loadd (A, memA2, strideA);
+    _tile_loadd (B, memB2, strideB);
+    _tile_dpbuud (C, A, B);
+    _tile_stored (C, memC2, strideC); /* BP2.  */
+  }
+
+  /* Test updated tilecfg.  */
+  tc.rows[A] = 1;  tc.cols[A] = 1;
+  tc.rows[B] = 1;  tc.cols[B] = 1;
+  tc.rows[C] = 1;  tc.cols[C] = 1;
+
+  _tile_loadconfig(&tc);
+
+  _tile_release (); /* BP3.  */
+}
+
+int
+main (int argc, char **argv)
+{
+  tfmaps_calc (1, N1, K1, M1);
+  tfmaps_calc (2, N2, K2, M2);
 
   return 0;
 }

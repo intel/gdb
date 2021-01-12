@@ -148,12 +148,18 @@ gdb_caching_proc skip_sycl_tests {
 
 proc continue_and_get_device_name {} {
     global gdb_prompt
+    global decimal hex
 
     set bp [gdb_get_line_number "return-sycl-queue" "../lib/sycl-util.cpp"]
     gdb_breakpoint "sycl-util.cpp:$bp" {temporary}
 
     set selected_sycl_device ""
+    set selected_gdbgt_device ""
     gdb_test_multiple "continue" "continue to fetch selected device" {
+	-re "intelgt: attached to device with id $hex \\\((Gen$decimal)\\\)\r\n" {
+	    set selected_gdbgt_device $expect_out(1,string)
+	    exp_continue
+	}
 	-re "SYCL: Using device: \\\[(\[^\r\n\]*)\\\] from \\\[(\[^\r\n\]*)\\\]\r\n" {
 	    set selected_sycl_device $expect_out(1,string)
 	    set selected_sycl_platform $expect_out(1,string)
@@ -165,7 +171,7 @@ proc continue_and_get_device_name {} {
     }
     gdb_test "finish"
 
-    return $selected_sycl_device
+    return "$selected_sycl_device  $selected_gdbgt_device"
 }
 
 # Issue a 'continue' command and expect to see program termination.

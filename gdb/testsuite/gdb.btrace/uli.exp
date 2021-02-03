@@ -1,0 +1,92 @@
+# This testcase is part of GDB, the GNU debugger.
+#
+# Copyright 2021 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Ensure gdb doesn't regress with user level interrupts.
+
+if {[skip_btrace_pt_tests]} {
+    unsupported "Target does not support record btrace pt."
+    return -1
+}
+
+# Test libipt version (must be >= 2.0.4).
+if {[require_libipt_version 2 0 4]} {
+    unsupported "Libipt doesn't support uiret decoding."
+    return -1
+}
+
+if {[skip_uli_tests]} {
+    unsupported "Hardware does not support ULI instructions."
+    return -1
+}
+
+set opts [list debug "additional_flags=-muintr -mgeneral-regs-only -minline-all-stringops"]
+
+standard_testfile
+if {[gdb_compile_pthreads "$srcdir/$subdir/$srcfile" "$binfile" executable $opts] != ""} {
+    return -1
+}
+clean_restart $testfile
+
+if ![runto_main] {
+    untested "failed to run to main"
+    return -1
+}
+
+### 1. run: test recording over uiret.
+set bp_1 [gdb_get_line_number "bp1"]
+set bp_2 [gdb_get_line_number "bp2"]
+set bp_3 [gdb_get_line_number "bp3"]
+set bp_4 [gdb_get_line_number "bp4"]
+gdb_breakpoint $bp_1
+
+gdb_test_no_output "record btrace pt"
+gdb_continue_to_breakpoint "break at bp_1" ".*$srcfile:$bp_1.*"
+
+# Test function call history.
+# ui_handler can be preceded by any function depending on the scheduling.
+gdb_test "record function-call-history" [multi_line \
+  ".*$decimal\tui_handler" \
+  "$decimal\tmain"]
+
+
+### 2. run: test signal pending.
+clean_restart $testfile
+
+if ![runto_main] {
+    untested "failed to run to main"
+    return -1
+}
+
+gdb_breakpoint $bp_2
+gdb_breakpoint $bp_4
+gdb_continue_to_breakpoint "break at bp_2" ".*$srcfile:$bp_2.*"
+gdb_test_no_output "set scheduler-locking step"
+
+gdb_test "next" "$decimal.*uintr_unregister_sender \\(uintr_fd, 0\\);\[\r\n\]+"
+
+gdb_test "thread 1" [multi_line \
+  "\[Switching to thread 1 \\(Thread $hex .*\\)\]" \
+  ".*in main \\(\\) at.*:$bp_3" \
+  "$bp_3.*while \\(!uintr_received\\); \\/\\* bp3 \\*\\/"]
+
+gdb_continue_to_breakpoint "break at bp_4" ".*$srcfile:$bp_4.*"
+
+# The bt usually shows ui_handler and main only.  But depending on scheduling,
+# main could be in other functions when the interrupt arrives.
+gdb_test "backtrace" ".0.* ui_handler.*$srcfile:$bp_4.*"
+
+gdb_continue_to_end "" continue 1

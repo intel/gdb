@@ -1,0 +1,84 @@
+# Copyright 2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test continuing a SYCL program from the host context while at a
+# kernel breakpoint, and vice-versa.  This test is aimed at a
+# multi-target (hence, multi-inferior) setting.
+
+load_lib sycl.exp
+
+standard_testfile single-task.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {![require_sycl_device "gpu" "Intel*"]} {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Set breakpoints inside and outside the kernel.
+set kernel_bp1 [gdb_get_line_number "kernel-line-1"]
+gdb_breakpoint "$kernel_bp1"
+set kernel_bp2 [gdb_get_line_number "kernel-line-2"]
+gdb_breakpoint "$kernel_bp2"
+
+set postkernel_bp1 [gdb_get_line_number line-after-kernel]
+gdb_breakpoint "$postkernel_bp1"
+set postkernel_bp2 [gdb_get_line_number return-stmt]
+gdb_breakpoint "$postkernel_bp2"
+
+gdb_continue_to_breakpoint "kernel bp1" ".*$srcfile:$kernel_bp1.*"
+
+set fill "\[^\r\n\]+"
+
+# Switch to the host and resume.  We should continue just normal.  Use
+# 'gdb_test' instead of 'gdb_continue_to_breakpoint' to ensure no
+# intermediary output such as "Cannot execute this command while the
+# target is running." is printed.
+gdb_test "inferior 1" "Switching to inferior 1.*" "first switch"
+gdb_test "continue" \
+    [multi_line "Continuing." \
+	 "\\\[Switching to Thread $fill lane 0\\\]" \
+	 "" \
+	 "Thread $fill$srcfile:$kernel_bp2.*"] \
+    "continue to kernel bp 2"
+
+gdb_test "inferior 1" "Switching to inferior 1.*" "second switch"
+gdb_test "continue" \
+    [multi_line "Continuing." \
+	 "" \
+	 "Thread $fill$srcfile:$postkernel_bp1.*"] \
+    "continue to post-kernel bp 1"
+
+# Now the symmetric case: switch to the kernel inferior and resume.
+gdb_test "inferior 2" "Switching to inferior 2.*" "third switch"
+gdb_test "continue" \
+    [multi_line "Continuing." \
+	 "Result is 42" \
+	 "\\\[Switching to Thread $fill\\\]" \
+	 "" \
+	 "Thread $fill$srcfile:$postkernel_bp2.*"] \
+    "continue to post-kernel bp 2"

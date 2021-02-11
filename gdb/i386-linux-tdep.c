@@ -40,6 +40,7 @@
 
 #include "i387-tdep.h"
 #include "gdbsupport/x86-xstate.h"
+#include "x86-tdep.h"
 
 /* The syscall's XML filename for i386.  */
 #define XML_SYSCALL_FILENAME_I386 "syscalls/i386-linux.xml"
@@ -680,6 +681,14 @@ i386_linux_core_read_xcr0 (bfd *abfd)
 
 /* See i386-linux-tdep.h.  */
 
+bool
+i386_linux_core_read_cet_state_p (bfd *abfd)
+{
+  return bfd_get_section_by_name (abfd, ".cet-state") != NULL;
+}
+
+/* See i386-linux-tdep.h.  */
+
 const struct target_desc *
 i386_linux_read_description (uint64_t xcr0, bool shstk_enabled,
 			     bool ibt_enabled)
@@ -717,7 +726,10 @@ i386_linux_core_read_description (struct gdbarch *gdbarch,
 {
   /* Linux/i386.  */
   uint64_t xcr0 = i386_linux_core_read_xcr0 (abfd);
-  const struct target_desc *tdesc = i386_linux_read_description (xcr0);
+  const bool cet_enabled = i386_linux_core_read_cet_state_p (abfd);
+  const struct target_desc *tdesc = i386_linux_read_description (xcr0,
+								 cet_enabled,
+								 cet_enabled);
 
   if (tdesc != NULL)
     return tdesc;
@@ -763,6 +775,49 @@ static const struct regset i386_linux_xstateregset =
     i386_linux_collect_xstateregset
   };
 
+static void
+i386_linux_supply_cet_regset (const struct regset *regset,
+			      struct regcache *regcache, int regnum,
+			      const void *cetregs, size_t len)
+{
+  gdb_assert (len == 16);
+
+  i386_gdbarch_tdep *tdep
+    = (i386_gdbarch_tdep *) gdbarch_tdep (regcache->arch ());
+  gdb_assert (tdep != nullptr);
+
+  if ((regnum == -1 && tdep->cet_msr_regnum > 0)
+      || regnum == tdep->cet_msr_regnum || regnum == tdep->ssp_regnum)
+    {
+      const uint64_t *regs = static_cast<const uint64_t *> (cetregs);
+      x86_supply_cet (regcache, regs);
+    }
+}
+
+static void
+i386_linux_collect_cet_regset (const struct regset *regset,
+			       const struct regcache *regcache,
+			       int regnum, void *cetregs, size_t len)
+{
+  gdb_assert (len == 16);
+
+  i386_gdbarch_tdep *tdep
+    = (i386_gdbarch_tdep *) gdbarch_tdep (regcache->arch ());
+  gdb_assert (tdep != nullptr);
+
+  if ((regnum == -1 && tdep->cet_msr_regnum > 0)
+      || regnum == tdep->cet_msr_regnum || regnum == tdep->ssp_regnum)
+    {
+      uint64_t *regs = static_cast<uint64_t *> (cetregs);
+      x86_collect_cet (regcache, regs);
+    }
+}
+
+const struct regset i386_linux_cet_regset =
+  {
+    NULL, i386_linux_supply_cet_regset, i386_linux_collect_cet_regset
+  };
+
 /* Iterate over core file register note sections.  */
 
 static void
@@ -784,6 +839,10 @@ i386_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
 	cb_data);
   else
     cb (".reg2", 108, 108, &i386_fpregset, NULL, cb_data);
+
+  if (tdep->cet_msr_regnum > 0)
+    cb (".cet-state", 16, 16, &i386_linux_cet_regset, "CET state", cb_data);
+
 }
 
 /* Linux kernel shows PC value after the 'int $0x80' instruction even if

@@ -43,6 +43,7 @@
 #include "target-descriptions.h"
 #include "expop.h"
 #include "inferior.h"
+#include "x86-tdep.h"
 
 /* The syscall's XML filename for i386.  */
 #define XML_SYSCALL_FILENAME_AMD64 "syscalls/amd64-linux.xml"
@@ -1648,6 +1649,14 @@ amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32,
   return *tdesc;
 }
 
+/* Get shadow stack pointer state from core dump.  */
+
+static bool
+amd64_linux_core_read_ssp_state_p (bfd *abfd)
+{
+  return bfd_get_section_by_name (abfd, ".reg-ssp") != NULL;
+}
+
 /* Get Linux/x86 target description from core dump.  */
 
 static const struct target_desc *
@@ -1661,8 +1670,11 @@ amd64_linux_core_read_description (struct gdbarch *gdbarch,
   if (xcr0 == 0)
     xcr0 = X86_XSTATE_SSE_MASK;
 
+  bool ssp_enabled = amd64_linux_core_read_ssp_state_p (abfd);
+
   return amd64_linux_read_description (xcr0 & X86_XSTATE_ALL_MASK,
-				       gdbarch_ptr_bit (gdbarch) == 32);
+				       gdbarch_ptr_bit (gdbarch) == 32,
+				       ssp_enabled);
 }
 
 /* Similar to amd64_supply_fpregset, but use XSAVE extended state.  */
@@ -1692,6 +1704,30 @@ static const struct regset amd64_linux_xstateregset =
     amd64_linux_collect_xstateregset
   };
 
+static void
+amd64_linux_supply_ssp (const struct regset *regset,
+			struct regcache *regcache, int regnum,
+			const void *ssp, size_t len)
+{
+  x86_supply_ssp (regcache, *static_cast<const uint64_t *> (ssp));
+}
+
+static void
+amd64_linux_collect_ssp (const struct regset *regset,
+			 const struct regcache *regcache, int regnum,
+			 void *ssp, size_t len)
+{
+  x86_collect_ssp (regcache, *static_cast<uint64_t *> (ssp));
+}
+
+/* Shadow stack pointer register.  */
+
+static const struct regset amd64_linux_ssp_register
+  {
+    NULL, amd64_linux_supply_ssp, amd64_linux_collect_ssp
+  };
+
+
 /* Iterate over core file register note sections.  */
 
 static void
@@ -1708,6 +1744,14 @@ amd64_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
     cb (".reg-xstate", tdep->xsave_layout.sizeof_xsave,
 	tdep->xsave_layout.sizeof_xsave, &amd64_linux_xstateregset,
 	"XSAVE extended state", cb_data);
+
+  /* SSP can be unavailable.  Thus, we need to check the register status
+     in case we write a core file (regcache != nullptr).  */
+  if (tdep->ssp_regnum > 0
+      && (regcache == nullptr
+	  || REG_VALID == regcache->get_register_status (tdep->ssp_regnum)))
+    cb (".reg-ssp", 8, 8, &amd64_linux_ssp_register,
+	"shadow stack pointer", cb_data);
 }
 
 /* The instruction sequences used in x86_64 machines for a

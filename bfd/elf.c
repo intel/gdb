@@ -9694,6 +9694,12 @@ elfcore_grok_xstatereg (bfd *abfd, Elf_Internal_Note *note)
 }
 
 static bfd_boolean
+elfcore_grok_cetreg (bfd *abfd, Elf_Internal_Note *note)
+{
+  return elfcore_make_note_pseudosection (abfd, ".cet-state", note);
+}
+
+static bfd_boolean
 elfcore_grok_ppc_vmx (bfd *abfd, Elf_Internal_Note *note)
 {
   return elfcore_make_note_pseudosection (abfd, ".reg-ppc-vmx", note);
@@ -10312,6 +10318,13 @@ elfcore_grok_note (bfd *abfd, Elf_Internal_Note *note)
       if (note->namesz == 6
 	  && strcmp (note->namedata, "LINUX") == 0)
 	return elfcore_grok_xstatereg (abfd, note);
+      else
+	return TRUE;
+
+    case NT_X86_CET:		/* Linux CET extension.  */
+      if (note->namesz == 6
+	  && strcmp (note->namedata, "LINUX") == 0)
+	return elfcore_grok_cetreg (abfd, note);
       else
 	return TRUE;
 
@@ -11515,6 +11528,15 @@ elfcore_write_xstatereg (bfd *abfd, char *buf, int *bufsiz,
 			     note_name, NT_X86_XSTATE, xfpregs, size);
 }
 
+static char *
+elfcore_write_cetreg (bfd *abfd, char *buf, int *bufsiz,
+		      const void *cetregs, int size)
+{
+  char *note_name = "LINUX";
+  return elfcore_write_note (abfd, buf, bufsiz,
+			     note_name, NT_X86_CET, cetregs, size);
+}
+
 char *
 elfcore_write_ppc_vmx (bfd *abfd,
 		       char *buf,
@@ -11955,6 +11977,8 @@ elfcore_write_register_note (bfd *abfd,
     return elfcore_write_prxfpreg (abfd, buf, bufsiz, data, size);
   if (strcmp (section, ".reg-xstate") == 0)
     return elfcore_write_xstatereg (abfd, buf, bufsiz, data, size);
+  if (strcmp (section, ".cet-state") == 0)
+    return elfcore_write_cetreg (abfd, buf, bufsiz, data, size);
   if (strcmp (section, ".reg-ppc-vmx") == 0)
     return elfcore_write_ppc_vmx (abfd, buf, bufsiz, data, size);
   if (strcmp (section, ".reg-ppc-vsx") == 0)

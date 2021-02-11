@@ -37,6 +37,12 @@
 /* Get XSAVE extended state xcr0 from core dump.  */
 extern uint64_t i386_linux_core_read_xcr0 (bfd *abfd);
 
+/* Get CET state from core dump.  */
+extern bool i386_linux_core_read_cet_state_p (bfd *abfd);
+
+/* CET register set.  */
+extern const struct regset i386_linux_cetregset;
+
 /* Handle and display information related to the MPX bound violation
    to the user.  */
 extern void i386_linux_report_signal_info (struct gdbarch *gdbarch,

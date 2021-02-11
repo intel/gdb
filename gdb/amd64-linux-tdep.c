@@ -1611,9 +1611,11 @@ amd64_linux_core_read_description (struct gdbarch *gdbarch,
 {
   /* Linux/x86-64.  */
   uint64_t xcr0 = i386_linux_core_read_xcr0 (abfd);
+  bool cet_enabled = i386_linux_core_read_cet_state_p (abfd);
 
   return amd64_linux_read_description (xcr0 & X86_XSTATE_ALL_MASK,
-				       gdbarch_ptr_bit (gdbarch) == 32);
+				       gdbarch_ptr_bit (gdbarch) == 32,
+				       cet_enabled);
 }
 
 /* Similar to amd64_supply_fpregset, but use XSAVE extended state.  */
@@ -1658,6 +1660,8 @@ amd64_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
   unsigned int xstate_size = get_x86_xstate_size (tdep->xcr0);
   cb (".reg-xstate", xstate_size, xstate_size,
       &amd64_linux_xstateregset, "XSAVE extended state", cb_data);
+  if (tdep->cet_regnum > 0)
+    cb (".cet-state", 16, 16, &i386_linux_cetregset, "CET state", cb_data);
 }
 
 /* The instruction sequences used in x86_64 machines for a

@@ -1,6 +1,6 @@
 /* x86 XSAVE extended state functions.
 
-   Copyright (C) 2020 Free Software Foundation, Inc.
+   Copyright (C) 2020-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
 

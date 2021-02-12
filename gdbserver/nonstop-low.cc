@@ -1,7 +1,7 @@
 /* Low level interface to for the remote server for GDB
    that implements architecture-independent non-stop behavior.
 
-   Copyright (C) 1995-2020 Free Software Foundation, Inc.
+   Copyright (C) 1995-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
 

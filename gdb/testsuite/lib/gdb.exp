@@ -1316,12 +1316,18 @@ proc gdb_test { args } {
     return [gdb_test_multiple $command $message $user_code]
 }
 
-# Return 1 if version MAJOR.MINOR is at least AT_LEAST_MAJOR.AT_LEAST_MINOR.
-proc version_at_least { major minor at_least_major at_least_minor} {
+# Return 1 if version MAJOR.MINOR.REVISION is at least
+# AT_LEAST_MAJOR.AT_LEAST_MINOR.AT_LEAST_REVISION.
+proc version_at_least { major minor revision at_least_major at_least_minor \
+			at_least_revision } {
     if { $major > $at_least_major } {
         return 1
     } elseif { $major == $at_least_major \
-		   && $minor >= $at_least_minor } {
+		   && $minor > $at_least_minor } {
+        return 1
+    } elseif { $major == $at_least_major \
+		   && $minor == $at_least_minor \
+		   && $revision >= $at_least_revision } {
         return 1
     } else {
         return 0
@@ -1333,8 +1339,8 @@ proc tcl_version_at_least { major minor } {
     global tcl_version
     regexp {^([0-9]+)\.([0-9]+)$} $tcl_version \
 	dummy tcl_version_major tcl_version_minor
-    return [version_at_least $tcl_version_major $tcl_version_minor \
-		$major $minor]
+    return [version_at_least $tcl_version_major $tcl_version_minor 0 \
+		$major $minor 0]
 }
 
 if { [tcl_version_at_least 8 5] == 0 } {
@@ -3267,6 +3273,58 @@ gdb_caching_proc skip_btrace_pt_tests {
 
     verbose "$me:  returning $skip_btrace_tests" 2
     return $skip_btrace_tests
+}
+
+
+# Run a test on the target to see if we have a minimum libipt version.
+# Return 0 if so, 1 if it does not.
+
+proc require_libipt_version { major minor revision } {
+    global srcdir subdir gdb_prompt inferior_exited_re
+
+    set me "libipt_version_tests"
+    if { ![istarget "i?86-*-*"] && ![istarget "x86_64-*-*"] } {
+        verbose "$me:  target does not support btrace, returning 1" 2
+        return 1
+    }
+
+    # Compile a test program.
+    set src { int main() { return 0; } }
+    if {![gdb_simple_compile $me $src executable]} {
+        return 1
+    }
+
+    # No error message, compilation succeeded so now run it via gdb.
+
+    gdb_exit
+    gdb_start
+    gdb_reinitialize_dir $srcdir/$subdir
+    gdb_load $obj
+    if ![runto_main] {
+        return 1
+    }
+
+    gdb_test_no_output "record btrace pt" "$me: record btrace pt"
+    set actual_major ""
+    set actual_minor ""
+    set actual_revision ""
+    gdb_test_multiple "maint info btrace" "$me: maint info btrace" {
+	-re ".*Version: (\[0-9\]+)\.(\[0-9\]+)\.(\[0-9\]+).*$gdb_prompt $" {
+	    append actual_major $expect_out(1,string)
+	    append actual_minor $expect_out(2,string)
+	    append actual_revision $expect_out(3,string)
+	}
+	default {}
+    }
+
+    gdb_exit
+    remote_file build delete $obj
+
+    verbose "$me: Using version: $actual_major.$actual_minor.$actual_revision" 2
+    verbose "$me: Required minimum version: $major.$minor.$revision" 2
+
+    return [expr ![version_at_least $actual_major $actual_minor \
+		   $actual_revision $major $minor $revision]]
 }
 
 # Run a test on the target to see if it supports ptwrite instructions.
@@ -5965,7 +6023,7 @@ proc readelf_prints_pie { } {
     # flag is printed by readelf, but we cannot reliably construct a PIE
     # executable if the multilib_flags dictate otherwise
     # (--target_board=unix/-no-pie/-fno-PIE).
-    return [version_at_least $major $minor 2 26]
+    return [version_at_least $major $minor 0 2 26 0]
 }
 
 # Return 1 if EXECUTABLE is a Position Independent Executable, 0 if it is not,

@@ -814,6 +814,8 @@ bppy_init (PyObject *self, PyObject *args, PyObject *kwargs)
   bppy_pending_object->number = -1;
   bppy_pending_object->bp = NULL;
 
+  spec = skip_spaces (spec);
+
   try
     {
       switch (type)
@@ -829,11 +831,7 @@ bppy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 
 	    if (spec != NULL)
 	      {
-		gdb::unique_xmalloc_ptr<char>
-		  copy_holder (xstrdup (skip_spaces (spec)));
-		const char *copy = copy_holder.get ();
-
-		location  = string_to_event_location (&copy,
+		location  = string_to_event_location (&spec,
 						      current_language,
 						      func_name_match_type);
 	      }
@@ -859,8 +857,8 @@ bppy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 	      breakpoint_ops_for_event_location (location.get (), false);
 
 	    create_breakpoint (python_gdbarch,
-			       location.get (), NULL, -1, NULL, false,
-			       0,
+			       location.get (), NULL, -1, spec, false,
+			       1,
 			       temporary_bp, type,
 			       0,
 			       AUTO_BOOLEAN_TRUE,

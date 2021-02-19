@@ -294,6 +294,8 @@ public:
 
   bool stopped_by_sw_breakpoint () override;
 
+  bool supports_multi_process () override;
+
 protected: /* Target ops from nonstop_process_target.  */
 
   ptid_t low_wait (ptid_t ptid, target_waitstatus *ourstatus,
@@ -1364,6 +1366,12 @@ intelgt_process_target::stopped_by_sw_breakpoint ()
   nonstop_thread_info *nti = get_thread_nti (current_thread);
 
   return (nti->stop_reason == TARGET_STOPPED_BY_SW_BREAKPOINT);
+}
+
+bool
+intelgt_process_target::supports_multi_process ()
+{
+  return true;
 }
 
 /* The Intel GT target ops object.  */

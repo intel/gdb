@@ -36,8 +36,6 @@ int using_threads = 1;
 constexpr unsigned long TIMEOUT_INFINITE = (unsigned long) -1;
 constexpr unsigned long TIMEOUT_NOHANG = 1;
 
-static intelgt::arch_info *intelgt_info;
-
 /* The device event that we shall process next.  */
 
 static GTEvent *next_event = nullptr;
@@ -153,6 +151,9 @@ struct process_info_private : public nonstop_process_info
 {
   /* GT device handle.  */
   GTDeviceHandle device_handle;
+
+  /* Architectural info.  */
+  intelgt::arch_info *intelgt_info;
 };
 
 /* GT-specific thread info to save as thread_info's
@@ -171,6 +172,15 @@ static intelgt_thread *
 get_intelgt_thread (thread_info *thread)
 {
   return static_cast<intelgt_thread *> (get_thread_nti (thread));
+}
+
+/* Find the architectural info for the current process.  */
+
+static intelgt::arch_info *
+get_intelgt_info ()
+{
+  process_info *proc = current_process ();
+  return proc->priv->intelgt_info;
 }
 
 /* Given a GTEvent, return the corresponding process_info.  */
@@ -381,8 +391,6 @@ intelgt_process_target::create_target_description (
       break;
     }
 
-  intelgt_info = intelgt::arch_info::get_or_create (gt_version);
-
   return tdesc.release ();
 }
 
@@ -404,19 +412,19 @@ intelgt_process_target::attach (unsigned long pid)
 
   static const char *expedite_regs[] = {"ip", "sp", "emask", nullptr};
 
-  target_desc *tdesc = nullptr;
+  intelgt::version gt_version;
   switch (info.gen_major)
     {
     case 9:
-      tdesc = create_target_description (intelgt::version::Gen9);
+      gt_version = intelgt::version::Gen9;
       break;
 
     case 11:
-      tdesc = create_target_description (intelgt::version::Gen11);
+      gt_version = intelgt::version::Gen11;
       break;
 
     case 12:
-      tdesc = create_target_description (intelgt::version::Gen12);
+      gt_version = intelgt::version::Gen12;
       break;
 
     default:
@@ -424,11 +432,14 @@ intelgt_process_target::attach (unsigned long pid)
 	     info.gen_major, info.gen_minor);
     }
 
+  target_desc *tdesc = create_target_description (gt_version);
   init_target_desc (tdesc, expedite_regs);
 
   process_info *proc = add_process (pid, 1 /* attached */);
   process_info_private *proc_priv = XCNEW (struct process_info_private);
   proc_priv->device_handle = device;
+  proc_priv->intelgt_info
+    = intelgt::arch_info::get_or_create (gt_version);
   proc->priv = proc_priv;
   proc->tdesc = tdesc;
 
@@ -899,6 +910,7 @@ void
 intelgt_process_target::read_gt_register (regcache *regcache,
 					  GTThreadHandle thread, int index)
 {
+  intelgt::arch_info *intelgt_info = get_intelgt_info ();
   const intelgt::gt_register &reg = intelgt_info->get_register (index);
   gdb_assert (reg.size_in_bytes <= intelgt_info->max_reg_size ());
   unsigned int buffer_size = intelgt_info->max_reg_size ();
@@ -923,6 +935,7 @@ intelgt_process_target::fetch_registers (regcache *regcache, int regno)
   dprintf ("regno: %d", regno);
 
   GTThreadHandle handle = get_intelgt_thread (current_thread)->handle;
+  intelgt::arch_info *intelgt_info = get_intelgt_info ();
 
   if (regno == -1) /* All registers.  */
     for (int i = 0; i < intelgt_info->num_registers (); i++)
@@ -938,6 +951,7 @@ void
 intelgt_process_target::write_gt_register (regcache *regcache,
 					   GTThreadHandle thread, int index)
 {
+  intelgt::arch_info *intelgt_info = get_intelgt_info ();
   const intelgt::gt_register &reg = intelgt_info->get_register (index);
   gdb_assert (reg.size_in_bytes <= intelgt_info->max_reg_size ());
   unsigned int buffer_size = intelgt_info->max_reg_size ();
@@ -963,6 +977,8 @@ intelgt_process_target::store_registers (regcache *regcache, int regno)
   GTThreadHandle handle = get_intelgt_thread (current_thread)->handle;
   if (!igfxdbg_IsThreadStopped (handle))
     return;
+
+  intelgt::arch_info *intelgt_info = get_intelgt_info ();
 
   if (regno == -1) /* All registers.  */
     for (int i = 0; i < intelgt_info->num_registers (); i++)
@@ -1143,6 +1159,7 @@ intelgt_process_target::breakpoint_at (CORE_ADDR where)
 {
   dprintf ("where: %s", core_addr_to_string_nz (where));
 
+  intelgt::arch_info *intelgt_info = get_intelgt_info ();
   bool is_breakpoint = false;
   gdb_byte inst[intelgt::MAX_INST_LENGTH];
   int err = read_memory (where, inst, intelgt::MAX_INST_LENGTH);

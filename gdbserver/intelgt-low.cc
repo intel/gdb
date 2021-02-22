@@ -811,7 +811,7 @@ intelgt_process_target::low_wait (ptid_t ptid, target_waitstatus *status,
   if (!(ptid.is_pid () || ptid == minus_one_ptid))
     error (_("Waiting on an individual thread is not supported"));
 
-  process_info *proc;
+  GTDeviceHandle device_handle;
   if (ptid == minus_one_ptid)
     {
       if (current_thread == nullptr)
@@ -819,15 +819,17 @@ intelgt_process_target::low_wait (ptid_t ptid, target_waitstatus *status,
 	  status->kind = TARGET_WAITKIND_IGNORE;
 	  return null_ptid;
 	}
-      proc = current_process ();
+      device_handle = nullptr; /* Match any device.  */
     }
   else
-    proc = find_process_pid (ptid.pid ());
-  if (proc == nullptr)
-    error (_("%s: cannot find process_info for pid %s"), __FUNCTION__,
-	   target_pid_to_str (ptid));
+    {
+      process_info *proc = find_process_pid (ptid.pid ());
+      if (proc == nullptr)
+	error (_("%s: cannot find process_info for pid %s"), __FUNCTION__,
+	       target_pid_to_str (ptid));
+      device_handle = proc->priv->device_handle;
+    }
 
-  GTDeviceHandle device_handle = proc->priv->device_handle;
   static GTEvent gt_event;
   gt_event.size_of_this = sizeof (gt_event);
 

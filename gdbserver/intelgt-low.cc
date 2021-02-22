@@ -207,8 +207,10 @@ find_thread_from_gt_event (GTEvent *event)
     error (_("could not get thread details; result: %s"),
 	   igfxdbg_result_to_string (result));
 
-  /* FIXME: Make thread_id 'long' and pid 'int' in igfxdbg.h.  */
-  ptid_t ptid = ptid_t {(int) event->pid, (long) info.thread_id, 0l};
+  process_info *proc = find_process_from_gt_event (event);
+  gdb_assert (proc != nullptr);
+  /* FIXME: Make thread_id 'long' in igfxdbg.h.  */
+  ptid_t ptid = ptid_t {proc->pid, (long) info.thread_id, 0l};
   thread_info *gdb_thread = find_thread_ptid (ptid);
 
   if (gdb_thread == nullptr)
@@ -334,7 +336,7 @@ private:
 
   void handle_kernel_unloaded (GTEvent *event);
 
-  void handle_thread_started (int parent_pid, GTEvent *event);
+  void handle_thread_started (GTEvent *event);
 
   ptid_t handle_thread_stopped (GTEvent *event, target_waitstatus *status);
 
@@ -344,8 +346,8 @@ private:
 
   ptid_t handle_step_completed (GTEvent *event, target_waitstatus *status);
 
-  ptid_t process_single_event (int parent_pid, GTEvent *event,
-			       target_waitstatus *status, int options);
+  ptid_t process_single_event (GTEvent *event, target_waitstatus *status,
+			       int options);
 
   void process_thread_stopped_event (thread_info *gdb_thread, GTEvent *event,
 				     target_waitstatus *status,
@@ -566,7 +568,7 @@ intelgt_process_target::handle_kernel_unloaded (GTEvent *event)
 /* Handle a 'thread started' event.  */
 
 void
-intelgt_process_target::handle_thread_started (int parent_pid, GTEvent *event)
+intelgt_process_target::handle_thread_started (GTEvent *event)
 {
   gdb_assert (event->type == eGfxDbgEventThreadStarted);
 
@@ -581,8 +583,10 @@ intelgt_process_target::handle_thread_started (int parent_pid, GTEvent *event)
     error (_("could not get details about new thread; result: %s"),
 	   igfxdbg_result_to_string (result));
 
+  process_info *proc = find_process_from_gt_event (event);
+  gdb_assert (proc != nullptr);
   /* FIXME: Make thread_id 'long' in igfxdbg.h.  */
-  ptid_t ptid = ptid_t {parent_pid, (long) info.thread_id, 0l};
+  ptid_t ptid = ptid_t {proc->pid, (long) info.thread_id, 0l};
   intelgt_thread *new_thread = new intelgt_thread {};
   new_thread->handle = event->thread;
   new_thread->thread = add_thread (ptid, new_thread);
@@ -713,10 +717,10 @@ intelgt_process_target::handle_device_exited (GTEvent *event,
   status->kind = TARGET_WAITKIND_EXITED;
   status->value.integer = /* exit code */ 0;
 
-  /* FIXME: Make pid 'int' in igfxdbg.h.  */
-  int pid = (int) event->pid;
+  process_info *proc = find_process_from_gt_event (event);
+  gdb_assert (proc != nullptr);
 
-  return ptid_t {pid};
+  return ptid_t {proc->pid};
 }
 
 /* Handle a 'step completed' event.  */
@@ -748,7 +752,7 @@ intelgt_process_target::handle_step_completed (GTEvent *event,
 /* Process a single event.  */
 
 ptid_t
-intelgt_process_target::process_single_event (int parent_pid, GTEvent *event,
+intelgt_process_target::process_single_event (GTEvent *event,
 					      target_waitstatus *status,
 					      int options)
 {
@@ -764,7 +768,7 @@ intelgt_process_target::process_single_event (int parent_pid, GTEvent *event,
 
     case eGfxDbgEventThreadStarted:
       dprintf ("Processing a thread started event");
-      handle_thread_started (parent_pid, event);
+      handle_thread_started (event);
       return null_ptid;
 
     case eGfxDbgEventKernelLoaded:
@@ -871,8 +875,7 @@ intelgt_process_target::low_wait (ptid_t ptid, target_waitstatus *status,
 	{
 	  struct target_waitstatus event_status;
 	  ptid_t eventing_ptid
-	    = process_single_event (proc->pid, next_event,
-				    &event_status, options);
+	    = process_single_event (next_event, &event_status, options);
 
 	  next_event = next_event->next;
 	  if (id == null_ptid && eventing_ptid != null_ptid)

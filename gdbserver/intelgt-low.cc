@@ -171,6 +171,17 @@ get_intelgt_thread (thread_info *thread)
   return static_cast<intelgt_thread *> (get_thread_nti (thread));
 }
 
+/* Given a GTEvent, return the corresponding process_info.  */
+
+static process_info *
+find_process_from_gt_event (GTEvent *event)
+{
+  return find_process ([event] (process_info *p)
+	   {
+	     return event->device == p->priv->device_handle;
+	   });
+}
+
 /* Given a GTEvent, return the corresponding thread_info.  */
 
 static thread_info *

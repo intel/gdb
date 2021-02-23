@@ -1075,11 +1075,14 @@ intelgt_process_target::request_interrupt ()
       return;
     }
 
-  GTDeviceHandle device_handle = current_process ()->priv->device_handle;
-  APIResult result = igfxdbg_Interrupt (device_handle);
-  if (result != eGfxDbgResultSuccess)
-    error (_("could not interrupt; result: %s"),
-	   igfxdbg_result_to_string (result));
+  for_each_process ([] (process_info *proc)
+    {
+      GTDeviceHandle device = proc->priv->device_handle;
+      APIResult result = igfxdbg_Interrupt (device);
+      if (result != eGfxDbgResultSuccess)
+	error (_("could not interrupt; result: %s"),
+	       igfxdbg_result_to_string (result));
+    });
 
   interrupt_in_progress = true;
 }
@@ -1300,13 +1303,19 @@ intelgt_process_target::resume_all_threads (int pid)
 {
   dprintf ("enter, pid: %d", pid);
 
-  regcache_invalidate ();
+  for_each_process ([=] (process_info *proc)
+    {
+      if (pid != -1 && pid != proc->pid)
+	return;
 
-  GTDeviceHandle device = current_process ()->priv->device_handle;
-  APIResult result = igfxdbg_ContinueExecutionAll (device);
-  if (result != eGfxDbgResultSuccess)
-    error (_("failed to continue all the threads; result: %s"),
-	   igfxdbg_result_to_string (result));
+      regcache_invalidate_pid (proc->pid);
+
+      GTDeviceHandle device = proc->priv->device_handle;
+      APIResult result = igfxdbg_ContinueExecutionAll (device);
+      if (result != eGfxDbgResultSuccess)
+	error (_("failed to continue all the threads; result: %s"),
+	       igfxdbg_result_to_string (result));
+    });
 
   for_each_thread ([] (thread_info *thread)
     {

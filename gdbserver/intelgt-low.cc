@@ -534,7 +534,8 @@ intelgt_process_target::handle_kernel_loaded (GTEvent *event)
   gdb_assert (event->type == eGfxDbgEventKernelLoaded);
   gdb_assert (event->kernel != nullptr);
 
-  loaded_dll (event->details.kernel_load_event.pathname,
+  process_info *proc = find_process_from_gt_event (event);
+  loaded_dll (proc, event->details.kernel_load_event.pathname,
 	      event->details.kernel_load_event.load_address);
 }
 
@@ -546,7 +547,8 @@ intelgt_process_target::handle_kernel_unloaded (GTEvent *event)
   gdb_assert (event->type == eGfxDbgEventKernelUnloaded);
   gdb_assert (event->kernel != nullptr);
 
-  unloaded_dll (event->details.kernel_load_event.pathname,
+  process_info *proc = find_process_from_gt_event (event);
+  unloaded_dll (proc, event->details.kernel_load_event.pathname,
 		event->details.kernel_load_event.load_address);
 }
 

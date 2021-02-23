@@ -4474,6 +4474,22 @@ add_matching_symbols_to_info (const char *name,
 	  if (prev_len == info->result.symbols->size ()
 	      && elt->language == language_asm)
 	    search_minsyms_for_name (info, lookup_name, pspace, elt);
+
+	  /* If still no new symbols were found in this iteration, perhaps
+	     the requested symbol is an inlined function.  In such case, we
+	     iterate over all symbols.  */
+	  if (prev_len == info->result.symbols->size ())
+	    {
+	      iterate_over_all_matching_symtabs (info->state, lookup_name,
+					VAR_DOMAIN, search_domain, pspace, true,
+					[&] (block_symbol *bsym)
+		{
+		  if (SYMBOL_INLINED (bsym->symbol)
+				    && (elt == bsym->symbol->owner.symtab))
+		    return info->add_symbol (bsym);
+		  return true;
+		});
+	    }
 	}
     }
 }

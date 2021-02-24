@@ -58,10 +58,14 @@ variables.
      desired value.
 """
 
+import subprocess
 import gdb
 
 # Breakpoint function for executing the auto-attach.
 BP_FCT = "igfxdbgxchgDebuggerHook"
+
+# Function call to query the number of devices.
+NUM_DEVICES_FCT = "(int)igfxdbgxchgNumDevices()"
 
 class IntelgtAutoAttach(gdb.Breakpoint):
     """Class to debug kernels offloaded to Intel GPU"""
@@ -110,7 +114,7 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
                                           internal=1, temporary=0)
             self.hook_bp.silent = True
             commands = ("python gdb.function.intelgt_auto_attach" +
-                        ".INTELGT_AUTO_ATTACH.init_gt_inferior()")
+                        ".INTELGT_AUTO_ATTACH.init_gt_inferiors()")
             # Find out if we are in nonstop mode.  It is safe to do it
             # here and only once, because the setting cannot be
             # changed after the program starts executing.
@@ -123,29 +127,44 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
                 self.hook_bp.commands = commands + "\ncontinue"
 
     def remove_gt_inf_for(self, host_inf):
-        """First detach from, then remove the gt inferior that was created
+        """First detach from, then remove the gt inferiors that were created
         for HOST_INF."""
-        gt_inf = self.inf_dict[host_inf]
-        if gt_inf is None:
+        gt_connection = self.inf_dict[host_inf]
+        if gt_connection is None:
             return
 
+        # Find all the gt infs whose connection is the same as 'gt_connection'.
+        gt_infs = []
+        for an_inf in gdb.inferiors():
+            if an_inf.connection_num == gt_connection:
+                gt_infs.append(an_inf)
+
+        # First, detach all gt inferiors.
+        for gt_inf in gt_infs:
+            if gt_inf.pid != 0:
+                gdb.execute(f"detach inferiors {gt_inf.num}", False, True)
+
+        # Terminate the gdbserver-gt session.  We should do this from a
+        # gt inf.
+        if gdb.selected_inferior() not in gt_infs:
+            cmd = f"inferior {gt_infs[0].num}"
+            self.protected_gdb_execute(cmd, True)
+        gdb.execute("monitor exit")
+
+        # Switch to host to be able to remove gt infs.
+        # Catch exceptions, since the switch will likely raise
+        # an error because the host inf also exited.
         ate_error = False
-        if gt_inf == gdb.selected_inferior():
-            # Switch to host to be able to detach/remove gt_inf.
-            # Catch exceptions, since the switch will likely raise an error
-            # because the host inf also exited.
-            ate_error = self.protected_gdb_execute("inferior %d" % host_inf.num,
-                                                   True)
+        if host_inf != gdb.selected_inferior():
+            cmd = f"inferior {host_inf.num}"
+            ate_error = self.protected_gdb_execute(cmd, True)
 
-        if gt_inf.pid != 0:
-            # Detach before removing.
-            gdb.execute("detach inferiors %d" % gt_inf.num, False, True)
-
-        # Save the inf num for logging after removal.
-        gt_inf_num = gt_inf.num
-        self.protected_gdb_execute("remove-inferiors %d" % gt_inf_num)
-        print("intelgt: inferior %d (%s) has been removed."
-              % (gt_inf_num, self.gdbserver_gt_binary))
+        # Now remove the gt inferiors.
+        for gt_inf in gt_infs:
+            gt_inf_num = gt_inf.num
+            self.protected_gdb_execute(f"remove-inferiors {gt_inf_num}")
+            print(f"intelgt: inferior {gt_inf_num} "
+                  f"({self.gdbserver_gt_binary}) has been removed.")
 
         # Remove the internal track.
         self.inf_dict[host_inf] = None
@@ -203,9 +222,11 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
                 # exit event will also arrive.  Events are async.
                 if not self.inf_dict[event.inferior] is None:
                     self.host_inf_for_auto_remove = event.inferior
-        elif event.inferior in self.inf_dict.values():
-            for key, value in self.inf_dict.items():
-                if event.inferior == value:
+        else:
+            for key, gt_connection in self.inf_dict.items():
+                if gt_connection is None:
+                    continue
+                if event.inferior.connection_num == gt_connection:
                     self.host_inf_for_auto_remove = key
 
     def handle_quit_event(self, event):
@@ -213,18 +234,19 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
         if event is None:
             return
 
-        inf_nums = " ".join(str(inf.num)
-                            for inf in self.inf_dict.values() if inf is not None)
-        if inf_nums:
-            gdb.execute("detach inferior " + inf_nums)
+        for host_inf in self.inf_dict:
+            self.host_inf_for_auto_remove = host_inf
+            self.handle_before_prompt_event()
 
     def handle_error(self, inf):
         """Remove the inferior and clean-up dict in case of error."""
         print("""\
-intelgt: gdbserver-gt failed to start.  Check if igfxdcd is installed, or use
-env variable INTELGT_AUTO_ATTACH_DISABLE=1 to disable auto-attach.""")
-        gdb.execute("inferior %d" % inf.num, False, True)
-        gdb.execute("remove-inferior %d" % self.inf_dict[inf].num)
+intelgt: gdbserver-gt failed to start.  The environment variable
+INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
+        gdb.execute(f"inferior {inf.num}", False, True)
+        # The gt inferior is the last inferior that was added.
+        gt_inf = gdb.inferiors()[-1]
+        gdb.execute(f"remove-inferior {gt_inf.num}")
         self.inf_dict[inf] = None
 
     @staticmethod
@@ -254,13 +276,12 @@ env variable INTELGT_AUTO_ATTACH_DISABLE=1 to disable auto-attach.""")
           self.get_env_variable("INTELGT_AUTO_ATTACH_GDBSERVER_GT_BINARY",
                                 "gdbserver-gt")
 
+        gdbserver_gt_attach_str = \
+            f"{self.gdbserver_gt_binary} --multi --hostpid={inf.pid} - "
+
         if gdbserver_gt_path_env_var:
             gdbserver_gt_attach_str = \
-              "%s/%s --attach - %d" \
-              % (gdbserver_gt_path_env_var, self.gdbserver_gt_binary, inf.pid)
-        else:
-            gdbserver_gt_attach_str = "%s --attach - %d" \
-                                      % (self.gdbserver_gt_binary, inf.pid)
+              f"{gdbserver_gt_path_env_var}/{gdbserver_gt_attach_str}"
 
         # check 'INTELGT_AUTO_ATTACH_IGFXDBG_PATH' in the inferior's
         # environment.
@@ -280,18 +301,28 @@ env variable INTELGT_AUTO_ATTACH_DISABLE=1 to disable auto-attach.""")
 
     def make_native_gdbserver(self, inf, ld_lib_path, gdbserver_cmd):
         """Spawn and connect to a native instance of gdbserver-gt."""
-        # Switch to the gt inferior.
-        gdb.execute("inferior %d" % (self.inf_dict[inf].num), False, True)
+        # Switch to the gt inferior.  It is the most recent inferior.
+        gt_inf = gdb.inferiors()[-1]
+        gdb.execute(f"inferior {gt_inf.num}", False, True)
         gdb.execute("set sysroot /")
-        target_remote_str = " ".join(("%s %s" % (ld_lib_path,
-                                                 gdbserver_cmd)).split())
-        connection_output = gdb.execute("target remote | %s"
-                                        % target_remote_str, False, True)
+        target_remote_str = \
+            " ".join((f"{ld_lib_path} {gdbserver_cmd}").split())
+        target_cmd = "target extended-remote"
+
+        gdbserver_port = \
+          self.get_env_variable("INTELGT_AUTO_ATTACH_GDBSERVER_PORT")
+        if gdbserver_port:
+            print(f"intelgt: connecting to gdbserver on port {gdbserver_port}.")
+            gdb.execute(f"{target_cmd} :{gdbserver_port}", False, True)
+        else:
+            gdb.execute(f"{target_cmd} | {target_remote_str}", False, True)
+            print(f"intelgt: gdbserver-gt started for process {inf.pid}.")
+
+        # Set a pending attach.
+        connection_output = gdb.execute("attach 0", False, True)
         # Print the first line only.  It contains useful device id and
         # architecture info.
         print(connection_output.split("\n")[0])
-        print("intelgt: inferior %d (gdbserver-gt) created for "
-              "process %d." % (self.inf_dict[inf].num, inf.pid))
 
     def make_remote_gdbserver(self, inf, ld_lib_path, gdbserver_cmd):
         """Spawn and connect to a remote instance of gdbserver-gt."""
@@ -313,7 +344,8 @@ env variable INTELGT_AUTO_ATTACH_DISABLE=1 to disable auto-attach.""")
             "INTELGT_AUTO_ATTACH_REMOTE_PROTOCOL", "ssh -T")
 
         # Switch to the gt inferior.
-        gdb.execute("inferior %d" % (self.inf_dict[inf].num), False, True)
+        gt_inf = gdb.inferiors()[-1]
+        gdb.execute(f"inferior {gt_inf.num}", False, True)
 
         if not remote_target_env_var:
             connection_target = inf.connection_target
@@ -338,13 +370,25 @@ env variable INTELGT_AUTO_ATTACH_DISABLE=1 to disable auto-attach.""")
         target_remote_str = \
             " ".join((f"{target_str} {ld_lib_path} {gdbserver_cmd}").split())
 
-        gdb.execute("target remote | %s" % target_remote_str)
-        print("""\
-intelgt: inferior %d created remotely for process %d using command
-'%s'""" % (self.inf_dict[inf].num, inf.pid, target_remote_str))
+        gdb.execute(f"target extended-remote | {target_remote_str}")
+        print(f"intelgt: inferior {gt_inf.num} "
+              f"created remotely for process {inf.pid} "
+              f"using command '{target_remote_str}'")
 
-    def init_gt_inferior(self):
-        """Create/initialize a second inferior with gdbserver-gt connection"""
+    @staticmethod
+    def igfxdcd_is_loaded():
+        """Check if the igfxdcd module is loaded."""
+        # Use lsmod to see if the igfxdcd module exists.  We don't use
+        # modinfo because in case the module was loaded as a .ko file
+        # via insmod, modinfo may not report it.
+        with subprocess.Popen(['lsmod'], stdout=subprocess.PIPE) as lsmod:
+            with subprocess.Popen(['grep', "^igfxdcd "], stdin=lsmod.stdout,
+                                  stdout=subprocess.DEVNULL) as grep:
+                grep.communicate()
+                return grep.returncode == 0
+
+    def init_gt_inferiors(self):
+        """Create/initialize inferiors with gdbserver-gt connection"""
         # get the host inferior.
         host_inf = gdb.selected_inferior()
 
@@ -356,18 +400,30 @@ intelgt: inferior %d created remotely for process %d using command
 
         self.hook_bp.delete()
 
+        if not self.igfxdcd_is_loaded():
+            print("""\
+intelgt: the igfxdcd module (i.e. the debug driver) is not loaded.""")
+            return
+
+        num_devices = gdb.parse_and_eval(NUM_DEVICES_FCT)
+        if num_devices == 0:
+            print("""intelgt: no GPU device is available for debug.""")
+            return
+
         if host_inf not in self.inf_dict or self.inf_dict[host_inf] is None:
             if not self.is_nonstop:
                 gdb.execute("set schedule-multiple off")
-            gdb.execute("add-inferior -no-connection", False, True)
-            self.inf_dict[host_inf] = gdb.inferiors()[-1]
+            gdb.execute("add-inferior -hidden -no-connection", False, True)
 
             # attach gdbserver-gt to gt inferior.
+            # This represents the first device.
             try:
                 self.handle_attach_gdbserver_gt(connection, host_inf)
             except gdb.error:
                 self.handle_error(host_inf)
                 return
+
+            self.inf_dict[host_inf] = gdb.inferiors()[-1].connection_num
 
             # switch to host inferior.
             gdb.execute(f"inferior {host_inf.num}", False, True)

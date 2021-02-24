@@ -36,6 +36,8 @@ int using_threads = 1;
 constexpr unsigned long TIMEOUT_INFINITE = (unsigned long) -1;
 constexpr unsigned long TIMEOUT_NOHANG = 1;
 
+extern unsigned long int intelgt_hostpid;
+
 /* The device event that we shall process next.  */
 
 static GTEvent *next_event = nullptr;
@@ -403,14 +405,28 @@ intelgt_process_target::create_target_description (
    error() otherwise.  */
 
 int
-intelgt_process_target::attach (unsigned long pid)
+intelgt_process_target::attach (unsigned long device_index)
 {
-  dprintf ("Attaching to pid %lu", pid);
+  /* For device initialization we need the host pid and the device
+     index.  We expect to receive the 1-based device index as the
+     parameter.  For the host pid, we use the --hostpid argument.  */
+  if (device_index <= 0 || device_index > igfxdbg_NumDevices ())
+    error (_("no device '%lu' found, there are %d devices"),
+	   device_index, igfxdbg_NumDevices ());
+
+  /* DCD uses 0-based indexing.  We show 1-based indexing because
+     "0" in a ptid has special meaning in GDB.  */
+  unsigned int dcd_device_index = device_index - 1;
+
+  dprintf ("Attaching to [pid: %lu, dcd instance: %d] as 'Device %lu'",
+	   intelgt_hostpid, dcd_device_index, device_index);
 
   GTDeviceHandle device;
   GTDeviceInfo info;
 
-  APIResult result = igfxdbg_Init ((ProcessID) pid, &device, &info, -1);
+  APIResult result
+    = igfxdbg_InitDevice ((ProcessID) intelgt_hostpid, dcd_device_index,
+			  &device, &info, -1);
   if (result != eGfxDbgResultSuccess)
     error (_("failed to initialize intelgt device for debug"));
 
@@ -439,7 +455,7 @@ intelgt_process_target::attach (unsigned long pid)
   target_desc *tdesc = create_target_description (gt_version);
   init_target_desc (tdesc, expedite_regs);
 
-  process_info *proc = add_process (pid, 1 /* attached */);
+  process_info *proc = add_process (device_index, 1 /* attached */);
   process_info_private *proc_priv = XCNEW (struct process_info_private);
   proc_priv->device_handle = device;
   proc_priv->intelgt_info
@@ -447,7 +463,8 @@ intelgt_process_target::attach (unsigned long pid)
   proc->priv = proc_priv;
   proc->tdesc = tdesc;
 
-  fprintf (stderr, "intelgt: attached to device with id 0x%x (Gen%d)\n",
+  fprintf (stderr, "intelgt: attached to device %lu of %d;"
+	   " id 0x%x (Gen%d)\n", device_index, igfxdbg_NumDevices (),
 	   info.device_id, info.gen_major);
 
   /* FIXME: At this point, we have not added any threads, yet.
@@ -1381,5 +1398,9 @@ static intelgt_process_target the_intelgt_target;
 void
 initialize_low ()
 {
+  if (intelgt_hostpid == 0)
+    error (_("intelgt: a HOSTPID must be specified via --hostpid."));
+  dprintf ("intelgt: using %lu as the host pid\n", intelgt_hostpid);
+
   set_target_ops (&the_intelgt_target);
 }

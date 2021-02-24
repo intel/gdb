@@ -90,6 +90,10 @@ static bool keep_processing_events = true;
 
 bool non_stop;
 
+/* The host process pid to be used for for initializing Intel GT
+   devices for debug.  */
+unsigned long int intelgt_hostpid = 0;
+
 static struct {
   /* Set the PROGRAM_PATH.  Here we adjust the path of the provided
      binary if needed.  */
@@ -3460,6 +3464,8 @@ gdbserver_usage (FILE *stream)
 	   "                        Exec PROG directly instead of using a shell.\n"
 	   "                        Disables argument globbing and variable substitution\n"
 	   "                        on UNIX-like systems.\n"
+	   "  --hostpid=HOSTPID     Initialize Intel GT devices for debug using\n"
+	   "                        HOSTPID for the host process pid.\n"
 	   "\n"
 	   "Debug options:\n"
 	   "\n"
@@ -3726,6 +3732,15 @@ captured_main (int argc, char *argv[])
 		  exit (1);
 		}
 	    }
+	}
+      else if (startswith (*next_arg, "--hostpid="))
+	{
+	  const char *hostpid_arg_begin = *next_arg + strlen ("--hostpid=");
+	  char *hostpid_arg_end = nullptr;
+	  intelgt_hostpid = strtoul (hostpid_arg_begin, &hostpid_arg_end, 0);
+	  if (intelgt_hostpid == 0)
+	    error (_("Bad argument for --hostpid"));
+	  *next_arg = hostpid_arg_end;
 	}
       else if (strcmp (*next_arg, "-") == 0)
 	{

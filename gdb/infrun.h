@@ -124,13 +124,6 @@ extern bool skip_trampoline_functions;
    current location.  */
 extern ULONGEST get_stop_id (void);
 
-/* Reverse execution.  */
-enum exec_direction_kind
-  {
-    EXEC_FORWARD,
-    EXEC_REVERSE
-  };
-
 /* The current execution direction.  */
 extern enum exec_direction_kind execution_direction;
 

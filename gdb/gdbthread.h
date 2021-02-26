@@ -119,6 +119,13 @@ enum class simd_lane_kind
     SIMD_LANE_ALL_ACTIVE,
   };
 
+/* Reverse execution.  */
+enum exec_direction_kind
+  {
+    EXEC_FORWARD,
+    EXEC_REVERSE
+  };
+
 /* Inferior thread specific part of `struct infcall_control_state'.
 
    Inferior process counterpart is `struct inferior_control_state'.  */
@@ -206,6 +213,9 @@ struct thread_control_state
 
   /* Whether the thread was replaying when the command was issued.  */
   bool is_replaying = false;
+
+  /* The execution direction when the command was issued.  */
+  enum exec_direction_kind execution_direction = EXEC_FORWARD;
 };
 
 /* Inferior thread specific part of `struct infcall_suspend_state'.  */

@@ -43,9 +43,15 @@ gdb_test "bt" "\\s*\\#0\\s+main.*" "in main"
 gdb_test "b get" ".*" "break at get"
 gdb_test "c" ".*" "continue to get"
 #call frame 1 is at line 29
+if {[test_compiler_info icc*]} {
+	setup_kfail "JIRA DOQG/2205" *-*-*
+}
 gdb_test "bt" "\\s*\\#0\\s+ptr::get\[^\r\]*${srcfile}:21\[\r\n\]+\\s*\\#1\\s+intermediate\[^\r\]*${srcfile}:29\[\r\n\]+.*" "at get"
 #print a local value here
 gdb_test "p t" ".*\\\$1 = \\(MyClass \\*\\) 0x.*" "print t"
 gdb_test "c" ".*SIGSEGV.*" "continue to SIGSEGV"
 #call frame 1 is at line 29
+if {[test_compiler_info icc*]} {
+	setup_kfail "JIRA DOQG/2205" *-*-*
+}
 gdb_test "bt" "\\s*\\#0\\s+MyClass::call\[^\r\]*${srcfile}:26\[\r\n\]+\\s*\\#1\\s+0x\[^\r\]*${srcfile}:29\[\r\n\]+.*" "at call"

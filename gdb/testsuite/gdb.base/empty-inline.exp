@@ -41,8 +41,23 @@ if ![runto_main] {
 }
 
 gdb_test "frame 0" "\\s*\\#0\\s+main.*${srcfile}:40.*" "in main"
+
+if {[test_compiler_info icc*] || [test_compiler_info intel*]} {
+	setup_kfail "JIRA DOQG/2205" *-*-*
+}
+
 gdb_test "step" ".*test0.*${srcfile}:21.*" "step into test0"
+
+if {[test_compiler_info icc*]} {
+	setup_kfail "JIRA DOQG/2205" *-*-*
+}
+
 gdb_test "frame 1" "\\s*\\#1\\s+main.*${srcfile}:40.*" "frame1"
+
+if {[test_compiler_info icc*]} {
+	setup_kfail "JIRA DOQG/2205" *-*-*
+}
+
 gdb_test "step" ".*test1.*${srcfile}:31.*" "step into test1"
 gdb_test "frame 1" "\\s*\\#1.*in main.*${srcfile}:40.*" "frame2"
 gdb_test "step" ".*main.*${srcfile}:41.*" "step back to main"

@@ -2142,6 +2142,8 @@ record_btrace_stop_replaying (struct thread_info *tp)
 {
   struct btrace_thread_info *btinfo;
 
+  DEBUG ("stop replaying %s", tp->ptid.to_string ().c_str ());
+
   btinfo = &tp->btrace;
 
   xfree (btinfo->replay);
@@ -2947,6 +2949,7 @@ record_btrace_target::goto_record (ULONGEST insn_number)
 void
 record_btrace_target::record_stop_replaying ()
 {
+  DEBUG ("stop replaying");
   for (thread_info *tp : current_inferior ()->non_exited_threads ())
     record_btrace_stop_replaying (tp);
 }

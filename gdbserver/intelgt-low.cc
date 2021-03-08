@@ -25,6 +25,7 @@
 #include "regcache.h"
 #include "tdesc.h"
 #include "nonstop-low.h"
+#include <unordered_map>
 
 #include "../features/intelgt-grf.c"
 #include "../features/intelgt-arf9.c"
@@ -154,9 +155,18 @@ struct process_info_private : public nonstop_process_info
   /* GT device handle.  */
   GTDeviceHandle device_handle;
 
+  /* GT device info.  */
+  GTDeviceInfo device_info;
+
+  /* DCD device index.  */
+  unsigned int dcd_device_index;
+
   /* Architectural info.  */
   intelgt::arch_info *intelgt_info;
 };
+
+static std::unordered_map<GTDeviceHandle,
+			  process_info_private *> process_infos;
 
 /* GT-specific thread info to save as thread_info's
    private target data.  */
@@ -298,6 +308,8 @@ public:
 
   bool supports_multi_process () override;
 
+  void initialize_device (unsigned int dcd_device_index);
+
 protected: /* Target ops from nonstop_process_target.  */
 
   ptid_t low_wait (ptid_t ptid, target_waitstatus *ourstatus,
@@ -400,26 +412,13 @@ intelgt_process_target::create_target_description (
   return tdesc.release ();
 }
 
-/* The 'attach' target op for the given process id.
-   Returns -1 if attaching is unsupported, 0 on success, and calls
-   error() otherwise.  */
+/* Initialize the device at index DCD_DEVICE_INDEX for debug.  */
 
-int
-intelgt_process_target::attach (unsigned long device_index)
+void
+intelgt_process_target::initialize_device (unsigned int dcd_device_index)
 {
   /* For device initialization we need the host pid and the device
-     index.  We expect to receive the 1-based device index as the
-     parameter.  For the host pid, we use the --hostpid argument.  */
-  if (device_index <= 0 || device_index > igfxdbg_NumDevices ())
-    error (_("no device '%lu' found, there are %d devices"),
-	   device_index, igfxdbg_NumDevices ());
-
-  /* DCD uses 0-based indexing.  We show 1-based indexing because
-     "0" in a ptid has special meaning in GDB.  */
-  unsigned int dcd_device_index = device_index - 1;
-
-  dprintf ("Attaching to [pid: %lu, dcd instance: %d] as 'Device %lu'",
-	   intelgt_hostpid, dcd_device_index, device_index);
+     index.  For the host pid, we use the --hostpid argument.  */
 
   GTDeviceHandle device;
   GTDeviceInfo info;
@@ -430,8 +429,47 @@ intelgt_process_target::attach (unsigned long device_index)
   if (result != eGfxDbgResultSuccess)
     error (_("failed to initialize intelgt device for debug"));
 
+  process_info_private *proc_priv = XCNEW (struct process_info_private);
+  proc_priv->device_handle = device;
+  proc_priv->device_info = info;
+  proc_priv->dcd_device_index = dcd_device_index;
+  proc_priv->intelgt_info = nullptr;
+
+  process_infos[device] = proc_priv;
+
+  dprintf ("initialized device [hostpid: %lu, dcd instance: %d, "
+	   "id: 0x%x (Gen%d)]", intelgt_hostpid, dcd_device_index,
+	   info.device_id, info.gen_major);
+}
+
+/* The 'attach' target op for the given process id.
+   Returns -1 if attaching is unsupported, 0 on success, and calls
+   error() otherwise.  */
+
+int
+intelgt_process_target::attach (unsigned long device_index)
+{
+  /* DCD uses 0-based indexing.  We show 1-based indexing because
+     "0" in a ptid has special meaning in GDB.  */
+  if (device_index > igfxdbg_NumDevices ())
+    error (_("no device '%ld' found, there are %d devices"),
+	   device_index, igfxdbg_NumDevices ());
+  unsigned int dcd_device_index = device_index - 1;
+
+  process_info_private *proc_priv = nullptr;
+  for (auto &info : process_infos)
+    if (info.second->dcd_device_index == dcd_device_index)
+      {
+	proc_priv = info.second;
+	break;
+      }
+
+  if (proc_priv == nullptr)
+    error (_("no device with index %lu is found"), device_index);
+
   static const char *expedite_regs[] = {"ip", "sp", "emask", nullptr};
 
+  GTDeviceInfo &info = proc_priv->device_info;
   intelgt::version gt_version;
   switch (info.gen_major)
     {
@@ -455,11 +493,10 @@ intelgt_process_target::attach (unsigned long device_index)
   target_desc *tdesc = create_target_description (gt_version);
   init_target_desc (tdesc, expedite_regs);
 
-  process_info *proc = add_process (device_index, 1 /* attached */);
-  process_info_private *proc_priv = XCNEW (struct process_info_private);
-  proc_priv->device_handle = device;
   proc_priv->intelgt_info
     = intelgt::arch_info::get_or_create (gt_version);
+
+  process_info *proc = add_process (device_index, 1 /* attached */);
   proc->priv = proc_priv;
   proc->tdesc = tdesc;
 
@@ -1401,6 +1438,9 @@ initialize_low ()
   if (intelgt_hostpid == 0)
     error (_("intelgt: a HOSTPID must be specified via --hostpid."));
   dprintf ("intelgt: using %lu as the host pid\n", intelgt_hostpid);
+
+  for (int i = 0; i < igfxdbg_NumDevices (); ++i)
+    the_intelgt_target.initialize_device (i);
 
   set_target_ops (&the_intelgt_target);
 }

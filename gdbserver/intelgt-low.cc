@@ -195,15 +195,30 @@ get_intelgt_info ()
   return proc->priv->intelgt_info;
 }
 
+static process_info *add_new_gt_process (process_info_private *proc_priv);
+
 /* Given a GTEvent, return the corresponding process_info.  */
 
 static process_info *
 find_process_from_gt_event (GTEvent *event)
 {
-  return find_process ([event] (process_info *p)
-	   {
-	     return event->device == p->priv->device_handle;
-	   });
+  process_info *proc
+    = find_process ([event] (process_info *p)
+	{
+	  return event->device == p->priv->device_handle;
+	});
+
+  if (proc == nullptr)
+    {
+      /* This is the first time we see an event from this device.  */
+      process_info_private *proc_priv = process_infos[event->device];
+      if (proc_priv == nullptr)
+	error (_("received an event from an unitialized device"));
+
+      proc = add_new_gt_process (proc_priv);
+    }
+
+  return proc;
 }
 
 /* Given a GTEvent, return the corresponding thread_info.  */

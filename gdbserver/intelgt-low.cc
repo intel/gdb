@@ -334,8 +334,6 @@ protected: /* Target ops from nonstop_process_target.  */
 
 private:
 
-  target_desc *create_target_description (intelgt::version gt_version);
-
   void read_gt_register (regcache *regcache, GTThreadHandle thread,
 			 int index);
 
@@ -385,9 +383,8 @@ intelgt_process_target::create_inferior (const char *program,
 
 /* Create a GT target description.  */
 
-target_desc *
-intelgt_process_target::create_target_description (
-    intelgt::version gt_version)
+static target_desc *
+create_target_description (intelgt::version gt_version)
 {
   target_desc_up tdesc = allocate_target_description ();
 
@@ -410,6 +407,52 @@ intelgt_process_target::create_target_description (
     }
 
   return tdesc.release ();
+}
+
+/* Add a new process using the given PROC_PRIV.  */
+static process_info *
+add_new_gt_process (process_info_private *proc_priv)
+{
+  static const char *expedite_regs[] = {"ip", "sp", "emask", nullptr};
+
+  GTDeviceInfo &info = proc_priv->device_info;
+  intelgt::version gt_version;
+  switch (info.gen_major)
+    {
+    case 9:
+      gt_version = intelgt::version::Gen9;
+      break;
+
+    case 11:
+      gt_version = intelgt::version::Gen11;
+      break;
+
+    case 12:
+      gt_version = intelgt::version::Gen12;
+      break;
+
+    default:
+      error (_("The GT %d.%d architecture is not supported"),
+	     info.gen_major, info.gen_minor);
+    }
+
+  target_desc *tdesc = create_target_description (gt_version);
+  init_target_desc (tdesc, expedite_regs);
+
+  proc_priv->intelgt_info
+    = intelgt::arch_info::get_or_create (gt_version);
+
+  unsigned int device_index = proc_priv->dcd_device_index + 1;
+
+  process_info *proc = add_process (device_index, 1 /* attached */);
+  proc->priv = proc_priv;
+  proc->tdesc = tdesc;
+
+  fprintf (stderr, "intelgt: attached to device %d of %d;"
+	   " id 0x%x (Gen%d)\n", device_index, igfxdbg_NumDevices (),
+	   info.device_id, info.gen_major);
+
+  return proc;
 }
 
 /* Initialize the device at index DCD_DEVICE_INDEX for debug.  */
@@ -467,42 +510,7 @@ intelgt_process_target::attach (unsigned long device_index)
   if (proc_priv == nullptr)
     error (_("no device with index %lu is found"), device_index);
 
-  static const char *expedite_regs[] = {"ip", "sp", "emask", nullptr};
-
-  GTDeviceInfo &info = proc_priv->device_info;
-  intelgt::version gt_version;
-  switch (info.gen_major)
-    {
-    case 9:
-      gt_version = intelgt::version::Gen9;
-      break;
-
-    case 11:
-      gt_version = intelgt::version::Gen11;
-      break;
-
-    case 12:
-      gt_version = intelgt::version::Gen12;
-      break;
-
-    default:
-      error (_("The GT %d.%d architecture is not supported"),
-	     info.gen_major, info.gen_minor);
-    }
-
-  target_desc *tdesc = create_target_description (gt_version);
-  init_target_desc (tdesc, expedite_regs);
-
-  proc_priv->intelgt_info
-    = intelgt::arch_info::get_or_create (gt_version);
-
-  process_info *proc = add_process (device_index, 1 /* attached */);
-  proc->priv = proc_priv;
-  proc->tdesc = tdesc;
-
-  fprintf (stderr, "intelgt: attached to device %lu of %d;"
-	   " id 0x%x (Gen%d)\n", device_index, igfxdbg_NumDevices (),
-	   info.device_id, info.gen_major);
+  add_new_gt_process (proc_priv);
 
   /* FIXME: At this point, we have not added any threads, yet.
      This creates a problem in nonstop mode.

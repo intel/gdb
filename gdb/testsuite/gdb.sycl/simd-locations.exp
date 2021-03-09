@@ -37,25 +37,53 @@ proc test_bp_1 {device} {
     gdb_test "print lid" " = .*"
 
     # Call operator() explicitly to work around known limitations.
-    gdb_test_expr_eq "pgid.operator() (wi)" "gid"
+    set v1 [get_valueof "" "pgid.operator() (wi)" "NONE"]
+    set v2 [get_valueof "" "gid" "NONE"]
+    gdb_assert {{$v1 eq $v2}} "pgid.operator() (wi) == gid"
+
     gdb_test_expr_eq "ain\[gid\]" "in"
     gdb_test_expr_eq "acs\[lid\].c" "cs"
+
     # LCS may be implemented as reference.  Skip some output.
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	setup_kfail "JIRA DOQG/2081" "*-*-*"
+    }
     gdb_test "print lcs" " = .* 4"
 }
 
-proc test_bp_2 {} {
+proc test_bp_2 {device {lane 0} } {
     global decimal
 
     gdb_test "print wi" " = .*"
     gdb_test "print lid" " = .*"
 
     # Call operator() explicitly to work around known limitations.
-    gdb_test_expr_eq "pgid.operator() (wi)" "gid"
-    gdb_test_expr_eq "atmp\[gid\].a" "in"
-    gdb_test_expr_eq "aout\[gid\]" "out"
+    set v1 [get_valueof "" "pgid.operator() (wi)" "NONE"]
+    set v2 [get_valueof "" "gid" "NONE"]
+    gdb_assert {{$v1 eq $v2}} "pgid.operator() (wi) == gid"
+
+    # Flaky test on Gen12.
+    if {[is_level_zero_debug_api]} {
+	setup_kfail "JIRA DOQG/2081" "*-*-*"
+    }
+    set v1 [get_valueof "" "atmp\[gid\].a" "NONE"]
+    set v2 [get_valueof "" "in" "NONE"]
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	setup_kfail "JIRA DOQG/2081" "*-*-*"
+    }
+    gdb_assert {{$v1 eq $v2}} "atmp\[gid\].a == in"
+
+    set kfail ""
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	set kfail "JIRA IGDB/3364"
+	setup_kfail $kfail "*-*-*"
+    }
+    gdb_test_expr_eq "aout\[gid\]" "out" "" "${kfail}"
 
     # LCS may be implemented as reference.  Skip some output.
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	setup_kfail "JIRA DOQG/2081" "*-*-*"
+    }
     gdb_test "print lcs" " = .* 4"
     gdb_test "print cs" " = 4"
 }
@@ -79,11 +107,11 @@ foreach device $sycl_device_list {
 		    with_test_prefix "lane $i" {
 			gdb_test "thread :$i" "Switching to thread .*:$i.*"
 
-			test_bp_1
+			test_bp_1 "$device"
 		    }
 		}
 	    } else {
-		test_bp_1
+		test_bp_1 "$device"
 	    }
 	}
 
@@ -98,11 +126,11 @@ foreach device $sycl_device_list {
 		    with_test_prefix "lane $i" {
 			gdb_test "thread :$i" "Switching to thread .*:$i.*"
 
-			test_bp_2
+			test_bp_2 "$device" $i
 		    }
 		}
 	    } else {
-		test_bp_2
+		test_bp_2 "$device"
 	    }
 	}
     }

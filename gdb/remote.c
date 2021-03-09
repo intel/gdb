@@ -2537,7 +2537,10 @@ remote_target::remote_notice_new_inferior (ptid_t currthread, int executing)
 	  struct remote_state *rs = get_remote_state ();
 
 	  if (!rs->starting_up)
-	    notice_new_inferior (new_thr, executing, 0);
+	    {
+	      inf->needs_setup = 1;
+	      notice_new_inferior (new_thr, executing, 0);
+	    }
 	}
     }
 }

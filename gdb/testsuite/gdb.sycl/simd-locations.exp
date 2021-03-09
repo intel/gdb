@@ -37,22 +37,32 @@ proc test_bp_1 {device} {
     gdb_test "print lid" " = .*"
 
     # Call operator() explicitly to work around known limitations.
-    gdb_test_expr_eq "pgid.operator() (wi)" "gid"
+    set v1 [get_valueof "" "pgid.operator() (wi)" "NONE"]
+    set v2 [get_valueof "" "gid" "NONE"]
+    gdb_assert {$v1 eq $v2} "pgid.operator() (wi) == gid"
+
     gdb_test_expr_eq "ain\[gid\]" "in"
     gdb_test_expr_eq "acs\[lid\].c" "cs"
+
     # LCS should be a reference here, as the lambda capture is by reference.
     gdb_test "print lcs" " = \\(uint16_t &\\) @$hex: 4"
 }
 
-proc test_bp_2 {} {
+proc test_bp_2 {device {lane 0} } {
     global decimal hex
 
     gdb_test "print wi" " = .*"
     gdb_test "print lid" " = .*"
 
     # Call operator() explicitly to work around known limitations.
-    gdb_test_expr_eq "pgid.operator() (wi)" "gid"
-    gdb_test_expr_eq "atmp\[gid\].a" "in"
+    set v1 [get_valueof "" "pgid.operator() (wi)" "NONE"]
+    set v2 [get_valueof "" "gid" "NONE"]
+    gdb_assert {$v1 eq $v2} "pgid.operator() (wi) == gid"
+
+    set v1 [get_valueof "" "atmp\[gid\].a" "NONE"]
+    set v2 [get_valueof "" "in" "NONE"]
+    gdb_assert {$v1 eq $v2} "atmp\[gid\].a == in"
+
     gdb_test_expr_eq "aout\[gid\]" "out"
 
     # LCS should be a reference here, as the lambda capture is by reference.
@@ -79,11 +89,11 @@ foreach device $sycl_device_list {
 		    with_test_prefix "lane $i" {
 			gdb_test "thread :$i" "Switching to thread .*:$i.*"
 
-			test_bp_1
+			test_bp_1 "$device"
 		    }
 		}
 	    } else {
-		test_bp_1
+		test_bp_1 "$device"
 	    }
 	}
 
@@ -98,11 +108,11 @@ foreach device $sycl_device_list {
 		    with_test_prefix "lane $i" {
 			gdb_test "thread :$i" "Switching to thread .*:$i.*"
 
-			test_bp_2
+			test_bp_2 "$device" $i
 		    }
 		}
 	    } else {
-		test_bp_2
+		test_bp_2 "$device"
 	    }
 	}
     }

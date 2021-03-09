@@ -1469,7 +1469,7 @@ handle_qxfer_exec_file (const char *annex,
 			gdb_byte *readbuf, const gdb_byte *writebuf,
 			ULONGEST offset, LONGEST len)
 {
-  char *file;
+  const char *file;
   ULONGEST pid;
   int total_len;
 

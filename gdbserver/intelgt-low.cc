@@ -1462,8 +1462,13 @@ initialize_low ()
     error (_("intelgt: a HOSTPID must be specified via --hostpid."));
   dprintf ("intelgt: using %lu as the host pid\n", intelgt_hostpid);
 
+  igfxdbg_SetDefaultShaderEnabled (true);
   for (int i = 0; i < igfxdbg_NumDevices (); ++i)
-    the_intelgt_target.initialize_device (i);
+    {
+      the_intelgt_target.initialize_device (i);
+      /* Only the first device shall have the default thread.  */
+      igfxdbg_SetDefaultShaderEnabled (false);
+    }
 
   set_target_ops (&the_intelgt_target);
 }

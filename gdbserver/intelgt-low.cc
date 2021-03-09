@@ -323,6 +323,10 @@ public:
 
   bool supports_multi_process () override;
 
+  bool supports_pid_to_exec_file () override;
+
+  const char *pid_to_exec_file (int pid) override;
+
   void initialize_device (unsigned int dcd_device_index);
 
 protected: /* Target ops from nonstop_process_target.  */
@@ -1449,6 +1453,18 @@ bool
 intelgt_process_target::supports_multi_process ()
 {
   return true;
+}
+
+bool
+intelgt_process_target::supports_pid_to_exec_file ()
+{
+  return true;
+}
+
+const char *
+intelgt_process_target::pid_to_exec_file (int pid)
+{
+  return "";
 }
 
 /* The Intel GT target ops object.  */

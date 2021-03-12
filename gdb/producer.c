@@ -103,7 +103,7 @@ producer_is_icc (const char *producer, int *major, int *minor)
       return true;
     }
 
-  return false;
+  return true;
 }
 
 /* See producer.h.  */

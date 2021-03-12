@@ -115,7 +115,7 @@ producer_is_icc (const char *producer, int *major, int *minor)
       return true;
     }
 
-  return false;
+  return true;
 }
 
 /* See producer.h.  */
@@ -140,7 +140,7 @@ producer_parsing_tests ()
     static const char icc_no_version[] = "Intel(R) foo bar";
 
     int major = 0, minor = 0;
-    SELF_CHECK (!producer_is_icc (icc_no_version, &major, &minor));
+    SELF_CHECK (producer_is_icc (icc_no_version, &major, &minor));
     SELF_CHECK (!producer_is_gcc (icc_no_version, &major, &minor));
   }
 

@@ -1,0 +1,60 @@
+# Copyright 2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test the ability to resume the kernel running on an Intel GPU when
+# the schedule-multiple setting is off.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-1D.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {![require_sycl_device "gpu" "Intel*"]} {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set bp [gdb_get_line_number "first-line"]
+gdb_breakpoint "$bp" {temporary}
+gdb_continue_to_breakpoint "the bp" ".*$srcfile:$bp.*"
+
+# The auto-attach script sets schedule-multiple to on.
+# Turn it off and resume the inferiors individually.
+gdb_test_no_output "set schedule-multiple off"
+
+# Switch to the host inferior.  Resume it.  It will wait for
+# kernel termination.
+gdb_test "inferior 1" "Switching to inferior 1.*"
+gdb_test "continue &" "Continuing\." "resume host"
+
+# The other inferior is the kernel.  Resuming it sends to the GT target
+# a resume ptid of the form (P, -1, 0) instead of (-1, 0, 0) because
+# schedule-multiple is off.  This should still be handled fine, all
+# GPU threads should be resumed, and the program should reach
+# termination.
+gdb_test "inferior 2" "Switching to inferior 2.*"
+continue_sycl_program_to_termination

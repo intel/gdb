@@ -1,0 +1,139 @@
+# Copyright 2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+
+if {![can_spawn_for_attach]} {
+    return 0
+}
+
+standard_testfile attach.c
+
+if {[prepare_for_testing "failed to prepare" $testfile $srcfile]} {
+    untested "failed to compile"
+    return -1
+}
+
+set test_spawn_id [spawn_wait_for_attach $binfile]
+set testpid [spawn_id_get_pid $test_spawn_id]
+set fill "\[^\r\n\]+"
+
+# Now test adding an arbitrary number of hidden and unhidden
+# inferiors.
+gdb_test "add-inferior -hidden" "Added inferior -1.*" "add hidden inferior 1"
+gdb_test "add-inferior -hidden" "Added inferior -2.*" "add hidden inferior 2"
+gdb_test "add-inferior -hidden -exec $binfile" "Added inferior -3.*" "add hidden inferior 3"
+gdb_test "add-inferior" "Added inferior 2.*" "add inferior 2"
+gdb_test "add-inferior" "Added inferior 3.*" "add inferior 3"
+gdb_test "add-inferior -hidden" "Added inferior -4.*" "add hidden inferior 4"
+gdb_test "add-inferior" "Added inferior 4.*" "add inferior 4"
+gdb_test "add-inferior -hidden" "Added inferior -5.*" "add hidden inferior 5"
+gdb_test "add-inferior -hidden" "Added inferior -6.*" "add hidden inferior 6"
+gdb_test "add-inferior -hidden" "Added inferior -7.*" "add hidden inferior 7"
+gdb_test "add-inferior" "Added inferior 5.*" "add inferior 5"
+
+gdb_test "info inferiors" \
+    [multi_line \
+	 "Num  Description ${fill}" \
+	 "\\* 1 ${fill}" \
+	 "  2 ${fill}" \
+	 "  3 ${fill}" \
+	 "  4 ${fill}" \
+	 "  5 ${fill}"] \
+    "info inferior does not show the hidden inferiors"
+
+gdb_test "maint info inferiors" \
+    [multi_line \
+	 "Num  Description ${fill}" \
+	 "\\* 1 ${fill}" \
+	 "  -1 ${fill}" \
+	 "  -2 ${fill}" \
+	 "  -3 ${fill}" \
+	 "  2 ${fill}" \
+	 "  3 ${fill}" \
+	 "  -4 ${fill}" \
+	 "  4 ${fill}" \
+	 "  -5 ${fill}" \
+	 "  -6 ${fill}" \
+	 "  -7 ${fill}" \
+	 "  5 ${fill}"] \
+    "maint info inferior shows the hidden inferiors"
+
+# Start the hidden inferior that was created with the "-exec" flag.
+# It should become unhidden.
+gdb_test "inferior -3" "Switching to inferior -3${fill}" \
+    "switch to the hidden exec inf"
+gdb_test "target native"
+if {![runto_main]} {
+    fail "could not run the exec inferior"
+    return
+}
+# We should have become inferior 6.
+gdb_test "print \$_inferior" " = 6"
+
+gdb_test "inferior -2" "Switching to inferior -2${fill}" \
+    "switch to a hidden inf"
+gdb_test "attach ${testpid}" "New inferior 7.*" "attach"
+
+gdb_test "info inferiors" \
+    [multi_line \
+	 "Num  Description ${fill}" \
+	 "  1 ${fill}" \
+	 "  2 ${fill}" \
+	 "  3 ${fill}" \
+	 "  4 ${fill}" \
+	 "  5 ${fill}" \
+	 "  6 ${fill}" \
+	 "\\* 7 ${fill}process${fill}"] \
+    "info inferiors after attach"
+
+gdb_test "maint info inferiors" \
+    [multi_line \
+	 "Num  Description ${fill}" \
+	 "  1 ${fill}" \
+	 "  -1 ${fill}" \
+	 "  2 ${fill}" \
+	 "  3 ${fill}" \
+	 "  -4 ${fill}" \
+	 "  4 ${fill}" \
+	 "  -5 ${fill}" \
+	 "  -6 ${fill}" \
+	 "  -7 ${fill}" \
+	 "  5 ${fill}" \
+	 "  6 ${fill}" \
+	 "\\* 7 ${fill}process${fill}"] \
+    "maint info inferiors after attach"
+
+# Test negative argument.
+gdb_test "maint info inferiors -4" \
+    [multi_line \
+	 "Num  Description ${fill}" \
+	 "  -4 ${fill}"] \
+    "maint info inferiors with negative argument"
+
+gdb_test_no_output "remove-inferiors -6"
+gdb_test "maint info inferiors" \
+    [multi_line \
+	 "Num  Description ${fill}" \
+	 "  1 ${fill}" \
+	 "  -1 ${fill}" \
+	 "  2 ${fill}" \
+	 "  3 ${fill}" \
+	 "  -4 ${fill}" \
+	 "  4 ${fill}" \
+	 "  -5 ${fill}" \
+	 "  -7 ${fill}" \
+	 "  5 ${fill}" \
+	 "  6 ${fill}" \
+	 "\\* 7 ${fill}process${fill}"] \
+    "maint info inferiors after removal"

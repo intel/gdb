@@ -403,7 +403,7 @@ class inferior : public refcounted_object,
 		 public intrusive_list_node<inferior>
 {
 public:
-  explicit inferior (int pid);
+  explicit inferior (int pid, bool hidden = false);
   ~inferior ();
 
   /* Returns true if we can delete this inferior.  */
@@ -565,7 +565,7 @@ public:
   }
 
   /* Convenient handle (GDB inferior id).  Unique across all
-     inferiors.  */
+     inferiors.  Negative for hidden inferiors.  */
   int num = 0;
 
   /* Actual target inferior id, usually, a process id.  This matches
@@ -704,11 +704,11 @@ private:
    inferior is found, and return the pointer to the new inferior.
    Caller may use this pointer to initialize the private inferior
    data.  */
-extern struct inferior *add_inferior (int pid);
+extern struct inferior *add_inferior (int pid, bool hidden = false);
 
 /* Same as add_inferior, but don't print new inferior notifications to
    the CLI.  */
-extern struct inferior *add_inferior_silent (int pid);
+extern struct inferior *add_inferior_silent (int pid, bool hidden = false);
 
 extern void delete_inferior (struct inferior *todel);
 
@@ -850,7 +850,7 @@ extern void prune_inferiors (void);
 
 extern int number_of_inferiors (void);
 
-extern struct inferior *add_inferior_with_spaces (void);
+extern struct inferior *add_inferior_with_spaces (bool hidden = false);
 
 /* Print the current selected inferior.  */
 extern void print_selected_inferior (struct ui_out *uiout);

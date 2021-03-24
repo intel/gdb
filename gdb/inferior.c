@@ -42,9 +42,12 @@
 #include <map>
 #include <tuple>
 #include <algorithm>
+#include <vector>
+
 
 intrusive_list<inferior> inferior_list;
 static int highest_inferior_num;
+static int lowest_hidden_inferior_num = 0;
 
 /* See inferior.h.  */
 bool print_inferior_events = true;
@@ -88,8 +91,8 @@ inferior::~inferior ()
   target_desc_info_free (inf->tdesc_info);
 }
 
-inferior::inferior (int pid_)
-  : num (++highest_inferior_num),
+inferior::inferior (int pid_, bool hidden)
+  : num (hidden ? --lowest_hidden_inferior_num : ++highest_inferior_num),
     pid (pid_),
     environment (gdb_environ::from_host_environ ())
 {
@@ -189,9 +192,9 @@ inferior::do_all_continuations ()
 }
 
 struct inferior *
-add_inferior_silent (int pid)
+add_inferior_silent (int pid, bool hidden)
 {
-  inferior *inf = new inferior (pid);
+  inferior *inf = new inferior (pid, hidden);
 
   inferior_list.push_back (*inf);
 
@@ -204,9 +207,9 @@ add_inferior_silent (int pid)
 }
 
 struct inferior *
-add_inferior (int pid)
+add_inferior (int pid, bool hidden)
 {
-  struct inferior *inf = add_inferior_silent (pid);
+  struct inferior *inf = add_inferior_silent (pid, hidden);
 
   if (print_inferior_events)
     {
@@ -322,6 +325,24 @@ detach_inferior (inferior *inf)
 		target_pid_to_str (ptid_t (pid)).c_str ());
 }
 
+/* Unhide INF by moving it to the end and assigning a positive num.  */
+
+static void
+unhide_inferior (inferior *inf)
+{
+  if (inf->num > 0)
+    return;
+
+  auto it = inferior_list.iterator_to (*inf);
+  inferior_list.erase (it);
+
+  inf->num = ++highest_inferior_num;
+
+  inferior_list.push_back (*inf);
+
+  gdb_printf (_("[New inferior %d]\n"), inf->num);
+}
+
 void
 inferior_appeared (struct inferior *inf, int pid)
 {
@@ -331,6 +352,7 @@ inferior_appeared (struct inferior *inf, int pid)
   if (!any_thread_p ())
     init_thread_list ();
 
+  unhide_inferior (inf);
   inf->pid = pid;
   inf->has_exit_code = false;
   inf->exit_code = 0;
@@ -523,16 +545,25 @@ uiout_field_connection (process_stratum_target *proc_target)
    printed.  */
 
 static void
-print_inferior (struct ui_out *uiout, const char *requested_inferiors)
+print_inferior (struct ui_out *uiout, const char *requested_inferiors,
+		bool show_hidden = false)
 {
-  int inf_count = 0;
   size_t connection_id_len = 20;
 
   bool device_in_inferiors = false;
   /* Compute number of inferiors we will print.  */
+  std::vector<inferior *> inferiors_to_print;
   for (inferior *inf : all_inferiors ())
     {
-      if (!number_is_in_list (requested_inferiors, inf->num))
+      if (!show_hidden
+	  && (inf->num < 0
+	      || !number_is_in_list (requested_inferiors, inf->num)))
+	continue;
+
+      if (show_hidden
+	  && requested_inferiors != nullptr
+	  && *requested_inferiors != '\0'
+	  && parse_and_eval_long (requested_inferiors) != inf->num)
 	continue;
 
       std::string conn = uiout_field_connection (inf->process_target ());
@@ -544,16 +575,17 @@ print_inferior (struct ui_out *uiout, const char *requested_inferiors)
       device_in_inferiors = (device_in_inferiors
 			     || gdbarch_is_inferior_device (inf->gdbarch));
 
-      ++inf_count;
+      inferiors_to_print.push_back (inf);
     }
 
-  if (inf_count == 0)
+  if (inferiors_to_print.size () == 0)
     {
       uiout->message ("No inferiors.\n");
       return;
     }
 
-  ui_out_emit_table table_emitter (uiout, 5, inf_count, "inferiors");
+  ui_out_emit_table table_emitter (uiout, 5, inferiors_to_print.size (),
+				   "inferiors");
   uiout->table_header (1, ui_left, "current", "");
   uiout->table_header (4, ui_left, "number", "Num");
   uiout->table_header (24, ui_left, "target-id", "Description");
@@ -567,11 +599,8 @@ print_inferior (struct ui_out *uiout, const char *requested_inferiors)
      inferior in the loop.  */
   scoped_restore_current_pspace_and_thread restore_pspace_thread;
   const inferior *current_inf = current_inferior ();
-  for (inferior *inf : all_inferiors ())
+  for (inferior *inf : inferiors_to_print)
     {
-      if (!number_is_in_list (requested_inferiors, inf->num))
-	continue;
-
       ui_out_emit_tuple tuple_emitter (uiout, nullptr);
 
       if (inf == current_inf)
@@ -775,6 +804,15 @@ info_inferiors_command (const char *args, int from_tty)
   print_inferior (current_uiout, args);
 }
 
+/* Print information about currently known inferiors,
+   including hidden ones.  */
+
+static void
+maintenance_info_inferiors (const char *args, int from_tty)
+{
+  print_inferior (current_uiout, args, true);
+}
+
 /* Remove the inferior whose number is NUM.  */
 static void
 remove_inferior_with_number (int num)
@@ -810,6 +848,14 @@ remove_inferior_command (const char *args, int from_tty)
   if (args == NULL || *args == '\0')
     error (_("Requires an argument (inferior id(s) to remove)"));
 
+  if (*args == '-')
+    {
+      /* This must be a negative number.  */
+      LONGEST num = parse_and_eval_long (args);
+      remove_inferior_with_number (num);
+      return;
+    }
+
   number_or_range_parser parser (args);
   while (!parser.finished ())
     {
@@ -823,7 +869,7 @@ remove_inferior_command (const char *args, int from_tty)
 }
 
 struct inferior *
-add_inferior_with_spaces (void)
+add_inferior_with_spaces (bool hidden)
 {
   struct address_space *aspace;
   struct program_space *pspace;
@@ -834,7 +880,7 @@ add_inferior_with_spaces (void)
      really does.  */
   aspace = maybe_new_address_space ();
   pspace = new program_space (aspace);
-  inf = add_inferior (0);
+  inf = add_inferior (0, hidden);
   inf->pspace = pspace;
   inf->aspace = pspace->aspace;
 
@@ -874,7 +920,7 @@ switch_to_inferior_and_push_target (inferior *new_inf,
     gdb_printf (_("Added inferior %d\n"), new_inf->num);
 }
 
-/* add-inferior [-copies N] [-exec FILENAME] [-no-connection] */
+/* add-inferior [-copies N] [-exec FILENAME] [-no-connection] [-hidden] */
 
 static void
 add_inferior_command (const char *args, int from_tty)
@@ -883,6 +929,7 @@ add_inferior_command (const char *args, int from_tty)
   gdb::unique_xmalloc_ptr<char> exec;
   symfile_add_flags add_flags = 0;
   bool no_connection = false;
+  bool hidden = false;
 
   if (from_tty)
     add_flags |= SYMFILE_VERBOSE;
@@ -904,6 +951,8 @@ add_inferior_command (const char *args, int from_tty)
 		}
 	      else if (strcmp (*argv, "-no-connection") == 0)
 		no_connection = true;
+	      else if (strcmp (*argv, "-hidden") == 0)
+		hidden = true;
 	      else if (strcmp (*argv, "-exec") == 0)
 		{
 		  ++argv;
@@ -923,7 +972,7 @@ add_inferior_command (const char *args, int from_tty)
 
   for (i = 0; i < copies; ++i)
     {
-      inferior *inf = add_inferior_with_spaces ();
+      inferior *inf = add_inferior_with_spaces (hidden);
 
       switch_to_inferior_and_push_target (inf, no_connection, orginf);
 
@@ -1243,15 +1292,24 @@ Usage: info inferiors [ID]...\n\
 If IDs are specified, the list is limited to just those inferiors.\n\
 By default all inferiors are displayed."));
 
+  add_cmd ("inferiors", class_maintenance, maintenance_info_inferiors, _("\
+Print a list of inferiors being managed, including hidden ones.\n\
+Usage: maint info inferiors [ID]\n\
+If ID is specified, the list is limited to just that inferior.  The ID\n\
+can be a negative value.  By default all inferiors are displayed."),
+	   &maintenanceinfolist);
+
   c = add_com ("add-inferior", no_class, add_inferior_command, _("\
 Add a new inferior.\n\
-Usage: add-inferior [-copies N] [-exec FILENAME] [-no-connection]\n\
+Usage: add-inferior [-copies N] [-exec FILENAME] [-no-connection] [-hidden]\n\
 N is the optional number of inferiors to add, default is 1.\n\
 FILENAME is the file name of the executable to use\n\
 as main program.\n\
 By default, the new inferior inherits the current inferior's connection.\n\
 If -no-connection is specified, the new inferior begins with\n\
-no target connection yet."));
+no target connection yet.\n\
+If -hidden is specified, the inferior stays hidden until it receives\n\
+a stop event from its target."));
   set_cmd_completer (c, filename_completer);
 
   add_com ("remove-inferiors", no_class, remove_inferior_command, _("\

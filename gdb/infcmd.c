@@ -2523,30 +2523,6 @@ attach_post_wait (int from_tty, enum attach_post_wait_mode mode)
     }
 }
 
-struct attach_command_continuation_args
-{
-  int from_tty;
-  enum attach_post_wait_mode mode;
-};
-
-static void
-attach_command_continuation (void *args)
-{
-  struct attach_command_continuation_args *a
-    = (struct attach_command_continuation_args *) args;
-
-  attach_post_wait (a->from_tty, a->mode);
-}
-
-static void
-attach_command_continuation_free_args (void *args)
-{
-  struct attach_command_continuation_args *a
-    = (struct attach_command_continuation_args *) args;
-
-  xfree (a);
-}
-
 /* "attach" command entry point.  Takes a program started up outside
    of gdb and ``attaches'' to it.  This stops it cold in its tracks
    and allows us to start debugging it.  */
@@ -2642,8 +2618,6 @@ attach_command (const char *args, int from_tty)
      E.g. Mach 3 or GNU hurd.  */
   if (!target_attach_no_wait ())
     {
-      struct attach_command_continuation_args *a;
-
       /* Careful here.  See comments in inferior.h.  Basically some
 	 OSes don't ignore SIGSTOPs on continue requests anymore.  We
 	 need a way for handle_inferior_event to reset the stop_signal
@@ -2652,11 +2626,10 @@ attach_command (const char *args, int from_tty)
       inferior->control.stop_soon = STOP_QUIETLY_NO_SIGSTOP;
 
       /* Wait for stop.  */
-      a = XNEW (struct attach_command_continuation_args);
-      a->from_tty = from_tty;
-      a->mode = mode;
-      add_inferior_continuation (attach_command_continuation, a,
-				 attach_command_continuation_free_args);
+      add_inferior_continuation ([=] ()
+	{
+	  attach_post_wait (from_tty, mode);
+	});
 
       /* Let infrun consider waiting for events out of this
 	 target.  */
@@ -2698,7 +2671,6 @@ notice_new_inferior (thread_info *thr, int leave_running, int from_tty)
 
   if (thr->executing)
     {
-      struct attach_command_continuation_args *a;
       struct inferior *inferior = current_inferior ();
 
       /* We're going to install breakpoints, and poke at memory,
@@ -2709,11 +2681,10 @@ notice_new_inferior (thread_info *thr, int leave_running, int from_tty)
       inferior->control.stop_soon = STOP_QUIETLY_REMOTE;
 
       /* Wait for stop before proceeding.  */
-      a = XNEW (struct attach_command_continuation_args);
-      a->from_tty = from_tty;
-      a->mode = mode;
-      add_inferior_continuation (attach_command_continuation, a,
-				 attach_command_continuation_free_args);
+      add_inferior_continuation ([=] ()
+	{
+	  attach_post_wait (from_tty, mode);
+	});
 
       return;
     }

@@ -2510,7 +2510,7 @@ get_machine_name (unsigned e_machine)
       /* 180 */
     case EM_L1OM:		return "Intel L1OM";
     case EM_K1OM:		return "Intel K1OM";
-    case EM_INTELGT:		return "Intel(R) Graphics Technology";
+    case EM_INTELGT_DCD:	return "Intel(R) Graphics Technology (DCD)";
     case EM_AARCH64:		return "AArch64";
     case EM_ARM184:		return "ARM (reserved)";
     case EM_AVR32:		return "Atmel Corporation 32-bit microprocessor";

@@ -294,7 +294,7 @@
 #define EM_SLE9X	179	/* Infineon Technologies SLE9X core */
 #define EM_L1OM		180	/* Intel L1OM */
 #define EM_K1OM		181	/* Intel K1OM */
-#define EM_INTELGT	182	/* Intel(R) Graphics Technology */
+#define EM_INTELGT_DCD	182	/* Intel(R) Graphics Technology (DCD) */
 #define EM_AARCH64	183	/* ARM 64-bit architecture */
 #define EM_ARM184	184	/* Reserved by ARM */
 #define EM_AVR32	185	/* Atmel Corporation 32-bit microprocessor family */

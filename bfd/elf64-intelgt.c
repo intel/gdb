@@ -38,7 +38,7 @@ elf64_intelgt_elf_object_p (bfd *abfd)
 #define TARGET_LITTLE_SYM		    intelgt_elf64_vec
 #define TARGET_LITTLE_NAME		    "elf64-intelgt"
 #define ELF_ARCH			    bfd_arch_intelgt
-#define ELF_MACHINE_CODE		    EM_INTELGT
+#define ELF_MACHINE_CODE		    EM_INTELGT_DCD
 
 #define	ELF_OSABI			    0
 

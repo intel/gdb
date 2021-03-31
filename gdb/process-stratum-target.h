@@ -107,6 +107,10 @@ public:
   thread_info *random_resumed_with_pending_wait_status
     (inferior *inf, ptid_t filter_ptid);
 
+  /* True if this target is pending an attach to a process that will/may
+     appear in future.  */
+  bool pending_attach = false;
+
   /* The connection number.  Visible in "info connections".  */
   int connection_number = 0;
 

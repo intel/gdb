@@ -306,7 +306,11 @@ attach_inferior (int pid)
   if (myattach (pid) != 0)
     return -1;
 
-  fprintf (stderr, "Attached; pid = %d\n", pid);
+  if (pid != 0)
+    fprintf (stderr, "Attached; pid = %d\n", pid);
+  else
+    fprintf (stderr, "Will listen for an attached process\n");
+
   fflush (stderr);
 
   /* FIXME - It may be that we should get the SIGNAL_PID from the
@@ -314,7 +318,12 @@ attach_inferior (int pid)
      whichever we were told to attach to.  */
   signal_pid = pid;
 
-  if (!non_stop)
+  if (!non_stop && pid == 0)
+    {
+      cs.last_status.kind = TARGET_WAITKIND_NO_RESUMED;
+      cs.last_ptid = minus_one_ptid;
+    }
+  else if (!non_stop)
     {
       cs.last_ptid = mywait (ptid_t (pid), &cs.last_status, 0, 0);
 
@@ -2932,13 +2941,14 @@ handle_v_attach (char *own_buf)
   int pid;
 
   pid = strtol (own_buf + 8, NULL, 16);
-  if (pid != 0 && attach_inferior (pid) == 0)
+  if (attach_inferior (pid) == 0)
     {
       /* Don't report shared library events after attaching, even if
 	 some libraries are preloaded.  GDB will always poll the
 	 library list.  Avoids the "stopped by shared library event"
 	 notice on the GDB side.  */
-      current_process ()->dlls_changed = false;
+      if (pid != 0)
+	current_process ()->dlls_changed = false;
 
       if (non_stop)
 	{

@@ -3171,6 +3171,21 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 
   commit_resume_all_targets ();
 
+  /* The targets that are pending attach are treated separately.  */
+  for (process_stratum_target *target : all_process_targets ())
+    {
+      if (resume_target != nullptr && resume_target != target)
+	continue;
+      if (!target->pending_attach)
+	continue;
+
+      switch_to_target_no_thread (target);
+      target_resume (minus_one_ptid, 0, GDB_SIGNAL_0);
+      target_commit_resume ();
+      if (target_can_async_p ())
+	target_async (1);
+    }
+
   finish_state.release ();
 
   /* If we've switched threads above, switch back to the previously
@@ -4761,6 +4776,20 @@ stop_all_threads (void)
 	      update_thread_list ();
 	    }
 
+	  /* The targets that are pending attach are treated
+	     separately.  They don't yet have a running process.  */
+	  for (auto *target : all_process_targets ())
+	    {
+	      switch_to_target_no_thread (target);
+	      if (target->pending_attach && target->threads_executing)
+		{
+		  infrun_debug_printf ("  connection %d needs stop",
+				       target->connection_number);
+		  target_stop (minus_one_ptid);
+		  waits_needed++;
+		}
+	    }
+
 	  /* Go through all threads looking for threads that we need
 	     to tell the target to stop.  */
 	  for (thread_info *t : all_non_exited_threads ())
@@ -4852,11 +4881,11 @@ stop_all_threads (void)
 		     were getting the NO_RESUMED waitkind that led to infinite
 		     looping.  The loop below is an attempt to avoid such a
 		     scenario.  */
-		  for (auto *target : all_non_exited_process_targets ())
+		  for (auto *target : all_process_targets ())
 		    {
 		      switch_to_target_no_thread (target);
 		      mark_non_executing_threads (target, minus_one_ptid,
-		      event.ws);
+						  event.ws);
 		    }
 
 		  break;
@@ -5003,6 +5032,10 @@ stop_all_threads (void)
 static int
 handle_no_resumed (struct execution_control_state *ecs)
 {
+  /* A target with a pending attach request always reports the event.  */
+  if (ecs->target->pending_attach)
+    return 0;
+
   if (target_can_async_p ())
     {
       int any_sync = 0;
@@ -5193,6 +5226,9 @@ handle_inferior_event (struct execution_control_state *ecs)
     {
       /* No unwaited-for children left.  IOW, all resumed children
 	 have exited.  */
+      if (ecs->target->pending_attach)
+	ecs->target->threads_executing = false;
+
       stop_print_frame = 0;
       stop_waiting (ecs);
       return;
@@ -8538,7 +8574,8 @@ normal_stop (void)
 	}
     }
 
-  if (last.kind == TARGET_WAITKIND_NO_RESUMED)
+  if (last.kind == TARGET_WAITKIND_NO_RESUMED
+      && !current_inferior ()->process_target ()->pending_attach)
     {
       SWITCH_THRU_ALL_UIS ()
 	if (current_ui->prompt_state == PROMPT_BLOCKED)

@@ -1134,6 +1134,10 @@ linux_process_target::attach (unsigned long pid)
 {
   struct process_info *proc;
   struct thread_info *initial_thread;
+
+  if (pid == 0)
+    return -1; /* Unsupported.  */
+
   ptid_t ptid = ptid_t (pid, pid, 0);
   int err;
 

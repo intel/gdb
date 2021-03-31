@@ -161,6 +161,11 @@ proc_with_prefix do_attach_failure_tests {} {
 	    # Response expected on the extended-remote target.
 	    pass "$test"
 	}
+	-re "Registering to .* process $boguspid failed.*$gdb_prompt $" {
+	    # Response expected on the extended-remote target with
+	    # pending attach.
+	    pass "$test"
+	}
     }
     
     # Verify that we can't double attach to the process.

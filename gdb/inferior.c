@@ -322,6 +322,8 @@ inferior_appeared (struct inferior *inf, int pid)
   inf->pid = pid;
   inf->has_exit_code = 0;
   inf->exit_code = 0;
+  if (inf->process_target () != nullptr)
+    inf->process_target ()->pending_attach = false;
 
   gdb::observers::inferior_appeared.notify (inf);
 }

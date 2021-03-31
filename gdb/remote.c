@@ -6011,7 +6011,10 @@ extended_remote_target::attach (const char *args, int from_tty)
     {
       const char *exec_file = get_exec_file (0);
 
-      if (exec_file)
+      if (pid == 0)
+	printf_unfiltered (_("Registering to the target for an attached "
+			     "process\n"));
+      else if (exec_file)
 	printf_unfiltered (_("Attaching to program: %s, %s\n"), exec_file,
 			   target_pid_to_str (ptid_t (pid)).c_str ());
       else
@@ -6045,38 +6048,42 @@ extended_remote_target::attach (const char *args, int from_tty)
 	     target_pid_to_str (ptid_t (pid)).c_str ());
     }
 
-  switch_to_inferior_no_thread (remote_add_inferior (false, pid, 1, 0));
-
-  inferior_ptid = ptid_t (pid);
-
-  if (target_is_non_stop_p ())
+  if (pid != 0)
     {
-      /* Get list of threads.  */
-      update_thread_list ();
+      switch_to_inferior_no_thread (remote_add_inferior (false, pid, 1, 0));
 
-      thread_info *thread = first_thread_of_inferior (current_inferior ());
-      if (thread != nullptr)
-	switch_to_thread (thread);
+      inferior_ptid = ptid_t (pid);
 
-      /* Invalidate our notion of the remote current thread.  */
-      record_currthread (rs, minus_one_ptid);
+      if (target_is_non_stop_p ())
+	{
+	  /* Get list of threads.  */
+	  update_thread_list ();
+
+	  thread_info *thread
+	    = first_thread_of_inferior (current_inferior ());
+	  if (thread != nullptr)
+	    switch_to_thread (thread);
+
+	  /* Invalidate our notion of the remote current thread.  */
+	  record_currthread (rs, minus_one_ptid);
+	}
+      else
+	{
+	  /* Now, if we have thread information, update the main thread's
+	     ptid.  */
+	  ptid_t curr_ptid = remote_current_thread (ptid_t (pid));
+
+	  /* Add the main thread to the thread list.  We add the thread
+	     silently in this case (the final true parameter).  */
+	  thread_info *thr = remote_add_thread (curr_ptid, true, true, true);
+
+	  switch_to_thread (thr);
+	}
+
+      /* Next, if the target can specify a description, read it.  We do
+	 this before anything involving memory or registers.  */
+      target_find_description ();
     }
-  else
-    {
-      /* Now, if we have thread information, update the main thread's
-	 ptid.  */
-      ptid_t curr_ptid = remote_current_thread (ptid_t (pid));
-
-      /* Add the main thread to the thread list.  We add the thread
-	 silently in this case (the final true parameter).  */
-      thread_info *thr = remote_add_thread (curr_ptid, true, true, true);
-
-      switch_to_thread (thr);
-    }
-
-  /* Next, if the target can specify a description, read it.  We do
-     this before anything involving memory or registers.  */
-  target_find_description ();
 
   if (!target_is_non_stop_p ())
     {
@@ -6098,6 +6105,15 @@ extended_remote_target::attach (const char *args, int from_tty)
 	  strcpy (rs->buf.data (), wait_status);
 	  rs->cached_wait_status = 1;
 	}
+    }
+  else if (pid == 0)
+    {
+      /* Put a fake reply packet into the queue to make GDB proceed.  */
+      const char *fake_reply = "N";
+      notif_event *reply
+	= remote_notif_parse (this, &notif_client_stop, fake_reply);
+      push_stop_reply ((stop_reply *) reply);
+      target_async (1);
     }
   else
     {

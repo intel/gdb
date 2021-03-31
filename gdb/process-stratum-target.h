@@ -70,6 +70,10 @@ public:
      may have spawned new threads we haven't heard of yet.  */
   bool threads_executing = false;
 
+  /* True if this target is pending an attach to a process that will/may
+     appear in future.  */
+  bool pending_attach = false;
+
   /* The connection number.  Visible in "info connections".  */
   int connection_number = 0;
 };

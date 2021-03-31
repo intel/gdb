@@ -648,6 +648,17 @@ continue_1 (int all_threads)
 
       iterate_over_threads (proceed_thread_callback, NULL);
 
+      /* The targets that are pending attach do not have any threads,
+	 yet.  Let infrun consider waiting for events out of them.  */
+      for (process_stratum_target *target : all_process_targets ())
+	{
+	  if (!target->pending_attach)
+	    continue;
+
+	  switch_to_target_no_thread (target);
+	  current_inferior ()->process_target ()->threads_executing = true;
+	}
+
       if (current_ui->prompt_state == PROMPT_BLOCKED)
 	{
 	  /* If all threads in the target were already running,
@@ -2605,7 +2616,11 @@ attach_command (const char *args, int from_tty)
 
   inferior->needs_setup = 1;
 
-  if (target_is_non_stop_p ())
+  int pid = parse_pid_to_attach (args);
+  if (pid == 0)
+    inferior->process_target ()->pending_attach = true;
+
+  if (target_is_non_stop_p () && pid != 0)
     {
       /* If we find that the current thread isn't stopped, explicitly
 	 do so now, because we're going to install breakpoints and
@@ -2621,7 +2636,8 @@ attach_command (const char *args, int from_tty)
     }
 
   /* Check for exec file mismatch, and let the user solve it.  */
-  validate_exec_file (from_tty);
+  if (pid != 0)
+    validate_exec_file (from_tty);
 
   mode = async_exec ? ATTACH_POST_WAIT_RESUME : ATTACH_POST_WAIT_STOP;
 
@@ -2637,10 +2653,11 @@ attach_command (const char *args, int from_tty)
       inferior->control.stop_soon = STOP_QUIETLY_NO_SIGSTOP;
 
       /* Wait for stop.  */
-      inferior->add_continuation ([=] ()
-	{
-	  attach_post_wait (from_tty, mode);
-	});
+      if (pid != 0)
+	inferior->add_continuation ([=] ()
+	  {
+	    attach_post_wait (from_tty, mode);
+	  });
 
       /* Let infrun consider waiting for events out of this
 	 target.  */

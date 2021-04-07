@@ -40,4 +40,7 @@ gdb_continue_to_breakpoint "break@foo_first_line"
 gdb_breakpoint "$foo_last_line"
 
 # We should hit the last line of the function foo.
+if {[require_sycl_device "gpu" "Intel*"]} {
+    setup_kfail "JIRA DOQG/1600" "*-*-*"
+}
 gdb_continue_to_breakpoint "break@foo_last_line" ".*$srcfile:$foo_last_line.*"

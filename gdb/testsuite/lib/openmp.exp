@@ -18,6 +18,10 @@
 # Return compiler flags for OpenMP.
 load_lib fortran.exp
 
+if {![info exists openmp_device_generation]} {
+    set openmp_device_generation ""
+}
+
 proc openmp_compilation_options {extension} {
     set flags "additional_flags=-fiopenmp \
 	    additional_flags=-O0 \
@@ -49,6 +53,8 @@ gdb_caching_proc skip_openmp_tests {
     global srcdir gdb_prompt subdir
     global inferior_exited_re
     global env
+    global decimal
+    global openmp_device_generation
 
     if {![info exists openmp_program_extension]} {
 	verbose "openmp_program_extension board info is not configured"
@@ -71,6 +77,10 @@ gdb_caching_proc skip_openmp_tests {
     set test "Test OpenMP support"
     set result 1
     gdb_test_multiple "run" $test {
+	-re "\\\((Gen$decimal)\\\)" {
+	    set openmp_device_generation $expect_out(1,string)
+	    exp_continue
+	}
 	-re "$inferior_exited_re normally].*$gdb_prompt $" {
 	    verbose "OpenMP: Support detected" 0
 	    set result 0
@@ -93,6 +103,18 @@ gdb_caching_proc skip_openmp_tests {
     gdb_exit
 
     return $result
+}
+
+# Return non-zero if the device is Gen12.
+
+gdb_caching_proc is_gen12 {
+    global openmp_device_generation
+
+    if {[string match "Gen12" $openmp_device_generation]} {
+	return 1;
+    }
+
+    return 0;
 }
 
 # Issue a 'continue' command and expect to see program termination.

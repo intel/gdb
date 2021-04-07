@@ -707,7 +707,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, intelgt_dwarf_reg_to_regnum);
 
   set_gdbarch_skip_prologue (gdbarch, intelgt_skip_prologue);
-  set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
+  set_gdbarch_inner_than (gdbarch, core_addr_greaterthan);
   set_gdbarch_unwind_pc (gdbarch, intelgt_unwind_pc);
   dwarf2_append_unwinders (gdbarch);
   frame_unwind_append_unwinder (gdbarch, &intelgt_unwinder);

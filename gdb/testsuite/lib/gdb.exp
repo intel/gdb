@@ -8744,7 +8744,7 @@ gdb_caching_proc has_hw_wp_support {
 # MESSAGE is an optional message to be printed.  If this is
 #   omitted, then the pass/fail messages use "EXPR_1 == EXPR_2".
 #
-proc gdb_test_expr_eq { expr_1 expr_2 { message "" } } {
+proc gdb_test_expr_eq { expr_1 expr_2 { message "" } { known_fail "" }} {
     global gdb_prompt
 
     if { $message eq "" } {
@@ -8783,6 +8783,7 @@ proc gdb_test_expr_eq { expr_1 expr_2 { message "" } } {
 	}
     }
 
+    if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
     if { $res_1 eq $res_2 } {
 	pass $message
     } else {

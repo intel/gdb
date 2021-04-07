@@ -70,6 +70,7 @@ if {[require_sycl_device "gpu" "Intel*"]} {
     gdb_test_no_output "set stop-on-solib-events 1"
     gdb_test "continue" "Stopped due to shared library event.*" \
 	"continue until solib load"
+    kfail "JIRA DOQG/2492" "stop-on-solib-events needed for kernel symbol BP"
 }
 
 gdb_breakpoint $kernel_symbol {allow-pending}

@@ -41,11 +41,6 @@ if { [start_sycl_program] < 0 } {
     return -1
 }
 
-set selected_sycl_device [continue_and_get_device_name]
-if {[string match "Intel*Gen12*" $selected_sycl_device]} {
-    unsupported "test is not supported on Gen12"
-    return 0
-}
 set first_line [gdb_get_line_number "kernel-first-line"]
 set second_line [gdb_get_line_number "kernel-second-line"]
 set condition_line [gdb_get_line_number "kernel-condition-line-1"]

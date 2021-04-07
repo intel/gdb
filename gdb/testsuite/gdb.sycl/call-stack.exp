@@ -54,6 +54,9 @@ set inlined_outer_desc \
 
 # Test breaking on function names inside the kernel.
 gdb_breakpoint "first"
+if {[require_sycl_device "gpu" "Intel*"]} {
+    setup_kfail "JIRA CMPLRXDEPS/797" "*-*-*"
+}
 gdb_continue_to_breakpoint "break_at_first" ".*$srcfile:$middle_loc.*"
 
 # Set breakpoint inside the kernel.

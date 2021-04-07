@@ -87,7 +87,15 @@ proc test {location dim0val {condition ""}} {
 
     gdb_test "print dim0" " = $dim0val"
 
-    continue_sycl_program_to_termination
+    global inferior_exited_re
+    gdb_test_multiple "continue -a" "continue to end" {
+	-re "$inferior_exited_re normally].*$gdb_prompt.*" {
+	    pass $gdb_test_name
+	}
+	-re "Element 37 is .*$inferior_exited_re with code 01].*$gdb_prompt.*" {
+	    kfail "JIRA DOQG/2318" $gdb_test_name
+	}
+    }
 }
 
 with_test_prefix "guarded stmt" {

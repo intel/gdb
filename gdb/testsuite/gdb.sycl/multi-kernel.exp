@@ -48,8 +48,13 @@ gdb_continue_to_breakpoint "hit the BP in kernel 1" \
 gdb_continue_to_breakpoint "hit the BP in-between kernels" \
     ".*$srcfile:$inbetween.*"
 
-gdb_continue_to_breakpoint "hit the BP in kernel 2" \
-    ".*$srcfile:$kernel_2.*"
-
-gdb_continue_to_breakpoint "hit the BP post-kernel" \
-    ".*$srcfile:$post_kernel.*"
+gdb_test_multiple "continue" "hit the BP in kernel 2" {
+    -re -wrap "Temporary breakpoint.*$srcfile:$kernel_2.*" {
+	pass $gdb_test_name
+	gdb_continue_to_breakpoint "hit the BP post-kernel" \
+	    ".*$srcfile:$post_kernel.*"
+    }
+    -re -wrap "Breakpoint.*$srcfile:$post_kernel.*" {
+	kfail "JIRA DOQG/2399" $gdb_test_name
+    }
+}

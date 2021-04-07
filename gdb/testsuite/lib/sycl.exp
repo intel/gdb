@@ -25,6 +25,18 @@
 # function in gdb.sycl/sycl-util.cpp.  See gdb.sycl/sycl-hello.cpp
 # for a sample SYCL program setup.
 
+# Define global variables for the driver version and platform.
+
+if {![info exists sycl_driver_version]} {
+    set sycl_driver_version ""
+}
+if {![info exists sycl_driver_platform]} {
+    set sycl_driver_platform ""
+}
+if {![info exists sycl_selected_device]} {
+    set sycl_selected_device ""
+}
+
 # Return compiler flags for SYCL.
 
 proc sycl_compilation_options {options} {
@@ -94,6 +106,9 @@ proc require_sycl_device {type name} {
 gdb_caching_proc skip_sycl_tests {
     global srcdir objdir subdir gdb_prompt
     global inferior_exited_re
+    global sycl_selected_device
+    global sycl_driver_version
+    global sycl_driver_platform
     global device_type device_name
 
     if {![info exists device_type] || ![info exists device_name]} {
@@ -122,6 +137,9 @@ gdb_caching_proc skip_sycl_tests {
 	    set platform $expect_out(2,string)
 	    set version $expect_out(3,string)
 	    verbose "SYCL: Selected device is '${dev}' from '${platform}' version '${version}'" 0
+	    set sycl_selected_device $dev
+	    set sycl_driver_version $version
+	    set sycl_driver_platform $platform
 	    exp_continue
 	}
 	-re -wrap "$inferior_exited_re normally].*" {
@@ -143,35 +161,45 @@ gdb_caching_proc skip_sycl_tests {
     return $result
 }
 
-# Continue an already-started program until the point where the device
-# is selected, and return the selected device name.
+# Return non-zero, if we are runing at Level-Zero.
 
-proc continue_and_get_device_name {} {
-    global gdb_prompt
-    global decimal hex
+proc is_level_zero {} {
+    global sycl_driver_platform
+    return [regexp {.*(Level-Zero)} $sycl_driver_platform]
+}
 
-    set bp [gdb_get_line_number "return-sycl-queue" "../lib/sycl-util.cpp"]
-    gdb_breakpoint "sycl-util.cpp:$bp" {temporary}
+# Return non-zero, if we are runing on OpenCL.
 
-    set selected_sycl_device ""
-    set selected_gdbgt_device ""
-    gdb_test_multiple "continue" "continue to fetch selected device" {
-	-re "intelgt: attached to device with id $hex \\\((Gen$decimal)\\\)\r\n" {
-	    set selected_gdbgt_device $expect_out(1,string)
-	    exp_continue
-	}
-	-re "SYCL: Using device: \\\[(\[^\r\n\]*)\\\] from \\\[(\[^\r\n\]*)\\\]\r\n" {
-	    set selected_sycl_device $expect_out(1,string)
-	    set selected_sycl_platform $expect_out(1,string)
-	    exp_continue
-	}
-	-re ".reakpoint .*sycl-util.cpp:${bp}.*$gdb_prompt $" {
-	    # do nothing
-	}
+proc is_opencl {} {
+    global sycl_driver_platform
+    return [regexp {.*(OpenCL)} $sycl_driver_platform]
+}
+
+# Return non-zero if the device is Gen9.
+
+gdb_caching_proc is_gen9 {
+    global sycl_selected_device
+
+    if {[string match "Intel*Gen9*" $sycl_selected_device]
+	|| [string match "Intel*Iris*Graphics*" $sycl_selected_device]} {
+	return 1;
     }
-    gdb_test "finish"
 
-    return "$selected_sycl_device  $selected_gdbgt_device"
+    return 0;
+}
+
+# Return non-zero if the device is Gen12.
+
+gdb_caching_proc is_gen12 {
+    global sycl_selected_device
+
+    if {[string match "Intel*Gen12*" $sycl_selected_device]
+	|| [string match "Intel*Xe MAX Graphics*" $sycl_selected_device]
+	|| [string match "Intel*Xe Graphics*" $sycl_selected_device]} {
+	return 1;
+    }
+
+    return 0;
 }
 
 # Issue a 'continue' command and expect to see program termination.

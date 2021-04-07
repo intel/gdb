@@ -42,4 +42,7 @@ gdb_continue_to_breakpoint "line before kernel" \
 
 # Now we should be able to run to the end without hitting
 # any other kernel/non-kernel breakpoints.
+if {[require_sycl_device "gpu" "Intel*"]} {
+    setup_kfail "JIRA DOQG/314" "*-*-*"
+}
 continue_sycl_program_to_termination

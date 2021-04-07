@@ -38,6 +38,9 @@ gdb_breakpoint $line {temporary}
 gdb_continue_to_breakpoint "3d" ".*$srcfile:$line.*"
 
 gdb_test_exact "ptype input\[id\]" "type = struct user_type {\n    int x;\n}" "3D element type"
+if {[require_sycl_device "gpu" "Intel*"]} {
+    setup_kfail "JIRA DOQG/2750" "*-*-*"
+}
 gdb_test "print output\[id\].x == input\[id\].x" "true" "3D access via id<3>"
 gdb_test_exact "print input\[0\]" \
     "Cannot resolve function operator\[\] to any overloaded instance" \

@@ -38,6 +38,9 @@ gdb_breakpoint $line {temporary}
 gdb_continue_to_breakpoint "2d" ".*$srcfile:$line.*"
 
 gdb_test "ptype input\[id\]" "type = float" "2D element type"
+if {[require_sycl_device "gpu" "Intel*"]} {
+    setup_kfail "JIRA DOQG/2750" "*-*-*"
+}
 gdb_test "print value == input\[id\]" "true" "2D access via id<2>"
 gdb_test_exact "print input\[0\]" \
     "Cannot resolve function operator\[\] to any overloaded instance" \

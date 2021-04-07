@@ -39,6 +39,9 @@ gdb_continue_to_breakpoint "1d" ".*$srcfile:$line.*"
 
 gdb_test "ptype input\[0\]" "type = int" "1D element type"
 gdb_test "print one == input\[0\]" "true" "1D access via size_t"
+if {[require_sycl_device "gpu" "Intel*"]} {
+    setup_kfail "JIRA DOQG/2750" "*-*-*"
+}
 gdb_test "print two == input\[id\]" "true" "1D access via id<1>"
 
 continue_sycl_program_to_termination

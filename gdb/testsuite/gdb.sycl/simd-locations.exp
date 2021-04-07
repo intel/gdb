@@ -45,11 +45,17 @@ proc test_bp_1 {} {
     gdb_test "print lid" " = .*"
 
     # Call operator() explicitly to work around known limitations.
-    gdb_test_expr_eq "pgid.operator() (wi)" "gid"
+    set v1 [get_valueof "" "pgid.operator() (wi)" "NONE"]
+    set v2 [get_valueof "" "gid" "NONE"]
+    gdb_assert {{$v1 eq $v2}} "pgid.operator() (wi) == gid"
+
     gdb_test_expr_eq "ain\[gid\]" "in"
     gdb_test_expr_eq "acs\[lid\].c" "cs"
 
     # LCS may be implemented as reference.  Skip some output.
+    if {[require_sycl_device "gpu" "Intel*"]} {
+	setup_kfail "JIRA DOQG/1630" "*-*-*"
+    }
     gdb_test "print lcs" " = .* 4"
 }
 
@@ -72,18 +78,30 @@ delete_breakpoints
 gdb_breakpoint $l2
 gdb_continue_to_breakpoint "bp.2" ".*$srcfile:$l2.*"
 
-proc test_bp_2 {} {
+proc test_bp_2 { {lane 0} } {
     global decimal
 
     gdb_test "print wi" " = .*"
     gdb_test "print lid" " = .*"
 
     # Call operator() explicitly to work around known limitations.
-    gdb_test_expr_eq "pgid.operator() (wi)" "gid"
-    gdb_test_expr_eq "atmp\[gid\].a" "in"
+    set v1 [get_valueof "" "pgid.operator() (wi)" "NONE"]
+    set v2 [get_valueof "" "gid" "NONE"]
+    gdb_assert {{$v1 eq $v2}} "pgid.operator() (wi) == gid"
+
+    set v1 [get_valueof "" "atmp\[gid\].a" "NONE"]
+    set v2 [get_valueof "" "in" "NONE"]
+    if {[require_sycl_device "gpu" "Intel*"] && $lane == 4 || [is_gen12]} {
+	setup_kfail "JIRA DOQG/2107" "*-*-*"
+    }
+    gdb_assert {{$v1 eq $v2}} "atmp\[gid\].a == in"
+
     gdb_test_expr_eq "aout\[gid\]" "out"
 
     # LCS may be implemented as reference.  Skip some output.
+    if {[require_sycl_device "gpu" "Intel*"]} {
+	setup_kfail "JIRA DOQG/1630" "*-*-*"
+    }
     gdb_test "print lcs" " = .* 4"
     gdb_test "print cs" " = 4"
 }
@@ -94,7 +112,7 @@ with_test_prefix "bp.2" {
 	    with_test_prefix "lane $i" {
 		gdb_test "thread :$i" "Switching to thread .*:$i.*"
 
-		test_bp_2
+		test_bp_2 $i
 	    }
 	}
     } else {

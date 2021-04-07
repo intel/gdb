@@ -31,11 +31,6 @@ if {[prepare_sycl_for_testing $binfile $srcfile]} {
 if {[start_sycl_program] < 0} {
     return -1
 }
-# Disable for a particular NEO version.
-if {$sycl_driver_version eq "20.35.0"} {
-    unsupported "test not supported with this driver version"
-    return -1
-}
 
 # CPU threads hit just one branch, while GPU threads hit both branches.
 set number_branches_to_hit 2
@@ -73,6 +68,9 @@ while { $i < $number_branches_to_hit } {
 		pass "$gdb_test_name else"
 	    }
 	    -re "$gdb_prompt" {
+		if {[is_gen12]} {
+		    setup_kfail "JIRA DOQG/2341" "*-*-*"
+		}
 		fail "$gdb_test_name"
 	    }
 	}

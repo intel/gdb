@@ -30,6 +30,9 @@ if { ![fortran_runto_main] } {
     continue
 }
 
+# Depending on the compiler being used, the type names can be printed differently.
+set logical [fortran_logical4]
+
 gdb_breakpoint [gdb_get_line_number "stop-here"]
 gdb_continue_to_breakpoint "stop-here" ".*stop-here.*"
 
@@ -87,4 +90,4 @@ gdb_test "p CMPLX (4.1, 2.0)" " = \\(4.$decimal,2\\)"
 
 # Test LOC
 
-gdb_test "p LOC(l)" "logical.*$hex"
+gdb_test "p LOC(l)" "$logical.*$hex"

@@ -214,8 +214,20 @@ static CORE_ADDR
 intelgt_skip_prologue (gdbarch *gdbarch, CORE_ADDR start_pc)
 {
   dprintf ("start_pc: %lx", start_pc);
+  CORE_ADDR func_addr;
 
-  /* For now there are no function calls, so no prologues.  */
+  if (find_pc_partial_function (start_pc, nullptr, &func_addr, nullptr))
+    {
+      CORE_ADDR post_prologue_pc
+       = skip_prologue_using_sal (gdbarch, func_addr);
+
+      dprintf ("post prologue pc: %lx", post_prologue_pc);
+
+      if (post_prologue_pc != 0)
+       return std::max (start_pc, post_prologue_pc);
+    }
+
+  /* Could not find the end of prologue using SAL.  */
   return start_pc;
 }
 

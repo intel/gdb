@@ -32,6 +32,11 @@ if {[start_sycl_program] < 0} {
     return -1
 }
 
+if {[is_gen12]} {
+    kfail "JIRA DOQG/2494" "test fails on Gen12"
+    return -1
+}
+
 # Define a conditional breakpoint with the condition set on a local
 # variable.  We pick these values:
 #   0: the most obvious one.

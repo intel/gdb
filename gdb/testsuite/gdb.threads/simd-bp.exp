@@ -136,7 +136,7 @@ while {$should_continue && $i < 10} {
 	-re "$srcfile:$odd_branch.*$gdb_prompt" {
 	    set hit_cond_for_inactive_lane true
 	    gdb_test "p/t \$emask" "= \[01\]+" "odd branch emask"
-	    fail $test_odd
+	    kfail "JIRA DOQG/2417" $test_odd
 	}
 	-re "$srcfile:$even_branch.*$gdb_prompt" {
 	    set hit_lane_clause_for_inactive_lane true

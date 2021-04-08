@@ -1670,10 +1670,10 @@ win32_process_target::store_registers (regcache *regcache, int regno)
 
 /* Read memory from the inferior process.  This should generally be
    called through read_inferior_memory, which handles breakpoint shadowing.
-   Read LEN bytes at MEMADDR into a buffer at MYADDR.  */
+   Read LEN bytes at MEMADDR in ADDR_SPACE into a buffer at MYADDR.  */
 int
 win32_process_target::read_memory (CORE_ADDR memaddr, unsigned char *myaddr,
-				   int len)
+				   int len, unsigned int addr_space)
 {
   return child_xfer_memory (memaddr, (char *) myaddr, len, 0, 0) != len;
 }

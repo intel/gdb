@@ -23,17 +23,17 @@
 #include "target/waitstatus.h"
 /* This header is a stopgap until more code is shared.  */
 
-/* Read LEN bytes of target memory at address MEMADDR, placing the
-   results in GDB's memory at MYADDR.  Return zero for success,
-   nonzero if any error occurs.  This function must be provided by
-   the client.  Implementations of this function may define and use
-   their own error codes, but functions in the common, nat and target
-   directories must treat the return code as opaque.  No guarantee is
-   made about the contents of the data at MYADDR if any error
-   occurs.  */
+/* Read LEN bytes of target memory at address MEMADDR in ADDR_SPACE, placing
+   the results in GDB's memory at MYADDR.  An ADDR_SPACE equal to zero
+   accesses the default space.  Return zero for success, nonzero if any
+   error occurs.  This function must be provided by the client.
+   Implementations of this function may define and use their own error
+   codes, but functions in the common, nat and target directories must
+   treat the return code as opaque.  No guarantee is made about the contents
+   of the data at MYADDR if any error occurs.  */
 
 extern int target_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr,
-			       ssize_t len);
+			       ssize_t len, unsigned int addr_space = 0);
 
 /* Read an unsigned 32-bit integer in the target's format from target
    memory at address MEMADDR, storing the result in GDB's format in

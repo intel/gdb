@@ -158,11 +158,11 @@ public:
   /* Read memory from the inferior process.  This should generally be
      called through read_inferior_memory, which handles breakpoint shadowing.
 
-     Read LEN bytes at MEMADDR into a buffer at MYADDR.
+     Read LEN bytes at MEMADDR in ADDR_SPACE into a buffer at MYADDR.
 
      Returns 0 on success and errno on failure.  */
   virtual int read_memory (CORE_ADDR memaddr, unsigned char *myaddr,
-			   int len) = 0;
+			   int len, unsigned int addr_space = 0) = 0;
 
   /* Write memory to the inferior process.  This should generally be
      called through target_write_memory, which handles breakpoint shadowing.
@@ -681,7 +681,8 @@ void done_accessing_memory (void);
 #define target_thread_handle(ptid, handle, handle_len) \
   the_target->thread_handle (ptid, handle, handle_len)
 
-int read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len);
+int read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len,
+			  unsigned int addr_space = 0);
 
 int set_desired_thread ();
 

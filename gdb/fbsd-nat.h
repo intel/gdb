@@ -53,7 +53,8 @@ public:
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space = 0) override;
 
 #ifdef PT_LWPINFO
   bool thread_alive (ptid_t ptid) override;

@@ -39901,11 +39901,12 @@ not close the connection in response to a kill request, @value{GDBN}
 probes the target state as if a new connection was opened
 (@pxref{? packet}).
 
-@item m @var{addr},@var{length}
+@item m @var{addr}@r{[}@@@var{addr_space}@r{]},@var{length}
 @cindex @samp{m} packet
 Read @var{length} addressable memory units starting at address @var{addr}
-(@pxref{addressable memory unit}).  Note that @var{addr} may not be aligned to
-any particular boundary.
+(@pxref{addressable memory unit}) in address space @var{addr_space}.  Note
+that @var{addr} may not be aligned to any particular boundary.  If
+@var{addr_space} is omitted, the default address space (zero) is used.
 
 The stub need not use any particular size or alignment when gathering
 data from memory for the response; even if @var{addr} is word-aligned

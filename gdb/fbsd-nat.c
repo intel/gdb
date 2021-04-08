@@ -686,7 +686,7 @@ fbsd_nat_target::xfer_partial (enum target_object object,
 			       const char *annex, gdb_byte *readbuf,
 			       const gdb_byte *writebuf,
 			       ULONGEST offset, ULONGEST len,
-			       ULONGEST *xfered_len)
+			       ULONGEST *xfered_len, unsigned int addr_space)
 {
   pid_t pid = inferior_ptid.pid ();
 

@@ -205,7 +205,8 @@ memory_error (enum target_xfer_status err, CORE_ADDR memaddr)
 
 static void
 read_memory_object (enum target_object object, CORE_ADDR memaddr,
-		    gdb_byte *myaddr, ssize_t len)
+		    gdb_byte *myaddr, ssize_t len,
+		    unsigned int addr_space = 0)
 {
   ULONGEST xfered = 0;
 
@@ -217,7 +218,7 @@ read_memory_object (enum target_object object, CORE_ADDR memaddr,
       status = target_xfer_partial (current_top_target (), object, NULL,
 				    myaddr + xfered, NULL,
 				    memaddr + xfered, len - xfered,
-				    &xfered_len);
+				    &xfered_len, addr_space);
 
       if (status != TARGET_XFER_OK)
 	memory_error (status == TARGET_XFER_EOF ? TARGET_XFER_E_IO : status,

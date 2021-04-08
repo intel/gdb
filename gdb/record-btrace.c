@@ -102,7 +102,8 @@ public:
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space) override;
 
   int insert_breakpoint (struct gdbarch *,
 			 struct bp_target_info *) override;
@@ -1470,7 +1471,8 @@ enum target_xfer_status
 record_btrace_target::xfer_partial (enum target_object object,
 				    const char *annex, gdb_byte *readbuf,
 				    const gdb_byte *writebuf, ULONGEST offset,
-				    ULONGEST len, ULONGEST *xfered_len)
+				    ULONGEST len, ULONGEST *xfered_len,
+				    unsigned int addr_space)
 {
   /* Filter out requests that don't make sense during replay.  */
   if (replay_memory_access == replay_memory_access_read_only
@@ -1512,7 +1514,7 @@ record_btrace_target::xfer_partial (enum target_object object,
 
   /* Forward the request.  */
   return this->beneath ()->xfer_partial (object, annex, readbuf, writebuf,
-					 offset, len, xfered_len);
+					 offset, len, xfered_len, addr_space);
 }
 
 /* The insert_breakpoint method of target record-btrace.  */

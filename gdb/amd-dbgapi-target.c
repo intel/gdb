@@ -220,7 +220,8 @@ struct amd_dbgapi_target final : public target_ops
 					const char *annex, gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space) override;
 
   bool stopped_by_watchpoint () override;
 
@@ -526,13 +527,13 @@ target_xfer_status
 amd_dbgapi_target::xfer_partial (enum target_object object, const char *annex,
 			       gdb_byte *readbuf, const gdb_byte *writebuf,
 			       ULONGEST offset, ULONGEST requested_len,
-			       ULONGEST *xfered_len)
+			       ULONGEST *xfered_len, unsigned int addr_space)
 {
   gdb::optional<scoped_restore_current_thread> maybe_restore_thread;
 
   if (!ptid_is_gpu (inferior_ptid))
     return beneath ()->xfer_partial (object, annex, readbuf, writebuf, offset,
-				     requested_len, xfered_len);
+				     requested_len, xfered_len, addr_space);
 
   gdb_assert (requested_len > 0);
   gdb_assert (xfered_len != nullptr);

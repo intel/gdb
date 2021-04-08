@@ -108,7 +108,8 @@ struct ravenscar_thread_target final : public target_ops
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space) override;
 
   bool thread_alive (ptid_t ptid) override;
 
@@ -854,7 +855,8 @@ ravenscar_thread_target::xfer_partial (enum target_object object,
 				       gdb_byte *readbuf,
 				       const gdb_byte *writebuf,
 				       ULONGEST offset, ULONGEST len,
-				       ULONGEST *xfered_len)
+				       ULONGEST *xfered_len,
+				       unsigned int addr_space)
 {
   scoped_restore save_ptid = make_scoped_restore (&inferior_ptid);
   /* Calling get_base_thread_from_ravenscar_task can read memory from
@@ -863,7 +865,7 @@ ravenscar_thread_target::xfer_partial (enum target_object object,
      practice.  */
   inferior_ptid = get_base_thread_from_ravenscar_task (inferior_ptid);
   return beneath ()->xfer_partial (object, annex, readbuf, writebuf,
-				   offset, len, xfered_len);
+				   offset, len, xfered_len, addr_space);
 }
 
 /* Observer on inferior_created: push ravenscar thread stratum if needed.  */

@@ -846,7 +846,8 @@ public:
 						gdb_byte *readbuf,
 						const gdb_byte *writebuf,
 						ULONGEST offset, ULONGEST len,
-						ULONGEST *xfered_len) override;
+						ULONGEST *xfered_len,
+						unsigned int addr_space) override;
   void files_info () override;
   int trace_find (enum trace_find_type type, int num,
 			  CORE_ADDR addr1, CORE_ADDR addr2, int *tpp) override;
@@ -1295,7 +1296,8 @@ enum target_xfer_status
 ctf_target::xfer_partial (enum target_object object,
 			  const char *annex, gdb_byte *readbuf,
 			  const gdb_byte *writebuf, ULONGEST offset,
-			  ULONGEST len, ULONGEST *xfered_len)
+			  ULONGEST len, ULONGEST *xfered_len,
+			  unsigned int addr_space)
 {
   /* We're only doing regular memory for now.  */
   if (object != TARGET_OBJECT_MEMORY)

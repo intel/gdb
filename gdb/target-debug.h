@@ -54,6 +54,8 @@
   target_debug_do_print (((X) ? (X) : "(null)"))
 #define target_debug_print_int(X)		\
   target_debug_do_print (plongest (X))
+#define target_debug_print_unsigned_int(X)	\
+  target_debug_do_print (pulongest (X))
 #define target_debug_print_bool(X)		\
   target_debug_do_print ((X) ? "true" : "false")
 #define target_debug_print_long(X)		\

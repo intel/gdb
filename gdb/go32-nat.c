@@ -350,7 +350,8 @@ struct go32_nat_target final : public x86_nat_target<inf_child_target>
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space) override;
 
   void files_info () override;
 
@@ -639,8 +640,8 @@ enum target_xfer_status
 go32_nat_target::xfer_partial (enum target_object object,
 			       const char *annex, gdb_byte *readbuf,
 			       const gdb_byte *writebuf, ULONGEST offset,
-			       ULONGEST len,
-			       ULONGEST *xfered_len)
+			       ULONGEST len, ULONGEST *xfered_len,
+			       unsigned int addr_space)
 {
   switch (object)
     {
@@ -650,7 +651,7 @@ go32_nat_target::xfer_partial (enum target_object object,
     default:
       return this->beneath ()->xfer_partial (object, annex,
 					     readbuf, writebuf, offset, len,
-					     xfered_len);
+					     xfered_len, addr_space);
     }
 }
 

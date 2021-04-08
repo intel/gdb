@@ -3698,7 +3698,9 @@ enum target_xfer_status
 linux_nat_target::xfer_partial (enum target_object object,
 				const char *annex, gdb_byte *readbuf,
 				const gdb_byte *writebuf,
-				ULONGEST offset, ULONGEST len, ULONGEST *xfered_len)
+				ULONGEST offset, ULONGEST len,
+				ULONGEST *xfered_len,
+				unsigned int addr_space)
 {
   if (object == TARGET_OBJECT_SIGNAL_INFO)
     return linux_xfer_siginfo (inferior_ptid, object, annex, readbuf, writebuf,
@@ -3743,7 +3745,7 @@ linux_nat_target::xfer_partial (enum target_object object,
     }
 
   return inf_ptrace_target::xfer_partial (object, annex, readbuf, writebuf,
-					  offset, len, xfered_len);
+					  offset, len, xfered_len, addr_space);
 }
 
 bool

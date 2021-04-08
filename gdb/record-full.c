@@ -280,7 +280,8 @@ public:
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space) override;
   int insert_breakpoint (struct gdbarch *,
 			 struct bp_target_info *) override;
   int remove_breakpoint (struct gdbarch *,
@@ -313,7 +314,8 @@ public:
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space) override;
   int insert_breakpoint (struct gdbarch *,
 			 struct bp_target_info *) override;
   int remove_breakpoint (struct gdbarch *,
@@ -1638,7 +1640,8 @@ enum target_xfer_status
 record_full_target::xfer_partial (enum target_object object,
 				  const char *annex, gdb_byte *readbuf,
 				  const gdb_byte *writebuf, ULONGEST offset,
-				  ULONGEST len, ULONGEST *xfered_len)
+				  ULONGEST len, ULONGEST *xfered_len,
+				  unsigned int addr_space)
 {
   if (!record_full_gdb_operation_disable
       && (object == TARGET_OBJECT_MEMORY
@@ -1692,7 +1695,7 @@ record_full_target::xfer_partial (enum target_object object,
     }
 
   return this->beneath ()->xfer_partial (object, annex, readbuf, writebuf,
-					 offset, len, xfered_len);
+					 offset, len, xfered_len, addr_space);
 }
 
 /* This structure represents a breakpoint inserted while the record
@@ -2122,7 +2125,8 @@ enum target_xfer_status
 record_full_core_target::xfer_partial (enum target_object object,
 				       const char *annex, gdb_byte *readbuf,
 				       const gdb_byte *writebuf, ULONGEST offset,
-				       ULONGEST len, ULONGEST *xfered_len)
+				       ULONGEST len, ULONGEST *xfered_len,
+				       unsigned int addr_space)
 {
   if (object == TARGET_OBJECT_MEMORY)
     {
@@ -2187,7 +2191,8 @@ record_full_core_target::xfer_partial (enum target_object object,
 			return this->beneath ()->xfer_partial (object, annex,
 							       readbuf, writebuf,
 							       offset, len,
-							       xfered_len);
+							       xfered_len,
+							       addr_space);
 
 		      memcpy (readbuf, entry->buf + sec_offset,
 			      (size_t) len);
@@ -2206,7 +2211,7 @@ record_full_core_target::xfer_partial (enum target_object object,
 
   return this->beneath ()->xfer_partial (object, annex,
 					 readbuf, writebuf, offset, len,
-					 xfered_len);
+					 xfered_len, addr_space);
 }
 
 /* "insert_breakpoint" method for prec over corefile.  */

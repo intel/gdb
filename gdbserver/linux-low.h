@@ -167,7 +167,7 @@ public:
 		   int len, unsigned int addr_space = 0) override;
 
   int write_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
-		    int len) override;
+		    int len, unsigned int addr_space = 0) override;
 
   void look_up_symbols () override;
 

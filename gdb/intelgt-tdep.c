@@ -24,6 +24,7 @@
 #include "frame-unwind.h"
 #include "gdbcmd.h"
 #include "gdbsupport/gdb_obstack.h"
+#include "gdbtypes.h"
 #include "target.h"
 #include "target-descriptions.h"
 #include "value.h"
@@ -39,6 +40,13 @@
 #define GT_FEATURE_GRF		"org.gnu.gdb.intelgt.grf"
 #define GT_FEATURE_DEBUG	"org.gnu.gdb.intelgt.debug"
 #define GT_FEATURE_ARF9		"org.gnu.gdb.intelgt.arf9"
+
+/* Address space flags.
+   We are assigning the TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 to the shared
+   local memory address space.  */
+
+#define INTELGT_TYPE_INSTANCE_FLAG_SLM TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1
+#define INTELGT_SLM_ADDRESS_QUALIFIER "slm"
 
 /* Global debug flag.  */
 static bool intelgt_debug = false;
@@ -712,6 +720,37 @@ intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
 #endif /* defined (HAVE_LIBIGA64)  */
 }
 
+/* Implementation of `address_class_type_flags_to_name' gdbarch method
+   as defined in gdbarch.h.  */
+
+static const char*
+intelgt_address_class_type_flags_to_name (struct gdbarch *gdbarch,
+					  type_instance_flags type_flags)
+{
+  if ((type_flags & INTELGT_TYPE_INSTANCE_FLAG_SLM) != 0)
+    return INTELGT_SLM_ADDRESS_QUALIFIER;
+  else
+    return nullptr;
+}
+
+/* Implementation of `address_class_name_to_type_flags' gdbarch method,
+   as defined in gdbarch.h.  */
+
+static bool
+intelgt_address_class_name_to_type_flags (struct gdbarch *gdbarch,
+					  const char* name,
+					  type_instance_flags *type_flags_ptr)
+{
+  if (strcmp (name, INTELGT_SLM_ADDRESS_QUALIFIER) == 0)
+    {
+      *type_flags_ptr = INTELGT_TYPE_INSTANCE_FLAG_SLM;
+      return true;
+    }
+  else
+    return false;
+}
+
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -833,6 +872,11 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 #if defined (USE_WIN32API)
   set_gdbarch_has_dos_based_file_system (gdbarch, 1);
 #endif
+
+  set_gdbarch_address_class_name_to_type_flags
+    (gdbarch, intelgt_address_class_name_to_type_flags);
+  set_gdbarch_address_class_type_flags_to_name
+    (gdbarch, intelgt_address_class_type_flags_to_name);
 
   return gdbarch;
 }

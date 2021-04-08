@@ -1680,11 +1680,12 @@ win32_process_target::read_memory (CORE_ADDR memaddr, unsigned char *myaddr,
 
 /* Write memory to the inferior process.  This should generally be
    called through write_inferior_memory, which handles breakpoint shadowing.
-   Write LEN bytes from the buffer at MYADDR to MEMADDR.
+   Write LEN bytes from the buffer at MYADDR to MEMADDR in ADDR_SPACE.
    Returns 0 on success and errno on failure.  */
 int
 win32_process_target::write_memory (CORE_ADDR memaddr,
-				    const unsigned char *myaddr, int len)
+				    const unsigned char *myaddr, int len,
+				    unsigned int addr_space)
 {
   return child_xfer_memory (memaddr, (char *) myaddr, len, 1, 0) != len;
 }

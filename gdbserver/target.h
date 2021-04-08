@@ -167,11 +167,11 @@ public:
   /* Write memory to the inferior process.  This should generally be
      called through target_write_memory, which handles breakpoint shadowing.
 
-     Write LEN bytes from the buffer at MYADDR to MEMADDR.
+     Write LEN bytes from the buffer at MYADDR to MEMADDR in ADDR_SPACE.
 
      Returns 0 on success and errno on failure.  */
   virtual int write_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
-			    int len) = 0;
+			    int len, unsigned int addr_space = 0) = 0;
 
   /* Query GDB for the values of any symbols we're interested in.
      This function is called whenever we receive a "qSymbols::"

@@ -541,7 +541,7 @@ netbsd_process_target::store_registers (struct regcache *regcache, int regno)
 
 int
 netbsd_process_target::read_memory (CORE_ADDR memaddr, unsigned char *myaddr,
-				    int size)
+				    int size, unsigned int addr_space)
 {
   pid_t pid = current_process ()->pid;
   return netbsd_nat::read_memory (pid, myaddr, memaddr, size, nullptr);

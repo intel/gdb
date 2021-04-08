@@ -588,7 +588,8 @@ netbsd_process_target::read_memory (CORE_ADDR memaddr, unsigned char *myaddr,
 
 int
 netbsd_process_target::write_memory (CORE_ADDR memaddr,
-				     const unsigned char *myaddr, int size)
+				     const unsigned char *myaddr, int size,
+				     unsigned int addr_space = 0)
 {
   struct ptrace_io_desc io;
   io.piod_op = PIOD_WRITE_D;

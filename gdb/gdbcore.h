@@ -96,13 +96,14 @@ CORE_ADDR read_memory_typed_address (CORE_ADDR addr, struct type *type);
    write.  */
 
 extern void write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr,
-			  ssize_t len);
+			  ssize_t len, unsigned int addr_space = 0);
 
 /* Same as write_memory, but notify 'memory_changed' observers.  */
 
 extern void write_memory_with_notification (CORE_ADDR memaddr,
 					    const bfd_byte *myaddr,
-					    ssize_t len);
+					    ssize_t len,
+					    unsigned int addr_space = 0);
 
 /* Store VALUE at ADDR in the inferior as a LEN-byte unsigned integer.  */
 extern void write_memory_unsigned_integer (CORE_ADDR addr, int len,

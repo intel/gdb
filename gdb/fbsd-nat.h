@@ -53,7 +53,8 @@ public:
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space = 0) override;
 
   bool thread_alive (ptid_t ptid) override;
   std::string pid_to_str (ptid_t) override;

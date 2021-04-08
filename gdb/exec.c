@@ -74,7 +74,8 @@ struct exec_target final : public target_ops
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space = 0) override;
   void files_info () override;
 
   bool has_memory () override;
@@ -891,7 +892,8 @@ enum target_xfer_status
 exec_target::xfer_partial (enum target_object object,
 			   const char *annex, gdb_byte *readbuf,
 			   const gdb_byte *writebuf,
-			   ULONGEST offset, ULONGEST len, ULONGEST *xfered_len)
+			   ULONGEST offset, ULONGEST len, ULONGEST *xfered_len,
+			   unsigned int addr_space)
 {
   const target_section_table *table = target_get_section_table (this);
 

@@ -134,7 +134,8 @@ public:
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space = 0) override;
 
   void mourn_inferior () override;
 
@@ -1718,7 +1719,8 @@ aix_thread_target::xfer_partial (enum target_object object,
 				 const char *annex, gdb_byte *readbuf,
 				 const gdb_byte *writebuf,
 				 ULONGEST offset, ULONGEST len,
-				 ULONGEST *xfered_len)
+				 ULONGEST *xfered_len,
+				 unsigned int addr_space)
 {
   scoped_restore save_inferior_ptid = make_scoped_restore (&inferior_ptid);
 

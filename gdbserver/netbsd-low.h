@@ -83,7 +83,7 @@ public:
   void store_registers (regcache *regcache, int regno) override;
 
   int read_memory (CORE_ADDR memaddr, unsigned char *myaddr,
-		   int len) override;
+		   int len, unsigned int addr_space = 0) override;
 
   int write_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
 		    int len) override;

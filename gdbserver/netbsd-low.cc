@@ -550,7 +550,7 @@ netbsd_process_target::store_registers (struct regcache *regcache, int regno)
 
 int
 netbsd_process_target::read_memory (CORE_ADDR memaddr, unsigned char *myaddr,
-				    int size)
+				    int size, unsigned int addr_space)
 {
   struct ptrace_io_desc io;
   io.piod_op = PIOD_READ_D;

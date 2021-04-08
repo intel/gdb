@@ -1213,9 +1213,9 @@ target_xfer_partial (struct target_ops *ops,
   return retval;
 }
 
-/* Read LEN bytes of target memory at address MEMADDR, placing the
-   results in GDB's memory at MYADDR.  Returns either 0 for success or
-   -1 if any error occurs.
+/* Read LEN bytes of target memory at address MEMADDR in ADDR_SPACE,
+   placing the results in GDB's memory at MYADDR.  Returns either 0 for
+   success or -1 if any error occurs.
 
    If an error occurs, no guarantee is made about the contents of the data at
    MYADDR.  In particular, the caller should not depend upon partial reads
@@ -1225,7 +1225,8 @@ target_xfer_partial (struct target_ops *ops,
    it makes no progress, and then return how much was transferred).  */
 
 int
-target_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, ssize_t len)
+target_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, ssize_t len,
+		    unsigned int addr_space)
 {
   if (target_read (current_top_target (), TARGET_OBJECT_MEMORY, NULL,
 		   myaddr, memaddr, len) == len)

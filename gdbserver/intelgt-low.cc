@@ -306,7 +306,7 @@ public:
 		   int len, unsigned int addr_space = 0) override;
 
   int write_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
-		    int len) override;
+		    int len, unsigned int addr_space = 0) override;
 
   void request_interrupt () override;
 
@@ -1140,7 +1140,8 @@ intelgt_process_target::read_memory (CORE_ADDR memaddr,
 
 int
 intelgt_process_target::write_memory (CORE_ADDR memaddr,
-				      const unsigned char *myaddr, int len)
+				      const unsigned char *myaddr, int len,
+				      unsigned int addr_space)
 {
   dprintf ("memaddr: %s, len: %d", core_addr_to_string_nz (memaddr), len);
 

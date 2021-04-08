@@ -1163,6 +1163,7 @@ value_assign (struct value *toval, struct value *fromval)
 	const gdb_byte *dest_buffer;
 	CORE_ADDR changed_addr;
 	int changed_len;
+	unsigned int addr_space = 0;
 	gdb_byte buffer[sizeof (LONGEST)];
 
 	if (value_bitsize (toval))
@@ -1201,7 +1202,21 @@ value_assign (struct value *toval, struct value *fromval)
 	    dest_buffer = value_contents (fromval);
 	  }
 
-	write_memory_with_notification (changed_addr, dest_buffer, changed_len);
+	struct gdbarch *arch = get_value_arch (toval);
+	/* For targets with multiple address spaces.  */
+	if (gdbarch_address_space_from_type_flags_p (arch))
+	  {
+	    if (type->code () == TYPE_CODE_PTR
+		|| type->code () == TYPE_CODE_REF)
+	      type = TYPE_TARGET_TYPE (type);
+
+	    addr_space
+	      = gdbarch_address_space_from_type_flags (arch,
+						       type->instance_flags ());
+	  }
+
+	write_memory_with_notification (changed_addr, dest_buffer, changed_len,
+					addr_space);
       }
       break;
 

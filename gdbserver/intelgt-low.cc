@@ -303,7 +303,7 @@ public:
   void store_registers (regcache *regcache, int regno) override;
 
   int read_memory (CORE_ADDR memaddr, unsigned char *myaddr,
-		   int len) override;
+		   int len, unsigned int addr_space = 0) override;
 
   int write_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
 		    int len) override;
@@ -1103,7 +1103,8 @@ intelgt_process_target::store_registers (regcache *regcache, int regno)
 
 int
 intelgt_process_target::read_memory (CORE_ADDR memaddr,
-				     unsigned char *myaddr, int len)
+				     unsigned char *myaddr, int len,
+				     unsigned int addr_space)
 {
   dprintf ("memaddr: %s, len: %d", core_addr_to_string_nz (memaddr), len);
 

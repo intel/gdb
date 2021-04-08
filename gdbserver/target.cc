@@ -178,13 +178,13 @@ target_read_uint32 (CORE_ADDR memaddr, uint32_t *result)
 
 int
 target_write_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
-		     ssize_t len)
+		     ssize_t len, unsigned int addr_space)
 {
   /* Make a copy of the data because check_mem_write may need to
      update it.  */
   gdb::byte_vector buffer (myaddr, myaddr + len);
   check_mem_write (memaddr, buffer.data (), myaddr, len);
-  return the_target->write_memory (memaddr, buffer.data (), len);
+  return the_target->write_memory (memaddr, buffer.data (), len, addr_space);
 }
 
 ptid_t

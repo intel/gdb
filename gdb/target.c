@@ -1293,14 +1293,15 @@ target_read_code (CORE_ADDR memaddr, gdb_byte *myaddr, ssize_t len)
     return -1;
 }
 
-/* Write LEN bytes from MYADDR to target memory at address MEMADDR.
-   Returns either 0 for success or -1 if any error occurs.  If an
-   error occurs, no guarantee is made about how much data got written.
+/* Write LEN bytes from MYADDR to target memory at address MEMADDR in
+   ADDR_SPACE.  Returns either 0 for success or -1 if any error occurs.  If
+   an error occurs, no guarantee is made about how much data got written.
    Callers that can deal with partial writes should call
    target_write.  */
 
 int
-target_write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr, ssize_t len)
+target_write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr, ssize_t len,
+		     unsigned int addr_space)
 {
   if (target_write (current_top_target (), TARGET_OBJECT_MEMORY, NULL,
 		    myaddr, memaddr, len) == len)

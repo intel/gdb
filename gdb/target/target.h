@@ -46,7 +46,8 @@ extern int target_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr,
 
 extern int target_read_uint32 (CORE_ADDR memaddr, uint32_t *result);
 
-/* Write LEN bytes from MYADDR to target memory at address MEMADDR.
+/* Write LEN bytes from MYADDR to target memory at address MEMADDR in
+   ADDR_SPACE.  An ADDR_SPACE equal to zero accesses the default space.
    Return zero for success, nonzero if any error occurs.  This
    function must be provided by the client.  Implementations of this
    function may define and use their own error codes, but functions
@@ -55,7 +56,7 @@ extern int target_read_uint32 (CORE_ADDR memaddr, uint32_t *result);
    data at MEMADDR if any error occurs.  */
 
 extern int target_write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr,
-				ssize_t len);
+				ssize_t len, unsigned int addr_space = 0);
 
 /* Cause the target to stop in a continuable fashion--for instance,
    under Unix, this should act like SIGSTOP--and wait for the target

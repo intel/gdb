@@ -5230,12 +5230,13 @@ linux_process_target::read_memory (CORE_ADDR memaddr,
 }
 
 /* Copy LEN bytes of data from debugger memory at MYADDR to inferior's
-   memory at MEMADDR.  On failure (cannot write to the inferior)
-   returns the value of errno.  Always succeeds if LEN is zero.  */
+   memory at MEMADDR in ADDR_SPACE.  On failure (cannot write to the
+   inferior) returns the value of errno.  Always succeeds if LEN is zero.  */
 
 int
 linux_process_target::write_memory (CORE_ADDR memaddr,
-				    const unsigned char *myaddr, int len)
+				    const unsigned char *myaddr, int len,
+				    unsigned int addr_space)
 {
   int i;
   /* Round starting address down to longword boundary.  */

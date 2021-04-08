@@ -12577,9 +12577,10 @@ _bfd_elf_init_secondary_reloc_section (bfd * abfd,
 /* Read in any secondary relocs associated with SEC.  */
 
 bfd_boolean
-_bfd_elf_slurp_secondary_reloc_section (bfd *      abfd,
-					asection * sec,
-					asymbol ** symbols)
+_bfd_elf_slurp_secondary_reloc_section (bfd *       abfd,
+					asection *  sec,
+					asymbol **  symbols,
+					bfd_boolean dynamic)
 {
   const struct elf_backend_data * const ebd = get_elf_backend_data (abfd);
   asection * relsec;
@@ -12658,7 +12659,10 @@ _bfd_elf_slurp_secondary_reloc_section (bfd *      abfd,
 	      continue;
 	    }
 
-	  symcount = bfd_get_symcount (abfd);
+	  if (dynamic)
+	    symcount = bfd_get_dynamic_symcount (abfd);
+	  else
+	    symcount = bfd_get_symcount (abfd);
 
 	  for (i = 0, internal_reloc = internal_relocs,
 		 native_reloc = native_relocs;
@@ -12702,7 +12706,6 @@ _bfd_elf_slurp_secondary_reloc_section (bfd *      abfd,
 		  asymbol **ps;
 
 		  ps = symbols + r_sym (rela.r_info) - 1;
-
 		  internal_reloc->sym_ptr_ptr = ps;
 		  /* Make sure that this symbol is not removed by strip.  */
 		  (*ps)->flags |= BSF_KEEP;

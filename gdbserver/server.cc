@@ -992,10 +992,11 @@ monitor_show_help (void)
    be served from a memory block that does not cover the whole request
    length.  A following request gets the rest served from either
    another block (of the same traceframe) or from the read-only
-   regions.  */
+   regions.  ADDR_SPACE is optional, zero indicates default access.  */
 
 static int
-gdb_read_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len)
+gdb_read_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len,
+		 unsigned int addr_space = 0)
 {
   client_state &cs = get_client_state ();
   int res;
@@ -1021,7 +1022,7 @@ gdb_read_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len)
   if (res == 0)
     {
       if (set_desired_thread ())
-	res = read_inferior_memory (memaddr, myaddr, len);
+	res = read_inferior_memory (memaddr, myaddr, len, addr_space);
       else
 	res = 1;
       done_accessing_memory ();
@@ -4110,7 +4111,7 @@ process_serial_event (void)
 {
   client_state &cs = get_client_state ();
   int signal;
-  unsigned int len;
+  unsigned int len, addr_space;
   CORE_ADDR mem_addr;
   unsigned char sig;
   int packet_len;
@@ -4260,8 +4261,8 @@ process_serial_event (void)
     case 'm':
       {
 	require_process_or_break (cs.own_buf);
-	decode_m_packet (&cs.own_buf[1], &mem_addr, &len);
-	int res = gdb_read_memory (mem_addr, mem_buf, len);
+	decode_m_packet (&cs.own_buf[1], &mem_addr, &len, &addr_space);
+	int res = gdb_read_memory (mem_addr, mem_buf, len, addr_space);
 	if (res < 0)
 	  write_enn (cs.own_buf);
 	else

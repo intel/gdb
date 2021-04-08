@@ -1308,7 +1308,8 @@ prepare_resume_reply (char *buf, ptid_t ptid,
 
 const char *
 decode_m_packet_params (const char *from, CORE_ADDR *mem_addr_ptr,
-			unsigned int *len_ptr, const char end_marker)
+			unsigned int *len_ptr, const char end_marker,
+			unsigned int *addr_space)
 {
   int i = 0;
   char ch;
@@ -1316,8 +1317,19 @@ decode_m_packet_params (const char *from, CORE_ADDR *mem_addr_ptr,
 
   while ((ch = from[i++]) != ',')
     {
+      if (ch == '@')
+	break;
       *mem_addr_ptr = *mem_addr_ptr << 4;
       *mem_addr_ptr |= fromhex (ch) & 0x0f;
+    }
+
+  if (ch == '@' && addr_space != nullptr)
+    {
+      while ((ch = from[i++]) != ',')
+	{
+	  *addr_space = *addr_space << 4;
+	  *addr_space |= fromhex (ch) & 0x0f;
+	}
     }
 
   while ((ch = from[i++]) != end_marker)
@@ -1331,16 +1343,18 @@ decode_m_packet_params (const char *from, CORE_ADDR *mem_addr_ptr,
 
 void
 decode_m_packet (const char *from, CORE_ADDR *mem_addr_ptr,
-		 unsigned int *len_ptr)
+		 unsigned int *len_ptr, unsigned int *addr_space)
 {
-  decode_m_packet_params (from, mem_addr_ptr, len_ptr, '\0');
+  decode_m_packet_params (from, mem_addr_ptr, len_ptr, '\0', addr_space);
 }
 
 void
 decode_M_packet (const char *from, CORE_ADDR *mem_addr_ptr,
-		 unsigned int *len_ptr, unsigned char **to_p)
+		 unsigned int *len_ptr, unsigned char **to_p,
+		 unsigned int *addr_space)
 {
-  from = decode_m_packet_params (from, mem_addr_ptr, len_ptr, ':');
+  from = decode_m_packet_params (from, mem_addr_ptr, len_ptr, ':',
+				 addr_space);
 
   if (*to_p == NULL)
     *to_p = (unsigned char *) xmalloc (*len_ptr);
@@ -1496,11 +1510,12 @@ look_up_one_symbol (const char *name, CORE_ADDR *addrp, int may_ask_gdb)
 	{
 	  CORE_ADDR mem_addr;
 	  unsigned char *mem_buf;
-	  unsigned int mem_len;
+	  unsigned int mem_len, addr_space;
 
-	  decode_m_packet (&cs.own_buf[1], &mem_addr, &mem_len);
+	  decode_m_packet (&cs.own_buf[1], &mem_addr, &mem_len, &addr_space);
 	  mem_buf = (unsigned char *) xmalloc (mem_len);
-	  if (read_inferior_memory (mem_addr, mem_buf, mem_len) == 0)
+	  if (read_inferior_memory (mem_addr, mem_buf, mem_len,
+				    addr_space) == 0)
 	    bin2hex (mem_buf, cs.own_buf, mem_len);
 	  else
 	    write_enn (cs.own_buf);

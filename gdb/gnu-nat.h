@@ -130,7 +130,8 @@ struct gnu_nat_target : public inf_child_target
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space = 0) override;
 
   int find_memory_regions (find_memory_region_ftype func, void *data)
     override;

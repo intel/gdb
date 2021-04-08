@@ -1797,7 +1797,8 @@ public:
 					const char *annex, gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space = 0) override;
 
   unsigned int fetch_registers_called = 0;
   unsigned int store_registers_called = 0;
@@ -1823,7 +1824,8 @@ target_ops_no_register::xfer_partial (enum target_object object,
 				      const char *annex, gdb_byte *readbuf,
 				      const gdb_byte *writebuf,
 				      ULONGEST offset, ULONGEST len,
-				      ULONGEST *xfered_len)
+				      ULONGEST *xfered_len,
+				      unsigned int addr_space)
 {
   this->xfer_partial_called++;
 

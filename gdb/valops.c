@@ -945,8 +945,21 @@ read_value_memory (struct value *val, LONGEST bit_offset,
   struct gdbarch *arch = get_value_arch (val);
   int unit_size = gdbarch_addressable_memory_unit_size (arch);
   enum target_object object;
+  unsigned int addr_space = 0;
 
   object = stack ? TARGET_OBJECT_STACK_MEMORY : TARGET_OBJECT_MEMORY;
+
+  /* For targets with multiple address spaces.  */
+  if (gdbarch_address_space_from_type_flags_p (arch))
+    {
+      struct type *t1 = check_typedef (value_type (val));
+      if (t1->code () == TYPE_CODE_PTR
+	  || t1->code () == TYPE_CODE_REF)
+	t1 = TYPE_TARGET_TYPE (t1);
+
+      addr_space = gdbarch_address_space_from_type_flags (arch,
+						TYPE_INSTANCE_FLAGS (t1));
+    }
 
   while (xfered_total < length)
     {
@@ -958,7 +971,8 @@ read_value_memory (struct value *val, LONGEST bit_offset,
 				    buffer + xfered_total * unit_size, NULL,
 				    memaddr + xfered_total,
 				    length - xfered_total,
-				    &xfered_partial);
+				    &xfered_partial,
+				    addr_space);
 
       if (status == TARGET_XFER_OK)
 	/* nothing */;

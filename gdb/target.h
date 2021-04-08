@@ -233,20 +233,11 @@ enum target_xfer_status
 extern const char *
   target_xfer_status_to_string (enum target_xfer_status status);
 
-typedef enum target_xfer_status
-  target_xfer_partial_ftype (struct target_ops *ops,
-			     enum target_object object,
-			     const char *annex,
-			     gdb_byte *readbuf,
-			     const gdb_byte *writebuf,
-			     ULONGEST offset,
-			     ULONGEST len,
-			     ULONGEST *xfered_len);
-
 enum target_xfer_status
   raw_memory_xfer_partial (struct target_ops *ops, gdb_byte *readbuf,
 			   const gdb_byte *writebuf, ULONGEST memaddr,
-			   LONGEST len, ULONGEST *xfered_len);
+			   LONGEST len, ULONGEST *xfered_len,
+			   unsigned int addr_space = 0);
 
 /* Request that OPS transfer up to LEN addressable units of the target's
    OBJECT.  When reading from a memory object, the size of an addressable unit
@@ -267,7 +258,8 @@ enum target_xfer_status
 extern LONGEST target_read (struct target_ops *ops,
 			    enum target_object object,
 			    const char *annex, gdb_byte *buf,
-			    ULONGEST offset, LONGEST len);
+			    ULONGEST offset, LONGEST len,
+			    unsigned int addr_space = 0);
 
 struct memory_read_result
 {
@@ -353,7 +345,15 @@ extern gdb::optional<gdb::char_vector> target_read_stralloc
     (struct target_ops *ops, enum target_object object, const char *annex);
 
 /* See target_ops->to_xfer_partial.  */
-extern target_xfer_partial_ftype target_xfer_partial;
+extern enum target_xfer_status target_xfer_partial (struct target_ops *ops,
+						    enum target_object object,
+						    const char *annex,
+						    gdb_byte *readbuf,
+						    const gdb_byte *writebuf,
+						    ULONGEST offset,
+						    ULONGEST len,
+						    ULONGEST *xfered_len,
+						    unsigned int addr_space = 0);
 
 /* Wrappers to target read/write that perform memory transfers.  They
    throw an error if the memory transfer fails.
@@ -753,7 +753,9 @@ struct target_ops
        data is unavailable (TARGET_XFER_UNAVAILABLE).  *XFERED_LEN
        smaller than LEN does not indicate the end of the object, only
        the end of the transfer; higher level code should continue
-       transferring if desired.  This is handled in target.c.
+       transferring if desired.  This is handled in target.c.  ADDR_SPACE
+       can be used for accessing different address spaces if the target
+       supports it.  A value of zero indicates default address space.
 
        The interface does not support a "retry" mechanism.  Instead it
        assumes that at least one addressable unit will be transfered on each
@@ -775,7 +777,8 @@ struct target_ops
 						  gdb_byte *readbuf,
 						  const gdb_byte *writebuf,
 						  ULONGEST offset, ULONGEST len,
-						  ULONGEST *xfered_len)
+						  ULONGEST *xfered_len,
+						  unsigned int addr_space = 0)
       TARGET_DEFAULT_RETURN (TARGET_XFER_E_IO);
 
     /* Return the limit on the size of any single memory transfer

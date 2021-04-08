@@ -125,7 +125,8 @@ public:
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space) override;
 
   void mourn_inferior () override;
 
@@ -1949,13 +1950,15 @@ aix_thread_target::xfer_partial (enum target_object object,
 				 const char *annex, gdb_byte *readbuf,
 				 const gdb_byte *writebuf,
 				 ULONGEST offset, ULONGEST len,
-				 ULONGEST *xfered_len)
+				 ULONGEST *xfered_len,
+				 unsigned int addr_space)
 {
   scoped_restore save_inferior_ptid = make_scoped_restore (&inferior_ptid);
 
   inferior_ptid = ptid_t (inferior_ptid.pid ());
   return beneath ()->xfer_partial (object, annex, readbuf,
-				   writebuf, offset, len, xfered_len);
+				   writebuf, offset, len, xfered_len,
+				   addr_space);
 }
 
 /* Clean up after the inferior exits.  */

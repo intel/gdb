@@ -114,7 +114,7 @@ struct dummy_target : public target_ops
   gdb_byte *get_bookmark (const char *arg0, int arg1) override;
   void goto_bookmark (const gdb_byte *arg0, int arg1) override;
   CORE_ADDR get_thread_local_address (ptid_t arg0, CORE_ADDR arg1, CORE_ADDR arg2) override;
-  enum target_xfer_status xfer_partial (enum target_object arg0, const char *arg1, gdb_byte *arg2, const gdb_byte *arg3, ULONGEST arg4, ULONGEST arg5, ULONGEST *arg6) override;
+  enum target_xfer_status xfer_partial (enum target_object arg0, const char *arg1, gdb_byte *arg2, const gdb_byte *arg3, ULONGEST arg4, ULONGEST arg5, ULONGEST *arg6, unsigned int arg7) override;
   ULONGEST get_memory_xfer_limit () override;
   std::vector<mem_region> memory_map () override;
   void flash_erase (ULONGEST arg0, LONGEST arg1) override;
@@ -291,7 +291,7 @@ struct debug_target : public target_ops
   gdb_byte *get_bookmark (const char *arg0, int arg1) override;
   void goto_bookmark (const gdb_byte *arg0, int arg1) override;
   CORE_ADDR get_thread_local_address (ptid_t arg0, CORE_ADDR arg1, CORE_ADDR arg2) override;
-  enum target_xfer_status xfer_partial (enum target_object arg0, const char *arg1, gdb_byte *arg2, const gdb_byte *arg3, ULONGEST arg4, ULONGEST arg5, ULONGEST *arg6) override;
+  enum target_xfer_status xfer_partial (enum target_object arg0, const char *arg1, gdb_byte *arg2, const gdb_byte *arg3, ULONGEST arg4, ULONGEST arg5, ULONGEST *arg6, unsigned int arg7) override;
   ULONGEST get_memory_xfer_limit () override;
   std::vector<mem_region> memory_map () override;
   void flash_erase (ULONGEST arg0, LONGEST arg1) override;
@@ -2387,24 +2387,24 @@ debug_target::get_thread_local_address (ptid_t arg0, CORE_ADDR arg1, CORE_ADDR a
 }
 
 enum target_xfer_status
-target_ops::xfer_partial (enum target_object arg0, const char *arg1, gdb_byte *arg2, const gdb_byte *arg3, ULONGEST arg4, ULONGEST arg5, ULONGEST *arg6)
+target_ops::xfer_partial (enum target_object arg0, const char *arg1, gdb_byte *arg2, const gdb_byte *arg3, ULONGEST arg4, ULONGEST arg5, ULONGEST *arg6, unsigned int arg7)
 {
-  return this->beneath ()->xfer_partial (arg0, arg1, arg2, arg3, arg4, arg5, arg6);
+  return this->beneath ()->xfer_partial (arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
 enum target_xfer_status
-dummy_target::xfer_partial (enum target_object arg0, const char *arg1, gdb_byte *arg2, const gdb_byte *arg3, ULONGEST arg4, ULONGEST arg5, ULONGEST *arg6)
+dummy_target::xfer_partial (enum target_object arg0, const char *arg1, gdb_byte *arg2, const gdb_byte *arg3, ULONGEST arg4, ULONGEST arg5, ULONGEST *arg6, unsigned int arg7)
 {
   return TARGET_XFER_E_IO;
 }
 
 enum target_xfer_status
-debug_target::xfer_partial (enum target_object arg0, const char *arg1, gdb_byte *arg2, const gdb_byte *arg3, ULONGEST arg4, ULONGEST arg5, ULONGEST *arg6)
+debug_target::xfer_partial (enum target_object arg0, const char *arg1, gdb_byte *arg2, const gdb_byte *arg3, ULONGEST arg4, ULONGEST arg5, ULONGEST *arg6, unsigned int arg7)
 {
   target_debug_printf_nofunc ("-> %s->xfer_partial (...)", this->beneath ()->shortname ());
   enum target_xfer_status result
-    = this->beneath ()->xfer_partial (arg0, arg1, arg2, arg3, arg4, arg5, arg6);
-  target_debug_printf_nofunc ("<- %s->xfer_partial (%s, %s, %s, %s, %s, %s, %s) = %s",
+    = this->beneath ()->xfer_partial (arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+  target_debug_printf_nofunc ("<- %s->xfer_partial (%s, %s, %s, %s, %s, %s, %s, %s) = %s",
 	      this->beneath ()->shortname (),
 	      target_debug_print_target_object (arg0).c_str (),
 	      target_debug_print_const_char_p (arg1).c_str (),
@@ -2413,6 +2413,7 @@ debug_target::xfer_partial (enum target_object arg0, const char *arg1, gdb_byte 
 	      target_debug_print_ULONGEST (arg4).c_str (),
 	      target_debug_print_ULONGEST (arg5).c_str (),
 	      target_debug_print_ULONGEST_p (arg6).c_str (),
+	      target_debug_print_unsigned_int (arg7).c_str (),
 	      target_debug_print_target_xfer_status (result).c_str ());
   return result;
 }

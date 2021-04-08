@@ -278,7 +278,8 @@ public:
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space = 0) override;
   int insert_breakpoint (struct gdbarch *,
 			 struct bp_target_info *) override;
   int remove_breakpoint (struct gdbarch *,
@@ -311,7 +312,8 @@ public:
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space = 0) override;
   int insert_breakpoint (struct gdbarch *,
 			 struct bp_target_info *) override;
   int remove_breakpoint (struct gdbarch *,
@@ -1629,7 +1631,8 @@ enum target_xfer_status
 record_full_target::xfer_partial (enum target_object object,
 				  const char *annex, gdb_byte *readbuf,
 				  const gdb_byte *writebuf, ULONGEST offset,
-				  ULONGEST len, ULONGEST *xfered_len)
+				  ULONGEST len, ULONGEST *xfered_len,
+				  unsigned int addr_space)
 {
   if (!record_full_gdb_operation_disable
       && (object == TARGET_OBJECT_MEMORY
@@ -2113,7 +2116,8 @@ enum target_xfer_status
 record_full_core_target::xfer_partial (enum target_object object,
 				       const char *annex, gdb_byte *readbuf,
 				       const gdb_byte *writebuf, ULONGEST offset,
-				       ULONGEST len, ULONGEST *xfered_len)
+				       ULONGEST len, ULONGEST *xfered_len,
+				       unsigned int addr_space)
 {
   if (object == TARGET_OBJECT_MEMORY)
     {

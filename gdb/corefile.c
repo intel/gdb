@@ -342,11 +342,11 @@ read_memory_typed_address (CORE_ADDR addr, struct type *type)
 
 void
 write_memory (CORE_ADDR memaddr, 
-	      const bfd_byte *myaddr, ssize_t len)
+	      const bfd_byte *myaddr, ssize_t len, unsigned int addr_space)
 {
   int status;
 
-  status = target_write_memory (memaddr, myaddr, len);
+  status = target_write_memory (memaddr, myaddr, len, addr_space);
   if (status != 0)
     memory_error (TARGET_XFER_E_IO, memaddr);
 }
@@ -355,9 +355,9 @@ write_memory (CORE_ADDR memaddr,
 
 void
 write_memory_with_notification (CORE_ADDR memaddr, const bfd_byte *myaddr,
-				ssize_t len)
+				ssize_t len, unsigned int addr_space)
 {
-  write_memory (memaddr, myaddr, len);
+  write_memory (memaddr, myaddr, len, addr_space);
   gdb::observers::memory_changed.notify (current_inferior (), memaddr, len, myaddr);
 }
 

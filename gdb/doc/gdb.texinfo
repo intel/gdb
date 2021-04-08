@@ -39927,11 +39927,13 @@ server was able to read only part of the region of memory.
 @var{NN} is errno
 @end table
 
-@item M @var{addr},@var{length}:@var{XX@dots{}}
+@item M @var{addr}@r{[}@@@var{addr_space}@r{]},@var{length}:@var{XX@dots{}}
 @cindex @samp{M} packet
 Write @var{length} addressable memory units starting at address @var{addr}
-(@pxref{addressable memory unit}).  The data is given by @var{XX@dots{}}; each
-byte is transmitted as a two-digit hexadecimal number.
+(@pxref{addressable memory unit}) in address space @var{addr_space}.  The
+data is given by @var{XX@dots{}}; each byte is transmitted as a two-digit
+hexadecimal number.  If @var{addr_space} is omitted, the default address
+space is used.
 
 Reply:
 @table @samp
@@ -40281,13 +40283,15 @@ for success (@pxref{Stop Reply Packets})
 @cindex @samp{vStopped} packet
 @xref{Notification Packets}.
 
-@item X @var{addr},@var{length}:@var{XX@dots{}}
+@item X @var{addr}@r{[}@@@var{addr_space}@r{]},@var{length}:@var{XX@dots{}}
 @anchor{X packet}
 @cindex @samp{X} packet
 Write data to memory, where the data is transmitted in binary.
-Memory is specified by its address @var{addr} and number of addressable memory
-units @var{length} (@pxref{addressable memory unit});
-@samp{@var{XX}@dots{}} is binary data (@pxref{Binary Data}).
+Memory is specified by its address @var{addr}, address space @var{addr_space}
+and number of addressable memory units @var{length}
+(@pxref{addressable memory unit}); @samp{@var{XX}@dots{}} is binary
+data (@pxref{Binary Data}).  If @var{addr_space} is omitted, the default
+address space is used.
 
 Reply:
 @table @samp

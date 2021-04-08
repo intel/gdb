@@ -1304,7 +1304,7 @@ target_write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr, ssize_t len,
 		     unsigned int addr_space)
 {
   if (target_write (current_top_target (), TARGET_OBJECT_MEMORY, NULL,
-		    myaddr, memaddr, len) == len)
+		    myaddr, memaddr, len, addr_space) == len)
     return 0;
   else
     return -1;
@@ -1396,10 +1396,11 @@ static enum target_xfer_status
 target_write_partial (struct target_ops *ops,
 		      enum target_object object,
 		      const char *annex, const gdb_byte *buf,
-		      ULONGEST offset, LONGEST len, ULONGEST *xfered_len)
+		      ULONGEST offset, LONGEST len, ULONGEST *xfered_len,
+		      unsigned int addr_space = 0)
 {
   return target_xfer_partial (ops, object, annex, NULL, buf, offset, len,
-			      xfered_len);
+			      xfered_len, addr_space);
 }
 
 /* Wrappers to perform the full transfer.  */
@@ -1644,7 +1645,8 @@ target_write_with_progress (struct target_ops *ops,
 			    enum target_object object,
 			    const char *annex, const gdb_byte *buf,
 			    ULONGEST offset, LONGEST len,
-			    void (*progress) (ULONGEST, void *), void *baton)
+			    void (*progress) (ULONGEST, void *), void *baton,
+			    unsigned int addr_space)
 {
   LONGEST xfered_total = 0;
   int unit_size = 1;
@@ -1669,7 +1671,7 @@ target_write_with_progress (struct target_ops *ops,
       status = target_write_partial (ops, object, annex,
 				     buf + xfered_total * unit_size,
 				     offset + xfered_total, len - xfered_total,
-				     &xfered_partial);
+				     &xfered_partial, addr_space);
 
       if (status != TARGET_XFER_OK)
 	return status == TARGET_XFER_EOF ? xfered_total : TARGET_XFER_E_IO;
@@ -1689,10 +1691,10 @@ LONGEST
 target_write (struct target_ops *ops,
 	      enum target_object object,
 	      const char *annex, const gdb_byte *buf,
-	      ULONGEST offset, LONGEST len)
+	      ULONGEST offset, LONGEST len, unsigned int addr_space)
 {
   return target_write_with_progress (ops, object, annex, buf, offset, len,
-				     NULL, NULL);
+				     NULL, NULL, addr_space);
 }
 
 /* Help for target_read_alloc and target_read_stralloc.  See their comments

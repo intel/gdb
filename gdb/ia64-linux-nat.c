@@ -55,7 +55,8 @@ public:
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space) override;
 
   /* Override watchpoint routines.  */
 
@@ -874,7 +875,8 @@ ia64_linux_nat_target::xfer_partial (enum target_object object,
 				     const char *annex,
 				     gdb_byte *readbuf, const gdb_byte *writebuf,
 				     ULONGEST offset, ULONGEST len,
-				     ULONGEST *xfered_len)
+				     ULONGEST *xfered_len,
+				     unsigned int addr_space)
 {
   if (object == TARGET_OBJECT_UNWIND_TABLE && readbuf != NULL)
     {

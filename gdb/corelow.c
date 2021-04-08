@@ -84,7 +84,8 @@ public:
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space) override;
   void files_info () override;
 
   bool thread_alive (ptid_t ptid) override;
@@ -1005,7 +1006,8 @@ core_target::xfer_memory_via_mappings (gdb_byte *readbuf,
 							writebuf,
 							offset,
 							len,
-							xfered_len);
+							xfered_len,
+							0);
 	  break;
 	}
     }
@@ -1016,7 +1018,8 @@ core_target::xfer_memory_via_mappings (gdb_byte *readbuf,
 enum target_xfer_status
 core_target::xfer_partial (enum target_object object, const char *annex,
 			   gdb_byte *readbuf, const gdb_byte *writebuf,
-			   ULONGEST offset, ULONGEST len, ULONGEST *xfered_len)
+			   ULONGEST offset, ULONGEST len, ULONGEST *xfered_len,
+			   unsigned int addr_space)
 {
   switch (object)
     {
@@ -1056,7 +1059,8 @@ core_target::xfer_partial (enum target_object object, const char *annex,
 	else
 	  xfer_status = this->beneath ()->xfer_partial (object, annex, readbuf,
 							writebuf, offset, len,
-							xfered_len);
+							xfered_len,
+							addr_space);
 	if (xfer_status == TARGET_XFER_OK)
 	  return TARGET_XFER_OK;
 
@@ -1213,7 +1217,7 @@ core_target::xfer_partial (enum target_object object, const char *annex,
     default:
       return this->beneath ()->xfer_partial (object, annex, readbuf,
 					     writebuf, offset, len,
-					     xfered_len);
+					     xfered_len, addr_space);
     }
 }
 

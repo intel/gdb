@@ -148,10 +148,11 @@ done_accessing_memory (void)
 }
 
 int
-read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len)
+read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len,
+		      unsigned int addr_space)
 {
   int res;
-  res = the_target->read_memory (memaddr, myaddr, len);
+  res = the_target->read_memory (memaddr, myaddr, len, addr_space);
   check_mem_read (memaddr, myaddr, len);
   return res;
 }
@@ -159,9 +160,10 @@ read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len)
 /* See target/target.h.  */
 
 int
-target_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, ssize_t len)
+target_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, ssize_t len,
+		    unsigned int addr_space)
 {
-  return read_inferior_memory (memaddr, myaddr, len);
+  return read_inferior_memory (memaddr, myaddr, len, addr_space);
 }
 
 /* See target/target.h.  */

@@ -5139,12 +5139,13 @@ linux_read_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len)
   return the_target->read_memory (memaddr, myaddr, len);
 }
 
-/* Copy LEN bytes from inferior's memory starting at MEMADDR
+/* Copy LEN bytes from inferior's memory starting at MEMADDR in ADDR_SPACE
    to debugger memory starting at MYADDR.  */
 
 int
 linux_process_target::read_memory (CORE_ADDR memaddr,
-				   unsigned char *myaddr, int len)
+				   unsigned char *myaddr, int len,
+				   unsigned int addr_space)
 {
   int pid = lwpid_of (current_thread);
   PTRACE_XFER_TYPE *buffer;

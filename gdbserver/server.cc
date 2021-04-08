@@ -1081,7 +1081,8 @@ gdb_read_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len,
    frames is forbidden.  */
 
 static int
-gdb_write_memory (CORE_ADDR memaddr, const unsigned char *myaddr, int len)
+gdb_write_memory (CORE_ADDR memaddr, const unsigned char *myaddr, int len,
+		  unsigned int addr_space = 0)
 {
   client_state &cs = get_client_state ();
   if (cs.current_traceframe >= 0)
@@ -1091,7 +1092,7 @@ gdb_write_memory (CORE_ADDR memaddr, const unsigned char *myaddr, int len)
       int ret;
 
       if (set_desired_process ())
-	ret = target_write_memory (memaddr, myaddr, len);
+	ret = target_write_memory (memaddr, myaddr, len, addr_space);
       else
 	ret = EIO;
       return ret;
@@ -4331,8 +4332,8 @@ process_serial_event (void)
       break;
     case 'M':
       require_running_or_break (cs.own_buf);
-      decode_M_packet (&cs.own_buf[1], &mem_addr, &len, &mem_buf);
-      if (gdb_write_memory (mem_addr, mem_buf, len) == 0)
+      decode_M_packet (&cs.own_buf[1], &mem_addr, &len, &mem_buf, &addr_space);
+      if (gdb_write_memory (mem_addr, mem_buf, len, addr_space) == 0)
 	write_ok (cs.own_buf);
       else
 	write_enn (cs.own_buf);
@@ -4340,8 +4341,8 @@ process_serial_event (void)
     case 'X':
       require_running_or_break (cs.own_buf);
       if (decode_X_packet (&cs.own_buf[1], packet_len - 1,
-			   &mem_addr, &len, &mem_buf) < 0
-	  || gdb_write_memory (mem_addr, mem_buf, len) != 0)
+			   &mem_addr, &len, &mem_buf, &addr_space) < 0
+	  || gdb_write_memory (mem_addr, mem_buf, len, addr_space) != 0)
 	write_enn (cs.own_buf);
       else
 	write_ok (cs.own_buf);

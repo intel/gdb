@@ -115,7 +115,8 @@ public:
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space = 0) override;
 
   void pass_signals (gdb::array_view<const unsigned char>) override;
 
@@ -2367,7 +2368,8 @@ enum target_xfer_status
 procfs_target::xfer_partial (enum target_object object,
 			     const char *annex, gdb_byte *readbuf,
 			     const gdb_byte *writebuf, ULONGEST offset,
-			     ULONGEST len, ULONGEST *xfered_len)
+			     ULONGEST len, ULONGEST *xfered_len,
+			     unsigned int addr_space)
 {
   switch (object)
     {

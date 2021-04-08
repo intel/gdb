@@ -81,7 +81,8 @@ public:
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space = 0) override;
   void files_info () override;
 
   bool thread_alive (ptid_t ptid) override;
@@ -802,7 +803,8 @@ core_target::xfer_memory_via_mappings (gdb_byte *readbuf,
 enum target_xfer_status
 core_target::xfer_partial (enum target_object object, const char *annex,
 			   gdb_byte *readbuf, const gdb_byte *writebuf,
-			   ULONGEST offset, ULONGEST len, ULONGEST *xfered_len)
+			   ULONGEST offset, ULONGEST len, ULONGEST *xfered_len,
+			   unsigned int addr_space)
 {
   switch (object)
     {

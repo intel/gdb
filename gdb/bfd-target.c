@@ -49,7 +49,8 @@ public:
 		  const char *annex, gdb_byte *readbuf,
 		  const gdb_byte *writebuf,
 		  ULONGEST offset, ULONGEST len,
-		  ULONGEST *xfered_len) override;
+		  ULONGEST *xfered_len,
+		  unsigned int addr_space = 0) override;
 
   target_section_table *get_section_table () override;
 
@@ -68,7 +69,8 @@ target_bfd::xfer_partial (target_object object,
 			  const char *annex, gdb_byte *readbuf,
 			  const gdb_byte *writebuf,
 			  ULONGEST offset, ULONGEST len,
-			  ULONGEST *xfered_len)
+			  ULONGEST *xfered_len,
+			  unsigned int addr_space)
 {
   switch (object)
     {

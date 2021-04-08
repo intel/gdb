@@ -412,7 +412,9 @@ enum target_xfer_status
 inf_ptrace_target::xfer_partial (enum target_object object,
 				 const char *annex, gdb_byte *readbuf,
 				 const gdb_byte *writebuf,
-				 ULONGEST offset, ULONGEST len, ULONGEST *xfered_len)
+				 ULONGEST offset, ULONGEST len,
+				 ULONGEST *xfered_len,
+				 unsigned int addr_space)
 {
   ptid_t ptid = inferior_ptid;
 

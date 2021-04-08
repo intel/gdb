@@ -1081,7 +1081,8 @@ jump_command (const char *arg, int from_tty)
     error_no_arg (_("starting address"));
 
   std::vector<symtab_and_line> sals
-    = decode_line_with_last_displayed (arg, DECODE_LINE_FUNFIRSTLINE);
+    = decode_line_with_last_displayed (arg, DECODE_LINE_FUNFIRSTLINE,
+				       current_program_space);
   if (sals.size () != 1)
     error (_("Unreasonable jump request"));
 

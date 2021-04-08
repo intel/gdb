@@ -347,7 +347,8 @@ tracepoint_look_up_symbols (void)
 /* See target.h.  */
 
 int
-read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len)
+read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len,
+		      unsigned int addr_space)
 {
   memcpy (myaddr, (void *) (uintptr_t) memaddr, len);
   return 0;

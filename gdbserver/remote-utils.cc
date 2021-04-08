@@ -1337,29 +1337,19 @@ decode_M_packet (const char *from, CORE_ADDR *mem_addr_ptr,
 }
 
 int
-decode_X_packet (char *from, int packet_len, CORE_ADDR *mem_addr_ptr,
-		 unsigned int *len_ptr, unsigned char **to_p)
+decode_X_packet (const char *from, int packet_len, CORE_ADDR *mem_addr_ptr,
+		 unsigned int *len_ptr, unsigned char **to_p,
+		 unsigned int *addr_space)
 {
-  int i = 0;
-  char ch;
-  *mem_addr_ptr = *len_ptr = 0;
-
-  while ((ch = from[i++]) != ',')
-    {
-      *mem_addr_ptr = *mem_addr_ptr << 4;
-      *mem_addr_ptr |= fromhex (ch) & 0x0f;
-    }
-
-  while ((ch = from[i++]) != ':')
-    {
-      *len_ptr = *len_ptr << 4;
-      *len_ptr |= fromhex (ch) & 0x0f;
-    }
+  const char *start = from;
+  from = decode_m_packet_params (from, mem_addr_ptr, len_ptr, ':',
+				 addr_space);
 
   if (*to_p == NULL)
     *to_p = (unsigned char *) xmalloc (*len_ptr);
 
-  if (remote_unescape_input ((const gdb_byte *) &from[i], packet_len - i,
+  if (remote_unescape_input ((const gdb_byte *) from,
+			     packet_len - (from - start),
 			     *to_p, *len_ptr) != *len_ptr)
     return -1;
 
@@ -1593,16 +1583,19 @@ relocate_instruction (CORE_ADDR *to, CORE_ADDR oldloc)
       else if (cs.own_buf[0] == 'X')
 	{
 	  if (decode_X_packet (&cs.own_buf[1], len - 1, &mem_addr,
-			       &mem_len, &mem_buf) < 0
-	      || target_write_memory (mem_addr, mem_buf, mem_len) != 0)
+			       &mem_len, &mem_buf, &addr_space) < 0
+	      || target_write_memory (mem_addr, mem_buf, mem_len,
+				      addr_space) != 0)
 	    write_enn (cs.own_buf);
 	  else
 	    write_ok (cs.own_buf);
 	}
       else
 	{
-	  decode_M_packet (&cs.own_buf[1], &mem_addr, &mem_len, &mem_buf);
-	  if (target_write_memory (mem_addr, mem_buf, mem_len) == 0)
+	  decode_M_packet (&cs.own_buf[1], &mem_addr, &mem_len, &mem_buf,
+			   &addr_space);
+	  if (target_write_memory (mem_addr, mem_buf, mem_len,
+				   addr_space) == 0)
 	    write_ok (cs.own_buf);
 	  else
 	    write_enn (cs.own_buf);

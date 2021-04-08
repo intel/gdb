@@ -25,6 +25,7 @@
 #include "frame-unwind.h"
 #include "cli/cli-cmds.h"
 #include "gdbsupport/gdb_obstack.h"
+#include "gdbtypes.h"
 #include "target.h"
 #include "target-descriptions.h"
 #include "value.h"
@@ -41,6 +42,13 @@
 #include "infcall.h"
 #include <algorithm>
 #include <array>
+
+/* Address space flags.
+   We are assigning the TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 to the shared
+   local memory address space.  */
+
+#define INTELGT_TYPE_INSTANCE_FLAG_SLM TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1
+#define INTELGT_SLM_ADDRESS_QUALIFIER "slm"
 
 /* The maximum number of GRF registers to be used when passing function
    arguments.  */
@@ -1075,6 +1083,36 @@ intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
 		"is missing.\n"));
   return -1;
 #endif /* defined (HAVE_LIBIGA64)  */
+}
+
+/* Implementation of `address_class_type_flags_to_name' gdbarch method
+   as defined in gdbarch.h.  */
+
+static const char*
+intelgt_address_class_type_flags_to_name (struct gdbarch *gdbarch,
+					  type_instance_flags type_flags)
+{
+  if ((type_flags & INTELGT_TYPE_INSTANCE_FLAG_SLM) != 0)
+    return INTELGT_SLM_ADDRESS_QUALIFIER;
+  else
+    return nullptr;
+}
+
+/* Implementation of `address_class_name_to_type_flags' gdbarch method,
+   as defined in gdbarch.h.  */
+
+static bool
+intelgt_address_class_name_to_type_flags (struct gdbarch *gdbarch,
+					  const char* name,
+					  type_instance_flags *type_flags_ptr)
+{
+  if (strcmp (name, INTELGT_SLM_ADDRESS_QUALIFIER) == 0)
+    {
+      *type_flags_ptr = INTELGT_TYPE_INSTANCE_FLAG_SLM;
+      return true;
+    }
+  else
+    return false;
 }
 
 /* Utility function to lookup the pseudo-register number by name.  Exact
@@ -2468,6 +2506,11 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 #if defined (USE_WIN32API)
   set_gdbarch_has_dos_based_file_system (gdbarch, 1);
 #endif
+
+  set_gdbarch_address_class_name_to_type_flags
+    (gdbarch, intelgt_address_class_name_to_type_flags);
+  set_gdbarch_address_class_type_flags_to_name
+    (gdbarch, intelgt_address_class_type_flags_to_name);
 
   /* Enable inferior call support.  */
   set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);

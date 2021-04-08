@@ -859,11 +859,13 @@ public: /* Remote specific methods.  */
 					     int unit_size,
 					     ULONGEST *xfered_len_units,
 					     char packet_format,
-					     int use_length);
+					     int use_length,
+					     unsigned int addr_space);
 
   target_xfer_status remote_write_bytes (CORE_ADDR memaddr,
 					 const gdb_byte *myaddr, ULONGEST len,
-					 int unit_size, ULONGEST *xfered_len);
+					 int unit_size, ULONGEST *xfered_len,
+					 unsigned int addr_space);
 
   target_xfer_status remote_read_bytes_1 (CORE_ADDR memaddr, gdb_byte *myaddr,
 					  ULONGEST len_units,
@@ -8653,7 +8655,7 @@ align_for_efficient_write (int todo, CORE_ADDR memaddr)
 /* Write memory data directly to the remote machine.
    This does not inform the data cache; the data cache uses this.
    HEADER is the starting part of the packet.
-   MEMADDR is the address in the remote memory space.
+   MEMADDR is the address in the remote memory space ADDR_SPACE.
    MYADDR is the address of the buffer in our space.
    LEN_UNITS is the number of addressable units to write.
    UNIT_SIZE is the length in bytes of an addressable unit.
@@ -8661,7 +8663,7 @@ align_for_efficient_write (int todo, CORE_ADDR memaddr)
    should send data as binary ('X'), or hex-encoded ('M').
 
    The function creates packet of the form
-       <HEADER><ADDRESS>,<LENGTH>:<DATA>
+       <HEADER><ADDRESS>[@<ADDRESS_SPACE>],<LENGTH>:<DATA>
 
    where encoding of <DATA> is terminated by PACKET_FORMAT.
 
@@ -8691,7 +8693,8 @@ remote_target::remote_write_bytes_aux (const char *header, CORE_ADDR memaddr,
 				       ULONGEST len_units,
 				       int unit_size,
 				       ULONGEST *xfered_len_units,
-				       char packet_format, int use_length)
+				       char packet_format, int use_length,
+				       unsigned int addr_space = 0)
 {
   struct remote_state *rs = get_remote_state ();
   char *p;
@@ -8716,16 +8719,22 @@ remote_target::remote_write_bytes_aux (const char *header, CORE_ADDR memaddr,
   rs->buf[0] = '\0';
 
   /* Compute the size of the actual payload by subtracting out the
-     packet header and footer overhead: "$M<memaddr>,<len>:...#nn".  */
+     packet header and footer overhead:
+     "$M<memaddr>[@<addr_space>],<len>:...#nn".  */
 
   payload_capacity_bytes -= strlen ("$,:#NN");
   if (!use_length)
     /* The comma won't be used.  */
     payload_capacity_bytes += 1;
+
+  if (addr_space != 0)
+    payload_capacity_bytes -= hexnumlen ((ULONGEST) addr_space) + 1;
+
   payload_capacity_bytes -= strlen (header);
   payload_capacity_bytes -= hexnumlen (memaddr);
 
-  /* Construct the packet excluding the data: "<header><memaddr>,<len>:".  */
+  /* Construct the packet excluding the data:
+     "<header><memaddr>[@<addr_space>],<len>:".  */
 
   strcat (rs->buf.data (), header);
   p = rs->buf.data () + strlen (header);
@@ -8764,6 +8773,29 @@ remote_target::remote_write_bytes_aux (const char *header, CORE_ADDR memaddr,
   /* Append "<memaddr>".  */
   memaddr = remote_address_masked (memaddr);
   p += hexnumstr (p, (ULONGEST) memaddr);
+
+  if (addr_space != 0)
+    {
+      if (remote_multi_address_space_p (rs))
+	{
+	  /* Append "@".  */
+	  *p++ = '@';
+
+	  /* Append the length and retain its location and size.  It may need
+	     to be adjusted once the packet body has been created.  */
+	  plen = p;
+	  plenlen = hexnumstr (p, (ULONGEST) addr_space);
+	  p += plenlen;
+	}
+      else
+	{
+	  /* If the remote doesn't support access requests to different memory
+	  spaces but addr_space indicates a non-default access, we need to
+	  error out.  We can't just write to the default space.  */
+	  error (_("Remote server does not support writing to non-default \n"
+		   "address spaces."));
+	}
+    }
 
   if (use_length)
     {
@@ -8842,7 +8874,7 @@ remote_target::remote_write_bytes_aux (const char *header, CORE_ADDR memaddr,
 
 /* Write memory data directly to the remote machine.
    This does not inform the data cache; the data cache uses this.
-   MEMADDR is the address in the remote memory space.
+   MEMADDR is the address in the remote memory space ADDR_SPACE.
    MYADDR is the address of the buffer in our space.
    LEN is the number of bytes.
 
@@ -8853,7 +8885,8 @@ remote_target::remote_write_bytes_aux (const char *header, CORE_ADDR memaddr,
 target_xfer_status
 remote_target::remote_write_bytes (CORE_ADDR memaddr, const gdb_byte *myaddr,
 				   ULONGEST len, int unit_size,
-				   ULONGEST *xfered_len)
+				   ULONGEST *xfered_len,
+				   unsigned int addr_space)
 {
   const char *packet_format = NULL;
 
@@ -8877,7 +8910,7 @@ remote_target::remote_write_bytes (CORE_ADDR memaddr, const gdb_byte *myaddr,
 
   return remote_write_bytes_aux (packet_format,
 				 memaddr, myaddr, len, unit_size, xfered_len,
-				 packet_format[0], 1);
+				 packet_format[0], 1, addr_space);
 }
 
 /* Read memory data directly from the remote machine.
@@ -11072,7 +11105,7 @@ remote_target::xfer_partial (enum target_object object,
 
       if (writebuf != NULL)
 	return remote_write_bytes (offset, writebuf, len, unit_size,
-				   xfered_len);
+				   xfered_len, addr_space);
       else
 	return remote_read_bytes (offset, readbuf, len, unit_size,
 				  xfered_len, addr_space);

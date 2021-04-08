@@ -1161,6 +1161,7 @@ value_assign (struct value *toval, struct value *fromval)
 	const gdb_byte *dest_buffer;
 	CORE_ADDR changed_addr;
 	int changed_len;
+	unsigned int addr_space = 0;
 	gdb_byte buffer[sizeof (LONGEST)];
 
 	if (toval->bitsize ())
@@ -1199,7 +1200,18 @@ value_assign (struct value *toval, struct value *fromval)
 	    dest_buffer = fromval->contents ().data ();
 	  }
 
-	write_memory_with_notification (changed_addr, dest_buffer, changed_len);
+	struct gdbarch *arch = toval->arch ();
+	/* For targets with multiple address spaces.  */
+	if (gdbarch_translate_address_p (arch))
+	  {
+	    changed_addr = gdbarch_translate_address (arch,
+						      type->instance_flags (),
+						      changed_addr,
+						      &addr_space);
+	  }
+
+	write_memory_with_notification (changed_addr, dest_buffer, changed_len,
+					addr_space);
       }
       break;
 

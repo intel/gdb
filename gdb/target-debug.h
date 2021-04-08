@@ -66,6 +66,10 @@ target_debug_print_int (int v)
 { return plongest (v); }
 
 static std::string
+target_debug_print_unsigned_int (int v)
+{ return pulongest (v); }
+
+static std::string
 target_debug_print_bool (bool v)
 { return v ? "true" : "false"; }
 

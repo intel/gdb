@@ -43327,11 +43327,12 @@ not close the connection in response to a kill request, @value{GDBN}
 probes the target state as if a new connection was opened
 (@pxref{? packet}).
 
-@item m @var{addr},@var{length}
+@item m @var{addr}@r{[}@@@var{addr_space}@r{]},@var{length}
 @cindex @samp{m} packet
 Read @var{length} addressable memory units starting at address @var{addr}
-(@pxref{addressable memory unit}).  Note that @var{addr} does not have to
-be aligned to any particular boundary.
+(@pxref{addressable memory unit}) in address space @var{addr_space}.  Note
+that @var{addr} does not have to be aligned to any particular boundary.
+If @var{addr_space} is omitted, the default address space (zero) is used.
 
 @cindex alignment of remote memory accesses
 @cindex size of remote memory accesses
@@ -43687,12 +43688,13 @@ for success (@pxref{Stop Reply Packets})
 @cindex @samp{vStopped} packet
 @xref{Notification Packets}.
 
-@item x @var{addr},@var{length}
+@item x @var{addr}@r{[}@@@var{addr_space}@r{]},@var{length}
 @anchor{x packet}
 @cindex @samp{x} packet
 Read @var{length} addressable memory units starting at address @var{addr}
-(@pxref{addressable memory unit}).  Note that @var{addr} does not have to
-be aligned to any particular boundary.
+(@pxref{addressable memory unit}) in address space @var{addr_space}.  Note
+that @var{addr} does not have to be aligned to any particular boundary.
+If @var{addr_space} is omitted, the default address space (zero) is used.
 
 @cindex alignment of remote memory accesses
 @cindex size of remote memory accesses

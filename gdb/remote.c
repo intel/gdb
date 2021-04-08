@@ -502,7 +502,8 @@ public:
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+					ULONGEST *xfered_len,
+					unsigned int addr_space) override;
 
   ULONGEST get_memory_xfer_limit () override;
 
@@ -875,7 +876,9 @@ public: /* Remote specific methods.  */
 
   target_xfer_status remote_read_bytes_1 (CORE_ADDR memaddr, gdb_byte *myaddr,
 					  ULONGEST len_units,
-					  int unit_size, ULONGEST *xfered_len_units);
+					  int unit_size,
+					  ULONGEST *xfered_len_units,
+					  unsigned int addr_space);
 
   target_xfer_status remote_xfer_live_readonly_partial (gdb_byte *readbuf,
 							ULONGEST memaddr,
@@ -886,7 +889,8 @@ public: /* Remote specific methods.  */
   target_xfer_status remote_read_bytes (CORE_ADDR memaddr,
 					gdb_byte *myaddr, ULONGEST len,
 					int unit_size,
-					ULONGEST *xfered_len);
+					ULONGEST *xfered_len,
+					unsigned int addr_space);
 
   packet_result remote_send_printf (const char *format, ...)
     ATTRIBUTE_PRINTF (2, 3);
@@ -9210,6 +9214,9 @@ remote_target::remote_write_bytes (CORE_ADDR memaddr, const gdb_byte *myaddr,
    MYADDR is the address of the buffer in our space.
    LEN_UNITS is the number of addressable memory units to read..
    UNIT_SIZE is the length in bytes of an addressable unit.
+   ADDR_SPACE is the address space that MEMADDR is in.  This can be used
+   for targets that support multiple address spaces.  A value of zero
+   indicates a read from the default space.
 
    Return the transferred status, error or OK (an
    'enum target_xfer_status' value).  Save the number of bytes
@@ -9221,7 +9228,8 @@ remote_target::remote_write_bytes (CORE_ADDR memaddr, const gdb_byte *myaddr,
 target_xfer_status
 remote_target::remote_read_bytes_1 (CORE_ADDR memaddr, gdb_byte *myaddr,
 				    ULONGEST len_units,
-				    int unit_size, ULONGEST *xfered_len_units)
+				    int unit_size, ULONGEST *xfered_len_units,
+				    unsigned int addr_space = 0)
 {
   struct remote_state *rs = get_remote_state ();
   int buf_size_bytes;		/* Max size of packet output buffer.  */
@@ -9242,6 +9250,24 @@ remote_target::remote_read_bytes_1 (CORE_ADDR memaddr, gdb_byte *myaddr,
   p = rs->buf.data ();
   *p++ = 'm';
   p += hexnumstr (p, (ULONGEST) memaddr);
+
+  if (addr_space != 0)
+  {
+    if (remote_multi_address_space_p (rs))
+      {
+	*p++ = '@';
+	p += hexnumstr (p, (ULONGEST) addr_space);
+      }
+    else
+      {
+	/* If the remote doesn't support access requests to different memory
+	   spaces we need to error out.  We can't just read from the default
+	   space, as the value would be wrong.  */
+	error (_("Remote server does not support reading from non-default \n"
+		 "address spaces."));
+      }
+  }
+
   *p++ = ',';
   p += hexnumstr (p, (ULONGEST) todo_units);
   *p = '\0';
@@ -9318,7 +9344,8 @@ remote_target::remote_xfer_live_readonly_partial (gdb_byte *readbuf,
 target_xfer_status
 remote_target::remote_read_bytes (CORE_ADDR memaddr,
 				  gdb_byte *myaddr, ULONGEST len, int unit_size,
-				  ULONGEST *xfered_len)
+				  ULONGEST *xfered_len,
+				  unsigned int addr_space)
 {
   if (len == 0)
     return TARGET_XFER_EOF;
@@ -9370,7 +9397,8 @@ remote_target::remote_read_bytes (CORE_ADDR memaddr,
 	}
     }
 
-  return remote_read_bytes_1 (memaddr, myaddr, len, unit_size, xfered_len);
+  return remote_read_bytes_1 (memaddr, myaddr, len, unit_size, xfered_len,
+			      addr_space);
 }
 
 
@@ -11265,8 +11293,9 @@ remote_target::remote_read_qxfer (const char *object_name,
 enum target_xfer_status
 remote_target::xfer_partial (enum target_object object,
 			     const char *annex, gdb_byte *readbuf,
-			     const gdb_byte *writebuf, ULONGEST offset, ULONGEST len,
-			     ULONGEST *xfered_len)
+			     const gdb_byte *writebuf, ULONGEST offset,
+			     ULONGEST len, ULONGEST *xfered_len,
+			     unsigned int addr_space)
 {
   struct remote_state *rs;
   int i;
@@ -11293,7 +11322,7 @@ remote_target::xfer_partial (enum target_object object,
 				   xfered_len);
       else
 	return remote_read_bytes (offset, readbuf, len, unit_size,
-				  xfered_len);
+				  xfered_len, addr_space);
     }
 
   /* Handle extra signal info using qxfer packets.  */

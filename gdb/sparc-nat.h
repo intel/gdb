@@ -71,7 +71,8 @@ struct sparc_target : public BaseTarget
 					gdb_byte *readbuf,
 					const gdb_byte *writebuf,
 					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override
+					ULONGEST *xfered_len,
+					unsigned int addr_space = 0) override
   {
     if (object == TARGET_OBJECT_WCOOKIE)
       return sparc_xfer_wcookie (object, annex, readbuf, writebuf,

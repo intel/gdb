@@ -551,7 +551,8 @@ netbsd_process_target::read_memory (CORE_ADDR memaddr, unsigned char *myaddr,
 
 int
 netbsd_process_target::write_memory (CORE_ADDR memaddr,
-				     const unsigned char *myaddr, int size)
+				     const unsigned char *myaddr, int size,
+				     unsigned int addr_space = 0)
 {
   pid_t pid = current_process ()->pid;
   return netbsd_nat::write_memory (pid, myaddr, memaddr, size, nullptr);

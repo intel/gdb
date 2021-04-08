@@ -82,7 +82,8 @@ set_desired_process ()
 /* See target.h.  */
 
 int
-read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len)
+read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len,
+		      unsigned int addr_space)
 {
   /* At the time of writing, GDB only sends write packets with LEN==0,
      not read packets (see comment in target_write_memory), but it
@@ -91,7 +92,7 @@ read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len)
   if (len == 0)
     return 0;
 
-  int res = the_target->read_memory (memaddr, myaddr, len);
+  int res = the_target->read_memory (memaddr, myaddr, len, addr_space);
   check_mem_read (memaddr, myaddr, len);
   return res;
 }
@@ -99,9 +100,10 @@ read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len)
 /* See target/target.h.  */
 
 int
-target_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, ssize_t len)
+target_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, ssize_t len,
+		    unsigned int addr_space)
 {
-  return read_inferior_memory (memaddr, myaddr, len);
+  return read_inferior_memory (memaddr, myaddr, len, addr_space);
 }
 
 /* See target/target.h.  */

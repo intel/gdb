@@ -5429,7 +5429,8 @@ proc_xfer_memory (CORE_ADDR memaddr, unsigned char *readbuf,
 
 int
 linux_process_target::read_memory (CORE_ADDR memaddr,
-				   unsigned char *myaddr, int len)
+				   unsigned char *myaddr, int len,
+				   unsigned int addr_space)
 {
   return proc_xfer_memory (memaddr, myaddr, nullptr, len);
 }

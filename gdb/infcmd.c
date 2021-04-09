@@ -1083,7 +1083,19 @@ jump_command (const char *arg, int from_tty)
     = decode_line_with_last_displayed (arg, DECODE_LINE_FUNFIRSTLINE,
 				       current_program_space);
   if (sals.size () != 1)
-    error (_("Unreasonable jump request"));
+    {
+      /* If multiple sal-objects were found, try dropping those that aren't
+	 from the current objectfile.  */
+      sals.erase (std::remove_if (sals.begin (), sals.end (),
+		  [] (symtab_and_line &sal)
+		    {
+		      struct symtab_and_line cursal
+			  = get_current_source_symtab_and_line ();
+		      return sal.symtab != cursal.symtab;
+		    }), sals.end ());
+      if (sals.size () != 1)
+	error (_("Unreasonable jump request"));
+    }
 
   symtab_and_line &sal = sals[0];
 

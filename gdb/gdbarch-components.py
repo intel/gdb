@@ -1452,6 +1452,14 @@ Method(
 )
 
 Method(
+    type="unsigned int",
+    name="address_space_from_type_flags",
+    params=[("type_instance_flags", "type_flags")],
+    predicate=True,
+    invalid=True,
+)
+
+Method(
     comment="""
 Execute vendor-specific DWARF Call Frame Instruction.  OP is the instruction.
 FS are passed from the generic execute_cfa_program function.

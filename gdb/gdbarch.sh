@@ -700,6 +700,7 @@ v;int;can_step_over_breakpoint;;;0;0;;0
 v;int;have_nonsteppable_watchpoint;;;0;0;;0
 F;int;address_class_type_flags;int byte_size, int dwarf2_addr_class;byte_size, dwarf2_addr_class
 M;const char *;address_class_type_flags_to_name;int type_flags;type_flags
+M;const unsigned int;address_space_from_type_flags;int type_flags;type_flags
 # Execute vendor-specific DWARF Call Frame Instruction.  OP is the instruction.
 # FS are passed from the generic execute_cfa_program function.
 m;bool;execute_dwarf_cfa_vendor_op;gdb_byte op, struct dwarf2_frame_state *fs;op, fs;;default_execute_dwarf_cfa_vendor_op;;0

@@ -1628,6 +1628,23 @@ Method(
 
 Method(
     comment="""
+Translate the given address ADDR using the address class TYPE_INSTANCE_FLAGS.
+ADDR_SPACE_PTR is set to the address space of the translated address.
+Returns the translated address.
+""",
+    type="CORE_ADDR",
+    name="translate_address",
+    params=[
+        ("type_instance_flags", "type_flags"),
+        ("CORE_ADDR", "addr"),
+        ("unsigned int *", "addr_space_ptr")
+    ],
+    predicate=True,
+    invalid=True,
+)
+
+Method(
+    comment="""
 Execute vendor-specific DWARF Call Frame Instruction.  OP is the instruction.
 FS are passed from the generic execute_cfa_program function.
 """,

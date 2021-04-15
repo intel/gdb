@@ -946,6 +946,16 @@ typedef const char * (gdbarch_address_class_type_flags_to_name_ftype) (struct gd
 extern const char * gdbarch_address_class_type_flags_to_name (struct gdbarch *gdbarch, type_instance_flags type_flags);
 extern void set_gdbarch_address_class_type_flags_to_name (struct gdbarch *gdbarch, gdbarch_address_class_type_flags_to_name_ftype *address_class_type_flags_to_name);
 
+/* Translate the given address ADDR using the address class TYPE_INSTANCE_FLAGS.
+   ADDR_SPACE_PTR is set to the address space of the translated address.
+   Returns the translated address. */
+
+extern bool gdbarch_translate_address_p (struct gdbarch *gdbarch);
+
+typedef CORE_ADDR (gdbarch_translate_address_ftype) (struct gdbarch *gdbarch, type_instance_flags type_flags, CORE_ADDR addr, unsigned int *addr_space_ptr);
+extern CORE_ADDR gdbarch_translate_address (struct gdbarch *gdbarch, type_instance_flags type_flags, CORE_ADDR addr, unsigned int *addr_space_ptr);
+extern void set_gdbarch_translate_address (struct gdbarch *gdbarch, gdbarch_translate_address_ftype *translate_address);
+
 /* Execute vendor-specific DWARF Call Frame Instruction.  OP is the instruction.
    FS are passed from the generic execute_cfa_program function. */
 

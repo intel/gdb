@@ -878,6 +878,12 @@ typedef const char * (gdbarch_address_class_type_flags_to_name_ftype) (struct gd
 extern const char * gdbarch_address_class_type_flags_to_name (struct gdbarch *gdbarch, int type_flags);
 extern void set_gdbarch_address_class_type_flags_to_name (struct gdbarch *gdbarch, gdbarch_address_class_type_flags_to_name_ftype *address_class_type_flags_to_name);
 
+extern int gdbarch_address_space_from_type_flags_p (struct gdbarch *gdbarch);
+
+typedef const unsigned int (gdbarch_address_space_from_type_flags_ftype) (struct gdbarch *gdbarch, int type_flags);
+extern const unsigned int gdbarch_address_space_from_type_flags (struct gdbarch *gdbarch, int type_flags);
+extern void set_gdbarch_address_space_from_type_flags (struct gdbarch *gdbarch, gdbarch_address_space_from_type_flags_ftype *address_space_from_type_flags);
+
 /* Execute vendor-specific DWARF Call Frame Instruction.  OP is the instruction.
    FS are passed from the generic execute_cfa_program function. */
 

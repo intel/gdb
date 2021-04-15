@@ -20,9 +20,87 @@
 #include "server.h"
 #include "ze-low.h"
 
+#include "arch/intelgt.h"
+
+#include <level_zero/zet_intel_gpu_debug.h>
+
 
 /* FIXME make into a target method?  */
 int using_threads = 1;
+
+/* Convenience macros.  */
+
+#define dprintf(...)						\
+  do								\
+    {								\
+      if (debug_threads)					\
+	{							\
+	  fprintf (stderr, "%s: ", __FUNCTION__);		\
+	  fprintf (stderr, __VA_ARGS__);			\
+	  fprintf (stderr, "\n");				\
+	  fflush (stderr);					\
+	}							\
+    }								\
+  while (0)
+
+
+/* Determine the most appropriate unsigned integer container type for a
+   register of BITSIZE bits.  */
+
+static const char *
+intelgt_uint_reg_type (uint32_t bitsize)
+{
+  if (bitsize <= 8u)
+    return "uint8";
+
+  if (bitsize <= 16u)
+    return "uint16";
+
+  if (bitsize <= 32u)
+    return "uint32";
+
+  if (bitsize <= 64u)
+    return "uint64";
+
+  if (bitsize <= 128u)
+    return "uint128";
+
+  if (bitsize <= 256u)
+    return "uint256";
+
+  if (bitsize <= 512u)
+    return "uint512";
+
+  if (bitsize <= 1024u)
+    return "uint1024";
+
+  if (bitsize <= 2048u)
+    return "uint2048";
+
+  if (bitsize <= 4096u)
+    return "uint4096";
+
+  if (bitsize <= 8192u)
+    return "uint8192";
+
+  error (_("unsupported bitsize %" PRIu32), bitsize);
+}
+
+/* Add a (uniform) register set to FEATURE.  */
+
+static void
+intelgt_add_regset (tdesc_feature *feature, long &regnum,
+		    const char *prefix, uint32_t count, const char *group,
+		    uint32_t bitsize, const char *type)
+{
+  for (uint32_t reg = 0; reg < count; ++reg)
+    {
+      std::string name = std::string (prefix) + std::to_string (reg);
+
+      tdesc_create_reg (feature, name.c_str (), regnum++, 1, group,
+			bitsize, type);
+    }
+}
 
 /* Target op definitions for Intel GT target based on level-zero.  */
 
@@ -37,6 +115,26 @@ public:
 
   CORE_ADDR read_pc (regcache *regcache) override;
   void write_pc (regcache *regcache, CORE_ADDR pc) override;
+
+protected:
+  bool is_device_supported
+    (const ze_device_properties_t &,
+     const std::vector<zet_debug_regset_properties_t> &) override;
+
+  target_desc *create_tdesc
+    (const ze_device_properties_t &,
+     const std::vector<zet_debug_regset_properties_t> &,
+     ze_regset_info_t &, expedite_t &) override;
+
+private:
+  /* Add a register set for REGPROP on DEVICE to REGSETS and increment REGNUM
+     accordingly.
+
+     May optionally add registers to EXPEDITE.  */
+  void add_regset (target_desc *tdesc, const ze_device_properties_t &device,
+		   const zet_debug_regset_properties_t &regprop,
+		   long &regnum, ze_regset_info_t &regsets,
+		   expedite_t &expedite);
 };
 
 bool
@@ -72,6 +170,286 @@ void
 intelgt_ze_target::write_pc (regcache *regcache, CORE_ADDR pc)
 {
   error (_("%s: tbd"), __FUNCTION__);
+}
+
+bool
+intelgt_ze_target::is_device_supported
+  (const ze_device_properties_t &properties,
+   const std::vector<zet_debug_regset_properties_t> &regset_properties)
+{
+  if (properties.type != ZE_DEVICE_TYPE_GPU)
+    {
+      dprintf ("non-gpu (%x) device (%" PRIx32 "): %s", properties.type,
+	       properties.deviceId, properties.name);
+      return false;
+    }
+
+  if (properties.vendorId != 0x8086)
+    {
+      dprintf ("unknown vendor (%" PRIx32 ") of device (%" PRIx32 "): %s",
+	       properties.vendorId, properties.deviceId, properties.name);
+      return false;
+    }
+
+  /* We need a few registers to support an Intel GT device.
+
+     Those are registers that GDB itself uses.  Without those, we might run into
+     internal errors at some point.  We need others, too, that may be referenced
+     in debug information.  */
+  bool have_grf = false;
+  bool have_isabase = false;
+  bool have_cr = false;
+  bool have_sr = false;
+  bool have_ce = false;
+  for (const zet_debug_regset_properties_t &regprop : regset_properties)
+    {
+      if (regprop.count < 1)
+	{
+	  warning (_("Ignoring empty regset %u in %s."), regprop.type,
+		   properties.name);
+	  continue;
+	}
+
+      switch (regprop.type)
+	{
+	case ZET_DEBUG_REGSET_TYPE_GRF_INTEL_GPU:
+	  have_grf = true;
+	  break;
+
+	case ZET_DEBUG_REGSET_TYPE_CE_INTEL_GPU:
+	  have_ce = true;
+	  break;
+
+	case ZET_DEBUG_REGSET_TYPE_CR_INTEL_GPU:
+	  have_cr = true;
+	  break;
+
+	case ZET_DEBUG_REGSET_TYPE_SR_INTEL_GPU:
+	  have_sr = true;
+	  break;
+
+	case ZET_DEBUG_REGSET_TYPE_SBA_INTEL_GPU:
+	  /* We need 'isabase', which is at position 5 in version 1.  */
+	  if ((regprop.version == 0) && (regprop.count >= 5))
+	    have_isabase = true;
+	  else
+	    warning (_("Ignoring unknown SBA regset version %u in %s."),
+		     regprop.version, properties.name);
+	  break;
+	}
+    }
+
+  if (have_grf && have_isabase && have_cr && have_sr && have_ce)
+    return true;
+
+  dprintf ("unsupported device (%" PRIx32 "): %s", properties.deviceId,
+	   properties.name);
+  return false;
+}
+
+target_desc *
+intelgt_ze_target::create_tdesc
+  (const ze_device_properties_t &properties,
+   const std::vector<zet_debug_regset_properties_t> &regset_properties,
+   ze_regset_info_t &regsets, expedite_t &expedite)
+{
+  if (properties.vendorId != 0x8086)
+    error (_("unknown vendor (%" PRIx32 ") of device (%" PRIx32 "): %s"),
+	   properties.vendorId, properties.deviceId, properties.name);
+
+  target_desc_up tdesc = allocate_target_description ();
+  set_tdesc_architecture (tdesc.get (), "intelgt");
+  set_tdesc_osabi (tdesc.get (), "GNU/Linux");
+
+  long regnum = 0;
+  for (const zet_debug_regset_properties_t &regprop : regset_properties)
+    add_regset (tdesc.get (), properties, regprop, regnum, regsets, expedite);
+
+  /* Tdesc expects a nullptr-terminated array.  */
+  expedite.push_back (nullptr);
+
+  init_target_desc (tdesc.get (), expedite.data ());
+  return tdesc.release ();
+}
+
+void
+intelgt_ze_target::add_regset (target_desc *tdesc,
+			       const ze_device_properties_t &device,
+			       const zet_debug_regset_properties_t &regprop,
+			       long &regnum, ze_regset_info_t &regsets,
+			       expedite_t &expedite)
+{
+  tdesc_feature *feature = nullptr;
+
+  ze_regset_info regset = {};
+  regset.type = (uint32_t) regprop.type;
+  regset.size = regprop.byteSize;
+  regset.begin = regnum;
+  regset.is_writeable
+    = ((regprop.generalFlags & ZET_DEBUG_REGSET_FLAG_WRITEABLE) != 0);
+
+  if (regprop.count < 1)
+    {
+      warning (_("Ignoring empty regset %u in %s."), regprop.type,
+	       device.name);
+      return;
+    }
+
+  if ((regprop.generalFlags & ZET_DEBUG_REGSET_FLAG_READABLE) == 0)
+    {
+      warning (_("Ignoring non-readable regset %u in %s."), regprop.type,
+	       device.name);
+      return;
+    }
+
+  switch (regprop.type)
+    {
+    case ZET_DEBUG_REGSET_TYPE_GRF_INTEL_GPU:
+      feature = tdesc_create_feature (tdesc, intelgt::feature_grf);
+
+      intelgt_add_regset (feature, regnum, "r", regprop.count, "GRF",
+			  regprop.bitSize,
+			  intelgt_uint_reg_type (regprop.bitSize));
+      break;
+
+    case ZET_DEBUG_REGSET_TYPE_ADDR_INTEL_GPU:
+      feature = tdesc_create_feature (tdesc, intelgt::feature_addr);
+
+      intelgt_add_regset (feature, regnum, "a", regprop.count, "ADDR",
+			  regprop.bitSize,
+			  intelgt_uint_reg_type (regprop.bitSize));
+      break;
+
+    case ZET_DEBUG_REGSET_TYPE_FLAG_INTEL_GPU:
+      feature = tdesc_create_feature (tdesc, intelgt::feature_flag);
+
+      intelgt_add_regset (feature, regnum, "f", regprop.count, "FLAG",
+			  regprop.bitSize,
+			  intelgt_uint_reg_type (regprop.bitSize));
+      break;
+
+    case ZET_DEBUG_REGSET_TYPE_CE_INTEL_GPU:
+      /* We expect a single 'emask' register.  */
+      if (regprop.count != 1)
+	warning (_("Ignoring %u unexpected 'emask' registers in %s."),
+		 regprop.count - 1, device.name);
+
+      feature = tdesc_create_feature (tdesc, intelgt::feature_ce);
+
+      tdesc_create_reg (feature, "emask", regnum++, 1, "CE",
+			regprop.bitSize,
+			intelgt_uint_reg_type (regprop.bitSize));
+
+      expedite.push_back ("emask");
+      break;
+
+    case ZET_DEBUG_REGSET_TYPE_SR_INTEL_GPU:
+      feature = tdesc_create_feature (tdesc, intelgt::feature_sr);
+
+      intelgt_add_regset (feature, regnum, "sr", regprop.count, "SR",
+			  regprop.bitSize,
+			  intelgt_uint_reg_type (regprop.bitSize));
+      break;
+
+    case ZET_DEBUG_REGSET_TYPE_CR_INTEL_GPU:
+      feature = tdesc_create_feature (tdesc, intelgt::feature_cr);
+
+      intelgt_add_regset (feature, regnum, "cr", regprop.count, "CR",
+			  regprop.bitSize,
+			  intelgt_uint_reg_type (regprop.bitSize));
+
+      expedite.push_back ("cr0");
+      break;
+
+    case ZET_DEBUG_REGSET_TYPE_TDR_INTEL_GPU:
+      feature = tdesc_create_feature (tdesc, intelgt::feature_tdr);
+
+      intelgt_add_regset (feature, regnum, "tdr", regprop.count, "TDR",
+			  regprop.bitSize,
+			  intelgt_uint_reg_type (regprop.bitSize));
+      break;
+
+    case ZET_DEBUG_REGSET_TYPE_ACC_INTEL_GPU:
+      feature = tdesc_create_feature (tdesc, intelgt::feature_acc);
+
+      intelgt_add_regset (feature, regnum, "acc", regprop.count, "ACC",
+			  regprop.bitSize,
+			  intelgt_uint_reg_type (regprop.bitSize));
+      break;
+
+    case ZET_DEBUG_REGSET_TYPE_MME_INTEL_GPU:
+      feature = tdesc_create_feature (tdesc, intelgt::feature_mme);
+
+      intelgt_add_regset (feature, regnum, "mme", regprop.count, "MME",
+			  regprop.bitSize,
+			  intelgt_uint_reg_type (regprop.bitSize));
+      break;
+
+    case ZET_DEBUG_REGSET_TYPE_SP_INTEL_GPU:
+      /* We expect a single 'sp' register.  */
+      if (regprop.count != 1)
+	warning (_("Ignoring %u unexpected 'sp' registers in %s."),
+		 regprop.count - 1, device.name);
+
+      feature = tdesc_create_feature (tdesc, intelgt::feature_sp);
+
+      tdesc_create_reg (feature, "sp", regnum++, 1, "SP",
+			regprop.bitSize,
+			intelgt_uint_reg_type (regprop.bitSize));
+      break;
+
+    case ZET_DEBUG_REGSET_TYPE_SBA_INTEL_GPU:
+      feature = tdesc_create_feature (tdesc, intelgt::feature_sba);
+
+      switch (regprop.version)
+	{
+	case 0:
+	  {
+	    const char *regtype = intelgt_uint_reg_type (regprop.bitSize);
+	    const char *sbaregs[] = {
+	      "genstbase",
+	      "sustbase",
+	      "dynbase",
+	      "iobase",
+	      "isabase",
+	      "blsustbase",
+	      "blsastbase",
+	      "btbase",
+	      "scrbase",
+	      nullptr
+	    };
+	    int reg = 0;
+	    for (; (reg < regprop.count) && (sbaregs[reg] != nullptr); ++reg)
+	      tdesc_create_reg (feature, sbaregs[reg], regnum++, 1, "SBA",
+				regprop.bitSize, regtype);
+
+	    if (regprop.count >= 4)
+	      expedite.push_back ("isabase");
+	  }
+	  break;
+
+	default:
+	  warning (_("Ignoring unknown SBA regset version %u in %s"),
+		   regprop.version, device.name);
+	  break;
+	}
+      break;
+
+    case ZET_DEBUG_REGSET_TYPE_INVALID_INTEL_GPU:
+    case ZET_DEBUG_REGSET_TYPE_FORCE_UINT32:
+      break;
+    }
+
+  if (feature == nullptr)
+    {
+      warning (_("Ignoring unknown regset %u in %s."), regprop.type,
+	       device.name);
+
+      return;
+    }
+
+  regset.end = regnum;
+  regsets.push_back (regset);
 }
 
 

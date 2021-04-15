@@ -22,9 +22,88 @@
 #define GDBSERVER_LEVEL_ZERO_LOW_H
 
 #include "target.h"
+#include "tdesc.h"
 
 #include <level_zero/zet_api.h>
 #include <string>
+#include <vector>
+#include <list>
+
+
+/* Information about register sets reported in target descriptions.
+
+   The main use of this is to find the information relevant for fetching
+   and storing registers via level-zero base on register numbers.  */
+struct ze_regset_info
+{
+  /* The device-specific level-zero register set type.  */
+  uint32_t type;
+
+  /* The register size in bytes for reading/writing.  */
+  uint32_t size;
+
+  /* The begin (inclusive) and end (exclusive) register numbers for this
+     regset.
+
+     This is used to map register numbers to regset types.  */
+  long begin, end;
+
+  /* Whether the regset is writable.  We assume all are readable.  */
+  bool is_writeable;
+};
+
+/* A vector of regset infos.  */
+typedef std::vector<ze_regset_info> ze_regset_info_t;
+
+/* A vector of expedite register names.
+
+   The names are expected to be string literals.  The vector must be
+   terminated with a single nullptr entry.  */
+typedef std::vector<const char *> expedite_t;
+
+/* Information about devices we're attached to.
+
+   This is pretty similar to process_info.  The difference is that we only
+   want to tell GDB about devices that the host application actually uses.
+   To know that, however, we need to attach to all available devices.  */
+
+struct ze_device_info
+{
+  /* The debug session configuration.  */
+  zet_debug_config_t config = {};
+
+  /* The device handle.  This must not be nullptr.  */
+  ze_device_handle_t handle = nullptr;
+
+  /* The device's properties.  */
+  ze_device_properties_t properties = {};
+
+  /* The debug session handle.
+
+     This is nullptr if we are not currently attached.  */
+  zet_debug_session_handle_t session = nullptr;
+
+  /* The target description for this device.  */
+  target_desc_up tdesc;
+
+  /* The register sets reported in the device's target description.  */
+  ze_regset_info_t regsets;
+
+  /* The expedite registers used for this device's target description.  */
+  expedite_t expedite;
+
+  /* The device enumeration ordinal number.  */
+  unsigned long ordinal = 0;
+
+  /* The process for this device.
+
+     We model devices we're attached to as inferior process.  In GDB, we
+     hide inferiors representing devices that are not currently used and
+     only show inferiors for devices that are in use.
+
+     If we are not attached to this device, PROCESS will be nullptr.  */
+  process_info *process = nullptr;
+};
 
 /* A thread's execution state.  */
 
@@ -127,6 +206,36 @@ ze_thread_id (const thread_info *thread)
 
 extern std::string ze_thread_id_str (const ze_device_thread_t &thread);
 
+/* The state of a process.  */
+
+enum ze_process_state
+{
+  /* The process is visible to the user.  */
+  ze_process_visible,
+
+  /* The process is hidden from the user.  */
+  ze_process_hidden
+};
+
+/* Process info private data for level-zero targets.  */
+
+struct process_info_private
+{
+  /* The device we're modelling as process.
+
+     In case we get forcefully detached from the device this process
+     represents, DEVICE will be nullptr.  The process will remain until
+     the detach event can be reported to GDB.  */
+  ze_device_info *device;
+
+  /* The state of this process.  */
+  ze_process_state state;
+
+  process_info_private (ze_device_info *dev, ze_process_state st)
+    : device (dev), state (st)
+    {}
+};
+
 /* Target op definitions for level-zero based targets.  */
 
 class ze_target : public process_stratum_target
@@ -180,6 +289,36 @@ public:
 
   void pause_all (bool freeze) override;
   void unpause_all (bool unfreeze) override;
+
+private:
+  typedef std::list<ze_device_info *> devices_t;
+
+  /* The devices we care about.  */
+  devices_t devices;
+
+  /* The current device ordinal number used for enumerating devices.  */
+  unsigned long ordinal = 0;
+
+  /* Attach to PID on devices in the device tree rooted at DEVICE.
+     Returns the number of devices we attached to.  */
+  int attach_to_device (uint32_t pid, ze_device_handle_t device);
+
+  /* Attach to all available devices for process PID and store them in
+     this object.  Returns the number of devices we attached to.  */
+  int attach_to_devices (uint32_t pid);
+
+protected:
+  /* Check whether a device is supported by this target.  */
+  virtual bool is_device_supported
+    (const ze_device_properties_t &,
+     const std::vector<zet_debug_regset_properties_t> &) = 0;
+
+  /* Create a target description for a device and populate the
+     corresponding regset information.  */
+  virtual target_desc *create_tdesc
+    (const ze_device_properties_t &,
+     const std::vector<zet_debug_regset_properties_t> &,
+     ze_regset_info_t &, expedite_t &) = 0;
 };
 
 #endif /* GDBSERVER_LEVEL_ZERO_LOW_H */

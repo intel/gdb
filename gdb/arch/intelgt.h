@@ -35,14 +35,27 @@ enum breakpoint_kind
 
 constexpr int MAX_INST_LENGTH = 16;
 
-/* Feature names.  */
+/* Feature names.
 
-constexpr const char* feature_sba = "org.gnu.gdb.intelgt.sba";
+   They correspond to register sets defined in zet_intel_gpu_debug.h.  We
+   declare feature names in the order used in that header.
+
+   The SBA register set consists of a set of base registers in the order
+   defined in that header file.
+
+   Not all registers have DWARF numbers.  See DWARF_REGSETS below for a
+   list of features that do.  */
 constexpr const char* feature_grf = "org.gnu.gdb.intelgt.grf";
 constexpr const char* feature_addr = "org.gnu.gdb.intelgt.addr";
 constexpr const char* feature_flag = "org.gnu.gdb.intelgt.flag";
+constexpr const char *feature_ce = "org.gnu.gdb.intelgt.ce";
+constexpr const char *feature_sr = "org.gnu.gdb.intelgt.sr";
+constexpr const char *feature_cr = "org.gnu.gdb.intelgt.cr";
+constexpr const char *feature_tdr = "org.gnu.gdb.intelgt.tdr";
 constexpr const char* feature_acc = "org.gnu.gdb.intelgt.acc";
 constexpr const char* feature_mme = "org.gnu.gdb.intelgt.mme";
+constexpr const char *feature_sp = "org.gnu.gdb.intelgt.sp";
+constexpr const char* feature_sba = "org.gnu.gdb.intelgt.sba";
 
 /* Register sets/groups needed for DWARF mapping.  Used for
    declaring static arrays for various mapping tables.  */

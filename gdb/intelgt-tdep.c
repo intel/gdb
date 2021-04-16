@@ -1111,6 +1111,21 @@ intelgt_address_class_name_to_type_flags (struct gdbarch *gdbarch,
     return false;
 }
 
+/* Implementation of `translate_address' gdbarch method, as defined in
+   gdbarch.h.  */
+
+static CORE_ADDR
+intelgt_translate_address (struct gdbarch *gdbarch,
+			   type_instance_flags type_flags, CORE_ADDR addr,
+			   unsigned int *addr_space_ptr)
+{
+  if ((type_flags & INTELGT_TYPE_INSTANCE_FLAG_SLM) != 0)
+    *addr_space_ptr = 1;
+  else
+    *addr_space_ptr = 0;
+  return addr;
+}
+
 /* Utility function to lookup the pseudo-register number by name.  Exact
    amount of pseudo-registers may differ and thus fixed constants can't be
    used for this.  */
@@ -2507,6 +2522,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
     (gdbarch, intelgt_address_class_name_to_type_flags);
   set_gdbarch_address_class_type_flags_to_name
     (gdbarch, intelgt_address_class_type_flags_to_name);
+  set_gdbarch_translate_address (gdbarch, intelgt_translate_address);
 
   /* Enable inferior call support.  */
   set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);

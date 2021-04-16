@@ -1116,6 +1116,18 @@ intelgt_address_class_name_to_type_flags (struct gdbarch *gdbarch,
     return false;
 }
 
+/* Implementation of `address_space_from_type_flags' gdbarch method,
+   as defined in gdbarch.h.  */
+
+static unsigned int
+intelgt_address_space_from_type_flags (struct gdbarch *gdbarch,
+				       type_instance_flags type_flags)
+{
+  if ((type_flags & INTELGT_TYPE_INSTANCE_FLAG_SLM) != 0)
+    return 1;
+  return 0;
+}
+
 /* Utility function to lookup the pseudo-register number by name.  Exact
    amount of pseudo-registers may differ and thus fixed constants can't be
    used for this.  */
@@ -2514,6 +2526,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
     (gdbarch, intelgt_address_class_name_to_type_flags);
   set_gdbarch_address_class_type_flags_to_name
     (gdbarch, intelgt_address_class_type_flags_to_name);
+  set_gdbarch_address_space_from_type_flags
+    (gdbarch, intelgt_address_space_from_type_flags);
 
   /* Enable inferior call support.  */
   set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);

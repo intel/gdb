@@ -1067,16 +1067,16 @@ handle_search_memory_1 (CORE_ADDR start_addr, CORE_ADDR search_space_len,
 			gdb_byte *pattern, unsigned pattern_len,
 			gdb_byte *search_buf,
 			unsigned chunk_size, unsigned search_buf_size,
-			CORE_ADDR *found_addrp)
+			CORE_ADDR *found_addrp, unsigned int addr_space)
 {
   /* Prime the search buffer.  */
 
-  if (gdb_read_memory (start_addr, search_buf, search_buf_size)
+  if (gdb_read_memory (start_addr, search_buf, search_buf_size, addr_space)
       != search_buf_size)
     {
       warning ("Unable to access %ld bytes of target "
-	       "memory at 0x%lx, halting search.",
-	       (long) search_buf_size, (long) start_addr);
+	       "memory at 0x%lx in address space %u, halting search.",
+	       (long) search_buf_size, (long) start_addr, addr_space);
       return -1;
     }
 
@@ -1126,11 +1126,11 @@ handle_search_memory_1 (CORE_ADDR start_addr, CORE_ADDR search_space_len,
 			: chunk_size);
 
 	  if (gdb_read_memory (read_addr, search_buf + keep_len,
-			       nr_to_read) != nr_to_read)
+			       nr_to_read, addr_space) != nr_to_read)
 	    {
 	      warning ("Unable to access %ld bytes of target memory "
-		       "at 0x%lx, halting search.",
-		       (long) nr_to_read, (long) read_addr);
+		       "at 0x%lx in address space %u, halting search.",
+		       (long) nr_to_read, (long) read_addr, addr_space);
 	      return -1;
 	    }
 
@@ -1148,10 +1148,11 @@ handle_search_memory_1 (CORE_ADDR start_addr, CORE_ADDR search_space_len,
 static void
 handle_search_memory (char *own_buf, int packet_len)
 {
-  CORE_ADDR start_addr;
-  CORE_ADDR search_space_len;
+  CORE_ADDR start_addr = 0;
+  CORE_ADDR search_space_len = 0;
   gdb_byte *pattern;
   unsigned int pattern_len;
+  unsigned int addr_space = 0;
   /* NOTE: also defined in find.c testcase.  */
 #define SEARCH_CHUNK_SIZE 16000
   const unsigned chunk_size = SEARCH_CHUNK_SIZE;
@@ -1172,7 +1173,7 @@ handle_search_memory (char *own_buf, int packet_len)
   if (decode_search_memory_packet (own_buf + cmd_name_len,
 				   packet_len - cmd_name_len,
 				   &start_addr, &search_space_len,
-				   pattern, &pattern_len) < 0)
+				   pattern, &pattern_len, &addr_space) < 0)
     {
       free (pattern);
       error ("Error in parsing qSearch:memory packet");
@@ -1198,7 +1199,7 @@ handle_search_memory (char *own_buf, int packet_len)
   found = handle_search_memory_1 (start_addr, search_space_len,
 				  pattern, pattern_len,
 				  search_buf, chunk_size, search_buf_size,
-				  &found_addr);
+				  &found_addr, addr_space);
 
   if (found > 0)
     sprintf (own_buf, "1,%lx", (long) found_addr);

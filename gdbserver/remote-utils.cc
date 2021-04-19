@@ -1412,12 +1412,33 @@ int
 decode_search_memory_packet (const char *buf, int packet_len,
 			     CORE_ADDR *start_addrp,
 			     CORE_ADDR *search_space_lenp,
-			     gdb_byte *pattern, unsigned int *pattern_lenp)
+			     gdb_byte *pattern, unsigned int *pattern_lenp,
+			     unsigned int *addr_spacep)
 {
   const char *p = buf;
+  char ch;
 
-  p = decode_address_to_semicolon (start_addrp, p);
-  p = decode_address_to_semicolon (search_space_lenp, p);
+  while ((ch = *p++) != ';' && ch != '@')
+    {
+      *start_addrp = *start_addrp << 4;
+      *start_addrp |= fromhex (ch) & 0x0f;
+    }
+
+  if (ch == '@')
+    {
+      while ((ch = *p++) != ';')
+	{
+	  *addr_spacep = *addr_spacep << 4;
+	  *addr_spacep |= fromhex (ch) & 0x0f;
+	}
+    }
+
+  while ((ch = *p++) != ';')
+    {
+      *search_space_lenp = *search_space_lenp << 4;
+      *search_space_lenp |= fromhex (ch) & 0x0f;
+    }
+
   packet_len -= p - buf;
   *pattern_lenp = remote_unescape_input ((const gdb_byte *) p, packet_len,
 					 pattern, packet_len);

@@ -2046,6 +2046,9 @@ enum {
   /* Support for multi-process extensions.  */
   PACKET_multiprocess_feature,
 
+  /* Support for multi-address-space extension.  */
+  PACKET_multi_address_space_feature,
+
   /* Support for enabling and disabling tracepoints while a trace
      experiment is running.  */
   PACKET_EnableDisableTracepoints_feature,
@@ -2208,6 +2211,14 @@ static int
 remote_multi_process_p (struct remote_state *rs)
 {
   return packet_support (PACKET_multiprocess_feature) == PACKET_ENABLE;
+}
+
+/* Returns true if the multi_address_space extensions are in effect.  */
+
+static int
+remote_multi_address_space_p (struct remote_state *rs)
+{
+  return packet_support (PACKET_multi_address_space_feature) == PACKET_ENABLE;
 }
 
 /* Returns true if fork events are supported.  */
@@ -5178,6 +5189,8 @@ static const struct protocol_feature remote_protocol_features[] = {
     PACKET_QStartNoAckMode },
   { "multiprocess", PACKET_DISABLE, remote_supported_packet,
     PACKET_multiprocess_feature },
+  { "multi-address-space", PACKET_DISABLE, remote_supported_packet,
+    PACKET_multi_address_space_feature },
   { "QNonStop", PACKET_DISABLE, remote_supported_packet, PACKET_QNonStop },
   { "qXfer:siginfo:read", PACKET_DISABLE, remote_supported_packet,
     PACKET_qXfer_siginfo_read },
@@ -5332,6 +5345,10 @@ remote_target::remote_query_supported ()
 
       if (packet_set_cmd_state (PACKET_no_resumed) != AUTO_BOOLEAN_FALSE)
 	remote_query_supported_append (&q, "no-resumed+");
+
+      if (packet_set_cmd_state
+		(PACKET_multi_address_space_feature) != AUTO_BOOLEAN_FALSE)
+	remote_query_supported_append (&q, "multi-address-space+");
 
       /* Keep this one last to work around a gdbserver <= 7.10 bug in
 	 the qSupported:xmlRegisters=i386 handling.  */
@@ -14794,6 +14811,9 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
 
   add_packet_config_cmd (&remote_protocol_packets[PACKET_multiprocess_feature],
        "multiprocess-feature", "multiprocess-feature", 0);
+
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_multi_address_space_feature],
+       "multi-address-space-feature", "multi-address-space-feature", 0);
 
   add_packet_config_cmd (&remote_protocol_packets[PACKET_swbreak_feature],
                          "swbreak-feature", "swbreak-feature", 0);

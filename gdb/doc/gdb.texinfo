@@ -23467,6 +23467,10 @@ are:
 @tab @code{multiprocess extensions}
 @tab Debug multiple processes and remote process PID awareness
 
+@item @code{multi-address-space-extensions}
+@tab @code{multi-address-space-feature extensions}
+@tab Access multiple address spaces via optional address space argument
+
 @item @code{swbreak-feature}
 @tab @code{swbreak stop reason}
 @tab @code{break}
@@ -41464,6 +41468,13 @@ extensions unless the stub also reports that it supports them by
 including @samp{multiprocess+} in its @samp{qSupported} reply.
 @xref{multiprocess extensions}, for details.
 
+@item multi-address-space
+This feature indicates whether @value{GDBN} supports multi-address-space
+extensions to the remote protocol.  @value{GDBN} does not use such
+extensions unless the stub also reports that it supports them by including
+@samp{multi-address-space+} in its @samp{qSupported} reply.
+@xref{multi-address-space extensions}, for details.
+
 @item xmlRegisters
 This feature indicates that @value{GDBN} supports the XML target
 description.  If the stub sees @samp{xmlRegisters=} with target
@@ -41682,6 +41693,11 @@ These are the currently defined stub features and their properties:
 @tab @samp{-}
 @tab No
 
+@item @samp{multi-address-space}
+@tab No
+@tab @samp{-}
+@tab No
+
 @item @samp{ConditionalBreakpoints}
 @tab No
 @tab @samp{-}
@@ -41886,6 +41902,15 @@ syntactic extensions only, not that the stub necessarily supports
 debugging of more than one process at a time.  The stub must not use
 multiprocess extensions in packet replies unless @value{GDBN} has also
 indicated it supports them in its @samp{qSupported} request.
+
+@item multi-address-space
+@anchor{multi-address-space extensions}
+@cindex multi-address-space extensions, in remote protocol
+The remote stub understands the multi-address-space extensions to the remote
+protocol syntax.  The multi-address-space extensions affect the syntax of
+the @samp{X}, @samp{M}, @samp{m} and @samp{qSearch:memory} packets.  Note
+that reporting this feature indicates support for the syntactic extensions
+only, not that the stub necessarily supports multi-address-space accesses.
 
 @item qXfer:osdata:read
 The remote stub understands the @samp{qXfer:osdata:read} packet

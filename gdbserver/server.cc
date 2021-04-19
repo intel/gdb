@@ -2723,6 +2723,8 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 		}
 	      else if (feature == "vContSupported+")
 		cs.vCont_supported = 1;
+	      else if (feature == "multi-address-space+")
+		cs.multi_addr_space = 1;
 	      else if (feature == "QThreadEvents+")
 		;
 	      else if (feature == "QThreadOptions+")
@@ -2860,6 +2862,8 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 	  sprintf (end_buf, ";QThreadOptions=%s",
 		   phex_nz (supported_options, sizeof (supported_options)));
 	}
+
+      strcat (own_buf, ";multi-address-space+");
 
       strcat (own_buf, ";QThreadEvents+");
 

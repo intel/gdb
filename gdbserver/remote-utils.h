@@ -71,7 +71,8 @@ int decode_search_memory_packet (const char *buf, int packet_len,
 				 CORE_ADDR *start_addrp,
 				 CORE_ADDR *search_space_lenp,
 				 gdb_byte *pattern,
-				 unsigned int *pattern_lenp);
+				 unsigned int *pattern_lenp,
+				 unsigned int *addr_spacep);
 
 void clear_symbol_cache (struct sym_cache **symcache_p);
 int look_up_one_symbol (const char *name, CORE_ADDR *addrp, int may_ask_gdb);

@@ -379,6 +379,8 @@ private:
 
   ptid_t handle_step_completed (GTEvent *event, target_waitstatus *status);
 
+  ptid_t handle_interrupt_timedout (GTEvent *event, target_waitstatus *status);
+
   ptid_t process_single_event (GTEvent *event, target_waitstatus *status);
 
   void process_thread_stopped_event (thread_info *gdb_thread, GTEvent *event,
@@ -831,6 +833,23 @@ intelgt_process_target::handle_step_completed (GTEvent *event,
   return ptid;
 }
 
+/* Handle an 'interrupt timeout' event.  */
+
+ptid_t
+intelgt_process_target::handle_interrupt_timedout (GTEvent *event,
+						   target_waitstatus *status)
+{
+  gdb_assert (event->type == eGfxDbgEventInterruptTimedOut);
+  interrupt_in_progress = false;
+  status->set_no_resumed ();
+
+  if (event->device == nullptr)
+    return minus_one_ptid;
+
+  process_info *proc = find_process_from_gt_event (event);
+  return ptid_t (proc->pid);
+}
+
 /* Process a single event.  */
 
 ptid_t
@@ -870,6 +889,10 @@ intelgt_process_target::process_single_event (GTEvent *event,
     case eGfxDbgEventStepCompleted:
       dprintf ("Processing a step completed event");
       return handle_step_completed (event, status);
+
+    case eGfxDbgEventInterruptTimedOut:
+      dprintf ("Processing an interrupt timeout");
+      return handle_interrupt_timedout (event, status);
 
     case eGfxDbgEventInvalid:
     case eGfxDbgEventReserved:

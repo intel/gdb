@@ -1140,10 +1140,11 @@ gdb_write_memory (CORE_ADDR memaddr, const unsigned char *myaddr, int len,
 static void
 handle_search_memory (char *own_buf, int packet_len)
 {
-  CORE_ADDR start_addr;
-  CORE_ADDR search_space_len;
+  CORE_ADDR start_addr = 0;
+  CORE_ADDR search_space_len = 0;
   gdb_byte *pattern;
   unsigned int pattern_len;
+  unsigned int addr_space = 0;
   int found;
   CORE_ADDR found_addr;
   int cmd_name_len = sizeof ("qSearch:memory:") - 1;
@@ -1155,15 +1156,15 @@ handle_search_memory (char *own_buf, int packet_len)
   if (decode_search_memory_packet (own_buf + cmd_name_len,
 				   packet_len - cmd_name_len,
 				   &start_addr, &search_space_len,
-				   pattern, &pattern_len) < 0)
+				   pattern, &pattern_len, &addr_space) < 0)
     {
       free (pattern);
       error ("Error in parsing qSearch:memory packet");
     }
 
-  auto read_memory = [] (CORE_ADDR addr, gdb_byte *result, size_t len)
+  auto read_memory = [addr_space] (CORE_ADDR addr, gdb_byte *result, size_t len)
     {
-      return gdb_read_memory (addr, result, len) == len;
+      return gdb_read_memory (addr, result, len, addr_space) == len;
     };
 
   found = simple_search_memory (read_memory, start_addr, search_space_len,

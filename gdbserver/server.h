@@ -170,6 +170,9 @@ struct client_state
      space randomization feature before starting an inferior.  */
   int disable_randomization = 1;
 
+  /* Whether we support an address_space argument for memory accesses.  */
+  int multi_addr_space = 1;
+
   int pass_signals[GDB_SIGNAL_LAST];
   int program_signals[GDB_SIGNAL_LAST];
   int program_signals_p = 0;

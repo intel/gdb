@@ -77,7 +77,8 @@ static int default_search_memory (struct target_ops *ops,
 				  ULONGEST search_space_len,
 				  const gdb_byte *pattern,
 				  ULONGEST pattern_len,
-				  CORE_ADDR *found_addrp);
+				  CORE_ADDR *found_addrp,
+				  unsigned int addr_space = 0);
 
 static int default_verify_memory (struct target_ops *self,
 				  const gdb_byte *data,
@@ -2801,25 +2802,25 @@ target_read_description (struct target_ops *target)
   return target->read_description ();
 }
 
-
 /* Default implementation of memory-searching.  */
 
 static int
 default_search_memory (struct target_ops *self,
 		       CORE_ADDR start_addr, ULONGEST search_space_len,
 		       const gdb_byte *pattern, ULONGEST pattern_len,
-		       CORE_ADDR *found_addrp)
+		       CORE_ADDR *found_addrp, unsigned int addr_space)
 {
-  auto read_memory = [=] (CORE_ADDR addr, gdb_byte *result, size_t len)
+  auto read_memory = [=] (CORE_ADDR addr, gdb_byte *result, size_t len,
+			  unsigned int l_addr_space)
     {
       return target_read (current_inferior ()->top_target (),
 			  TARGET_OBJECT_MEMORY, NULL,
-			  result, addr, len) == len;
+			  result, addr, len, l_addr_space) == len;
     };
 
   /* Start over from the top of the target stack.  */
   return simple_search_memory (read_memory, start_addr, search_space_len,
-			       pattern, pattern_len, found_addrp);
+			       pattern, pattern_len, found_addrp, addr_space);
 }
 
 /* Search SEARCH_SPACE_LEN bytes beginning at START_ADDR for the
@@ -2832,12 +2833,12 @@ default_search_memory (struct target_ops *self,
 int
 target_search_memory (CORE_ADDR start_addr, ULONGEST search_space_len,
 		      const gdb_byte *pattern, ULONGEST pattern_len,
-		      CORE_ADDR *found_addrp)
+		      CORE_ADDR *found_addrp, unsigned int addr_space)
 {
   target_ops *target = current_inferior ()->top_target ();
 
   return target->search_memory (start_addr, search_space_len, pattern,
-				pattern_len, found_addrp);
+				pattern_len, found_addrp, addr_space);
 }
 
 /* Look through the currently pushed targets.  If none of them will

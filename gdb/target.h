@@ -869,15 +869,16 @@ struct target_ops
 			    gdb_byte *endptr, CORE_ADDR *typep, CORE_ADDR *valp)
       TARGET_DEFAULT_FUNC (default_auxv_parse);
 
-    /* Search SEARCH_SPACE_LEN bytes beginning at START_ADDR for the
-       sequence of bytes in PATTERN with length PATTERN_LEN.
+    /* Search SEARCH_SPACE_LEN bytes beginning at START_ADDR in ADDR_SPACE
+       for the sequence of bytes in PATTERN with length PATTERN_LEN.
 
        The result is 1 if found, 0 if not found, and -1 if there was an error
        requiring halting of the search (e.g. memory read error).
        If the pattern is found the address is recorded in FOUND_ADDRP.  */
     virtual int search_memory (CORE_ADDR start_addr, ULONGEST search_space_len,
 			       const gdb_byte *pattern, ULONGEST pattern_len,
-			       CORE_ADDR *found_addrp)
+			       CORE_ADDR *found_addrp,
+			       unsigned int addr_space = 0)
       TARGET_DEFAULT_FUNC (default_search_memory);
 
     /* Can target execute in reverse?  */
@@ -2157,7 +2158,8 @@ extern int target_search_memory (CORE_ADDR start_addr,
 				 ULONGEST search_space_len,
 				 const gdb_byte *pattern,
 				 ULONGEST pattern_len,
-				 CORE_ADDR *found_addrp);
+				 CORE_ADDR *found_addrp,
+				 unsigned int addr_space = 0);
 
 /* Target file operations.  */
 

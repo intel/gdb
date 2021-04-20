@@ -31,7 +31,7 @@ simple_search_memory
   (gdb::function_view<target_read_memory_ftype> read_memory,
    CORE_ADDR start_addr, ULONGEST search_space_len,
    const gdb_byte *pattern, ULONGEST pattern_len,
-   CORE_ADDR *found_addrp)
+   CORE_ADDR *found_addrp, unsigned int addr_space)
 {
   const unsigned chunk_size = SEARCH_CHUNK_SIZE;
   /* Buffer to hold memory contents for searching.  */
@@ -47,11 +47,13 @@ simple_search_memory
 
   /* Prime the search buffer.  */
 
-  if (!read_memory (start_addr, search_buf.data (), search_buf_size))
+  if (!read_memory (start_addr, search_buf.data (), search_buf_size,
+		    addr_space))
     {
       warning (_("Unable to access %s bytes of target "
-		 "memory at %s, halting search."),
-	       pulongest (search_buf_size), hex_string (start_addr));
+		 "memory at %s in address space %s, halting search."),
+	       pulongest (search_buf_size), hex_string (start_addr),
+	       pulongest ((LONGEST) addr_space));
       return -1;
     }
 
@@ -101,12 +103,13 @@ simple_search_memory
 	  nr_to_read = std::min (search_space_len - keep_len,
 				 (ULONGEST) chunk_size);
 
-	  if (!read_memory (read_addr, &search_buf[keep_len], nr_to_read))
+	  if (!read_memory (read_addr, &search_buf[keep_len], nr_to_read,
+			    addr_space))
 	    {
 	      warning (_("Unable to access %s bytes of target "
-			 "memory at %s, halting search."),
-		       plongest (nr_to_read),
-		       hex_string (read_addr));
+			 "memory at %s in address space %s, halting search."),
+		       plongest (nr_to_read), hex_string (read_addr),
+		       pulongest ((LONGEST) addr_space));
 	      return -1;
 	    }
 

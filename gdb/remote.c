@@ -532,7 +532,8 @@ public:
 
   int search_memory (CORE_ADDR start_addr, ULONGEST search_space_len,
 		     const gdb_byte *pattern, ULONGEST pattern_len,
-		     CORE_ADDR *found_addrp) override;
+		     CORE_ADDR *found_addrp,
+		     unsigned int addr_space = 0) override;
 
   bool can_async_p () override;
 
@@ -11535,7 +11536,7 @@ remote_target::get_memory_xfer_limit ()
 int
 remote_target::search_memory (CORE_ADDR start_addr, ULONGEST search_space_len,
 			      const gdb_byte *pattern, ULONGEST pattern_len,
-			      CORE_ADDR *found_addrp)
+			      CORE_ADDR *found_addrp, unsigned int addr_space)
 {
   int addr_size = gdbarch_addr_bit (target_gdbarch ()) / 8;
   struct remote_state *rs = get_remote_state ();
@@ -11551,10 +11552,11 @@ remote_target::search_memory (CORE_ADDR start_addr, ULONGEST search_space_len,
   int found;
   ULONGEST found_addr;
 
-  auto read_memory = [=] (CORE_ADDR addr, gdb_byte *result, size_t len)
+  auto read_memory = [=] (CORE_ADDR addr, gdb_byte *result, size_t len,
+			  unsigned int l_addr_space)
     {
-      return (target_read (this, TARGET_OBJECT_MEMORY, NULL, result, addr, len)
-	      == len);
+      return (target_read (this, TARGET_OBJECT_MEMORY, NULL, result, addr,
+			   len, l_addr_space) == len);
     };
 
   /* Don't go to the target if we don't have to.  This is done before
@@ -11577,17 +11579,24 @@ remote_target::search_memory (CORE_ADDR start_addr, ULONGEST search_space_len,
       /* Target doesn't provided special support, fall back and use the
 	 standard support (copy memory and do the search here).  */
       return simple_search_memory (read_memory, start_addr, search_space_len,
-				   pattern, pattern_len, found_addrp);
+				   pattern, pattern_len, found_addrp,
+				   addr_space);
     }
 
   /* Make sure the remote is pointing at the right process.  */
   set_general_process ();
 
+  std::string addr_space_s = "";
   /* Insert header.  */
-  i = snprintf (rs->buf.data (), max_size, 
-		"qSearch:memory:%s;%s;",
+  if (remote_multi_address_space_p (rs) && addr_space != 0)
+    addr_space_s = "@" + std::to_string (addr_space);
+
+  i = snprintf (rs->buf.data (), max_size,
+		"qSearch:memory:%s%s;%s;",
 		phex_nz (start_addr, addr_size),
+		addr_space_s.c_str (),
 		phex_nz (search_space_len, sizeof (search_space_len)));
+
   max_size -= (i + 1);
 
   /* Escape as much data as fits into rs->buf.  */
@@ -11609,7 +11618,8 @@ remote_target::search_memory (CORE_ADDR start_addr, ULONGEST search_space_len,
       if (packet_config_support (packet) == PACKET_DISABLE)
 	{
 	  return simple_search_memory (read_memory, start_addr, search_space_len,
-				       pattern, pattern_len, found_addrp);
+				       pattern, pattern_len, found_addrp,
+				       addr_space);
 	}
       return -1;
     }

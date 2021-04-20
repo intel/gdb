@@ -1236,7 +1236,7 @@ single_qualifier:
 
 qualifier_seq_noopt:
 		single_qualifier
-	| 	qualifier_seq single_qualifier
+	| 	qualifier_seq_noopt single_qualifier
 	;
 
 qualifier_seq:

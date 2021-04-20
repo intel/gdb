@@ -23,6 +23,110 @@
 
 #include "target.h"
 
+#include <level_zero/zet_api.h>
+#include <string>
+
+/* A thread's execution state.  */
+
+enum ze_thread_exec_state_t
+{
+  /* We do not know the thread state.  This is likely an error condition.  */
+  ze_thread_state_unknown,
+
+  /* The thread is stopped and is expected to remain stopped until we
+     resume it.  */
+  ze_thread_state_stopped,
+
+  /* The thread is running.  We do not know whether it is still available
+     to us and we're able to stop it or whether it would eventually hit a
+     breakpoint.
+
+     When a thread completes executing a kernel it becomes idle and may
+     pick up other workloads, either in this context or in another
+     process' context.
+
+     In the former case, it would still be considered RUNNING from our
+     point of view, even though it started over again with a new set of
+     arguments.  In the latter case, it would be UNAVAILABLE.  */
+  ze_thread_state_running,
+
+  /* The thread is currently not available to us.  It may be idle or it
+     may be executing work on behalf of a different process.
+
+     We cannot distinguish those cases.  We're not able to interact with
+     that thread.  It may become available again at any time, though.
+
+     From GDB's view, a thread may switch between RUNNING and UNAVAILABLE.
+     We will only know the difference when we try to stop it.  It's not
+     entirely clear whether we need to distinguish the two, at all.  */
+  ze_thread_state_unavailable
+};
+
+/* Thread private data for level-zero targets.  */
+
+struct ze_thread_info
+{
+  /* The thread identifier.  */
+  ze_device_thread_t id;
+
+  /* The thread's execution state.  */
+  enum ze_thread_exec_state_t exec_state = ze_thread_state_unknown;
+};
+
+/* Return the ZE thread info for TP.  */
+
+static inline
+ze_thread_info *
+ze_thread (thread_info *tp)
+{
+  if (tp == nullptr)
+    return nullptr;
+
+  return (ze_thread_info *) tp->target_data;
+}
+
+/* Return the ZE thread info for const TP.  */
+
+static inline
+const ze_thread_info *
+ze_thread (const thread_info *tp)
+{
+  if (tp == nullptr)
+    return nullptr;
+
+  return (const ze_thread_info *) tp->target_data;
+}
+
+/* Return the level-zero thread id for all threads.  */
+
+static inline ze_device_thread_t
+ze_thread_id_all ()
+{
+  ze_device_thread_t all;
+  all.slice = UINT32_MAX;
+  all.subslice = UINT32_MAX;
+  all.eu = UINT32_MAX;
+  all.thread = UINT32_MAX;
+
+  return all;
+}
+
+/* Return the level-zero thread id for THREAD.  */
+
+static inline ze_device_thread_t
+ze_thread_id (const thread_info *thread)
+{
+  const ze_thread_info *zetp = ze_thread (thread);
+  if (zetp == nullptr)
+    error (_("No thread."));
+
+  return zetp->id;
+}
+
+/* Return a human-readable device thread id string.  */
+
+extern std::string ze_thread_id_str (const ze_device_thread_t &thread);
+
 /* Target op definitions for level-zero based targets.  */
 
 class ze_target : public process_stratum_target
@@ -69,6 +173,8 @@ public:
 
   /* We model h/w threads - they do not exit.  */
   bool thread_alive (ptid_t ptid) override { return true; }
+  bool supports_thread_stopped () override { return true; }
+  bool thread_stopped (struct thread_info *tp) override;
 
   void request_interrupt () override;
 

@@ -55,7 +55,7 @@ put_bits (bfd_uint64_t data, gdb::byte_vector &buf, int bits, bfd_boolean big_p)
 static gdb::byte_vector
 parse_find_args (const char *args, ULONGEST *max_countp,
 		 CORE_ADDR *start_addrp, ULONGEST *search_space_lenp,
-		 bfd_boolean big_p)
+		 bfd_boolean big_p, unsigned int *addr_space)
 {
   /* Default to using the specified type.  */
   char size = '\0';
@@ -66,6 +66,8 @@ parse_find_args (const char *args, ULONGEST *max_countp,
   ULONGEST search_space_len;
   const char *s = args;
   struct value *v;
+  unsigned int addr_space_start_addr = 0;
+  unsigned int addr_space_t_pattern = 0;
 
   if (args == NULL)
     error (_("Missing search parameters."));
@@ -107,6 +109,21 @@ parse_find_args (const char *args, ULONGEST *max_countp,
 
   v = parse_to_comma_and_eval (&s);
   start_addr = value_as_address (v);
+
+  struct type *start_addr_type = check_typedef (value_type (v));
+  struct gdbarch *gdbarch = get_type_arch (start_addr_type);
+
+  /* For targets with multiple address spaces.  */
+  if (gdbarch_address_space_from_type_flags_p (gdbarch))
+    {
+      if (start_addr_type->code () == TYPE_CODE_PTR
+	  || start_addr_type->code () == TYPE_CODE_REF)
+	start_addr_type = TYPE_TARGET_TYPE (start_addr_type);
+
+      addr_space_start_addr = gdbarch_address_space_from_type_flags (
+					gdbarch,
+					TYPE_INSTANCE_FLAGS (start_addr_type));
+    }
 
   if (*s == ',')
     ++s;
@@ -164,6 +181,33 @@ parse_find_args (const char *args, ULONGEST *max_countp,
       v = parse_to_comma_and_eval (&s);
       t = value_type (v);
 
+      if (gdbarch_address_space_from_type_flags_p (gdbarch))
+	{
+	  /* Both start_addr and the search pattern can contain information
+	     about the address space requested.  We therefore need to adjust
+	     start_addr here and check that there weren't two contradicting
+	     address spaces requested.  */
+	  struct type *pattern_type = check_typedef (value_type (v));
+
+	  if (pattern_type->code () == TYPE_CODE_PTR
+	      || pattern_type->code () == TYPE_CODE_REF)
+	    pattern_type = TYPE_TARGET_TYPE (pattern_type);
+
+	  addr_space_t_pattern = gdbarch_address_space_from_type_flags (
+					gdbarch,
+					TYPE_INSTANCE_FLAGS (pattern_type));
+
+	  if (addr_space_start_addr == 0 && addr_space_t_pattern != 0)
+	    *addr_space = addr_space_t_pattern;
+	  else if (addr_space_start_addr != 0 && addr_space_t_pattern == 0)
+	    *addr_space = addr_space_start_addr;
+	  else if (addr_space_start_addr == addr_space_t_pattern)
+	    *addr_space = addr_space_t_pattern;
+	  else
+	    error (_("Address spaces of start_addr %s and value %s differ."),
+		   hex_string (start_addr), s);
+	}
+
       if (size != '\0')
 	{
 	  x = value_as_long (v);
@@ -218,6 +262,7 @@ find_command (const char *args, int from_tty)
   ULONGEST max_count = 0;
   CORE_ADDR start_addr = 0;
   ULONGEST search_space_len = 0;
+  unsigned int addr_space = 0;
   /* End of command line parameters.  */
   unsigned int found_count;
   CORE_ADDR last_found_addr;
@@ -225,7 +270,7 @@ find_command (const char *args, int from_tty)
   gdb::byte_vector pattern_buf = parse_find_args (args, &max_count,
 						  &start_addr,
 						  &search_space_len,
-						  big_p);
+						  big_p, &addr_space);
 
   /* Perform the search.  */
 
@@ -241,7 +286,7 @@ find_command (const char *args, int from_tty)
       int found = target_search_memory (start_addr, search_space_len,
 					pattern_buf.data (),
 					pattern_buf.size (),
-					&found_addr);
+					&found_addr, addr_space);
 
       if (found <= 0)
 	break;

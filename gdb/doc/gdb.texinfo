@@ -41364,16 +41364,18 @@ command by a @samp{,}, not a @samp{:}, contrary to the naming
 conventions above.  Please don't use this packet as a model for new
 packets.)
 
-@item qSearch:memory:@var{address};@var{length};@var{search-pattern}
+@item qSearch:memory:@var{address}@r{[}@@@var{addr_space}@r{]};@var{length};@var{search-pattern}
 @cindex searching memory, in remote debugging
 @ifnotinfo
 @cindex @samp{qSearch:memory} packet
 @end ifnotinfo
 @cindex @samp{qSearch memory} packet
 @anchor{qSearch memory}
-Search @var{length} bytes at @var{address} for @var{search-pattern}.
-Both @var{address} and @var{length} are encoded in hex;
+Search @var{length} bytes at @var{address} in @var{addr_space} for
+@var{search-pattern}. Both @var{address} and @var{length} are encoded in hex;
 @var{search-pattern} is a sequence of bytes, also hex encoded.
+@var{addr_space} is target dependent. If omitted, the default
+address space is used.
 
 Reply:
 @table @samp

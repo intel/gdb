@@ -23,6 +23,7 @@
 
 #include <level_zero/zet_api.h>
 #include <exception>
+#include <sstream>
 
 #ifndef USE_WIN32API
 #  include <signal.h>
@@ -94,6 +95,34 @@ ze_async_mark ()
 #else
   error (_("%s: tbd"), __FUNCTION__);
 #endif
+}
+
+/* Return a human-readable device thread id component string.  */
+
+static std::string
+ze_thread_id_component_str (uint32_t component)
+{
+  if (component == UINT32_MAX)
+    return std::string ("all");
+
+  return std::to_string (component);
+}
+
+/* See ze-low.h.  */
+
+std::string
+ze_thread_id_str (const ze_device_thread_t &thread)
+{
+  std::stringstream sstream;
+  sstream << ze_thread_id_component_str (thread.slice)
+	  << "."
+	  << ze_thread_id_component_str (thread.subslice)
+	  << "."
+	  << ze_thread_id_component_str (thread.eu)
+	  << "."
+	  << ze_thread_id_component_str (thread.thread);
+
+  return sstream.str ();
 }
 
 void
@@ -257,6 +286,15 @@ ze_target::write_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
 			 int len, unsigned int addr_space)
 {
   error (_("%s: tbd"), __FUNCTION__);
+}
+
+bool
+ze_target::thread_stopped (struct thread_info *tp)
+{
+  const ze_thread_info *zetp = ze_thread (tp);
+  gdb_assert (zetp != nullptr);
+
+  return (zetp->exec_state == ze_thread_state_stopped);
 }
 
 void

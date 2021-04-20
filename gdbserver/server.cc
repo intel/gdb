@@ -1186,13 +1186,14 @@ handle_search_memory (char *own_buf, int packet_len)
       error ("Error in parsing qSearch:memory packet");
     }
 
-  auto read_memory = [addr_space] (CORE_ADDR addr, gdb_byte *result, size_t len)
+  auto read_memory = [addr_space] (CORE_ADDR addr, gdb_byte *result, size_t len,
+				   unsigned int l_addr_space)
     {
-      return gdb_read_memory (addr, result, len, addr_space) == len;
+      return gdb_read_memory (addr, result, len, l_addr_space) == len;
     };
 
   found = simple_search_memory (read_memory, start_addr, search_space_len,
-				pattern, pattern_len, &found_addr);
+				pattern, pattern_len, &found_addr, addr_space);
 
   if (found > 0)
     sprintf (own_buf, "1,%lx", (long) found_addr);

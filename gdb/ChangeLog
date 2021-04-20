@@ -1,3 +1,7 @@
+2021-04-20  Felix Willgerodt  <felix.willgerodt@intel.com>
+
+	* c-exp.y (single_qualifier): Handle UNKNOWN_CPP_NAME.
+
 2021-04-14  Tankut Baris Aktemur  <tankut.baris.aktemur@intel.com>
 
 	* dwarf2/read.c (inherit_abstract_dies): Keep a reference to the

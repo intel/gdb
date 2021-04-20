@@ -74,7 +74,8 @@ static int default_search_memory (struct target_ops *ops,
 				  ULONGEST search_space_len,
 				  const gdb_byte *pattern,
 				  ULONGEST pattern_len,
-				  CORE_ADDR *found_addrp);
+				  CORE_ADDR *found_addrp,
+				  unsigned int addr_space = 0);
 
 static int default_verify_memory (struct target_ops *self,
 				  const gdb_byte *data,
@@ -2178,7 +2179,7 @@ int
 simple_search_memory (struct target_ops *ops,
 		      CORE_ADDR start_addr, ULONGEST search_space_len,
 		      const gdb_byte *pattern, ULONGEST pattern_len,
-		      CORE_ADDR *found_addrp)
+		      CORE_ADDR *found_addrp, unsigned int addr_space)
 {
   /* NOTE: also defined in find.c testcase.  */
 #define SEARCH_CHUNK_SIZE 16000
@@ -2196,13 +2197,14 @@ simple_search_memory (struct target_ops *ops,
 
   /* Prime the search buffer.  */
 
-  if (target_read (ops, TARGET_OBJECT_MEMORY, NULL,
-		   search_buf.data (), start_addr, search_buf_size)
+  if (target_read (ops, TARGET_OBJECT_MEMORY, NULL, search_buf.data (),
+		   start_addr, search_buf_size, addr_space)
       != search_buf_size)
     {
       warning (_("Unable to access %s bytes of target "
-		 "memory at %s, halting search."),
-	       pulongest (search_buf_size), hex_string (start_addr));
+		 "memory at %s in address space %s, halting search."),
+	       pulongest (search_buf_size), hex_string (start_addr),
+	       pulongest ((LONGEST) addr_space));
       return -1;
     }
 
@@ -2253,12 +2255,12 @@ simple_search_memory (struct target_ops *ops,
 
 	  if (target_read (ops, TARGET_OBJECT_MEMORY, NULL,
 			   &search_buf[keep_len], read_addr,
-			   nr_to_read) != nr_to_read)
+			   nr_to_read, addr_space) != nr_to_read)
 	    {
 	      warning (_("Unable to access %s bytes of target "
-			 "memory at %s, halting search."),
-		       plongest (nr_to_read),
-		       hex_string (read_addr));
+			 "memory at %s in address space %s, halting search."),
+		       plongest (nr_to_read), hex_string (read_addr),
+		       pulongest ((LONGEST) addr_space));
 	      return -1;
 	    }
 
@@ -2277,12 +2279,12 @@ static int
 default_search_memory (struct target_ops *self,
 		       CORE_ADDR start_addr, ULONGEST search_space_len,
 		       const gdb_byte *pattern, ULONGEST pattern_len,
-		       CORE_ADDR *found_addrp)
+		       CORE_ADDR *found_addrp, unsigned int addr_space)
 {
   /* Start over from the top of the target stack.  */
-  return simple_search_memory (current_top_target (),
-			       start_addr, search_space_len,
-			       pattern, pattern_len, found_addrp);
+  return simple_search_memory (current_top_target (), start_addr,
+			       search_space_len, pattern, pattern_len,
+			       found_addrp, addr_space);
 }
 
 /* Search SEARCH_SPACE_LEN bytes beginning at START_ADDR for the
@@ -2295,10 +2297,11 @@ default_search_memory (struct target_ops *self,
 int
 target_search_memory (CORE_ADDR start_addr, ULONGEST search_space_len,
 		      const gdb_byte *pattern, ULONGEST pattern_len,
-		      CORE_ADDR *found_addrp)
+		      CORE_ADDR *found_addrp, unsigned int addr_space)
 {
   return current_top_target ()->search_memory (start_addr, search_space_len,
-				      pattern, pattern_len, found_addrp);
+				      pattern, pattern_len, found_addrp,
+				      addr_space);
 }
 
 /* Look through the currently pushed targets.  If none of them will

@@ -1227,6 +1227,11 @@ single_qualifier:
 		  cpstate->type_stack.insert (pstate,
 					      copy_name ($2.stoken).c_str ());
 		}
+	|	'@' UNKNOWN_CPP_NAME
+		{
+		  cpstate->type_stack.insert (pstate,
+					      copy_name ($2.stoken).c_str ());
+		}
 	;
 
 qualifier_seq_noopt:

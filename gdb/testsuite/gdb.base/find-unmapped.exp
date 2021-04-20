@@ -54,7 +54,7 @@ proc test_not_found {expect_warning} {
 
     if {$expect_warning} {
 	set halting_search_re \
-	    "warning: Unable to access $decimal bytes of target memory at $hex, halting search\.\r\n"
+	    "warning: Unable to access $decimal bytes of target memory at $hex in address space $decimal, halting search\.\r\n"
     } else {
 	set halting_search_re ""
     }

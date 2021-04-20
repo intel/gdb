@@ -28,7 +28,8 @@
    wants to be able to examine trace data when searching, and
    target_read_memory does not do this.  */
 
-typedef bool target_read_memory_ftype (CORE_ADDR, gdb_byte *, size_t);
+typedef bool target_read_memory_ftype (CORE_ADDR, gdb_byte *, size_t,
+				       unsigned int);
 
 /* Utility implementation of searching memory.  */
 extern int simple_search_memory
@@ -37,6 +38,7 @@ extern int simple_search_memory
    ULONGEST search_space_len,
    const gdb_byte *pattern,
    ULONGEST pattern_len,
-   CORE_ADDR *found_addrp);
+   CORE_ADDR *found_addrp,
+   unsigned int addr_space);
 
 #endif /* COMMON_SEARCH_H */

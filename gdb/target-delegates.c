@@ -122,7 +122,7 @@ struct dummy_target : public target_ops
   const struct target_desc *read_description () override;
   ptid_t get_ada_task_ptid (long arg0, ULONGEST arg1) override;
   int auxv_parse (const gdb_byte **arg0, const gdb_byte *arg1, CORE_ADDR *arg2, CORE_ADDR *arg3) override;
-  int search_memory (CORE_ADDR arg0, ULONGEST arg1, const gdb_byte *arg2, ULONGEST arg3, CORE_ADDR *arg4) override;
+  int search_memory (CORE_ADDR arg0, ULONGEST arg1, const gdb_byte *arg2, ULONGEST arg3, CORE_ADDR *arg4, unsigned int arg5) override;
   bool can_execute_reverse () override;
   enum exec_direction_kind execution_direction () override;
   bool supports_multi_process () override;
@@ -299,7 +299,7 @@ struct debug_target : public target_ops
   const struct target_desc *read_description () override;
   ptid_t get_ada_task_ptid (long arg0, ULONGEST arg1) override;
   int auxv_parse (const gdb_byte **arg0, const gdb_byte *arg1, CORE_ADDR *arg2, CORE_ADDR *arg3) override;
-  int search_memory (CORE_ADDR arg0, ULONGEST arg1, const gdb_byte *arg2, ULONGEST arg3, CORE_ADDR *arg4) override;
+  int search_memory (CORE_ADDR arg0, ULONGEST arg1, const gdb_byte *arg2, ULONGEST arg3, CORE_ADDR *arg4, unsigned int arg5) override;
   bool can_execute_reverse () override;
   enum exec_direction_kind execution_direction () override;
   bool supports_multi_process () override;
@@ -2589,30 +2589,31 @@ debug_target::auxv_parse (const gdb_byte **arg0, const gdb_byte *arg1, CORE_ADDR
 }
 
 int
-target_ops::search_memory (CORE_ADDR arg0, ULONGEST arg1, const gdb_byte *arg2, ULONGEST arg3, CORE_ADDR *arg4)
+target_ops::search_memory (CORE_ADDR arg0, ULONGEST arg1, const gdb_byte *arg2, ULONGEST arg3, CORE_ADDR *arg4, unsigned int arg5)
 {
-  return this->beneath ()->search_memory (arg0, arg1, arg2, arg3, arg4);
+  return this->beneath ()->search_memory (arg0, arg1, arg2, arg3, arg4, arg5);
 }
 
 int
-dummy_target::search_memory (CORE_ADDR arg0, ULONGEST arg1, const gdb_byte *arg2, ULONGEST arg3, CORE_ADDR *arg4)
+dummy_target::search_memory (CORE_ADDR arg0, ULONGEST arg1, const gdb_byte *arg2, ULONGEST arg3, CORE_ADDR *arg4, unsigned int arg5)
 {
-  return default_search_memory (this, arg0, arg1, arg2, arg3, arg4);
+  return default_search_memory (this, arg0, arg1, arg2, arg3, arg4, arg5);
 }
 
 int
-debug_target::search_memory (CORE_ADDR arg0, ULONGEST arg1, const gdb_byte *arg2, ULONGEST arg3, CORE_ADDR *arg4)
+debug_target::search_memory (CORE_ADDR arg0, ULONGEST arg1, const gdb_byte *arg2, ULONGEST arg3, CORE_ADDR *arg4, unsigned int arg5)
 {
   target_debug_printf_nofunc ("-> %s->search_memory (...)", this->beneath ()->shortname ());
   int result
-    = this->beneath ()->search_memory (arg0, arg1, arg2, arg3, arg4);
-  target_debug_printf_nofunc ("<- %s->search_memory (%s, %s, %s, %s, %s) = %s",
+    = this->beneath ()->search_memory (arg0, arg1, arg2, arg3, arg4, arg5);
+  target_debug_printf_nofunc ("<- %s->search_memory (%s, %s, %s, %s, %s, %s) = %s",
 	      this->beneath ()->shortname (),
 	      target_debug_print_CORE_ADDR (arg0).c_str (),
 	      target_debug_print_ULONGEST (arg1).c_str (),
 	      target_debug_print_const_gdb_byte_p (arg2).c_str (),
 	      target_debug_print_ULONGEST (arg3).c_str (),
 	      target_debug_print_CORE_ADDR_p (arg4).c_str (),
+	      target_debug_print_unsigned_int (arg5).c_str (),
 	      target_debug_print_int (result).c_str ());
   return result;
 }

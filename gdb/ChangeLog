@@ -1,3 +1,10 @@
+2021-04-21  Tankut Baris Aktemur  <tankut.baris.aktemur@intel.com>
+
+	* breakpoint.c (print_one_breakpoint_location): Display "N" for
+	disabled-by-condition locations on MI-like output.
+	(breakpoint_1): Do not display the disabled-by-condition footnote
+	if the output is MI-like.
+
 2020-09-13  Pedro Alves  <pedro@palves.net>
 
 	* NEWS: Document "-break-insert --qualified".

@@ -1,3 +1,8 @@
+2021-04-21  Simon Marchi  <simon.marchi@polymtl.ca>
+	    Tankut Baris Aktemur  <tankut.baris.aktemur@intel.com>
+
+	* gdb.mi/mi-break.exp: Fix the duplicate test names.
+
 2020-09-13  Pedro Alves  <pedro@palves.net>
 
 	* gdb.mi/mi-break-qualified.cc: New file.

@@ -1,0 +1,84 @@
+# Copyright 2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Create two inferiors with different targets.  The first runs on top of
+# a native target while the second on a remote target.  Both inferiors
+# use the copy of the same source code. The copy is done in order to make
+# sure that a breakpoint is only in inferior 2.  While in inferior 1, do
+# a "next" which should break in a thread in inferior 2.
+# Both executables will run total of 4 threads (2 per executable) and
+# we will put a breakpoint only in the second executable to achieve this.
+
+load_lib gdbserver-support.exp
+
+standard_testfile breakpoint-running-inferior-1.c breakpoint-running-inferior-2.c
+set binfile2 ${binfile}2
+
+if  { [gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
+    untested "failed to compile first testcase"
+    return -1
+}
+
+if  { [gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile2}" "${binfile2}" executable {debug}] != "" } {
+    untested "failed to compile second testcase"
+    return -1
+}
+
+clean_restart ${binfile}
+
+gdb_test_no_output "set schedule-multiple off"
+
+if {![runto_main]} {
+    untested "failed to run to main"
+    return -1
+}
+set break_pos [gdb_get_line_number "break here" ${srcfile}]
+gdb_breakpoint "$srcfile:$break_pos"
+gdb_continue_to_breakpoint "continue to breakpoint in inf 1"
+
+gdb_test "add-inferior -no-connection" "Added inferior 2.*" "add empty inferior 2"
+gdb_test "inferior 2" "Switching to inferior 2.*" "switch to inferior 2"
+
+# Start gdbserver and connect.
+set res [gdbserver_start "" $binfile2]
+set gdbserver_protocol [lindex $res 0]
+set gdbserver_gdbport [lindex $res 1]
+set res [gdb_target_cmd $gdbserver_protocol $gdbserver_gdbport]
+if ![gdb_assert {$res == 0} "connect"] {
+    return -1
+}
+
+set break_pos [gdb_get_line_number "break here" ${srcfile2}]
+gdb_breakpoint "$srcfile2:$break_pos"
+
+gdb_continue_to_breakpoint "continue to breakpoint in inf 2"
+
+gdb_test "thread 1.1" "Switching to thread 1.1.*" "first switch to thread 1.1"
+
+# Remove the breakpoint from inf 1.  Now only a breakpoint in inf 2 remains.
+gdb_test "clear $srcfile:$break_pos" "Deleted breakpoint 2 " "remove inf 1 breakpoint"
+gdb_test_no_output "set schedule-multiple on"
+gdb_test "next" ".*Thread 2.*hit Breakpoint.*" "next while in inferior 1"
+
+# We should be able to normally switch to thread 1.1.
+# In case of a bad GDB flow the GDB was losing the thread.
+gdb_test_multiple "thread 1.1" "Switching to thread 1.1" {
+    -re "\\\[Switching to thread 1.1 \\(Thread .*\\)\\\]" {
+        pass $gdb_test_name
+    }
+    -re ".*Thread ID 1.1 has terminated.*" {
+        fail $gdb_test_name
+    }
+}

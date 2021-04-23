@@ -7495,6 +7495,8 @@ keep_going_stepped_thread (struct thread_info *tp)
        stepping thread is still alive.  For that reason, we need to
        synchronously query the target now.  */
 
+  /* Make sure that we are within a correct inferior.  */
+  switch_to_inferior_no_thread (tp->inf);
   if (tp->state == THREAD_EXITED || !target_thread_alive (tp->ptid))
     {
       infrun_debug_printf ("not resuming previously stepped thread, it has "

@@ -210,6 +210,9 @@ find_process_from_gt_event (GTEvent *event)
 
   if (proc == nullptr)
     {
+      if (event->type == eGfxDbgEventDeviceExited)
+	return nullptr;
+
       /* This is the first time we see an event from this device.  */
       process_info_private *proc_priv = process_infos[event->device];
       if (proc_priv == nullptr)
@@ -512,12 +515,24 @@ intelgt_process_target::initialize_device (unsigned int dcd_device_index)
 int
 intelgt_process_target::attach (unsigned long device_index)
 {
+  if (device_index == 0)
+    {
+      /* Just initialize and return.  We rely on waiting the target
+	 and adding the process when the first stop event is
+	 received.  */
+      igfxdbg_SetDefaultShaderEnabled (false);
+      for (int i = 0; i < igfxdbg_NumDevices (); ++i)
+	initialize_device (i);
+      return 0;
+    }
+
   /* DCD uses 0-based indexing.  We show 1-based indexing because
      "0" in a ptid has special meaning in GDB.  */
   if (device_index > igfxdbg_NumDevices ())
     error (_("no device '%ld' found, there are %d devices"),
 	   device_index, igfxdbg_NumDevices ());
   unsigned int dcd_device_index = device_index - 1;
+  initialize_device (dcd_device_index);
 
   process_info_private *proc_priv = nullptr;
   for (auto &info : process_infos)
@@ -802,7 +817,8 @@ intelgt_process_target::handle_device_exited (GTEvent *event,
   status->set_exited (0 /* exit code */);
 
   process_info *proc = find_process_from_gt_event (event);
-  gdb_assert (proc != nullptr);
+  if (proc == nullptr)
+    return null_ptid;
 
   return ptid_t {proc->pid};
 }
@@ -918,14 +934,7 @@ intelgt_process_target::low_wait (ptid_t ptid, target_waitstatus *status,
 
   GTDeviceHandle device_handle;
   if (ptid == minus_one_ptid)
-    {
-      if (current_thread == nullptr)
-	{
-	  status->kind = TARGET_WAITKIND_IGNORE;
-	  return null_ptid;
-	}
-      device_handle = nullptr; /* Match any device.  */
-    }
+    device_handle = nullptr; /* Match any device.  */
   else
     {
       process_info *proc = find_process_pid (ptid.pid ());
@@ -1168,12 +1177,6 @@ intelgt_process_target::request_interrupt ()
 {
   dprintf ("attempting interrupt");
 
-  /* If we don't have a current_thread, we cannot interrupt.  This
-     case may happen when the kernel already terminated but GDB sent
-     the interrupt request before receiving our exit event.  */
-  if (current_thread == nullptr)
-    return;
-
   if (interrupt_in_progress)
     {
       dprintf ("request ignored; an interrupt is already in progress");
@@ -1187,9 +1190,19 @@ intelgt_process_target::request_interrupt ()
       if (result != eGfxDbgResultSuccess)
 	error (_("could not interrupt; result: %s"),
 	       igfxdbg_result_to_string (result));
+      interrupt_in_progress = true;
     });
 
-  interrupt_in_progress = true;
+  if (!interrupt_in_progress)
+    {
+      /* No process exists yet that we can interrupt.  Send a generic
+	 interrupt.  */
+      APIResult result = igfxdbg_Interrupt (nullptr);
+      if (result != eGfxDbgResultSuccess)
+	error (_("could not interrupt; result: %s"),
+	       igfxdbg_result_to_string (result));
+      interrupt_in_progress = true;
+    }
 }
 
 /* The 'supports_z_point_type' target op.  */
@@ -1499,14 +1512,6 @@ initialize_low ()
   if (intelgt_hostpid == 0)
     error (_("intelgt: a HOSTPID must be specified via --hostpid."));
   dprintf ("intelgt: using %lu as the host pid\n", intelgt_hostpid);
-
-  igfxdbg_SetDefaultShaderEnabled (true);
-  for (int i = 0; i < igfxdbg_NumDevices (); ++i)
-    {
-      the_intelgt_target.initialize_device (i);
-      /* Only the first device shall have the default thread.  */
-      igfxdbg_SetDefaultShaderEnabled (false);
-    }
 
   set_target_ops (&the_intelgt_target);
 }

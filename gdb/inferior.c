@@ -701,6 +701,33 @@ info_inferiors_command (const char *args, int from_tty)
   print_inferior (current_uiout, args);
 }
 
+/* Remove the inferior whose number is NUM.  */
+static void
+remove_inferior_with_number (int num)
+{
+  inferior *inf = find_inferior_id (num);
+
+  if (inf == nullptr)
+    {
+      warning (_("Inferior ID %d not known."), num);
+      return;
+    }
+
+  if (!inf->deletable ())
+    {
+      warning (_("Can not remove current inferior %d."), num);
+      return;
+    }
+
+  if (inf->pid != 0)
+    {
+      warning (_("Can not remove active inferior %d."), num);
+      return;
+    }
+
+  delete_inferior (inf);
+}
+
 /* remove-inferior ID */
 
 static void
@@ -717,27 +744,7 @@ remove_inferior_command (const char *args, int from_tty)
       if (!parser.get_number (&num))
 	error (_("Wrong inferior ID '%s'"), p);
 
-      struct inferior *inf = find_inferior_id (num);
-
-      if (inf == NULL)
-	{
-	  warning (_("Inferior ID %d not known."), num);
-	  continue;
-	}
-
-      if (!inf->deletable ())
-	{
-	  warning (_("Can not remove current inferior %d."), num);
-	  continue;
-	}
-    
-      if (inf->pid != 0)
-	{
-	  warning (_("Can not remove active inferior %d."), num);
-	  continue;
-	}
-
-      delete_inferior (inf);
+      remove_inferior_with_number (num);
     }
 }
 

@@ -1929,6 +1929,9 @@ extern gdb::byte_vector target_thread_info_to_thread_handle
 
    If the executable file cannot be determined, NULL is returned.
 
+   If the target does not have the notion of executable files,
+   empty string is returned.
+
    Else, a pointer to a character string containing the pathname
    is returned.  This string should be copied into a buffer by
    the client if the string will not be immediately used, or if

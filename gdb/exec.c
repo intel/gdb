@@ -358,6 +358,12 @@ exec_file_locate_attach (int pid, int defer_bp_reset, int from_tty)
       return;
     }
 
+  if (*exec_file_target == '\0')
+    {
+      /* The target does not have the notion of an exec file.  */
+      return;
+    }
+
   gdb::unique_xmalloc_ptr<char> exec_file_host
     = exec_file_find (exec_file_target, NULL);
 

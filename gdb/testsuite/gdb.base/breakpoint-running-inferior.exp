@@ -74,9 +74,14 @@ gdb_test "next" ".*Thread 2.*hit Breakpoint.*" "next while in inferior 1"
 
 # We should be able to normally switch to thread 1.1.
 # In case of a bad GDB flow the GDB was losing the thread.
+# The thread should also not be in a "running" state because it is
+# stopped.
 gdb_test_multiple "thread 1.1" "Switching to thread 1.1" {
     -re "\\\[Switching to thread 1.1 \\(Thread .*\\)\\\]" {
         pass $gdb_test_name
+    }
+    -re "\\\[Switching to thread 1.1.*\\(running\\)" {
+        fail $gdb_test_name
     }
     -re ".*Thread ID 1.1 has terminated.*" {
         fail $gdb_test_name

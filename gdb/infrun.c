@@ -7705,7 +7705,7 @@ restart_after_all_stop_detach (process_stratum_target *proc_target)
 
 /* Set a previously stepped thread back to stepping.  Returns true on
    success, false if the resume is not possible (e.g., the thread
-   vanished).  */
+   vanished, or the thread breakpoint position cannot be determined).  */
 
 static bool
 keep_going_stepped_thread (struct thread_info *tp)
@@ -7741,6 +7741,19 @@ keep_going_stepped_thread (struct thread_info *tp)
 
       delete_thread (tp);
       return false;
+    }
+  /* Step start function determines the location of the next stopping
+     point (next PC where the stepped thread should stop).  In case that
+     this position cannot be determined the step_start_function will not
+     be set.  Do not resume the stepped thread in this case.  Resuming
+     would lead to an inconsistent state where the stepped thread would be
+     running forever and GDB would never get to breakpoints of the other
+     threads.  */
+  if (tp->control.step_start_function == nullptr)
+    {
+      infrun_debug_printf ("not resuming previously stepped thread, it is "
+			   "already executing");
+      return 0;
     }
 
   infrun_debug_printf ("resuming previously stepped thread");

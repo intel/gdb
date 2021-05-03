@@ -87,6 +87,11 @@ as_process_stratum_target (target_ops *target)
 
 extern std::set<process_stratum_target *> all_non_exited_process_targets ();
 
+/* Return a collection of targets, including those that have
+   non-executing inferiors.  */
+
+extern std::set<process_stratum_target *> all_process_targets ();
+
 /* Switch to the first inferior (and program space) of TARGET, and
    switch to no thread selected.  */
 

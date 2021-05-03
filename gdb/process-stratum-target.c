@@ -99,6 +99,22 @@ all_non_exited_process_targets ()
 
 /* See process-stratum-target.h.  */
 
+std::set<process_stratum_target *>
+all_process_targets ()
+{
+  /* Inferiors may share targets.  To eliminate duplicates, use a set.  */
+  std::set<process_stratum_target *> targets;
+  for (inferior *inf : all_inferiors ())
+    {
+      if (inf->process_target () != nullptr)
+	targets.insert (inf->process_target ());
+    }
+
+  return targets;
+}
+
+/* See process-stratum-target.h.  */
+
 void
 switch_to_target_no_thread (process_stratum_target *target)
 {

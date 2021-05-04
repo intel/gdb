@@ -261,7 +261,19 @@ intelgt_ze_target::sw_breakpoint_from_kind (int kind, int *size)
 bool
 intelgt_ze_target::stopped_by_sw_breakpoint ()
 {
-  error (_("%s: tbd"), __FUNCTION__);
+  const ze_thread_info *zetp = ze_thread (current_thread);
+  if (zetp == nullptr)
+    return false;
+
+  ptid_t ptid = ptid_of (current_thread);
+
+  if (zetp->exec_state != ze_thread_state_stopped)
+    {
+      dprintf ("not-stopped thread %d.%ld", ptid.pid (), ptid.tid ());
+      return false;
+    }
+
+  return (zetp->stop_reason == TARGET_STOPPED_BY_SW_BREAKPOINT);
 }
 
 CORE_ADDR

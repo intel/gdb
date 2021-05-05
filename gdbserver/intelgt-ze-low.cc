@@ -267,13 +267,35 @@ intelgt_ze_target::stopped_by_sw_breakpoint ()
 CORE_ADDR
 intelgt_ze_target::read_pc (regcache *regcache)
 {
-  error (_("%s: tbd"), __FUNCTION__);
+  uint32_t ip = intelgt_read_cr0 (regcache, 2);
+  uint64_t isabase;
+  collect_register_by_name (regcache, "isabase", &isabase);
+
+  if (UINT32_MAX < ip)
+    warning (_("IP '0x%" PRIx32 "' outside of ISA range."), ip);
+
+  CORE_ADDR pc = (CORE_ADDR) isabase + (CORE_ADDR) ip;
+  if (pc < isabase)
+    warning (_("PC '%s' outside of ISA range."),
+	     core_addr_to_string_nz (pc));
+
+  return pc;
 }
 
 void
 intelgt_ze_target::write_pc (regcache *regcache, CORE_ADDR pc)
 {
-  error (_("%s: tbd"), __FUNCTION__);
+  uint64_t isabase;
+  collect_register_by_name (regcache, "isabase", &isabase);
+
+  if (pc < isabase)
+    error (_("PC '%s' outside of ISA range."), core_addr_to_string_nz (pc));
+
+  pc -= isabase;
+  if (UINT32_MAX < pc)
+    error (_("PC '%s' outside of ISA range."), core_addr_to_string_nz (pc));
+
+  intelgt_write_cr0 (regcache, 2, (uint32_t) pc);
 }
 
 bool

@@ -44,6 +44,7 @@ gdb_test "info line" "Line ${first_line} of .${srcfile}.*" \
     "info line first_line (${first_line})"
 
 # Test: "next".
+setup_kfail "JIRA DOQG/1939" "*-*-*"
 gdb_test "next" "${second_line}.*second\-line"
 
 # Test: "continue".
@@ -67,4 +68,5 @@ gdb_test "list" [multi_line \
     "${fourth_line}.*fourth\-line.*"]
 
 # Test: "ptype <variable>".
+setup_kfail "issue/36" "*-*-*"
 gdb_test "ptype l2" "type = double"

@@ -1,0 +1,296 @@
+# Copyright 2021 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Support library for testing NUMBA and NUMBA-DPPy GDB features.
+#
+# To select a particular device for DPPy-offloading, use a NUMBA board
+# file, and make your test program select the queue via the functions
+# skip_numba_dppy_tests and start_numba_script.
+
+
+# Define a global variable for the executable interpreter.
+
+if {![info exists numba_binfile]} {
+    set numba_binfile ""
+}
+
+# Define a global variable for the uniform marker.
+
+if {![info exists numba_uniform_marker]} {
+    set numba_uniform_marker "numba-kernel-breakpoint"
+}
+
+# Define global variable for the Numba and Numba-DPPy compiler versions.
+
+if {![info exists njit_compiler_version]} {
+    set njit_compiler_version ""
+}
+if {![info exists dppy_compiler_version]} {
+    set dppy_compiler_version ""
+}
+
+# Define global variable for the Numba-DPPy device name.
+
+if {![info exists dppy_device_name]} {
+    set dppy_device_name ""
+}
+
+
+# Run a test on the target to check if it recognizes NUMBA-DPPy.
+#
+# INTERPRETER is the basename of the executable interpreter.
+#   If none given, "python3" is the default.
+# PATH is the path to the interpreter executable.
+#   If none given, OS command "which <interpreter>" is used.
+#
+# Return 0 if NUMBA-DPPy is supported, non-zero otherwise.
+
+proc skip_numba_dppy_tests {{interpreter "python3"} {path ""}} {
+    global numba_binfile
+    global srcdir
+    global dppy_backend
+    global dppy_device
+    global dppy_device_number
+    global gdb_prompt
+    global njit_compiler_version
+    global dppy_compiler_version
+    global dppy_device_name
+
+    if {![info exists dppy_backend] || \
+        ![info exists dppy_device] || \
+        ![info exists dppy_device_number]} {
+	verbose "NUMBA: test parameters not set; use a NUMBA board file" 0
+	return -1
+    }
+
+    # The global variable $numba_binfile points to the interpreter executable.
+    if {"${path}" eq ""} {
+	# If user didn't specify the path, ask the OS.
+	if {[catch {set numba_binfile [exec which "${interpreter}"]}]} {
+	    verbose "NUMBA: failed to find the path to '${interpreter}'" 0
+	    gdb_exit
+	    return -1
+	}
+    } else {
+	# Use the user specified path.
+	set numba_binfile ${path}/${interpreter}
+    }
+    verbose -log "NUMBA: using interpreter '${numba_binfile}'" 2
+
+    if {[clean_restart $numba_binfile] < 0} {
+	verbose "NUMBA: failed to start the interpreter" 0
+	gdb_exit
+	return -1
+    }
+
+    # Set arguments: the script file to run in the interpreter, and the
+    # device type.
+    # Because we're doing an internal setup, use gdb_test_multiple
+    # instead of gdb_test to not include this as a pass.
+    set set_args_cmd "set args '${srcdir}/lib/numba-hello.py' '${dppy_backend}' '${dppy_device}' '${dppy_device_number}'"
+    gdb_test_multiple $set_args_cmd $set_args_cmd {
+	-re "$gdb_prompt $" {}
+    }
+
+    # Remove any breakpoints, and run the script.
+    delete_breakpoints
+    gdb_run_cmd
+
+    # Support is detected, if the output includes the expected message.
+    set retval -1
+    gdb_expect 30 {
+	-re [multi_line \
+	    "njit:(\[^\r\n\]*)" \
+	    "dppy:(\[^\r\n\]*)" \
+	    "queue:(\[^\r\n\]*)" \
+	    ".*Hello, NUMBA-DPPy!.*" ] {
+	    set njit_compiler_version $expect_out(1,string)
+	    set dppy_compiler_version $expect_out(2,string)
+	    set dppy_device_name $expect_out(3,string)
+	    set retval 0
+	}
+	-re "(.*)$gdb_prompt $" {
+	}
+	eof     { verbose -log "\nNUMBA: eof" 2 }
+	timeout { verbose -log "\nNUMBA: timeout" 2 }
+    }
+
+    if {$retval} {
+	verbose "NUMBA: support not detected" 0
+    } else {
+	verbose -log "NUMBA: support detected"
+    }
+
+    gdb_exit
+    return $retval
+}
+
+
+# Get the Numba compiler version.
+
+proc njit_compiler {} {
+    global njit_compiler_version
+    return $njit_compiler_version
+}
+
+
+# Get the Numba-DPPy compiler version.
+
+proc dppy_compiler {} {
+    global dppy_compiler_version
+    return $dppy_compiler_version
+}
+
+
+# Get the Numba-DPPy device name.
+
+proc dppy_device {} {
+    global dppy_device_name
+    return $dppy_device_name
+}
+
+
+# Starts fresh GDB binary and loads the interpreter.
+#
+# This function overwrites the default clean_restart (see gdb.exp).
+# Instead of loading an executable from the test folder, we load the
+# interpreter.
+#
+# Returns -1 if starting gdb or loading the interpreter failed.
+
+proc clean_restart { args } {
+    global srcdir
+    global subdir
+    global errcnt
+    global warncnt
+
+    if {[llength $args] > 1} {
+	error "bad number of args: [llength $args]"
+    }
+
+    gdb_exit
+
+    # This is a clean restart, so reset error and warning count.
+    set errcnt 0
+    set warncnt 0
+
+    gdb_start
+    if {$errcnt > 0} {
+	return -1
+    }
+
+    gdb_reinitialize_dir $srcdir/$subdir
+
+    if {[llength $args] >= 1} {
+
+	# Numba compiler may generate files in the workspace.
+	# We want them into the test folder.
+	cd [standard_output_file ""]
+
+	set executable [lindex $args 0]
+	set retval [gdb_load ${executable}]
+	return $retval
+    }
+
+    return 0
+}
+
+
+# Starts a fresh GDB binary, loads the interpreter, and starts the script.
+#
+# Usage: start_numba_script
+#
+# Return 0 if failed to start gdb, load the interpreter or start the
+# script.
+
+proc start_numba_script {} {
+    global numba_binfile
+    global srcfile
+    global srcdir subdir
+    global dppy_backend
+    global dppy_device
+    global dppy_device_number
+    global gdb_prompt
+    global numba_uniform_marker
+
+    # Note that $numba_binfile was set in skip_numba_dppy_tests.
+    if {[clean_restart $numba_binfile] < 0} {
+	verbose "NUMBA: failed to start ${numba_binfile}" 0
+	return 0
+    }
+
+    # Use gdb_test_multiple to not include this as a pass.
+    set set_args_cmd "set args '${srcdir}/${subdir}/${srcfile}' '${dppy_backend}' '${dppy_device}' '${dppy_device_number}'"
+    gdb_test_multiple $set_args_cmd $set_args_cmd {
+	-re "$gdb_prompt $" {}
+    }
+
+    # We cannot set breakpoint at main, but we can use a uniform marker.
+    set line [numba_get_line_number \
+	      "${srcdir}/${subdir}/$srcfile" \
+	      ${numba_uniform_marker}]
+    if {$line < 0} {
+	untested "'${numba_uniform_marker}' not found"
+	return 0
+    }
+    set script_main "${srcfile}:${line}"
+
+    if {![runto $script_main allow-pending no-message]} {
+	untested "failed to run to uniform marker at $script_main"
+	return 0
+    }
+
+    return 1
+}
+
+
+# Get the line number of the marker.
+#
+# SCRIPT is a full path to the script to read. 
+# MARKER is a string literal, not a regular expression.
+#
+# This function is similar to gdb_get_line_number, but rather than calling
+# error, this function always returns.
+#
+# Returns -1, if the marker is not found.
+
+proc numba_get_line_number { script marker } {
+
+    if {[catch {set fd [open "${script}"]} message]} then {
+	verbose "NUMBA: failed to open ${script}" 0
+	return -1
+    }
+
+    set found -1
+    for {set line 1} {1} {incr line} {
+	if {[catch {set nchar [gets "$fd" body]} message]} then {
+	    break
+	}
+	if {$nchar < 0} then {
+	    break
+	}
+	if {[string first ${marker} "$body"] >= 0} then {
+	    set found $line
+	    break
+	}
+    }
+
+    if {[catch {close "$fd"} message]} then {
+	verbose "NUMBA: failed to close ${script}" 0
+	set found -1
+    }
+
+    return $found
+}

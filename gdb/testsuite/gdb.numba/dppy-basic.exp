@@ -1,0 +1,70 @@
+# Copyright 2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for NUMBA-DPPy.
+
+load_lib numba.exp
+
+standard_testfile .py
+
+if {[skip_numba_dppy_tests]} {
+    unsupported "target does not support NUMBA-DPPy"
+    return 0
+}
+
+if {![start_numba_script]} {
+    return -1
+}
+
+
+set first_line [gdb_get_line_number "numba-kernel-breakpoint"]
+set second_line [gdb_get_line_number "second-line"]
+set third_line [gdb_get_line_number "third-line"]
+set fourth_line [gdb_get_line_number "fourth-line"]
+
+# Test: "backtrace".
+# Ignore all but the first frame.
+gdb_test "backtrace 1" \
+    "0.*main.* \\\(\\\) at ${srcfile}:${first_line}.*"
+
+# Test: "info line".
+gdb_test "info line" "Line ${first_line} of .${srcfile}.*" \
+    "info line first_line (${first_line})"
+
+# Test: "next".
+gdb_test "next" "${second_line}.*second\-line"
+
+# Test: "continue".
+gdb_breakpoint "${fourth_line}"
+gdb_continue_to_breakpoint "line ${fourth_line}" \
+    ".*${srcfile}:${fourth_line}.*"
+
+# Test: "jump <line>".
+# Jump to the first line, execution continues until we hit a breakpoint.
+delete_breakpoints
+gdb_breakpoint "$srcfile:${third_line}"
+gdb_test "jump ${first_line}" \
+    "Breakpoint ${decimal}, .*${srcfile}:${third_line}.*" \
+    "jump first_line (${first_line})"
+
+# Test: "list".
+gdb_test "list" [multi_line \
+    "${first_line}.*numba\-kernel\-breakpoint" \
+    "${second_line}.*second\-line" \
+    "${third_line}.*third\-line" \
+    "${fourth_line}.*fourth\-line.*"]
+
+# Test: "ptype <variable>".
+gdb_test "ptype l2" "type = double"

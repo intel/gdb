@@ -3311,7 +3311,13 @@ handle_v_attach (char *own_buf)
 {
   client_state &cs = get_client_state ();
 
+  errno = 0;
   int pid = strtol (own_buf + 8, NULL, 16);
+  if (errno != 0)
+    {
+      sprintf (own_buf, "E.Bad pid");
+      return;
+    }
 
   try
     {

@@ -1,0 +1,31 @@
+# Copyright 2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This file is a dejagnu "board file" and is used to run the testsuite
+# with NUMBA-DPPy support on a CPU device.
+#
+# Example usage:
+# bash$ make check RUNTESTFLAGS='--target_board=numba-cpu'
+
+# This is copied from baseboards/unix.exp.
+# At the moment this only supports things that unix.exp supports.
+load_generic_config "unix"
+process_multilib_options ""
+load_board_description "local-board"
+
+set dppy_backend "opencl"
+set dppy_device "cpu"
+set dppy_device_number "0"
+set gdb_test_timeout 100

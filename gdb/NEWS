@@ -13,6 +13,14 @@
     equivalent of the CLI's "break -qualified" and "dprintf
     -qualified".
 
+ ** '-break-insert --force-condition' and '-dprintf-insert --force-condition'
+
+    The MI -break-insert and -dprintf-insert commands now support a
+    '--force-condition' flag to forcibly define a condition even when
+    the condition is invalid at all locations of the breakpoint.  This
+    is equivalent to the '-force-condition' flag of the CLI's "break"
+    command.
+
 *** Changes in GDB 10
 
 * There are new feature names for ARC targets: "org.gnu.gdb.arc.core"

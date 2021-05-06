@@ -628,6 +628,183 @@ ze_device_detached (process_info *process, zet_debug_detach_reason_t reason)
     });
 }
 
+/* Find the regset containing REGNO on DEVICE or throw if not found.  */
+
+static ze_regset_info
+ze_find_regset (const ze_device_info &device, long regno)
+{
+  for (const ze_regset_info &regset : device.regsets)
+    {
+      if (regno < regset.begin)
+	continue;
+
+      if (regset.end <= regno)
+	continue;
+
+      return regset;
+    }
+
+  error (_("No register %ld on %s."), regno, device.properties.name);
+}
+
+/* Fetch all registers for THREAD on DEVICE into REGCACHE.  */
+
+static void
+ze_fetch_all_registers (const ze_device_info &device,
+			const ze_device_thread_t thread,
+			regcache *regcache)
+{
+  for (const ze_regset_info &regset : device.regsets)
+    {
+      gdb_assert (regset.begin <= regset.end);
+      long lnregs = regset.end - regset.begin;
+
+      gdb_assert (lnregs < UINT32_MAX);
+      uint32_t nregs = (uint32_t) lnregs;
+
+      std::vector<uint8_t> buffer (regset.size * nregs);
+      ze_result_t status
+	= zetDebugReadRegisters (device.session, thread, regset.type, 0,
+				 nregs, buffer.data ());
+      switch (status)
+	{
+	case ZE_RESULT_SUCCESS:
+	  {
+	    size_t offset = 0;
+	    long reg = regset.begin;
+	    for (; reg < regset.end; reg += 1, offset += regset.size)
+	      supply_register (regcache, reg, &buffer[offset]);
+	  }
+	  break;
+
+	case ZE_RESULT_ERROR_NOT_AVAILABLE:
+	  break;
+
+	default:
+	  warning (_("Error %x reading regset %" PRIu32 " for %s on %s."),
+		   status, regset.type, ze_thread_id_str (thread).c_str (),
+		   device.properties.name);
+
+	  break;
+	}
+    }
+}
+
+/* Fetch register REGNO for THREAD on DEVICE into REGCACHE.  */
+
+static void
+ze_fetch_register (const ze_device_info &device,
+		   const ze_device_thread_t thread,
+		   regcache *regcache, long regno)
+{
+  ze_regset_info regset = ze_find_regset (device, regno);
+
+  gdb_assert (regset.begin <= regno);
+  long lrsno = regno - regset.begin;
+
+  gdb_assert (lrsno <= UINT32_MAX);
+  uint32_t rsno = (uint32_t) lrsno;
+
+  std::vector<uint8_t> buffer (regset.size);
+  ze_result_t status
+    = zetDebugReadRegisters (device.session, thread, regset.type, rsno, 1,
+			     buffer.data ());
+  switch (status)
+    {
+    case ZE_RESULT_SUCCESS:
+      supply_register (regcache, regno, buffer.data ());
+      break;
+
+    case ZE_RESULT_ERROR_NOT_AVAILABLE:
+      break;
+
+    default:
+      warning (_("Error %x reading register %ld (regset %" PRIu32
+		 ") for %s on %s."), status, regno, regset.type,
+	       ze_thread_id_str (thread).c_str (), device.properties.name);
+      break;
+    }
+}
+
+/* Store all registers for THREAD on DEVICE from REGCACHE.  */
+
+static void
+ze_store_all_registers (const ze_device_info &device,
+			const ze_device_thread_t thread,
+			regcache *regcache)
+{
+  for (const ze_regset_info &regset : device.regsets)
+    {
+      if (!regset.is_writeable)
+	continue;
+
+      gdb_assert (regset.begin <= regset.end);
+      long lnregs = regset.end - regset.begin;
+
+      gdb_assert (lnregs < UINT32_MAX);
+      uint32_t nregs = (uint32_t) lnregs;
+
+      std::vector<uint8_t> buffer (regset.size * nregs);
+      size_t offset = 0;
+      long reg = regset.begin;
+      for (; reg < regset.end; reg += 1, offset += regset.size)
+	collect_register (regcache, reg, &buffer[offset]);
+
+      ze_result_t status
+	= zetDebugWriteRegisters (device.session, thread, regset.type, 0,
+				  nregs, buffer.data ());
+      switch (status)
+	{
+	case ZE_RESULT_SUCCESS:
+	  break;
+
+	default:
+	  error (_("Error %x writing regset %" PRIu32 " for %s on %s."),
+		 status, regset.type, ze_thread_id_str (thread).c_str (),
+		 device.properties.name);
+	}
+    }
+}
+
+/* Store register REGNO for THREAD on DEVICE from REGCACHE.  */
+
+static void
+ze_store_register (const ze_device_info &device,
+		   const ze_device_thread_t thread,
+		   regcache *regcache, long regno)
+{
+  ze_regset_info regset = ze_find_regset (device, regno);
+
+  if (!regset.is_writeable)
+    error (_("Writing read-only register %ld (regset %" PRIu32
+	     ") for %s on %s."), regno, regset.type,
+	   ze_thread_id_str (thread).c_str (), device.properties.name);
+
+  gdb_assert (regset.begin <= regno);
+  long lrsno = regno - regset.begin;
+
+  gdb_assert (lrsno <= UINT32_MAX);
+  uint32_t rsno = (uint32_t) lrsno;
+
+  std::vector<uint8_t> buffer (regset.size);
+  supply_register (regcache, regno, buffer.data ());
+
+  ze_result_t status
+    = zetDebugWriteRegisters (device.session, thread, regset.type, rsno, 1,
+			      buffer.data ());
+  switch (status)
+    {
+    case ZE_RESULT_SUCCESS:
+      break;
+
+    default:
+      error (_("Error %x writing register %ld (regset %" PRIu32
+	       ") for %s on %s."), status,  regno, regset.type,
+	     ze_thread_id_str (thread).c_str (),
+	     device.properties.name);
+    }
+}
+
 int
 ze_target::attach_to_device (uint32_t pid, ze_device_handle_t device)
 {
@@ -1186,13 +1363,27 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 void
 ze_target::fetch_registers (regcache *regcache, int regno)
 {
-  error (_("%s: tbd"), __FUNCTION__);
+  ze_device_thread_t tid = ze_thread_id (current_thread);
+  ze_device_info *device = ze_thread_device (current_thread);
+  gdb_assert (device != nullptr);
+
+  if (regno == -1)
+    ze_fetch_all_registers (*device, tid, regcache);
+  else
+    ze_fetch_register (*device, tid, regcache, regno);
 }
 
 void
 ze_target::store_registers (regcache *regcache, int regno)
 {
-  error (_("%s: tbd"), __FUNCTION__);
+  ze_device_thread_t tid = ze_thread_id (current_thread);
+  ze_device_info *device = ze_thread_device (current_thread);
+  gdb_assert (device != nullptr);
+
+  if (regno == -1)
+    ze_store_all_registers (*device, tid, regcache);
+  else
+    ze_store_register (*device, tid, regcache, regno);
 }
 
 /* Determine the thread id and device context for accessing ADDR_SPACE

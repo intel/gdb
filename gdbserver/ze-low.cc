@@ -578,6 +578,55 @@ ze_ack_event (const ze_device_info &device, const zet_debug_event_t &event)
     }
 }
 
+/* Clear TP's resume state.  */
+
+static void
+ze_clear_resume_state (thread_info *tp)
+{
+  ze_thread_info *zetp = ze_thread (tp);
+  gdb_assert (zetp != nullptr);
+
+  zetp->resume_state = ze_thread_resume_none;
+}
+
+/* Set TP's resume state from RKIND.  */
+
+static void
+ze_set_resume_state (thread_info *tp, resume_kind rkind)
+{
+  ze_thread_info *zetp = ze_thread (tp);
+  gdb_assert (zetp != nullptr);
+
+  switch (rkind)
+    {
+    case resume_continue:
+      zetp->resume_state = ze_thread_resume_run;
+      return;
+
+    case resume_step:
+      zetp->resume_state = ze_thread_resume_step;
+      return;
+
+    case resume_stop:
+      zetp->resume_state = ze_thread_resume_stop;
+      return;
+    }
+
+  internal_error (__FILE__, __LINE__, _("bad resume kind: %d."), rkind);
+}
+
+/* Return TP's resume state.  */
+
+static enum ze_thread_resume_state_t
+ze_resume_state (const thread_info *tp)
+{
+  const ze_thread_info *zetp = ze_thread (tp);
+  if (zetp == nullptr)
+    return ze_thread_resume_none;
+
+  return zetp->resume_state;
+}
+
 /* Return TP's execution state.  */
 
 static enum ze_thread_exec_state_t
@@ -850,6 +899,103 @@ ze_discard_regcache (thread_info *tp)
   gdb_assert (regcache != nullptr);
 
   regcache->registers_valid = 0;
+}
+
+/* Resume THREAD on DEVICE.  */
+
+static void
+ze_resume (const ze_device_info &device, ze_device_thread_t thread)
+{
+  ze_result_t status = zetDebugResume (device.session, thread);
+  switch (status)
+    {
+    case ZE_RESULT_SUCCESS:
+      /* Update our thread state to reflect the target.  */
+      for_each_thread (device, thread, [&] (thread_info *tp)
+	{
+	  ze_thread_info *zetp = ze_thread (tp);
+	  gdb_assert (zetp != nullptr);
+
+	  if (zetp->exec_state != ze_thread_state_stopped)
+	    return;
+
+	  zetp->exec_state = ze_thread_state_running;
+	});
+      break;
+
+    case ZE_RESULT_ERROR_NOT_AVAILABLE:
+      /* Ignore this if we're not modeling DEVICE as a process anymore.  */
+      if (device.process == nullptr)
+	break;
+
+      /* The thread is already running or unavailable.
+
+	 Assuming our thread state tracking is correct, the thread isn't
+	 running, so we assume it became unavailable.  That is strange,
+	 too, as we had it stopped.  */
+      warning (_("thread %s unexpectedly unavailable on %s."),
+	       ze_thread_id_str (thread).c_str (), device.properties.name);
+
+      /* Update our thread state to reflect the target.  */
+      for_each_thread (device, thread, [&] (thread_info *tp)
+	{
+	  ze_thread_info *zetp = ze_thread (tp);
+	  gdb_assert (zetp != nullptr);
+
+	  if (zetp->exec_state != ze_thread_state_stopped)
+	    return;
+
+	  zetp->exec_state = ze_thread_state_unavailable;
+	  zetp->waitstatus = { TARGET_WAITKIND_UNAVAILABLE };
+	});
+      break;
+
+    default:
+      error (_("Failed to resume %s on %s: %x."),
+	     ze_thread_id_str (thread).c_str (), device.properties.name,
+	     status);
+    }
+}
+
+/* Interrupt THREAD on DEVICE.  */
+
+static void
+ze_interrupt (const ze_device_info &device, ze_device_thread_t thread)
+{
+  ze_result_t status = zetDebugInterrupt (device.session, thread);
+  switch (status)
+    {
+    case ZE_RESULT_SUCCESS:
+      break;
+
+    case ZE_RESULT_NOT_READY:
+      /* We already requested THREAD to be stopped.  We do not track
+	 requests so let's ignore this.  */
+      break;
+
+    case ZE_RESULT_ERROR_NOT_AVAILABLE:
+      /* The thread is already stopped or unavailable.
+
+	 Assuming that our state tracking works, update non-stopped
+	 threads to reflect that.  */
+      for_each_thread (device, thread, [&] (thread_info *tp)
+	{
+	  ze_thread_info *zetp = ze_thread (tp);
+	  gdb_assert (zetp != nullptr);
+
+	  if (zetp->exec_state == ze_thread_state_stopped)
+	    return;
+
+	  zetp->exec_state = ze_thread_state_unavailable;
+	  zetp->waitstatus = { TARGET_WAITKIND_UNAVAILABLE };
+	});
+	break;
+
+    default:
+      error (_("Failed to interrupt %s on %s: %x."),
+	     ze_thread_id_str (thread).c_str (), device.properties.name,
+	     status);
+    }
 }
 
 int
@@ -1312,6 +1458,11 @@ ze_target::attach (unsigned long pid)
       if (device->session == nullptr)
 	continue;
 
+      /* GDB (and higher layers of gdbserver) expects threads stopped on
+	 attach in all-stop mode.  */
+      if (!non_stop)
+	resume (*device, resume_stop);
+
       nattached += 1;
     }
 
@@ -1357,9 +1508,262 @@ ze_target::join (int pid)
 }
 
 void
+ze_target::resume (const ze_device_info &device, enum resume_kind rkind)
+{
+  switch (rkind)
+    {
+    case resume_continue:
+    case resume_step:
+      {
+	/* Check if any thread has new events to report.
+
+	   Note that even if we stopped all, unavailable threads may still
+	   report new events as we were not able to stop them.
+
+	   We ignore those threads and the unavailable event they report.  */
+	int pid = ze_device_pid (device);
+	thread_info *eventing
+	  = find_thread (pid, [] (thread_info *tp)
+	      {
+		return ze_has_priority_waitstatus (tp);
+	      });
+
+	/* If we have nothing to report, we can simply resume everything
+	   with a single resume request for all-stop and non-stop.  */
+	if (eventing == nullptr)
+	  {
+	    uint32_t nstopped = 0;
+	    for_each_thread (pid, [this, rkind, &nstopped] (thread_info *tp)
+	      {
+		ze_set_resume_state (tp, rkind);
+
+		enum ze_thread_exec_state_t state = ze_exec_state (tp);
+		switch (state)
+		  {
+		  case ze_thread_state_stopped:
+		    /* We have reported the previous stop.  */
+		    gdb_assert (!ze_has_waitstatus (tp));
+
+		    nstopped += 1;
+		    switch (rkind)
+		      {
+		      case resume_continue:
+		      case resume_step:
+			prepare_thread_resume (tp, rkind);
+			regcache_invalidate_thread (tp);
+			return;
+
+		      default:
+			gdb_assert_not_reached (_("unexpected resume kind"));
+		      }
+
+		  case ze_thread_state_unavailable:
+		    /* Clear any previous unavailable status.
+
+		       The thread is still running for all we know.  */
+		    (void) ze_move_waitstatus (tp);
+		    return;
+
+		  case ze_thread_state_running:
+		    /* The thread doesn't have anything to report.  */
+		    gdb_assert (!ze_has_waitstatus (tp));
+		    return;
+
+		  case ze_thread_state_unknown:
+		    warning (_("thread %d.%ld has unknown execution state"),
+			     tp->id.pid (), tp->id.lwp ());
+		    return;
+		  }
+
+		internal_error (__FILE__, __LINE__,
+				_("bad execution state: %d."), state);
+	      });
+
+	    /* There is nothing to resume if nothing is stopped.  */
+	    if (nstopped == 0)
+	      return;
+
+	    ze_device_thread_t all = ze_thread_id_all ();
+	    ze_resume (device, all);
+	    return;
+	  }
+
+	/* In all-stop mode, we're done.  There already is an event to
+	   report so there's no reason to resume the target.
+
+	   We still need to set the resume state so we will actually
+	   report the event.
+
+	   In non-stop mode, we resume threads individually.  */
+	for_each_thread (pid, [this, rkind] (thread_info *tp)
+	  {
+	    if (!non_stop)
+	      ze_set_resume_state (tp, rkind);
+	    else
+	      resume (tp, rkind);
+	  });
+      }
+      return;
+
+    case resume_stop:
+      {
+	/* The stop case is comparably easy since the target will ignore
+	   already stopped threads.  */
+	int pid = ze_device_pid (device);
+	for_each_thread (pid, [this, rkind] (thread_info *tp)
+	  {
+	    ze_set_resume_state (tp, rkind);
+	  });
+
+	ze_device_thread_t all = ze_thread_id_all ();
+	ze_interrupt (device, all);
+	return;
+      }
+    }
+
+  internal_error (__FILE__, __LINE__, _("bad resume kind: %d."), rkind);
+}
+
+void
+ze_target::resume (thread_info *tp, enum resume_kind rkind)
+{
+  ze_thread_info *zetp = ze_thread (tp);
+  gdb_assert (zetp != nullptr);
+
+  /* When we get detached, we will remove the device but we will also mark
+     each thread exited.  We shouldn't try to resume them.  */
+  ze_device_info *device = ze_thread_device (tp);
+  gdb_assert (device != nullptr);
+
+  ze_thread_exec_state_t state = zetp->exec_state;
+  switch (state)
+    {
+    case ze_thread_state_stopped:
+      /* We silently ignore threads that still need to report an event.  */
+      if (ze_has_priority_waitstatus (tp))
+	return;
+
+      switch (rkind)
+	{
+	case resume_continue:
+	  zetp->resume_state = ze_thread_resume_run;
+
+	  prepare_thread_resume (tp, rkind);
+	  regcache_invalidate_thread (tp);
+	  ze_resume (*device, zetp->id);
+	  return;
+
+	case resume_step:
+	  zetp->resume_state = ze_thread_resume_step;
+
+	  prepare_thread_resume (tp, rkind);
+	  regcache_invalidate_thread (tp);
+	  ze_resume (*device, zetp->id);
+	  return;
+
+	case resume_stop:
+	  zetp->resume_state = ze_thread_resume_stop;
+	  /* We silently ignore already stopped threads.  */
+	  return;
+	}
+
+      internal_error (__FILE__, __LINE__, _("bad resume kind: %d."), rkind);
+
+    case ze_thread_state_running:
+    case ze_thread_state_unavailable:
+      switch (rkind)
+	{
+	case resume_continue:
+	  zetp->resume_state = ze_thread_resume_run;
+	  /* Silently ignore already running or unavailable threads.  */
+	  return;
+
+	case resume_step:
+	  zetp->resume_state = ze_thread_resume_step;
+	  /* Silently ignore already running or unavailable threads.  */
+	  return;
+
+	case resume_stop:
+	  zetp->resume_state = ze_thread_resume_stop;
+	  ze_interrupt (*device, zetp->id);
+	  return;
+	}
+
+      internal_error (__FILE__, __LINE__, _("bad resume kind: %d."), rkind);
+
+    case ze_thread_state_unknown:
+      warning (_("thread %d.%ld has unknown execution "
+		 "state"), tp->id.pid (), tp->id.lwp ());
+      return;
+    }
+
+  internal_error (__FILE__, __LINE__, _("bad execution state: %d."), state);
+}
+
+void
 ze_target::resume (thread_resume *resume_info, size_t n)
 {
-  error (_("%s: tbd"), __FUNCTION__);
+  if (frozen)
+    return;
+
+  /* In all-stop mode, a new resume request overwrites any previous
+     request.  We're going to set the request for affected threads below.
+     Clear it for all threads, here.
+
+     In the resume-all case, this will iterate over all threads twice to
+     first clear and then set the resume request.  Not ideal, but if we
+     first iterated over all threads to set the resume state, we'd also
+     have to iterate over all threads again in order to actually resume
+     them.
+
+     And if we inverted the loops (i.e. iterate over threads, then over
+     resume requests), we'd miss out on the opportunity to resume all
+     threads at once.  */
+  if (!non_stop)
+    for_each_thread ([] (thread_info *tp)
+      {
+	ze_clear_resume_state (tp);
+      });
+
+  /* Let's hope that we're not getting any conflicting resume requests.
+
+     If higher layers cannot guarantee that, we'd need to add a check, but
+     this should really be the responsibility of higher layers, IMHO.  */
+  for (size_t i = 0; i < n; ++i)
+    {
+      const thread_resume &rinfo = resume_info[i];
+      if (rinfo.sig != 0)
+	warning (_("ignoring signal on resume request for %d.%ld"),
+		 rinfo.thread.pid (), rinfo.thread.lwp ());
+
+      if ((rinfo.kind == resume_step)
+	  && (rinfo.step_range_start != rinfo.step_range_end))
+	warning (_("ignoring range step request for %d.%ld"),
+		 rinfo.thread.pid (), rinfo.thread.lwp ());
+
+      ptid_t rptid = rinfo.thread;
+      int rpid = rptid.pid ();
+      if ((rptid == minus_one_ptid)
+	  || rptid.is_pid ()
+	  || (rptid.lwp () == -1))
+	{
+	  for (ze_device_info *device : devices)
+	    {
+	      gdb_assert (device != nullptr);
+
+	      int pid = ze_device_pid (*device);
+	      if ((rpid != -1) && (rpid != pid))
+		continue;
+
+	      resume (*device, rinfo.kind);
+	    }
+	}
+      else
+	{
+	  thread_info *tp = find_thread_ptid (rptid);
+	  resume (tp, rinfo.kind);
+	}
+    }
 }
 
 ptid_t
@@ -1401,7 +1805,10 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 
 	 We prioritize process events since they are typically a lot rarer and
 	 further have higher impact and should be handled before any thread
-	 events of that process.  */
+	 events of that process.
+
+	 Process events are no stop events.  They leave threads running,
+	 even in all-stop mode.  */
       process_info *process
 	= find_process ([ptid, this] (process_info *proc)
 	  {
@@ -1445,6 +1852,11 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 	    if (!tp->id.matches (ptid))
 	      return false;
 
+	    /* Only consider threads that were resumed.  */
+	    ze_thread_resume_state_t state = ze_resume_state (tp);
+	    if (state == ze_thread_resume_none)
+	      return false;
+
 	    return ze_has_priority_waitstatus (tp);
 	  });
 
@@ -1454,11 +1866,22 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 	    if (!tp->id.matches (ptid))
 	      return false;
 
+	    /* Only consider threads that were resumed.  */
+	    ze_thread_resume_state_t state = ze_resume_state (tp);
+	    if (state == ze_thread_resume_none)
+	      return false;
+
 	    return ze_has_waitstatus (tp);
 	  });
 
       if (thread != nullptr)
 	{
+	  /* Stop all other threads.
+
+	     Do this before moving THREAD's waitstatus in case it throws.  */
+	  if (!non_stop)
+	    pause_all (false);
+
 	  *status = ze_move_waitstatus (thread);
 
 	  /* FIXME: switch_to_thread
@@ -1611,17 +2034,206 @@ ze_target::thread_stopped (struct thread_info *tp)
 void
 ze_target::request_interrupt ()
 {
-  error (_("%s: tbd"), __FUNCTION__);
+  if (!has_current_process ())
+    error (_("no current process."));
+
+  process_info *process = current_process ();
+  gdb_assert (process != nullptr);
+
+  process_info_private *priv = process->priv;
+  gdb_assert (priv != nullptr);
+
+  /* The only reason why we would not have a device is if we got detached.
+
+     There is nothing to interrupt in that case.  */
+  ze_device_info *device = priv->device;
+  if (device == nullptr)
+    return;
+
+  /* Interrupt is not a resume request.  */
+
+  ze_device_thread_t all = ze_thread_id_all ();
+  ze_interrupt (*device, all);
 }
 
 void
 ze_target::pause_all (bool freeze)
 {
-  error (_("%s: tbd"), __FUNCTION__);
+  if (freeze)
+    {
+      if (frozen == UINT32_MAX)
+	internal_error (__FILE__, __LINE__, _("freeze count overflow"));
+      frozen += 1;
+    }
+
+  /* Nothing to stop if we were frozen already.  */
+  if (frozen > 1)
+    return;
+
+  /* Unavailable threads may become available and hence respond to our
+     interrupt request.  To ensure that we are actually waiting for an
+     unavailable thread's response, set the state to unknown and have it
+     changed by fetch_events.
+
+     This allows us to distinguish an older unavailable state from the
+     current state at the time of our interrupt request.  */
+  for_each_thread ([] (thread_info *tp)
+    {
+      enum ze_thread_exec_state_t state = ze_exec_state (tp);
+      if (state != ze_thread_state_unavailable)
+	return;
+
+      ze_thread_info *zetp = ze_thread (tp);
+      gdb_assert (zetp != nullptr);
+
+      zetp->exec_state = ze_thread_state_unknown;
+    });
+
+  /* We start by interrupting all threads on all devices.
+
+     Threads that are already stopped will be ignored and, in case all
+     threads were already stopped on a device, we'd handle the resulting
+     error in ze_interrupt.  */
+  ze_device_thread_t all = ze_thread_id_all ();
+  for (ze_device_info *device : devices)
+    {
+      gdb_assert (device != nullptr);
+      ze_interrupt (*device, all);
+    }
+
+  /* Fetch events until each thread is either stopped or unavailable.
+
+     We could use a worklist to only poll threads that are not stopped,
+     yet.  I'm not sure this speeds up waiting, though, and I wouldn't
+     expect more than two iterations, anyway.  */
+  thread_info *thread = nullptr;
+  do {
+    for (ze_device_info *device : devices)
+      {
+	gdb_assert (device != nullptr);
+	fetch_events (*device);
+      }
+
+    thread = find_thread ([] (thread_info *tp)
+      {
+	enum ze_thread_exec_state_t state = ze_exec_state (tp);
+	switch (state)
+	  {
+	  case ze_thread_state_stopped:
+	  case ze_thread_state_unavailable:
+	    return false;
+
+	  case ze_thread_state_running:
+	  case ze_thread_state_unknown:
+	    return true;
+	  }
+
+	internal_error (__FILE__, __LINE__, _("bad execution state: %d."),
+			state);
+      });
+  } while (thread != nullptr);
 }
 
 void
 ze_target::unpause_all (bool unfreeze)
 {
-  error (_("%s: tbd"), __FUNCTION__);
+  if (unfreeze)
+    {
+      if (frozen == 0)
+	internal_error (__FILE__, __LINE__, _("freeze count underflow"));
+      frozen -= 1;
+    }
+
+  /* Nothing to resume if we're still frozen.  */
+  if (frozen > 1)
+    return;
+
+  /* In non-stop mode, we resume all threads that have not reported an
+     event (other than stopped because of an interrupt request) that we
+     have not reported, yet.
+
+     In all-stop mode, we first check whether any thread on any device
+     reported such an event.  Only if there is nothing to report we will
+     resume everything.
+
+     Note that in the presence of unavailable threads, removing threads
+     races with threads becoming available and reporting events.  */
+
+  /* In both cases, we start by fetching latest events.  */
+  for (ze_device_info *device : devices)
+    {
+      gdb_assert (device != nullptr);
+      fetch_events (*device);
+    }
+
+  if (non_stop)
+    {
+      /* Let's resume threads by device and try to group them.  */
+      for (ze_device_info *device : devices)
+	{
+	  gdb_assert (device != nullptr);
+
+	  /* Ignore devices we're not modelling as processes.  */
+	  process_info *process = device->process;
+	  if (process == nullptr)
+	    continue;
+
+	  /* Check if we have any thread with an event to report.  */
+	  thread_info *thread
+	    = find_thread (pid_of (process), [] (thread_info *tp)
+		{
+		  return ze_has_priority_waitstatus (tp);
+		});
+
+	  /* If we don't, we can group all threads together.
+
+	     Otherwise, we send individual resume requests.  Let's not try
+	     to group them any further for now.  */
+	  if (thread == nullptr)
+	    {
+	      ze_device_thread_t all = ze_thread_id_all ();
+	      ze_resume (*device, all);
+	    }
+	  else
+	    {
+	      for_each_thread (pid_of (process), [device] (thread_info *tp)
+		{
+		  const ze_thread_info *zetp = ze_thread (tp);
+		  gdb_assert (zetp != nullptr);
+
+		  if (ze_has_priority_waitstatus (tp))
+		    return;
+
+		  ze_device_thread_t id = ze_thread_id (tp);
+		  ze_resume (*device, id);
+		});
+	    }
+	}
+    }
+  else
+    {
+      /* Check whether we have events we have not reported, yet.
+
+	 We ignore THREAD_UNAVAILABLE events.  The reporting thread hasn't
+	 really stopped.  */
+      thread_info *thread
+	= find_thread ([] (thread_info *tp)
+	    {
+	      return ze_has_priority_waitstatus (tp);
+	    });
+
+      /* If we have at least one thread event, keep the target stopped.
+
+	 We will report the event in the next wait ().  */
+      if (thread != nullptr)
+	return;
+
+      /* There are no unreported events.  Let's resume everything.  */
+      ze_device_thread_t all = ze_thread_id_all ();
+      for (ze_device_info *device : devices)
+	{
+	  gdb_assert (device != nullptr);
+	  ze_resume (*device, all);
+	}
+    }
 }

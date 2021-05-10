@@ -106,6 +106,9 @@ intelgt_add_regset (tdesc_feature *feature, long &regnum,
 
 enum
   {
+    /* The position of the Breakpoint Suppress bit in CR0.0.  */
+    intelgt_cr0_0_breakpoint_suppress = 15,
+
     /* The position of the Breakpoint Status and Control bit in CR0.1.  */
     intelgt_cr0_1_breakpoint_status = 31,
 
@@ -229,6 +232,9 @@ protected:
      ze_regset_info_t &, expedite_t &) override;
 
   target_stop_reason get_stop_reason (thread_info *, gdb_signal &) override;
+
+  void prepare_thread_resume (thread_info *tp,
+			      enum resume_kind rkind) override;
 
 private:
   /* Add a register set for REGPROP on DEVICE to REGSETS and increment REGNUM
@@ -429,8 +435,19 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
       cr0[1] &= ~(1 << intelgt_cr0_1_breakpoint_status);
       intelgt_write_cr0 (tp, 1, cr0[1]);
 
+      /* We cannot distinguish a single step exception from a breakpoint
+	 exception just by looking at CR0.
+
+	 We could inspect the instruction to see if the breakpoint bit is
+	 set.  Or we could check the resume type and assume that we set
+	 things up correctly for single-stepping before we resumed.  */
+      const ze_thread_info *zetp = ze_thread (tp);
+      gdb_assert (zetp != nullptr);
+
       signal = GDB_SIGNAL_TRAP;
-      return TARGET_STOPPED_BY_SW_BREAKPOINT;
+      return ((zetp->resume_state == ze_thread_resume_step)
+	      ? TARGET_STOPPED_BY_SINGLE_STEP
+	      : TARGET_STOPPED_BY_SW_BREAKPOINT);
     }
 
   if ((cr0[1] & (1 << intelgt_cr0_1_illegal_opcode_status)) != 0)
@@ -454,6 +471,60 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
     }
 
   return TARGET_STOPPED_BY_NO_REASON;
+}
+
+void
+intelgt_ze_target::prepare_thread_resume (thread_info *tp,
+					  enum resume_kind rkind)
+{
+  ze_device_thread_t thread = ze_thread_id (tp);
+  regcache *regcache = get_thread_regcache (tp, 1);
+  uint32_t cr0[3] = {
+    intelgt_read_cr0 (regcache, 0),
+    intelgt_read_cr0 (regcache, 1),
+    intelgt_read_cr0 (regcache, 2)
+  };
+
+  /* Clear any potential interrupt indication.
+
+     We leave other exception indications so the exception would be
+     reported again and can be handled by GDB.  */
+  cr0[1] &= ~(1 << intelgt_cr0_1_force_exception_status);
+  cr0[1] &= ~(1 << intelgt_cr0_1_external_halt_status);
+
+  /* Distinguish stepping and continuing.  */
+  switch (rkind)
+    {
+    case resume_continue:
+      cr0[1] &= ~(1 << intelgt_cr0_1_breakpoint_status);
+      break;
+
+    case resume_step:
+      cr0[1] |= (1 << intelgt_cr0_1_breakpoint_status);
+      break;
+
+    default:
+      internal_error (__FILE__, __LINE__, _("bad resume kind: %d."), rkind);
+    }
+
+  /* When stepping over a breakpoint, we need to suppress the breakpoint
+     exception we would otherwise get immediately.
+
+     This requires breakpoints to be already inserted when this function
+     is called.  It also handles permanent breakpoints.  */
+  gdb_byte inst[intelgt::MAX_INST_LENGTH];
+  CORE_ADDR pc = read_pc (regcache);
+  int status = read_memory (pc, inst, intelgt::MAX_INST_LENGTH);
+  if ((status == 0) && intelgt::has_breakpoint (inst))
+    cr0[0] |= (1 << intelgt_cr0_0_breakpoint_suppress);
+
+  intelgt_write_cr0 (regcache, 0, cr0[0]);
+  intelgt_write_cr0 (regcache, 1, cr0[1]);
+  intelgt_write_cr0 (regcache, 2, cr0[2]);
+
+  dprintf ("thread %d.%ld (%s) resumed, cr0.0=%" PRIx32 " .1=%" PRIx32
+	   " .2=%" PRIx32 ".", tp->id.pid (), tp->id.lwp (),
+	   ze_thread_id_str (thread).c_str (), cr0[0], cr0[1], cr0[2]);
 }
 
 void

@@ -105,6 +105,27 @@ struct ze_device_info
   process_info *process = nullptr;
 };
 
+/* A thread's resume state.
+
+   This is very similar to enum resume_kind except that we need an
+   additional none case to model the thread not being mentioned in any
+   resume request.  */
+
+enum ze_thread_resume_state_t
+{
+  /* Gdbserver did not ask anything of this thread.  */
+  ze_thread_resume_none,
+
+  /* The thread shall stop.  */
+  ze_thread_resume_stop,
+
+  /* The thread shall run.  */
+  ze_thread_resume_run,
+
+  /* The thread shall step.  */
+  ze_thread_resume_step
+};
+
 /* A thread's execution state.  */
 
 enum ze_thread_exec_state_t
@@ -148,7 +169,14 @@ struct ze_thread_info
   /* The thread identifier.  */
   ze_device_thread_t id;
 
-  /* The thread's execution state.  */
+  /* The thread's resume state.
+
+     What does gdbserver want this thread to do.  */
+  enum ze_thread_resume_state_t resume_state = ze_thread_resume_none;
+
+  /* The thread's execution state.
+
+     What is this thread actually doing.  */
   enum ze_thread_exec_state_t exec_state = ze_thread_state_unknown;
 
   /* The thread's stop reason.
@@ -272,6 +300,7 @@ public:
      initialized.  */
   void init ();
 
+  bool supports_hardware_single_step () override { return true; }
   bool supports_multi_process () override { return true; }
   bool supports_non_stop () override { return true; }
   int start_non_stop (bool enable) override { async (enable); return 0; }
@@ -320,6 +349,9 @@ private:
   /* The current device ordinal number used for enumerating devices.  */
   unsigned long ordinal = 0;
 
+  /* The freeze count for pause_all ().  */
+  uint32_t frozen = 0;
+
   /* Attach to PID on devices in the device tree rooted at DEVICE.
      Returns the number of devices we attached to.  */
   int attach_to_device (uint32_t pid, ze_device_handle_t device);
@@ -330,6 +362,12 @@ private:
 
   /* Fetch and process events from DEVICE.  Return number of events.  */
   uint64_t fetch_events (ze_device_info &device);
+
+  /* Resume all threads on DEVICE.  */
+  void resume (const ze_device_info &device, enum resume_kind rkind);
+
+  /* Resume TP.  */
+  void resume (thread_info *tp, enum resume_kind rkind);
 
 protected:
   /* Check whether a device is supported by this target.  */
@@ -348,6 +386,10 @@ protected:
      fill in SIGNAL.  */
   virtual target_stop_reason get_stop_reason (thread_info *tp,
 					      gdb_signal &signal) = 0;
+
+  /* Prepare TP for resuming with RKIND.  */
+  virtual void prepare_thread_resume (thread_info *tp,
+				      enum resume_kind rkind) = 0;
 };
 
 #endif /* GDBSERVER_LEVEL_ZERO_LOW_H */

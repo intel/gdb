@@ -135,6 +135,8 @@ public:
 
   virtual int emask_regnum () const override;
 
+  virtual int retval_regnum () const override;
+
   virtual unsigned int address_reg_base () const override;
 
   virtual unsigned int acc_reg_base () const override;
@@ -258,6 +260,13 @@ int
 arch_info_gen9::emask_regnum () const
 {
   return debug_reg_base ();
+}
+
+int
+arch_info_gen9::retval_regnum () const
+{
+  /* GRF r26.  */
+  return 26;
 }
 
 unsigned int

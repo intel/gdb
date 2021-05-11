@@ -3746,16 +3746,8 @@ lwp_is_marked_dead (struct lwp_info *lwp)
 void
 linux_process_target::wait_for_sigstop ()
 {
-  struct thread_info *saved_thread;
-  ptid_t saved_tid;
-  int wstat;
-  int ret;
-
-  saved_thread = current_thread;
-  if (saved_thread != NULL)
-    saved_tid = saved_thread->id;
-  else
-    saved_tid = null_ptid; /* avoid bogus unused warning */
+  thread_info *saved_thread = current_thread;
+  scoped_restore_current_thread restore_thread;
 
   if (debug_threads)
     debug_printf ("wait_for_sigstop: pulling events\n");
@@ -3763,11 +3755,13 @@ linux_process_target::wait_for_sigstop ()
   /* Passing NULL_PTID as filter indicates we want all events to be
      left pending.  Eventually this returns when there are no
      unwaited-for children left.  */
-  ret = wait_for_event_filtered (minus_one_ptid, null_ptid, &wstat, __WALL);
+  int wstat;
+  int ret = wait_for_event_filtered (minus_one_ptid, null_ptid, &wstat,
+				     __WALL);
   gdb_assert (ret == -1);
 
-  if (saved_thread == NULL || mythread_alive (saved_tid))
-    current_thread = saved_thread;
+  if (saved_thread == nullptr || mythread_alive (saved_thread->id))
+    return;
   else
     {
       if (debug_threads)
@@ -3776,7 +3770,8 @@ linux_process_target::wait_for_sigstop ()
       /* We can't change the current inferior behind GDB's back,
 	 otherwise, a subsequent command may apply to the wrong
 	 process.  */
-      current_thread = NULL;
+      restore_thread.dont_restore ();
+      switch_to_thread (nullptr);
     }
 }
 

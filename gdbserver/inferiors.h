@@ -85,11 +85,13 @@ pid_of (const process_info *proc)
   return proc->pid;
 }
 
-/* Return a pointer to the process that corresponds to the current
-   thread (current_thread).  It is an error to call this if there is
-   no current thread selected.  */
+/* Return a pointer to the current process.  It is the process that
+   corresponds to the current thread (current_thread), if the current
+   thread exists.  Note that a current process may still exist even
+   when there are no threads added, yet.  */
 
 struct process_info *current_process (void);
+bool has_current_process ();
 struct process_info *get_thread_process (const struct thread_info *);
 
 extern std::list<process_info *> all_processes;

@@ -427,14 +427,10 @@ linux_process_target::low_new_fork (process_info *parent, process_info *child)
 void
 linux_process_target::arch_setup_thread (thread_info *thread)
 {
-  struct thread_info *saved_thread;
-
-  saved_thread = current_thread;
-  current_thread = thread;
+  scoped_restore_current_thread restore_thread;
+  switch_to_thread (thread);
 
   low_arch_setup ();
-
-  current_thread = saved_thread;
 }
 
 int
@@ -671,7 +667,7 @@ linux_process_target::handle_extended_wait (lwp_info **orig_event_lwp,
 
       /* Delete the execing process and all its threads.  */
       mourn (proc);
-      current_thread = NULL;
+      switch_to_thread (nullptr);
 
       /* Create a new process/lwp/thread.  */
       proc = add_linux_process (event_pid, 0);
@@ -711,15 +707,14 @@ linux_process_target::handle_extended_wait (lwp_info **orig_event_lwp,
 CORE_ADDR
 linux_process_target::get_pc (lwp_info *lwp)
 {
-  struct thread_info *saved_thread;
   struct regcache *regcache;
   CORE_ADDR pc;
 
   if (!low_supports_breakpoints ())
     return 0;
 
-  saved_thread = current_thread;
-  current_thread = get_lwp_thread (lwp);
+  scoped_restore_current_thread restore_thread;
+  switch_to_thread (get_lwp_thread (lwp));
 
   regcache = get_thread_regcache (current_thread, 1);
   pc = low_get_pc (regcache);
@@ -727,26 +722,22 @@ linux_process_target::get_pc (lwp_info *lwp)
   if (debug_threads)
     debug_printf ("pc is 0x%lx\n", (long) pc);
 
-  current_thread = saved_thread;
   return pc;
 }
 
 void
 linux_process_target::get_syscall_trapinfo (lwp_info *lwp, int *sysno)
 {
-  struct thread_info *saved_thread;
   struct regcache *regcache;
 
-  saved_thread = current_thread;
-  current_thread = get_lwp_thread (lwp);
+  scoped_restore_current_thread restore_thread;
+  switch_to_thread (get_lwp_thread (lwp));
 
   regcache = get_thread_regcache (current_thread, 1);
   low_get_syscall_trapinfo (regcache, sysno);
 
   if (debug_threads)
     debug_printf ("get_syscall_trapinfo sysno %d\n", *sysno);
-
-  current_thread = saved_thread;
 }
 
 void
@@ -761,7 +752,6 @@ linux_process_target::save_stop_reason (lwp_info *lwp)
 {
   CORE_ADDR pc;
   CORE_ADDR sw_breakpoint_pc;
-  struct thread_info *saved_thread;
 #if USE_SIGTRAP_SIGINFO
   siginfo_t siginfo;
 #endif
@@ -773,8 +763,8 @@ linux_process_target::save_stop_reason (lwp_info *lwp)
   sw_breakpoint_pc = pc - low_decr_pc_after_break ();
 
   /* breakpoint_at reads from the current thread.  */
-  saved_thread = current_thread;
-  current_thread = get_lwp_thread (lwp);
+  scoped_restore_current_thread restore_thread;
+  switch_to_thread (get_lwp_thread (lwp));
 
 #if USE_SIGTRAP_SIGINFO
   if (ptrace (PTRACE_GETSIGINFO, lwpid_of (current_thread),
@@ -887,7 +877,6 @@ linux_process_target::save_stop_reason (lwp_info *lwp)
     }
 
   lwp->stop_pc = pc;
-  current_thread = saved_thread;
   return true;
 }
 
@@ -1652,7 +1641,6 @@ linux_process_target::thread_still_has_status_pending (thread_info *thread)
       && (lp->stop_reason == TARGET_STOPPED_BY_SW_BREAKPOINT
 	  || lp->stop_reason == TARGET_STOPPED_BY_HW_BREAKPOINT))
     {
-      struct thread_info *saved_thread;
       CORE_ADDR pc;
       int discard = 0;
 
@@ -1660,8 +1648,8 @@ linux_process_target::thread_still_has_status_pending (thread_info *thread)
 
       pc = get_pc (lp);
 
-      saved_thread = current_thread;
-      current_thread = thread;
+      scoped_restore_current_thread restore_thread;
+      switch_to_thread (thread);
 
       if (pc != lp->stop_pc)
 	{
@@ -1689,8 +1677,6 @@ linux_process_target::thread_still_has_status_pending (thread_info *thread)
 	  discard = 1;
 	}
 #endif
-
-      current_thread = saved_thread;
 
       if (discard)
 	{
@@ -1979,10 +1965,8 @@ linux_process_target::low_get_thread_area (int lwpid, CORE_ADDR *addrp)
 bool
 linux_process_target::maybe_move_out_of_jump_pad (lwp_info *lwp, int *wstat)
 {
-  struct thread_info *saved_thread;
-
-  saved_thread = current_thread;
-  current_thread = get_lwp_thread (lwp);
+  scoped_restore_current_thread restore_thread;
+  switch_to_thread (get_lwp_thread (lwp));
 
   if ((wstat == NULL
        || (WIFSTOPPED (*wstat) && WSTOPSIG (*wstat) != SIGTRAP))
@@ -2023,7 +2007,6 @@ linux_process_target::maybe_move_out_of_jump_pad (lwp_info *lwp, int *wstat)
 		debug_printf ("Checking whether LWP %ld needs to move out of "
 			      "the jump pad...it does\n",
 			      lwpid_of (current_thread));
-	      current_thread = saved_thread;
 
 	      return true;
 	    }
@@ -2096,7 +2079,6 @@ linux_process_target::maybe_move_out_of_jump_pad (lwp_info *lwp, int *wstat)
 		  "jump pad...no\n",
 		  lwpid_of (current_thread));
 
-  current_thread = saved_thread;
   return false;
 }
 
@@ -2187,16 +2169,14 @@ dequeue_one_deferred_signal (struct lwp_info *lwp, int *wstat)
 bool
 linux_process_target::check_stopped_by_watchpoint (lwp_info *child)
 {
-  struct thread_info *saved_thread = current_thread;
-  current_thread = get_lwp_thread (child);
+  scoped_restore_current_thread restore_thread;
+  switch_to_thread (get_lwp_thread (child));
 
   if (low_stopped_by_watchpoint ())
     {
       child->stop_reason = TARGET_STOPPED_BY_WATCHPOINT;
       child->stopped_data_address = low_stopped_data_address ();
     }
-
-  current_thread = saved_thread;
 
   return child->stop_reason == TARGET_STOPPED_BY_WATCHPOINT;
 }
@@ -2277,7 +2257,7 @@ linux_process_target::filter_event (int lwpid, int wstat)
       child_ptid = ptid_t (lwpid, lwpid, 0);
       child = add_lwp (child_ptid);
       child->stopped = 1;
-      current_thread = child->thread;
+      switch_to_thread (child->thread);
     }
 
   /* If we didn't find a process, one of two things presumably happened:
@@ -2543,7 +2523,7 @@ linux_process_target::wait_for_event_filtered (ptid_t wait_ptid,
       *wstatp = event_child->status_pending;
       event_child->status_pending_p = 0;
       event_child->status_pending = 0;
-      current_thread = event_thread;
+      switch_to_thread (event_thread);
       return lwpid_of (event_thread);
     }
 
@@ -2671,7 +2651,7 @@ linux_process_target::wait_for_event_filtered (ptid_t wait_ptid,
 
   gdb_sigmask (SIG_SETMASK, &prev_mask, NULL);
 
-  current_thread = event_thread;
+  switch_to_thread (event_thread);
 
   return lwpid_of (event_thread);
 }
@@ -2802,7 +2782,7 @@ linux_process_target::stabilize_threads ()
       return;
     }
 
-  thread_info *saved_thread = current_thread;
+  scoped_restore_current_thread restore_thread;
 
   stabilizing_threads = 1;
 
@@ -2843,8 +2823,6 @@ linux_process_target::stabilize_threads ()
   unsuspend_all_lwps (NULL);
 
   stabilizing_threads = 0;
-
-  current_thread = saved_thread;
 
   if (debug_threads)
     {
@@ -3561,7 +3539,7 @@ linux_process_target::low_wait (ptid_t ptid, target_waitstatus *ourstatus,
 	  select_event_lwp (&event_child);
 
 	  /* current_thread and event_child must stay in sync.  */
-	  current_thread = get_lwp_thread (event_child);
+	  switch_to_thread (get_lwp_thread (event_child));
 
 	  event_child->status_pending_p = 0;
 	  w = event_child->status_pending;
@@ -3823,7 +3801,6 @@ linux_process_target::stuck_in_jump_pad (thread_info *thread)
 void
 linux_process_target::move_out_of_jump_pad (thread_info *thread)
 {
-  struct thread_info *saved_thread;
   struct lwp_info *lwp = get_thread_lwp (thread);
   int *wstat;
 
@@ -3836,8 +3813,8 @@ linux_process_target::move_out_of_jump_pad (thread_info *thread)
   gdb_assert (lwp->stopped);
 
   /* For gdb_breakpoint_here.  */
-  saved_thread = current_thread;
-  current_thread = thread;
+  scoped_restore_current_thread restore_thread;
+  switch_to_thread (thread);
 
   wstat = lwp->status_pending_p ? &lwp->status_pending : NULL;
 
@@ -3866,8 +3843,6 @@ linux_process_target::move_out_of_jump_pad (thread_info *thread)
     }
   else
     lwp_suspended_inc (lwp);
-
-  current_thread = saved_thread;
 }
 
 static bool
@@ -3964,9 +3939,9 @@ linux_process_target::install_software_single_step_breakpoints (lwp_info *lwp)
   struct thread_info *thread = get_lwp_thread (lwp);
   struct regcache *regcache = get_thread_regcache (thread, 1);
 
-  scoped_restore save_current_thread = make_scoped_restore (&current_thread);
+  scoped_restore_current_thread restore_thread;
 
-  current_thread = thread;
+  switch_to_thread (thread);
   std::vector<CORE_ADDR> next_pcs = low_get_next_pcs (regcache);
 
   for (CORE_ADDR pc : next_pcs)
@@ -4016,7 +3991,6 @@ linux_process_target::resume_one_nti_throw (nonstop_thread_info *nti,
 {
   lwp_info *lwp = static_cast<lwp_info *> (nti);
   struct thread_info *thread = get_lwp_thread (lwp);
-  struct thread_info *saved_thread;
   int ptrace_request;
   struct process_info *proc = get_thread_process (thread);
 
@@ -4072,8 +4046,8 @@ linux_process_target::resume_one_nti_throw (nonstop_thread_info *nti,
       return;
     }
 
-  saved_thread = current_thread;
-  current_thread = thread;
+  scoped_restore_current_thread restore_thread;
+  switch_to_thread (thread);
 
   /* This bit needs some thinking about.  If we get a signal that
      we must report while a single-step reinsert is still pending,
@@ -4197,7 +4171,6 @@ linux_process_target::resume_one_nti_throw (nonstop_thread_info *nti,
 	     of coercing an 8 byte integer to a 4 byte pointer.  */
 	  (PTRACE_TYPE_ARG4) (uintptr_t) signal);
 
-  current_thread = saved_thread;
   if (errno)
     perror_with_name ("resuming thread");
 
@@ -4320,7 +4293,6 @@ bool
 linux_process_target::thread_needs_step_over (thread_info *thread)
 {
   struct lwp_info *lwp = get_thread_lwp (thread);
-  struct thread_info *saved_thread;
   CORE_ADDR pc;
   struct process_info *proc = get_thread_process (thread);
 
@@ -4401,8 +4373,8 @@ linux_process_target::thread_needs_step_over (thread_info *thread)
       return false;
     }
 
-  saved_thread = current_thread;
-  current_thread = thread;
+  scoped_restore_current_thread restore_thread;
+  switch_to_thread (thread);
 
   /* We can only step over breakpoints we know about.  */
   if (breakpoint_here (pc) || fast_tracepoint_jump_here (pc))
@@ -4419,7 +4391,6 @@ linux_process_target::thread_needs_step_over (thread_info *thread)
 			  " GDB breakpoint at 0x%s; skipping step over\n",
 			  lwpid_of (thread), paddress (pc));
 
-	  current_thread = saved_thread;
 	  return false;
 	}
       else
@@ -4431,13 +4402,9 @@ linux_process_target::thread_needs_step_over (thread_info *thread)
 
 	  /* We've found an lwp that needs stepping over --- return 1 so
 	     that find_thread stops looking.  */
-	  current_thread = saved_thread;
-
 	  return true;
 	}
     }
-
-  current_thread = saved_thread;
 
   if (debug_threads)
     debug_printf ("Need step over [LWP %ld]? No, no breakpoint found"
@@ -4451,9 +4418,6 @@ void
 linux_process_target::start_step_over (thread_info *thread)
 {
   struct lwp_info *lwp = get_thread_lwp (thread);
-  struct thread_info *saved_thread;
-  CORE_ADDR pc;
-  int step;
 
   if (debug_threads)
     debug_printf ("Starting step-over on LWP %ld.  Stopping all threads\n",
@@ -4475,18 +4439,19 @@ linux_process_target::start_step_over (thread_info *thread)
      either by GDB (if we're resuming due to GDB's request), or by our
      caller, if we just finished handling an internal breakpoint GDB
      shouldn't care about.  */
-  pc = get_pc (lwp);
+  CORE_ADDR pc = get_pc (lwp);
 
-  saved_thread = current_thread;
-  current_thread = thread;
+  bool step = false;
+  {
+    scoped_restore_current_thread restore_thread;
+    switch_to_thread (thread);
 
-  lwp->bp_reinsert = pc;
-  uninsert_breakpoints_at (pc);
-  uninsert_fast_tracepoint_jumps_at (pc);
+    lwp->bp_reinsert = pc;
+    uninsert_breakpoints_at (pc);
+    uninsert_fast_tracepoint_jumps_at (pc);
 
-  step = single_step (lwp);
-
-  current_thread = saved_thread;
+    step = single_step (lwp);
+  }
 
   resume_one_nti (lwp, step, 0, nullptr);
 
@@ -4499,12 +4464,12 @@ linux_process_target::finish_step_over (lwp_info *lwp)
 {
   if (lwp->bp_reinsert != 0)
     {
-      struct thread_info *saved_thread = current_thread;
+      scoped_restore_current_thread restore_thread;
 
       if (debug_threads)
 	debug_printf ("Finished step over.\n");
 
-      current_thread = get_lwp_thread (lwp);
+      switch_to_thread (get_lwp_thread (lwp));
 
       /* Reinsert any breakpoint at LWP->BP_REINSERT.  Note that there
 	 may be no breakpoint to reinsert there by now.  */
@@ -4525,7 +4490,6 @@ linux_process_target::finish_step_over (lwp_info *lwp)
 	}
 
       step_over_bkpt = null_ptid;
-      current_thread = saved_thread;
       return true;
     }
   else

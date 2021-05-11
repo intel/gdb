@@ -31,6 +31,7 @@
 #include "iga.h"
 #endif /* defined (HAVE_LIBIGA64)  */
 #include "gdbthread.h"
+#include "inferior.h"
 
 /* Feature names.  */
 
@@ -229,6 +230,152 @@ intelgt_skip_prologue (gdbarch *gdbarch, CORE_ADDR start_pc)
 
   /* Could not find the end of prologue using SAL.  */
   return start_pc;
+}
+
+/* Implementation of gdbarch's return_value method.  */
+
+static enum return_value_convention
+intelgt_return_value (gdbarch *gdbarch, value *function,
+		      type *valtype, regcache *regcache,
+		      gdb_byte *readbuf, const gdb_byte *writebuf)
+{
+  dprintf ("return type length %ld", TYPE_LENGTH (valtype));
+  bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  gdb_assert (inferior_ptid != null_ptid);
+
+  intelgt::arch_info *intelgt_info = get_intelgt_arch_info (gdbarch);
+  int address_size_byte = gdbarch_addr_bit (gdbarch) / 8;
+
+  /* The vectorized return value is stored at this register and onwards.  */
+  int retval_regnum = intelgt_info->retval_regnum ();
+  unsigned int max_reg_size = intelgt_info->max_reg_size ();
+  int type_length = TYPE_LENGTH (valtype);
+  int simd_lane = inferior_thread ()->current_simd_lane ();
+
+  if (type_length > 8 || class_or_union_p (valtype))
+    {
+      /* Values greater than 64 bits (64 is specified by ABI) or structs
+	 are stored by reference.  The return value register contains a
+	 vectorized sequence of memory addresses.  */
+      if (readbuf != nullptr)
+	{
+	  CORE_ADDR offset = address_size_byte * simd_lane;
+	  /* One retval register contains that many addresses.  */
+	  int n_addresses_in_retval_reg = max_reg_size / address_size_byte;
+
+	  /* Find at which register the return value address is stored
+	     for the current SIMD lane.  */
+	  while (offset > max_reg_size)
+	    {
+	      /* The register RETVAL_REGNUM does not contain the return value
+		 for the current SIMD lane.  Decrease the offset by the size of
+		 addresses stored in this register and move to the next
+		 register.  */
+	      offset -= n_addresses_in_retval_reg* address_size_byte;
+	      retval_regnum++;
+	    }
+
+	  /* Read the address to a temporary buffer.  The address is stored
+	     in RETVAL_REGNUM with OFFSET.  */
+	  gdb_byte buf[address_size_byte];
+	  regcache->cooked_read_part (retval_regnum, offset,
+				      address_size_byte, buf);
+	  CORE_ADDR addr = extract_unsigned_integer (buf, address_size_byte,
+						     byte_order);
+	  /* Read the value to the resulting buffer.  */
+	  target_read_memory (addr, readbuf, type_length);
+	}
+
+      return RETURN_VALUE_ABI_RETURNS_ADDRESS;
+    }
+
+  /* Return value is stored in the return register.  */
+  if (readbuf != nullptr)
+    {
+      if (TYPE_VECTOR (valtype) == 1)
+	{
+	  /* Vectors on GRF are stored with Structure of Arrays (SoA) layout.
+	     E.g. the vector v[4] when vectorized accross SIMD lanes will have
+	     the following layout:
+	     v[3] v[3]...v[3] v[2] v[2]...v[2] v[1] v[1]...v[1] v[0] v[0]...v[0]
+	     To get the complete vector, we need to read the whole register.  */
+
+	  /* Length of an element in the vector.  */
+	  int target_type_length = TYPE_LENGTH (TYPE_TARGET_TYPE (valtype));
+
+	  /* Number of elements in the vector.  */
+	  int n_elements_to_read = type_length / target_type_length;
+
+	  /* Number of elements, which we have already found.  */
+	  int n_done_elements = 0;
+
+	  /* Buffer to read the register.  */
+	  gdb_byte reg_buf[max_reg_size];
+
+	  /* Offset at the read register buffer.  */
+	  int reg_offset;
+
+	  while (n_done_elements != n_elements_to_read)
+	    {
+	      regcache->cooked_read (retval_regnum, reg_buf);
+
+	      /* The register has the format (read from right to left):
+		 next elements... v[n_done_elements]... v[n_done_elements]
+		 We set initial offset to the v[n_done_elements] from
+		 the current SIMD lane.  Then we loop through the rest of
+		 the read register and take next elements of the vector.
+		 We find them by increasing this offset by 8 bytes at every
+		 iteration, until the register is completed.  */
+	      reg_offset = target_type_length * simd_lane;
+
+	      while (n_done_elements != n_elements_to_read
+		     && reg_offset < max_reg_size)
+		{
+		  /* Offset for the current element at the resulting
+		     buffer.  */
+		  int val_offset = n_done_elements * target_type_length;
+
+		  /* Copy the current element to the resulting buffer
+		     to the correct position.  */
+		  memcpy (readbuf + val_offset, reg_buf + reg_offset,
+			  target_type_length);
+
+		  n_done_elements++;
+		  reg_offset += 8;
+		}
+
+	      /* If we are not yet finished, at the next iteration we will
+		 read the next register.  */
+	      retval_regnum++;
+	    }
+	}
+      else
+	{
+	  /* The return value takes a contiguous chunk in GRF.  */
+
+	  CORE_ADDR offset = type_length * simd_lane;
+	  /* One retval register contains that many values.  */
+	  int n_values_in_retval_reg = max_reg_size / type_length;
+
+	  /* Find at which register the return value is stored
+	     for the current SIMD lane.  */
+	  while (offset > max_reg_size)
+	    {
+	      /* The register RETVAL_REGNUM does not contain the return value
+		 for the current SIMD lane.  Decrease the offset by the size of
+		 data stored in this register and move to the next register.  */
+	      offset -= n_values_in_retval_reg * type_length;
+	      retval_regnum++;
+	    }
+
+	  /* Read the final value from the register with the remaining
+	     offset.  */
+	  regcache->cooked_read_part (retval_regnum, offset, type_length,
+				      readbuf);
+	}
+    }
+
+  return RETURN_VALUE_REGISTER_CONVENTION;
 }
 
 /* The 'unwind_pc' gdbarch method.  */
@@ -711,6 +858,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_unwind_pc (gdbarch, intelgt_unwind_pc);
   dwarf2_append_unwinders (gdbarch);
   frame_unwind_append_unwinder (gdbarch, &intelgt_unwinder);
+
+  set_gdbarch_return_value (gdbarch, intelgt_return_value);
 
   set_gdbarch_memory_insert_breakpoint (gdbarch,
 					intelgt_memory_insert_breakpoint);

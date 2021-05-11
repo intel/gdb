@@ -128,6 +128,7 @@ private:
    is null.  */
 
 struct process_info *current_process (void);
+bool has_current_process ();
 
 extern owning_intrusive_list<process_info> all_processes;
 

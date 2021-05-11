@@ -28,6 +28,10 @@ std::list<thread_info *> all_threads;
 
 struct thread_info *current_thread;
 
+/* The current process.  */
+
+static process_info *current_process_;
+
 /* The current working directory used to start the inferior.  */
 static const char *current_inferior_cwd = NULL;
 
@@ -210,8 +214,14 @@ get_thread_process (const struct thread_info *thread)
 struct process_info *
 current_process (void)
 {
-  gdb_assert (current_thread != NULL);
-  return get_thread_process (current_thread);
+  gdb_assert (current_process_ != nullptr);
+  return current_process_;
+}
+
+bool
+has_current_process ()
+{
+  return current_process_ != nullptr;
 }
 
 /* See gdbsupport/common-gdbthread.h.  */
@@ -229,6 +239,10 @@ void
 switch_to_thread (thread_info *thread)
 {
   current_thread = thread;
+  if (thread == nullptr)
+    current_process_ = nullptr;
+  else
+    current_process_ = get_thread_process (thread);
 }
 
 /* See inferiors.h.  */
@@ -239,6 +253,11 @@ switch_to_process (process_info *proc)
   int pid = pid_of (proc);
 
   switch_to_thread (find_any_thread_of_pid (pid));
+
+  /* Make sure to set current_process_, in case it does not have any
+     threads.  This is the case where current_process_ may point to
+     a valid process whereas current_thread is null.  */
+  current_process_ = proc;
 }
 
 /* See gdbsupport/common-inferior.h.  */
@@ -264,6 +283,7 @@ set_inferior_cwd (const char *cwd)
 scoped_restore_current_thread::scoped_restore_current_thread ()
 {
   m_thread = current_thread;
+  m_process = current_process_;
 }
 
 scoped_restore_current_thread::~scoped_restore_current_thread ()
@@ -272,4 +292,11 @@ scoped_restore_current_thread::~scoped_restore_current_thread ()
     return;
 
   switch_to_thread (m_thread);
+
+  /* m_process can be non-null while m_thread is null.  Hence, do the
+     extra check and assignment.  */
+  if (m_thread == nullptr)
+    current_process_ = m_process;
+  else
+    gdb_assert (current_process_ == m_process);
 }

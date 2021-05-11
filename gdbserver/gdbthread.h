@@ -228,7 +228,7 @@ lwpid_of (const thread_info *thread)
 
 void switch_to_thread (thread_info *thread);
 
-/* Save/restore current thread.  */
+/* Save/restore current thread and process.  */
 
 class scoped_restore_current_thread
 {
@@ -244,6 +244,7 @@ public:
 private:
   bool m_dont_restore = false;
   thread_info *m_thread;
+  process_info *m_process;
 };
 
 #endif /* GDBSERVER_GDBTHREAD_H */

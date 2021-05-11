@@ -248,7 +248,8 @@ find_thread_from_gt_event (GTEvent *event)
 
   if (gdb_thread == nullptr)
     {
-      dprintf ("An unknown GT thread detected; adding to the list");
+      if (event->type != eGfxDbgEventThreadStarted)
+	dprintf ("An unknown GT thread detected; adding to the list");
       intelgt_thread *new_thread = new intelgt_thread {};
       new_thread->handle = event->thread;
       gdb_thread = add_thread (ptid, new_thread);
@@ -679,23 +680,9 @@ intelgt_process_target::handle_thread_started (GTEvent *event)
   if (event->thread == nullptr)
     error (_("Got a nullptr thread handle"));
 
-  ThreadDetails info;
-  info.size_of_this = sizeof (info);
 
-  APIResult result = igfxdbg_GetThreadDetails (event->thread, &info);
-  if (result != eGfxDbgResultSuccess)
-    error (_("could not get details about new thread; result: %s"),
-	   igfxdbg_result_to_string (result));
-
-  process_info *proc = find_process_from_gt_event (event);
-  gdb_assert (proc != nullptr);
-  /* FIXME: Make thread_id 'long' in igfxdbg.h.  */
-  ptid_t ptid = ptid_t {proc->pid, (long) info.thread_id, 0l};
-  intelgt_thread *new_thread = new intelgt_thread {};
-  new_thread->handle = event->thread;
-  new_thread->thread = add_thread (ptid, new_thread);
-
-  dprintf ("Added %s", target_pid_to_str (ptid));
+  thread_info *gdb_thread = find_thread_from_gt_event (event);
+  dprintf ("Added %s", target_pid_to_str (gdb_thread->id));
 }
 
 void

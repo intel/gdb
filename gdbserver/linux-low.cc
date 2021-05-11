@@ -3752,6 +3752,8 @@ linux_process_target::wait_for_sigstop ()
   else
     saved_tid = null_ptid; /* avoid bogus unused warning */
 
+  scoped_restore_current_thread restore_thread;
+
   if (debug_threads)
     debug_printf ("wait_for_sigstop: pulling events\n");
 
@@ -3762,7 +3764,7 @@ linux_process_target::wait_for_sigstop ()
   gdb_assert (ret == -1);
 
   if (saved_thread == NULL || mythread_alive (saved_tid))
-    current_thread = saved_thread;
+    return;
   else
     {
       if (debug_threads)
@@ -3771,7 +3773,8 @@ linux_process_target::wait_for_sigstop ()
       /* We can't change the current inferior behind GDB's back,
 	 otherwise, a subsequent command may apply to the wrong
 	 process.  */
-      current_thread = NULL;
+      restore_thread.dont_restore ();
+      switch_to_thread (nullptr);
     }
 }
 

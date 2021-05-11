@@ -97,6 +97,7 @@ pid_of (const process_info *proc)
    is null.  */
 
 struct process_info *current_process (void);
+bool has_current_process ();
 struct process_info *get_thread_process (const struct thread_info *);
 
 extern std::list<process_info *> all_processes;

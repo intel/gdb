@@ -162,6 +162,10 @@ public:
   /* The index of the 'emask' register.  */
   virtual int emask_regnum () const = 0;
 
+  /* The return value register.  The vectorized return value is stored
+     in this register and onwards.  */
+  virtual int retval_regnum () const = 0;
+
   /* Set the breakpoint bit in INST.
 
      Returns the state of the bit prior to setting it:

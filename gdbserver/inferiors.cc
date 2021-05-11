@@ -223,6 +223,14 @@ switch_to_thread (process_stratum_target *ops, ptid_t ptid)
   current_thread = find_thread_ptid (ptid);
 }
 
+/* See gdbthread.h.  */
+
+void
+switch_to_thread (thread_info *thread)
+{
+  current_thread = thread;
+}
+
 /* See inferiors.h.  */
 
 void
@@ -251,4 +259,17 @@ set_inferior_cwd (const char *cwd)
     current_inferior_cwd = xstrdup (cwd);
   else
     current_inferior_cwd = NULL;
+}
+
+scoped_restore_current_thread::scoped_restore_current_thread ()
+{
+  m_thread = current_thread;
+}
+
+scoped_restore_current_thread::~scoped_restore_current_thread ()
+{
+  if (m_dont_restore)
+    return;
+
+  switch_to_thread (m_thread);
 }

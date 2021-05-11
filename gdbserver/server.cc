@@ -1288,7 +1288,7 @@ handle_detach (char *own_buf)
 	  cs.last_status.value.integer = 0;
 	  cs.last_ptid = ptid_t (pid);
 
-	  current_thread = NULL;
+	  switch_to_thread (nullptr);
 	}
       else
 	{
@@ -1701,8 +1701,7 @@ handle_qxfer_threads_proper (struct buffer *buffer)
 {
   client_state &cs = get_client_state ();
 
-  scoped_restore save_current_thread
-    = make_scoped_restore (&current_thread);
+  scoped_restore_current_thread restore_thread;
   scoped_restore save_current_general_thread
     = make_scoped_restore (&cs.general_thread);
 
@@ -2216,7 +2215,7 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 
   if (strcmp ("qSymbol::", own_buf) == 0)
     {
-      struct thread_info *save_thread = current_thread;
+      scoped_restore_current_thread restore_thread;
 
       /* For qSymbol, GDB only changes the current thread if the
 	 previous current thread was of a different process.  So if
@@ -2225,15 +2224,15 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 	 exec in a non-leader thread.  */
       if (current_thread == NULL)
 	{
-	  current_thread
+	  thread_info *any_thread
 	    = find_any_thread_of_pid (cs.general_thread.pid ());
+	  switch_to_thread (any_thread);
 
 	  /* Just in case, if we didn't find a thread, then bail out
 	     instead of crashing.  */
 	  if (current_thread == NULL)
 	    {
 	      write_enn (own_buf);
-	      current_thread = save_thread;
 	      return;
 	    }
 	}
@@ -2255,8 +2254,6 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 
       if (current_thread != NULL)
 	the_target->look_up_symbols ();
-
-      current_thread = save_thread;
 
       strcpy (own_buf, "OK");
       return;

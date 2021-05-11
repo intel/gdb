@@ -1425,7 +1425,7 @@ get_child_debug_event (DWORD *continue_status,
 	*ourstatus = stop->status;
 	current_event = stop->event;
 	ptid = debug_event_ptid (&current_event);
-	current_thread = find_thread_ptid (ptid);
+	switch_to_thread (find_thread_ptid (ptid));
 	return 1;
       }
 
@@ -1476,7 +1476,7 @@ get_child_debug_event (DWORD *continue_status,
       child_delete_thread (current_event.dwProcessId,
 			   current_event.dwThreadId);
 
-      current_thread = get_first_thread ();
+      switch_to_thread (get_first_thread ());
       return 1;
 
     case CREATE_PROCESS_DEBUG_EVENT:
@@ -1596,7 +1596,7 @@ get_child_debug_event (DWORD *continue_status,
       ourstatus->kind = TARGET_WAITKIND_SPURIOUS;
     }
   else
-    current_thread = find_thread_ptid (ptid);
+    switch_to_thread (find_thread_ptid (ptid));
 
   return 1;
 }

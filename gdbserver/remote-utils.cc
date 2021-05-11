@@ -1099,7 +1099,6 @@ prepare_resume_reply (char *buf, ptid_t ptid,
     case TARGET_WAITKIND_SYSCALL_ENTRY:
     case TARGET_WAITKIND_SYSCALL_RETURN:
       {
-	struct thread_info *saved_thread;
 	const char **regp;
 	struct regcache *regcache;
 
@@ -1184,7 +1183,7 @@ prepare_resume_reply (char *buf, ptid_t ptid,
 
 	buf += strlen (buf);
 
-	saved_thread = current_thread;
+	scoped_restore_current_thread restore_thread;
 
 	switch_to_thread (the_target, ptid);
 
@@ -1275,8 +1274,6 @@ prepare_resume_reply (char *buf, ptid_t ptid,
 	    buf += strlen (buf);
 	    current_process ()->dlls_changed = false;
 	  }
-
-	current_thread = saved_thread;
       }
       break;
     case TARGET_WAITKIND_EXITED:

@@ -180,6 +180,12 @@ current_process (void)
   return current_process_;
 }
 
+bool
+has_current_process ()
+{
+  return current_process_ != nullptr;
+}
+
 /* See inferiors.h.  */
 
 void

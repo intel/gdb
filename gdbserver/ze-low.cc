@@ -219,6 +219,42 @@ ze_thread_device (thread_info *thread)
   return ze_process_device (process);
 }
 
+/* Returns whether ID is in SET.  */
+
+static bool
+ze_device_thread_in (ze_device_thread_t id, ze_device_thread_t set)
+{
+  if ((set.slice != UINT32_MAX) && (set.slice != id.slice))
+    return false;
+
+  if ((set.subslice != UINT32_MAX) && (set.subslice != id.subslice))
+    return false;
+
+  if ((set.eu != UINT32_MAX) && (set.eu != id.eu))
+    return false;
+
+  if ((set.thread != UINT32_MAX) && (set.thread != id.thread))
+    return false;
+
+  return true;
+}
+
+/* Call FUNC for each thread on DEVICE matching ID.  */
+
+template <typename Func>
+static void
+for_each_thread (const ze_device_info &device, ze_device_thread_t id,
+		 Func func)
+{
+  int pid = ze_device_pid (device);
+  for_each_thread (pid, [id, func] (thread_info *tp)
+    {
+      ze_device_thread_t tid = ze_thread_id (tp);
+      if (ze_device_thread_in (tid, id))
+	func (tp);
+    });
+}
+
 /* Add a process for DEVICE.  */
 
 static process_info *
@@ -805,6 +841,17 @@ ze_store_register (const ze_device_info &device,
     }
 }
 
+/* Discard TP's regcache.  */
+
+static void
+ze_discard_regcache (thread_info *tp)
+{
+  regcache *regcache = get_thread_regcache (tp, /* fetch = */ 0);
+  gdb_assert (regcache != nullptr);
+
+  regcache->registers_valid = 0;
+}
+
 int
 ze_target::attach_to_device (uint32_t pid, ze_device_handle_t device)
 {
@@ -1065,7 +1112,54 @@ ze_target::fetch_events (ze_device_info &device)
 	  break;
 
 	case ZET_DEBUG_EVENT_TYPE_THREAD_STOPPED:
-	  break;
+	  {
+	    ze_device_thread_t tid = event.info.thread.thread;
+	    ze_ack_event (device, event);
+
+	    /* We would not remain attached without a process.  */
+	    process_info *process = device.process;
+	    gdb_assert (process != nullptr);
+
+	    /* A thread event turns a process visible.  */
+	    ze_show_process (process);
+
+	    for_each_thread (device, tid, [&] (thread_info *tp)
+	      {
+		ze_thread_info *zetp = ze_thread (tp);
+		gdb_assert (zetp != nullptr);
+
+		/* Ignore threads we know to be stopped.
+
+		   We already analyzed the stop reason and probably
+		   destroyed it in the process.  */
+		if (zetp->exec_state == ze_thread_state_stopped)
+		  return;
+
+		/* Discard any registers we may have fetched while TP was
+		   unavailable.  */
+		ze_discard_regcache (tp);
+		try
+		  {
+		    gdb_signal signal = GDB_SIGNAL_0;
+		    target_stop_reason reason = get_stop_reason (tp, signal);
+
+		    zetp->exec_state = ze_thread_state_stopped;
+		    zetp->stop_reason = reason;
+		    zetp->waitstatus = { TARGET_WAITKIND_STOPPED, signal };
+		  }
+		/* FIXME: exceptions
+
+		   We'd really like to catch some 'thread_unavailable'
+		   exception rather than assuming that any exception is
+		   due to thread availability.  */
+		catch (...)
+		  {
+		    zetp->exec_state = ze_thread_state_unavailable;
+		    zetp->waitstatus = { TARGET_WAITKIND_UNAVAILABLE };
+		  }
+	      });
+	  }
+	  continue;
 
 	case ZET_DEBUG_EVENT_TYPE_THREAD_UNAVAILABLE:
 	  break;

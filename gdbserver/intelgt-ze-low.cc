@@ -102,6 +102,108 @@ intelgt_add_regset (tdesc_feature *feature, long &regnum,
     }
 }
 
+/* Control Register details.  */
+
+enum
+  {
+    /* The position of the Breakpoint Status and Control bit in CR0.1.  */
+    intelgt_cr0_1_breakpoint_status = 31,
+
+    /* The position of the External Halt Status and Control bit in CR0.1.  */
+    intelgt_cr0_1_external_halt_status = 30,
+
+    /* The position of the Illegal Opcode Exception Status bit in CR0.1.  */
+    intelgt_cr0_1_illegal_opcode_status = 28,
+
+    /* The position of the Force Exception Status and Control bit in CR0.1.  */
+    intelgt_cr0_1_force_exception_status = 26
+};
+
+/* Return CR0.SUBREG in REGCACHE.  */
+
+static uint32_t
+intelgt_read_cr0 (regcache *regcache, int subreg)
+{
+  int cr0regno = find_regno (regcache->tdesc, "cr0");
+
+  enum register_status cr0status = regcache->get_register_status (cr0regno);
+  switch (cr0status)
+    {
+    case REG_VALID:
+      {
+	int cr0size = register_size (regcache->tdesc, cr0regno);
+	uint32_t cr0[16];
+	gdb_assert (cr0size <= sizeof (cr0));
+	gdb_assert (cr0size >= sizeof (cr0[0]) * (subreg + 1));
+	collect_register (regcache, cr0regno, cr0);
+
+	return cr0[subreg];
+      }
+
+    case REG_UNKNOWN:
+      internal_error (__FILE__, __LINE__, _("unknown register 'cr0'."));
+
+    case REG_UNAVAILABLE:
+      error (_("cr0 is not available"));
+    }
+
+  internal_error (__FILE__, __LINE__, _("unknown register status: %d."),
+		  cr0status);
+}
+
+/* Write VALUE into CR0.SUBREG in REGCACHE.  */
+
+static void
+intelgt_write_cr0 (regcache *regcache, int subreg, uint32_t value)
+{
+  int cr0regno = find_regno (regcache->tdesc, "cr0");
+
+  enum register_status cr0status = regcache->get_register_status (cr0regno);
+  switch (cr0status)
+    {
+    case REG_VALID:
+      {
+	int cr0size = register_size (regcache->tdesc, cr0regno);
+	uint32_t cr0[16];
+	gdb_assert (cr0size <= sizeof (cr0));
+	gdb_assert (cr0size >= sizeof (cr0[0]) * (subreg + 1));
+	collect_register (regcache, cr0regno, cr0);
+
+	cr0[subreg] = value;
+
+	supply_register (regcache, cr0regno, cr0);
+	return;
+      }
+
+    case REG_UNKNOWN:
+      internal_error (__FILE__, __LINE__, _("unknown register 'cr0'."));
+
+    case REG_UNAVAILABLE:
+      error (_("cr0 is not available"));
+    }
+
+  internal_error (__FILE__, __LINE__, _("unknown register status: %d."),
+		  cr0status);
+}
+
+/* Return CR0.SUBREG for TP.  */
+
+static uint32_t
+intelgt_read_cr0 (thread_info *tp, int subreg)
+{
+  struct regcache *regcache = get_thread_regcache (tp, /* fetch = */ 1);
+  return intelgt_read_cr0 (regcache, subreg);
+}
+
+/* Write VALUE into CR0.SUBREG for TP.  */
+
+static void
+intelgt_write_cr0 (thread_info *tp, int subreg, uint32_t value)
+{
+  struct regcache *regcache = get_thread_regcache (tp, /* fetch = */ 1);
+  intelgt_write_cr0 (regcache, subreg, value);
+}
+
 /* Target op definitions for Intel GT target based on level-zero.  */
 
 class intelgt_ze_target : public ze_target
@@ -125,6 +227,8 @@ protected:
     (const ze_device_properties_t &,
      const std::vector<zet_debug_regset_properties_t> &,
      ze_regset_info_t &, expedite_t &) override;
+
+  target_stop_reason get_stop_reason (thread_info *, gdb_signal &) override;
 
 private:
   /* Add a register set for REGPROP on DEVICE to REGSETS and increment REGNUM
@@ -270,6 +374,52 @@ intelgt_ze_target::create_tdesc
 
   init_target_desc (tdesc.get (), expedite.data ());
   return tdesc.release ();
+}
+
+target_stop_reason
+intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
+{
+  ze_device_thread_t thread = ze_thread_id (tp);
+  uint32_t cr0[3] = {
+    intelgt_read_cr0 (tp, 0),
+    intelgt_read_cr0 (tp, 1),
+    intelgt_read_cr0 (tp, 2)
+  };
+
+  dprintf ("thread %d.%ld (%s) stopped, cr0.0=%" PRIx32 " .1=%" PRIx32
+	   " .2=%" PRIx32 ".", tp->id.pid (), tp->id.lwp (),
+	   ze_thread_id_str (thread).c_str (), cr0[0], cr0[1], cr0[2]);
+
+  if ((cr0[1] & (1 << intelgt_cr0_1_breakpoint_status)) != 0)
+    {
+      cr0[1] &= ~(1 << intelgt_cr0_1_breakpoint_status);
+      intelgt_write_cr0 (tp, 1, cr0[1]);
+
+      signal = GDB_SIGNAL_TRAP;
+      return TARGET_STOPPED_BY_SW_BREAKPOINT;
+    }
+
+  if ((cr0[1] & (1 << intelgt_cr0_1_illegal_opcode_status)) != 0)
+    {
+      cr0[1] &= ~(1 << intelgt_cr0_1_illegal_opcode_status);
+      intelgt_write_cr0 (tp, 1, cr0[1]);
+
+      signal = GDB_SIGNAL_ILL;
+      return TARGET_STOPPED_BY_NO_REASON;
+    }
+
+  if ((cr0[1] & ((1 << intelgt_cr0_1_force_exception_status)
+		| (1 << intelgt_cr0_1_external_halt_status))) != 0)
+    {
+      cr0[1] &= ~(1 << intelgt_cr0_1_force_exception_status);
+      cr0[1] &= ~(1 << intelgt_cr0_1_external_halt_status);
+      intelgt_write_cr0 (tp, 1, cr0[1]);
+
+      signal = GDB_SIGNAL_INT;
+      return TARGET_STOPPED_BY_NO_REASON;
+    }
+
+  return TARGET_STOPPED_BY_NO_REASON;
 }
 
 void

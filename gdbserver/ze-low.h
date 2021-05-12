@@ -151,6 +151,11 @@ struct ze_thread_info
   /* The thread's execution state.  */
   enum ze_thread_exec_state_t exec_state = ze_thread_state_unknown;
 
+  /* The thread's stop reason.
+
+     This is only valid if EXEC_STATE == ZE_THREAD_STATE_STOPPED.  */
+  target_stop_reason stop_reason = TARGET_STOPPED_BY_NO_REASON;
+
   /* The waitstatus for this thread's last event.
 
      TARGET_WAITKIND_IGNORE means that there is no last event.  */
@@ -338,6 +343,11 @@ protected:
     (const ze_device_properties_t &,
      const std::vector<zet_debug_regset_properties_t> &,
      ze_regset_info_t &, expedite_t &) = 0;
+
+  /* TP stopped.  Find out why and return the stop reason.  Optionally
+     fill in SIGNAL.  */
+  virtual target_stop_reason get_stop_reason (thread_info *tp,
+					      gdb_signal &signal) = 0;
 };
 
 #endif /* GDBSERVER_LEVEL_ZERO_LOW_H */

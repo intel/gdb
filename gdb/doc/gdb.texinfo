@@ -3595,11 +3595,14 @@ program's ``main thread'' even if the program is not multi-threaded.
 
 @vindex $_thread@r{, convenience variable}
 @vindex $_gthread@r{, convenience variable}
+@vindex $_simd_lane@r{, convenience variable}
 The debugger convenience variables @samp{$_thread} and
 @samp{$_gthread} contain, respectively, the per-inferior thread number
-and the global thread number of the current thread.  You may find this
-useful in writing breakpoint conditional expressions, command scripts,
-and so forth.  @xref{Convenience Vars,, Convenience Variables}, for
+and the global thread number of the current thread.  The debugger
+convenience variable @samp{$_simd_lane} contains the currently selected
+SIMD lane of the current thread.  You may find this useful in writing
+breakpoint conditional expressions, command scripts, and so forth.
+@xref{Convenience Vars,, Convenience Variables}, for
 general information on convenience variables.
 
 If @value{GDBN} detects the program is multi-threaded, it augments the
@@ -12362,6 +12365,9 @@ The thread number of the current thread.  @xref{thread numbers}.
 
 @item $_gthread
 The global number of the current thread.  @xref{global thread numbers}.
+
+@item $_simd_lane
+The selected SIMD lane of the current thread.
 
 @item $_gdb_major
 @itemx $_gdb_minor

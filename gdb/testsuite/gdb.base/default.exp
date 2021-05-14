@@ -582,6 +582,7 @@ set show_conv_list \
     { \
 	{$_sdata = void} \
 	{$_siginfo = void} \
+	{$_simd_lane = -1} \
 	{$_thread = 0} \
 	{$_gthread = 0} \
 	{$_inferior = 1} \

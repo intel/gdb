@@ -39,6 +39,7 @@ if { [prepare_sycl_for_testing $binfile $srcfile] } {
 
 with_test_prefix "no inferior" {
     gdb_test "thread :0" "No thread selected\."
+    gdb_test "print \$_simd_lane" "= -1"
 }
 
 if { [start_sycl_program] < 0 } {
@@ -56,6 +57,7 @@ set first_thread [lindex [split $first_thread "."] 1]
 
 gdb_test "thread" "Current thread is 2.$first_thread:1 (.*lane 1).*"\
     "current thread displays lanes"
+gdb_test "print \$_simd_lane" "= 1"
 
 set first_thread_lane 3
 if {$first_thread != "3"} {
@@ -69,6 +71,7 @@ gdb_test "thread :$first_thread_lane"\
     "Switching to.*$first_thread:$first_thread_lane.*\
      (.*lane $first_thread_lane).*"\
     "explicitly set lane"
+gdb_test "print \$_simd_lane" "= $first_thread_lane" "print \$_simd_lane = \$first_thread_lane"
 
 # thread 3, first active lane is chosen
 gdb_test "thread $second_thread"\

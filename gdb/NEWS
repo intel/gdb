@@ -3,6 +3,8 @@
 
 *** Changes since GDB 10
 
+* Add convenience variable `$_simd_lane`.
+
 * MI changes
 
  ** '-break-insert --qualified' and '-dprintf-insert --qualified'

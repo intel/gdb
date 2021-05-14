@@ -3780,14 +3780,17 @@ program's ``main thread'' even if the program is not multi-threaded.
 @vindex $_thread@r{, convenience variable}
 @vindex $_gthread@r{, convenience variable}
 @vindex $_inferior_thread_count@r{, convenience variable}
+@vindex $_simd_lane@r{, convenience variable}
 The debugger convenience variables @samp{$_thread} and
 @samp{$_gthread} contain, respectively, the per-inferior thread number
-and the global thread number of the current thread.  You may find this
-useful in writing breakpoint conditional expressions, command scripts,
-and so forth.  The convenience variable @samp{$_inferior_thread_count}
-contains the number of live threads in the current inferior.
-@xref{Convenience Vars,, Convenience Variables}, for general
-information on convenience variables.
+and the global thread number of the current thread.  The convenience
+variable @samp{$_simd_lane} contains the currently selected SIMD lane
+of the current thread.  You may find these useful in writing breakpoint
+conditional expressions, command scripts, and so forth.  The
+convenience variable @samp{$_inferior_thread_count} contains the
+number of live threads in the current inferior.  @xref{Convenience
+Vars,, Convenience Variables}, for general information on convenience
+variables.
 
 When running in non-stop mode (@pxref{Non-Stop Mode}), where new
 threads can be created, and existing threads exit, at any time,

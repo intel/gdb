@@ -76,6 +76,7 @@ gdb_test_multiple "next" "next in same lane has no switch output" {
 
 gdb_test "thread" "Current thread is $first_thread:5.*" \
     "next preserves lane"
+gdb_test "print \$_simd_lane" "= 5" "\$_simd_lane preserved by next"
 
 # Test SIMD switch after stepping into the even branch.
 gdb_test "next" "\\\[Switching to SIMD lane 0\\\].*"\
@@ -84,6 +85,7 @@ gdb_test "next" "\\\[Switching to SIMD lane 0\\\].*"\
 # Test SIMD switch after stepping out of the odd branch.
 gdb_test "next 2" "\\\[Switching to SIMD lane 1\\\].*"\
     "SIMD lane switch after stepping into odd branch after even"
+gdb_test "print \$_simd_lane" "= 1" "check \$_simd_lane after next"
 
 gdb_test_no_output "set scheduler-locking off" \
     "scheduler locking off for the first thread $first_thread"

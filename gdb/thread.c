@@ -2606,6 +2606,19 @@ global_thread_id_make_value (struct gdbarch *gdbarch, struct internalvar *var,
   return thread_num_make_value_helper (gdbarch, 1);
 }
 
+/* Return a new value for the current SIMD lane of the selected thread.
+   Return a value of -1 if no thread is selected, or no threads exist.  */
+
+static value *
+simd_lane_num_make_value (gdbarch *gdbarch, internalvar *var, void *ignore)
+{
+  int lane_num = (inferior_ptid != null_ptid)
+    ? inferior_thread ()->current_simd_lane ()
+    : -1;
+
+  return value_from_longest (builtin_type (gdbarch)->builtin_int, lane_num);
+}
+
 /* Commands with a prefix of `thread'.  */
 struct cmd_list_element *thread_cmd_list = NULL;
 
@@ -2623,6 +2636,14 @@ static const struct internalvar_funcs gthread_funcs =
 {
   global_thread_id_make_value,
   NULL,
+};
+
+/* Implementation of `simd_lane' variable.  */
+
+static const internalvar_funcs simd_lane_funcs =
+{
+  simd_lane_num_make_value,
+  nullptr,
 };
 
 void _initialize_thread ();
@@ -2753,4 +2774,5 @@ When on messages about thread creation and deletion are printed."),
 
   create_internalvar_type_lazy ("_thread", &thread_funcs, NULL);
   create_internalvar_type_lazy ("_gthread", &gthread_funcs, NULL);
+  create_internalvar_type_lazy ("_simd_lane", &simd_lane_funcs, nullptr);
 }

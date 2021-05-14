@@ -119,12 +119,14 @@ while {$should_continue && $i < 10} {
 	    gdb_test "thread" ".*$second_thread:3.*"\
 		"second thread ($second_thread) after BP with lane clause"
 	    incr n_hit_lane_clause
+	    gdb_test "print \$_simd_lane" "= 3"
 	}
 	-re "$srcfile:$fourth_line.*$gdb_prompt" {
 	    # The thread should be first_thread, SIMD lane have to be 5.
 	    gdb_test "thread" ".*$first_thread:5.*"\
 		"first thread ($first_thread) after hit BP with lane clause and condition "
 	    incr n_hit_lane_clause_condition
+	    gdb_test "print \$_simd_lane" "= 5"
 	}
 	-re "$srcfile:$sixth_line.*$gdb_prompt" {
 	    # Thread should be $first_thread, SIMD lane 7.

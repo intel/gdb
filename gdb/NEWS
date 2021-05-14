@@ -12,6 +12,8 @@ set|show scheduler-locking-eval (on|off)
   The new setting allows a user to lock scheduler during inferior calls.
   It can be set in parallel to scheduler-locking step or replay mode.
 
+* Add convenience variable `$_simd_lane`.
+
 *** Changes in GDB 13
 
 * MI version 1 is deprecated, and will be removed in GDB 14.

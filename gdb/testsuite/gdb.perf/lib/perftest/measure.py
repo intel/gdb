@@ -108,8 +108,10 @@ class MeasurementPerfCounter(Measurement):
         self.start_time = time.perf_counter()
 
     def stop(self, id):
-        perf_counter = time.perf_counter() - self.start_time
-        self.result.record(id, perf_counter)
+        # Convert fractional seconds value to milliseconds.
+        perf_counter = (time.perf_counter() - self.start_time) * 1000
+        # Return value rounded upto 2 decimal digits.
+        self.result.record(id, round(perf_counter, 2))
 
 
 class MeasurementProcessTime(Measurement):
@@ -129,7 +131,6 @@ class MeasurementProcessTime(Measurement):
     def stop(self, id):
         process_time = time.process_time() - self.start_time
         self.result.record(id, process_time)
-
 
 class MeasurementWallTime(Measurement):
     """Measurement on Wall time."""

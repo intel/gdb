@@ -328,11 +328,6 @@ For example, to turn on gdbserver debugging, you can do:
 
 	make check GDBSERVER_DEBUG="debug,replay"
 
-OFFLOAD_PERF_AOT_TESTING
-
-When set to "1", GDB offload performance tests will set the AOT flags
-for compilation.
-
 OFFLOAD_DEVICE_GROUP
 
 By default, tests that offload parts of the test program to a device try

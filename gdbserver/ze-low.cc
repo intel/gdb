@@ -289,6 +289,56 @@ ze_remove_process (process_info *process)
   remove_process (process);
 }
 
+/* Show PROCESS.  */
+
+static void
+ze_show_process (process_info *process)
+{
+  gdb_assert (process != nullptr);
+  process_info_private *priv = process->priv;
+
+  gdb_assert (priv != nullptr);
+  switch (priv->state)
+    {
+    case ze_process_visible:
+      return;
+
+    case ze_process_hidden:
+      /* FIXME: report state change
+
+	 Set priv->status and report the new visibility to GDB.  */
+      priv->state = ze_process_visible;
+      return;
+    }
+
+  internal_error (__FILE__, __LINE__, _("unknown process state"));
+}
+
+/* Hide PROCESS.  */
+
+static void
+ze_hide_process (process_info *process)
+{
+  gdb_assert (process != nullptr);
+  process_info_private *priv = process->priv;
+
+  gdb_assert (priv != nullptr);
+  switch (priv->state)
+    {
+    case ze_process_hidden:
+      return;
+
+    case ze_process_visible:
+      /* FIXME: report state change
+
+	 Set priv->status and report the new visibility to GDB.  */
+      priv->state = ze_process_hidden;
+      return;
+    }
+
+  internal_error (__FILE__, __LINE__, _("unknown process state"));
+}
+
 /* Attach to DEVICE and create a hidden process for it.
 
    Modifies DEVICE as a side-effect.
@@ -782,10 +832,14 @@ ze_target::fetch_events (ze_device_info &device)
 	  return nevents;
 
 	case ZET_DEBUG_EVENT_TYPE_PROCESS_ENTRY:
-	  break;
+	  ze_ack_event (device, event);
+	  ze_show_process (device.process);
+	  continue;
 
 	case ZET_DEBUG_EVENT_TYPE_PROCESS_EXIT:
-	  break;
+	  ze_ack_event (device, event);
+	  ze_hide_process (device.process);
+	  continue;
 
 	case ZET_DEBUG_EVENT_TYPE_MODULE_LOAD:
 	  break;

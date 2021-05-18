@@ -71,7 +71,7 @@ class TextReporter(Reporter):
         data_max = max(data_points)
         self.txt_sum.write("%s %s %s\n" % (
             test_name, measurement_name, average))
-        self.txt_log.write("%s %s %s, min %s, max %s, data %s\n" % (
+        self.txt_log.write("%s %s %s, ms %s, max %s, data %s\n" % (
             test_name, measurement_name, average, data_min, data_max,
             data_points))
 

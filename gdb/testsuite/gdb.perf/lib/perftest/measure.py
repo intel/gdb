@@ -84,25 +84,27 @@ class Measurement(object):
 
 class MeasurementCpuTime(Measurement):
     """Measurement on CPU time."""
-    # On UNIX, time.clock() measures the amount of CPU time that has
-    # been used by the current process.  On Windows it will measure
-    # wall-clock seconds elapsed since the first call to the function.
-    # Something other than time.clock() should be used to measure CPU
-    # time on Windows.
+    # On UNIX, time.clock() is now removed from Python 3.9 so it is
+    # replaced with time.perf_counter() to measure the amount of CPU
+    # time that has been used by the current process in fractional
+    # seconds.
 
     def __init__(self, result):
         super(MeasurementCpuTime, self).__init__("cpu_time", result)
         self.start_time = 0
 
     def start(self, id):
-        self.start_time = time.clock()
+        self.start_time = time.perf_counter()
 
     def stop(self, id):
         if os.name == 'nt':
             cpu_time = 0
         else:
-            cpu_time = time.clock() - self.start_time
-        self.result.record (id, cpu_time)
+            # Convert fractional seconds value to milliseconds.
+            cpu_time = (time.perf_counter() - self.start_time) * 1000
+
+        # Return value rounded upto 2 decimal digits.
+        self.result.record (id, round (cpu_time, 2))
 
 class MeasurementWallTime(Measurement):
     """Measurement on Wall time."""

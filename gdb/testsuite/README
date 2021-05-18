@@ -340,11 +340,6 @@ by switching to a different user on the same machine.  These users
 will have random files copied into their $HOME directories, so it is a
 good idea to setup new users just for this purpose.
 
-OFFLOAD_PERF_AOT_TESTING
-
-When set to "1", GDB offload performance tests will set the AOT flags
-for compilation.
-
 OFFLOAD_DEVICE_GROUP
 
 This option can be used to restrict the offloading tests to run only

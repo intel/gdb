@@ -465,8 +465,12 @@ proc sycl_perftest_initialize {} {
     set option ""
     if {$OFFLOAD_PERF_AOT_TESTING == "1"} {
 	# LD and compile flags setting is needed for AOT testing.
-	# gen9: option creates AOT binary for gen9 and newer targets.
-	set option [list "additional_flags=-fsycl-targets=spir64_x86_64,spir64_fpga,spir64_gen" "ldflags=-Xsycl-target-backend=spir64_gen \"-q -device gen9:\""]
+	# TODO IGDB/3805: Make AOT Flags options generic again using
+	# following options:
+	# -fsycl-targets=spir64_x86_64,spir64_fpga,spir64_gen" "ldflags=-Xsycl-target-backend=spir64_gen \"-q -device xe:\"
+	# Currently limited the AOT compilation to CPU only for performance
+	# tests.
+	set option [list "additional_flags=-fsycl-targets=spir64_x86_64"]
     }
 
     if {[build_executable "failed to compile $srcfile" \

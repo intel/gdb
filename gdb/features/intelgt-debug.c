@@ -9,6 +9,8 @@ create_feature_intelgt_debug (struct target_desc *result, long regnum)
   struct tdesc_feature *feature;
 
   feature = tdesc_create_feature (result, "org.gnu.gdb.intelgt.debug");
+  tdesc_create_reg (feature, "emask", regnum++, 1, NULL, 32, "uint32");
+  tdesc_create_reg (feature, "iemask", regnum++, 1, NULL, 32, "uint32");
   tdesc_create_reg (feature, "btbase", regnum++, 1, NULL, 64, "uint64");
   tdesc_create_reg (feature, "scrbase", regnum++, 1, NULL, 64, "uint64");
   tdesc_create_reg (feature, "genstbase", regnum++, 1, NULL, 64, "uint64");

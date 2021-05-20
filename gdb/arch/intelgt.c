@@ -33,10 +33,10 @@ gt_register::gt_register (std::string name, reg_group group,
 /* See intelgt.h.  */
 arch_info::arch_info (unsigned int num_grfs, unsigned int num_addresses,
 		      unsigned int num_accumulators, unsigned int num_flags,
-		      unsigned int num_mmes)
+		      unsigned int num_mmes, unsigned int num_debug)
   : num_grfs {num_grfs}, num_addresses {num_addresses},
     num_accumulators {num_accumulators}, num_flags {num_flags},
-    num_mmes {num_mmes}
+    num_mmes {num_mmes}, num_debug {num_debug}
 {}
 
 /* See intelgt.h.  */
@@ -89,6 +89,14 @@ arch_info::mme_reg_count () const
 
 /* See intelgt.h.  */
 
+unsigned int
+arch_info::debug_reg_count () const
+{
+  return num_debug;
+}
+
+/* See intelgt.h.  */
+
 const gt_register &
 arch_info::get_register (int index)
 {
@@ -135,6 +143,8 @@ public:
 
   virtual unsigned int mme_reg_base () const override;
 
+  virtual unsigned int debug_reg_base () const override;
+
   virtual bool set_breakpoint (gdb_byte inst[]) const override;
 
   virtual bool clear_breakpoint (gdb_byte inst[]) const override;
@@ -145,7 +155,7 @@ public:
 };
 
 arch_info_gen9::arch_info_gen9 ()
-  : arch_info (128, 1, 10, 2, 8)
+  : arch_info (128, 1, 10, 2, 8, 9)
 {
   gdb_assert (regs.size () == 0);
 
@@ -153,6 +163,17 @@ arch_info_gen9::arch_info_gen9 ()
   std::string r = "r";
   for (int i = 0; i < grf_reg_count (); i++)
     regs.emplace_back (r + std::to_string (i), reg_group::Grf, i, 32);
+
+  /* Add virtual debug registers.  */
+  regs.emplace_back ("btbase", reg_group::Debug, 0, 8);
+  regs.emplace_back ("scrbase", reg_group::Debug, 1, 8);
+  regs.emplace_back ("genstbase", reg_group::Debug, 2, 8);
+  regs.emplace_back ("sustbase", reg_group::Debug, 3, 8);
+  regs.emplace_back ("blsustbase", reg_group::Debug, 4, 8);
+  regs.emplace_back ("blsastbase", reg_group::Debug, 5, 8);
+  regs.emplace_back ("isabase", reg_group::Debug, 6, 8);
+  regs.emplace_back ("iobase", reg_group::Debug, 7, 8);
+  regs.emplace_back ("dynbase", reg_group::Debug, 8, 8);
 
   /* Add ARF registers.  Entries here must be listed in the exact
      same order as the features file.  */
@@ -224,37 +245,37 @@ arch_info_gen9::is_compacted_inst (const gdb_byte inst[]) const
 int
 arch_info_gen9::pc_regnum () const
 {
-  return grf_reg_count () + 17;
+  return address_reg_base () + 17;
 }
 
 int
 arch_info_gen9::sp_regnum () const
 {
-  return grf_reg_count () + 14;
+  return address_reg_base () + 14;
 }
 
 int
 arch_info_gen9::emask_regnum () const
 {
-  return grf_reg_count () + 20;
+  return address_reg_base () + 20;
 }
 
 unsigned int
 arch_info_gen9::address_reg_base () const
 {
-  return grf_reg_count ();
+  return debug_reg_base () + debug_reg_count ();
 }
 
 unsigned int
 arch_info_gen9::acc_reg_base () const
 {
-  return grf_reg_count () + address_reg_count ();
+  return address_reg_base () + address_reg_count ();
 }
 
 unsigned int
 arch_info_gen9::flag_reg_base () const
 {
-  return grf_reg_count () + address_reg_count () + acc_reg_count ();
+  return acc_reg_base () + acc_reg_count ();
 }
 
 unsigned int
@@ -262,6 +283,13 @@ arch_info_gen9::mme_reg_base () const
 {
   return emask_regnum () + 1 + 1;
 }
+
+unsigned int
+arch_info_gen9::debug_reg_base () const
+{
+  return grf_reg_count ();
+}
+
 
 /* Get the bit at POS in INST.  */
 

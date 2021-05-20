@@ -155,7 +155,7 @@ public:
 };
 
 arch_info_gen9::arch_info_gen9 ()
-  : arch_info (128, 1, 10, 2, 8, 9)
+  : arch_info (128, 1, 10, 2, 8, 11)
 {
   gdb_assert (regs.size () == 0);
 
@@ -165,15 +165,17 @@ arch_info_gen9::arch_info_gen9 ()
     regs.emplace_back (r + std::to_string (i), reg_group::Grf, i, 32);
 
   /* Add virtual debug registers.  */
-  regs.emplace_back ("btbase", reg_group::Debug, 0, 8);
-  regs.emplace_back ("scrbase", reg_group::Debug, 1, 8);
-  regs.emplace_back ("genstbase", reg_group::Debug, 2, 8);
-  regs.emplace_back ("sustbase", reg_group::Debug, 3, 8);
-  regs.emplace_back ("blsustbase", reg_group::Debug, 4, 8);
-  regs.emplace_back ("blsastbase", reg_group::Debug, 5, 8);
-  regs.emplace_back ("isabase", reg_group::Debug, 6, 8);
-  regs.emplace_back ("iobase", reg_group::Debug, 7, 8);
-  regs.emplace_back ("dynbase", reg_group::Debug, 8, 8);
+  regs.emplace_back ("emask", reg_group::Debug, 0, 4);
+  regs.emplace_back ("iemask", reg_group::Debug, 1, 4);
+  regs.emplace_back ("btbase", reg_group::Debug, 2, 8);
+  regs.emplace_back ("scrbase", reg_group::Debug, 3, 8);
+  regs.emplace_back ("genstbase", reg_group::Debug, 4, 8);
+  regs.emplace_back ("sustbase", reg_group::Debug, 5, 8);
+  regs.emplace_back ("blsustbase", reg_group::Debug, 6, 8);
+  regs.emplace_back ("blsastbase", reg_group::Debug, 7, 8);
+  regs.emplace_back ("isabase", reg_group::Debug, 8, 8);
+  regs.emplace_back ("iobase", reg_group::Debug, 9, 8);
+  regs.emplace_back ("dynbase", reg_group::Debug, 10, 8);
 
   /* Add ARF registers.  Entries here must be listed in the exact
      same order as the features file.  */
@@ -197,8 +199,6 @@ arch_info_gen9::arch_info_gen9 ()
   regs.emplace_back ("ip", reg_group::InstructionPointer, 0, 4);
   regs.emplace_back ("tdr", reg_group::ThreadDependency, 0, 16);
   regs.emplace_back ("tm0", reg_group::Timestamp, 0, 16);
-  regs.emplace_back ("emask", reg_group::ExecMaskPseudo, 0, 4);
-  regs.emplace_back ("iemask", reg_group::ExecMaskPseudo, 1, 4);
   regs.emplace_back ("mme0", reg_group::Mme, 0, 32);
   regs.emplace_back ("mme1", reg_group::Mme, 1, 32);
   regs.emplace_back ("mme2", reg_group::Mme, 2, 32);
@@ -257,7 +257,7 @@ arch_info_gen9::sp_regnum () const
 int
 arch_info_gen9::emask_regnum () const
 {
-  return address_reg_base () + 20;
+  return debug_reg_base ();
 }
 
 unsigned int
@@ -281,7 +281,7 @@ arch_info_gen9::flag_reg_base () const
 unsigned int
 arch_info_gen9::mme_reg_base () const
 {
-  return emask_regnum () + 1 + 1;
+  return pc_regnum () + 3;
 }
 
 unsigned int

@@ -180,7 +180,6 @@ GDB = false
 aarch64-feature = 1
 arm-feature = 1
 i386-feature = 1
-intelgt-feature = 1
 riscv-feature = 1
 tic6x-feature = 1
 
@@ -235,11 +234,6 @@ FEATURE_XMLFILES = aarch64-core.xml \
 	i386/64bit-ssp.xml \
 	i386/cet.xml \
 	i386/x32-core.xml \
-	intelgt-grf.xml \
-	intelgt-debug.xml \
-	intelgt-arf9.xml \
-	intelgt-arf11.xml \
-	intelgt-arf12.xml \
 	riscv/32bit-cpu.xml \
 	riscv/32bit-fpu.xml \
 	riscv/64bit-cpu.xml \

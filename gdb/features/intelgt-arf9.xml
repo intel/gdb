@@ -34,8 +34,6 @@
   <reg name="tdr"    bitsize="128" type="uint128"/>
 
   <reg name="tm0"    bitsize="128" type="uint128"/>
-  <reg name="emask"  bitsize="32"  type="uint32"/>
-  <reg name="iemask" bitsize="32"  type="uint32"/>
 
   <reg name="mme0"   bitsize="256" type="uint256"/>
   <reg name="mme1"   bitsize="256" type="uint256"/>

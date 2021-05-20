@@ -27,12 +27,6 @@
 #include "nonstop-low.h"
 #include <unordered_map>
 
-#include "../features/intelgt-grf.c"
-#include "../features/intelgt-debug.c"
-#include "../features/intelgt-arf9.c"
-#include "../features/intelgt-arf11.c"
-#include "../features/intelgt-arf12.c"
-
 int using_threads = 1;
 
 constexpr unsigned long TIMEOUT_INFINITE = (unsigned long) -1;
@@ -412,27 +406,57 @@ intelgt_process_target::create_inferior (const char *program,
 /* Create a GT target description.  */
 
 static target_desc *
-create_target_description (intelgt::version gt_version)
+create_target_description ()
 {
   target_desc_up tdesc = allocate_target_description ();
 
   set_tdesc_architecture (tdesc.get (), "intelgt");
   set_tdesc_osabi (tdesc.get (), "GNU/Linux");
 
-  long regnum = create_feature_intelgt_grf (tdesc.get (), 0);
-  regnum = create_feature_intelgt_debug (tdesc.get (), regnum);
+  struct tdesc_feature *feature;
+  long regnum = 0;
+  char reg_name[6] = {0};
 
-  switch (gt_version)
+  feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.grf");
+  for (int i = 0; i <= 127; ++i)
     {
-    case intelgt::version::Gen9:
-      regnum = create_feature_intelgt_arf9 (tdesc.get (), regnum);
-      break;
-    case intelgt::version::Gen11:
-      regnum = create_feature_intelgt_arf11 (tdesc.get (), regnum);
-      break;
-    case intelgt::version::Gen12:
-      regnum = create_feature_intelgt_arf12 (tdesc.get (), regnum);
-      break;
+      snprintf (reg_name, 6, "r%d", i);
+      tdesc_create_reg (feature, reg_name, regnum++, 1, "grf", 256, "uint256");
+    }
+
+  feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.debug");
+  tdesc_create_reg (feature, "emask", regnum++, 1, "vdr", 32, "uint32");
+  tdesc_create_reg (feature, "iemask", regnum++, 1, "vdr", 32, "uint32");
+  tdesc_create_reg (feature, "btbase", regnum++, 1, "vdr", 64, "uint64");
+  tdesc_create_reg (feature, "scrbase", regnum++, 1, "vdr", 64, "uint64");
+  tdesc_create_reg (feature, "genstbase", regnum++, 1, "vdr", 64, "uint64");
+  tdesc_create_reg (feature, "sustbase", regnum++, 1, "vdr", 64, "uint64");
+  tdesc_create_reg (feature, "blsustbase", regnum++, 1, "vdr", 64, "uint64");
+  tdesc_create_reg (feature, "blsastbase", regnum++, 1, "vdr", 64, "uint64");
+  tdesc_create_reg (feature, "isabase", regnum++, 1, "vdr", 64, "uint64");
+  tdesc_create_reg (feature, "iobase", regnum++, 1, "vdr", 64, "uint64");
+  tdesc_create_reg (feature, "dynbase", regnum++, 1, "vdr", 64, "uint64");
+
+  feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.arf");
+  tdesc_create_reg (feature, "a0", regnum++, 1, "address", 256, "uint256");
+  for (int i = 0; i <= 9; ++i)
+    {
+      snprintf (reg_name, 6, "acc%d", i);
+      tdesc_create_reg (feature, reg_name, regnum++, 1, "accumulator", 256, "uint256");
+    }
+  tdesc_create_reg (feature, "f0", regnum++, 1, "flag", 32, "uint32");
+  tdesc_create_reg (feature, "f1", regnum++, 1, "flag", 32, "uint32");
+  tdesc_create_reg (feature, "ce", regnum++, 1, "channel_enable", 32, "uint32");
+  tdesc_create_reg (feature, "sp", regnum++, 1, "stack_pointer", 128, "uint128");
+  tdesc_create_reg (feature, "sr0", regnum++, 1, "state", 128, "uint128");
+  tdesc_create_reg (feature, "cr0", regnum++, 1, "control", 128, "uint128");
+  tdesc_create_reg (feature, "ip", regnum++, 1, "instruction_pointer", 32, "uint32");
+  tdesc_create_reg (feature, "tdr", regnum++, 1, "thread_dependency", 128, "uint128");
+  tdesc_create_reg (feature, "tm0", regnum++, 1, "timestamp", 128, "uint128");
+  for (int i = 0; i <= 7; ++i)
+    {
+      snprintf (reg_name, 6, "mme%d", i);
+      tdesc_create_reg (feature, reg_name, regnum++, 1, "mme", 256, "uint256");
     }
 
   return tdesc.release ();
@@ -445,19 +469,11 @@ add_new_gt_process (process_info_private *proc_priv)
   static const char *expedite_regs[] = {"ip", "sp", "emask", nullptr};
 
   GTDeviceInfo &info = proc_priv->device_info;
-  intelgt::version gt_version;
   switch (info.gen_major)
     {
     case 9:
-      gt_version = intelgt::version::Gen9;
-      break;
-
     case 11:
-      gt_version = intelgt::version::Gen11;
-      break;
-
     case 12:
-      gt_version = intelgt::version::Gen12;
       break;
 
     default:
@@ -465,11 +481,11 @@ add_new_gt_process (process_info_private *proc_priv)
 	     info.gen_major, info.gen_minor);
     }
 
-  target_desc *tdesc = create_target_description (gt_version);
+  target_desc *tdesc = create_target_description ();
   init_target_desc (tdesc, expedite_regs);
 
   proc_priv->intelgt_info
-    = intelgt::arch_info::get_or_create (gt_version);
+    = intelgt::arch_info::get_or_create (intelgt::version::Gen9);
 
   unsigned int device_index = proc_priv->dcd_device_index + 1;
 

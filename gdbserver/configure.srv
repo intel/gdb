@@ -113,7 +113,7 @@ case "${gdbserver_host}" in
 			srv_linux_usrregs=yes
 			;;
   intelgt-*-elf)	srv_regobj=""
-			srv_xmlfiles="intelgt-grf.xml intelgt-debug.xml intelgt-arf9.xml intelgt-arf11.xml intelgt-arf12.xml"
+			srv_xmlfiles=""
 			srv_tgtobj="nonstop-low.o intelgt-low.o arch/intelgt.o"
 			;;
   m68*-*-linux*)	if test "$gdb_cv_m68k_is_coldfire" = yes; then

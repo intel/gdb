@@ -38,9 +38,7 @@
 
 #define GT_FEATURE_GRF		"org.gnu.gdb.intelgt.grf"
 #define GT_FEATURE_DEBUG	"org.gnu.gdb.intelgt.debug"
-#define GT_FEATURE_ARF9		"org.gnu.gdb.intelgt.arf9"
-#define GT_FEATURE_ARF11	"org.gnu.gdb.intelgt.arf11"
-#define GT_FEATURE_ARF12	"org.gnu.gdb.intelgt.arf12"
+#define GT_FEATURE_ARF		"org.gnu.gdb.intelgt.arf"
 
 /* Address space flags.
    We are assigning the TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 to the shared
@@ -594,38 +592,6 @@ intelgt_sw_breakpoint_from_kind (gdbarch *gdbarch, int kind, int *size)
   return nullptr;
 }
 
-/* Check the tdesc for validity.  */
-
-static intelgt::version
-intelgt_version_from_tdesc (const target_desc *tdesc)
-{
-  if (!tdesc_has_registers (tdesc))
-    {
-      /* We assume a default feature in this case.  */
-      return intelgt::version::Gen9;
-    }
-
-  /* We have to have the GRF feature + the debug feature + an ARF feature.  */
-  gdb_assert (tdesc_find_feature (tdesc, GT_FEATURE_GRF) != nullptr);
-  gdb_assert (tdesc_find_feature (tdesc, GT_FEATURE_DEBUG) != nullptr);
-
-  const tdesc_feature *feature
-    = tdesc_find_feature (tdesc, GT_FEATURE_ARF9);
-  if (feature != nullptr)
-    return intelgt::version::Gen9;
-
-  feature = tdesc_find_feature (tdesc, GT_FEATURE_ARF11);
-  if (feature != nullptr)
-    return intelgt::version::Gen11;
-
-  feature = tdesc_find_feature (tdesc, GT_FEATURE_ARF12);
-  if (feature != nullptr)
-    return intelgt::version::Gen12;
-
-  error (_("A supported Intel(R) Graphics Technology feature was not "
-	   "found"));
-}
-
 /* Initialize architectural information.  The TDESC must be validated
    prior to calling this function.  */
 
@@ -634,25 +600,16 @@ intelgt_initialize_gdbarch_data (const target_desc *tdesc,
 				 gdbarch *gdbarch)
 {
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
-  intelgt::version gt_version = intelgt_version_from_tdesc (tdesc);
-
-  data->info = intelgt::arch_info::get_or_create (gt_version);
+  data->info = intelgt::arch_info::get_or_create (intelgt::version::Gen9);
 
 #if defined (HAVE_LIBIGA64)
-  iga_gen_t iga_version = IGA_GEN_INVALID;
-  if (gt_version == intelgt::version::Gen9)
-    iga_version = IGA_GEN9;
-  else if (gt_version == intelgt::version::Gen11)
-    iga_version = IGA_GEN11;
-  else if (gt_version == intelgt::version::Gen12)
-    iga_version = IGA_GEN12p1;
-
-  if (iga_version != IGA_GEN_INVALID)
-    {
-      const iga_context_options_t options
-        = IGA_CONTEXT_OPTIONS_INIT (iga_version);
-      iga_context_create (&options, &data->iga_ctx);
-    }
+  /* There is currently no way to know on GDB side what GEN exactly it is
+     working with.  Some testing has shown that using GEN9 for all supported
+     platforms works at least for commonly used instructions.  Should be updated
+     once remote protocol allows to report the used GEN version.  */
+  iga_gen_t iga_version = IGA_GEN9;
+  const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);
+  iga_context_create (&options, &data->iga_ctx);
 #endif
 }
 
@@ -828,6 +785,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
       /* Fill in data for GRF registers.  */
       const tdesc_feature *feature
 	= tdesc_find_feature (tdesc, GT_FEATURE_GRF);
+      gdb_assert (feature != nullptr);
+
       for (int i = 0; i < intelgt_info->grf_reg_count (); i++)
 	{
 	  const char *name = intelgt_info->get_register_name (i);
@@ -844,6 +803,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
       /* Fill in data for the virtual debug registers.  */
       feature = tdesc_find_feature (tdesc, GT_FEATURE_DEBUG);
+      gdb_assert (feature != nullptr);
       int start = intelgt_info->debug_reg_base ();
       int count = intelgt_info->debug_reg_count ();
       for (int i = start; i < start + count; i++)
@@ -861,30 +821,22 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 	}
 
       /* Fill in data for ARF registers.  */
-      feature = tdesc_find_feature (tdesc, GT_FEATURE_ARF9);
+      feature = tdesc_find_feature (tdesc, GT_FEATURE_ARF);
+      gdb_assert (feature != nullptr);
 
-      if (feature == nullptr) /* Try again.  */
-	feature = tdesc_find_feature (tdesc, GT_FEATURE_ARF11);
-
-      if (feature == nullptr) /* Try again.  */
-	feature = tdesc_find_feature (tdesc, GT_FEATURE_ARF12);
-
-      if (feature != nullptr)
+      dprintf ("Found feature %s", feature->name.c_str ());
+      int i = intelgt_info->address_reg_base ();
+      for (; i < intelgt_info->num_registers (); i++)
 	{
-	  dprintf ("Found feature %s", feature->name.c_str ());
-	  int i = intelgt_info->address_reg_base ();
-	  for (; i < intelgt_info->num_registers (); i++)
-	    {
-	      const char *name = intelgt_info->get_register_name (i);
-	      int valid
-		= tdesc_numbered_register (feature, tdesc_data, i, name);
+	  const char *name = intelgt_info->get_register_name (i);
+	  int valid
+	    = tdesc_numbered_register (feature, tdesc_data, i, name);
 
-	      if (!valid)
-		{
-		  dprintf ("ARF register %d '%s' not found", i, name);
-		  tdesc_data_cleanup (tdesc_data);
-		  return nullptr;
-		}
+	  if (!valid)
+	    {
+	      dprintf ("ARF register %d '%s' not found", i, name);
+	      tdesc_data_cleanup (tdesc_data);
+	      return nullptr;
 	    }
 	}
     }

@@ -232,6 +232,7 @@ FEATURE_XMLFILES = aarch64-core.xml \
 	i386/64bit-cet.xml \
 	i386/x32-core.xml \
 	intelgt-grf.xml \
+	intelgt-debug.xml \
 	intelgt-arf9.xml \
 	intelgt-arf11.xml \
 	intelgt-arf12.xml \

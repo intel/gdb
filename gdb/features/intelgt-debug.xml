@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2019-2021 Free Software Foundation, Inc.
+
+     Copying and distribution of this file, with or without modification,
+     are permitted in any medium without royalty provided the copyright
+     notice and this notice are preserved.  -->
+
+<!-- Virtual debug registers.  -->
+
+<!DOCTYPE feature SYSTEM "gdb-target.dtd">
+<feature name="org.gnu.gdb.intelgt.debug">
+
+  <reg name="btbase" bitsize="64" type="uint64"/>
+  <reg name="scrbase" bitsize="64" type="uint64"/>
+  <reg name="genstbase" bitsize="64" type="uint64"/>
+  <reg name="sustbase" bitsize="64" type="uint64"/>
+  <reg name="blsustbase" bitsize="64" type="uint64"/>
+  <reg name="blsastbase" bitsize="64" type="uint64"/>
+  <reg name="isabase" bitsize="64" type="uint64"/>
+  <reg name="iobase" bitsize="64" type="uint64"/>
+  <reg name="dynbase" bitsize="64" type="uint64"/>
+
+</feature>

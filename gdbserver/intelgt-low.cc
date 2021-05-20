@@ -28,6 +28,7 @@
 #include <unordered_map>
 
 #include "../features/intelgt-grf.c"
+#include "../features/intelgt-debug.c"
 #include "../features/intelgt-arf9.c"
 #include "../features/intelgt-arf11.c"
 #include "../features/intelgt-arf12.c"
@@ -142,6 +143,8 @@ igfxdbg_reg_type (intelgt::reg_group group)
       return eExecMaskPseudoRegister;
     case reg_group::Mme:
       return eArfMmeRegister;
+    case reg_group::Debug:
+      return eDebugPseudoRegister;
     }
 
   return eInvalidRegisterType;
@@ -416,6 +419,7 @@ create_target_description (intelgt::version gt_version)
   set_tdesc_osabi (tdesc.get (), "GNU/Linux");
 
   long regnum = create_feature_intelgt_grf (tdesc.get (), 0);
+  regnum = create_feature_intelgt_debug (tdesc.get (), regnum);
 
   switch (gt_version)
     {

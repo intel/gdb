@@ -51,6 +51,7 @@ enum class reg_group : unsigned short
     Grf,
     ExecMaskPseudo,
     Mme,
+    Debug,
   };
 
 struct gt_register
@@ -92,7 +93,7 @@ class arch_info
 public:
   arch_info (unsigned int num_grfs, unsigned int num_addresses,
 	     unsigned int num_accumulators, unsigned int num_flags,
-	     unsigned int num_mmes);
+	     unsigned int num_mmes, unsigned int num_debug);
 
   /* Return the total number of registers.  */
   unsigned int num_registers ();
@@ -112,6 +113,9 @@ public:
   /* The number of mme registers.  */
   unsigned int mme_reg_count () const;
 
+  /* The number of the virtual debug registers.  */
+  unsigned int debug_reg_count () const;
+
   /* The base index of address registers.  */
   virtual unsigned int address_reg_base () const = 0;
 
@@ -123,6 +127,9 @@ public:
 
   /* The base index of mme registers.  */
   virtual unsigned int mme_reg_base () const = 0;
+
+  /* The base index of virtual debug registers.  */
+  virtual unsigned int debug_reg_base () const = 0;
 
   /* Return the register at INDEX.  */
   const gt_register &get_register (int index);
@@ -201,6 +208,8 @@ private:
   const unsigned int num_flags;
 
   const unsigned int num_mmes;
+
+  const unsigned int num_debug;
 };
 
 } /* namespace intelgt */

@@ -10,6 +10,8 @@
 <!DOCTYPE feature SYSTEM "gdb-target.dtd">
 <feature name="org.gnu.gdb.intelgt.debug">
 
+  <reg name="emask"  bitsize="32"  type="uint32"/>
+  <reg name="iemask" bitsize="32"  type="uint32"/>
   <reg name="btbase" bitsize="64" type="uint64"/>
   <reg name="scrbase" bitsize="64" type="uint64"/>
   <reg name="genstbase" bitsize="64" type="uint64"/>

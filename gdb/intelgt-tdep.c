@@ -35,6 +35,7 @@
 /* Feature names.  */
 
 #define GT_FEATURE_GRF		"org.gnu.gdb.intelgt.grf"
+#define GT_FEATURE_DEBUG	"org.gnu.gdb.intelgt.debug"
 #define GT_FEATURE_ARF9		"org.gnu.gdb.intelgt.arf9"
 #define GT_FEATURE_ARF11	"org.gnu.gdb.intelgt.arf11"
 #define GT_FEATURE_ARF12	"org.gnu.gdb.intelgt.arf12"
@@ -117,6 +118,8 @@ intelgt_register_type (gdbarch *gdbarch, int regno)
     {
     case 4:
       return builtin_type (gdbarch)->builtin_uint32;
+    case 8:
+      return builtin_type (gdbarch)->builtin_uint64;
     case 16:
       return builtin_type (gdbarch)->builtin_uint128;
     case 32:
@@ -132,6 +135,8 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
 {
   constexpr unsigned int IP = 0;
   constexpr unsigned int EMask = 1;
+  constexpr unsigned int DebugBase = 5;
+  constexpr unsigned int DebugLast = 10;
   constexpr unsigned int GRFBase = 16;
   constexpr unsigned int A0Base = 272;
   constexpr unsigned int F0Base = 288;
@@ -152,6 +157,8 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
 	return intelgt_info->pc_regnum ();
       if (num == EMask)
 	return intelgt_info->emask_regnum ();
+      if (num >= DebugBase && num <= DebugLast)
+	return intelgt_info->debug_reg_base () - DebugBase + num;
     }
   else if (num >= GRFBase && num < A0Base)
     {
@@ -432,8 +439,9 @@ intelgt_version_from_tdesc (const target_desc *tdesc)
       return intelgt::version::Gen9;
     }
 
-  /* We have to have the GRF feature, plus an ARF feature.  */
+  /* We have to have the GRF feature + the debug feature + an ARF feature.  */
   gdb_assert (tdesc_find_feature (tdesc, GT_FEATURE_GRF) != nullptr);
+  gdb_assert (tdesc_find_feature (tdesc, GT_FEATURE_DEBUG) != nullptr);
 
   const tdesc_feature *feature
     = tdesc_find_feature (tdesc, GT_FEATURE_ARF9);
@@ -620,7 +628,24 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
 	  if (!valid)
 	    {
-	      dprintf ("Register '%s' not found", name);
+	      dprintf ("GRF register %d '%s' not found", i, name);
+	      return nullptr;
+	    }
+	}
+
+      /* Fill in data for the virtual debug registers.  */
+      feature = tdesc_find_feature (tdesc, GT_FEATURE_DEBUG);
+      int start = intelgt_info->debug_reg_base ();
+      int count = intelgt_info->debug_reg_count ();
+      for (int i = start; i < start + count; i++)
+	{
+	  const char *name = intelgt_info->get_register_name (i);
+	  int valid
+	    = tdesc_numbered_register (feature, tdesc_data.get (), i, name);
+
+	  if (!valid)
+	    {
+	      dprintf ("Debug register %d '%s' not found", i, name);
 	      return nullptr;
 	    }
 	}
@@ -637,7 +662,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
       if (feature != nullptr)
 	{
 	  dprintf ("Found feature %s", feature->name.c_str ());
-	  int i = intelgt_info->grf_reg_count ();
+	  int i = intelgt_info->address_reg_base ();
 	  for (; i < intelgt_info->num_registers (); i++)
 	    {
 	      const char *name = intelgt_info->get_register_name (i);
@@ -646,7 +671,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
 	      if (!valid)
 		{
-		  dprintf ("Register '%s' not found", name);
+		  dprintf ("ARF register %d '%s' not found", i, name);
 		  return nullptr;
 		}
 	    }

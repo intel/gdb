@@ -5060,6 +5060,9 @@ maybe_print_thread_hit_breakpoint (struct ui_out *uiout)
 	  uiout->text ("\"");
 	}
 
+      if (!thr->is_active ())
+	  uiout->text (" (inactive)");
+
       uiout->text (" hit ");
     }
 }
@@ -5711,12 +5714,24 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
 
   unsigned int lanes_mask = thread->active_simd_lanes_mask ();
 
-  if (b->thread != -1
-      && b->thread == thread->global_num
-      && b->simd_lane_num >= 0)
+  if (lanes_mask != 0x0)
     {
-      /* If the breakpoint is set for a specific lane, mask all other lanes.  */
-      lanes_mask &= (0x1 << b->simd_lane_num);
+      if (b->thread != -1
+	  && b->thread == thread->global_num
+	  && b->simd_lane_num >= 0)
+	{
+	  /* If the breakpoint is set for a specific lane, mask all other
+	     lanes.  */
+	  lanes_mask &= (0x1 << b->simd_lane_num);
+	}
+    }
+  else if (thread->has_simd_lanes ()
+	   && b->simd_lane_num == -1)
+    {
+      /* If the BP hit has happenned at an inactive thread and the BP did not
+	 specify a particular SIMD lane number, pretend that SIMD lane mask is
+	 0x1.  Thus, we will show the stop to a user.  */
+      lanes_mask = 0x1;
     }
 
   /* If this is a thread/task-specific breakpoint, don't waste cpu
@@ -5733,9 +5748,6 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
       bs->stop = false;
       return;
     }
-
-  /* Remember the SIMD mask.  */
-  bs->hit_lane_mask = lanes_mask;
 
   /* Evaluate extension language breakpoints that have a "stop" method
      implemented.  */
@@ -5823,7 +5835,7 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
 	      /* If at least one lane is unmasked, then the condition
 		 was hold.  Update the SIMD lanes mask.  */
 	      condition_result = condition_mask != 0x0;
-	      bs->hit_lane_mask = condition_mask;
+	      lanes_mask = condition_mask;
 	    }
 	  catch (const gdb_exception_error &ex)
 	    {
@@ -5870,7 +5882,13 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
     }
 
   if (bs->stop)
-    infrun_debug_printf ("stopping at this breakpoint");
+    {
+      infrun_debug_printf ("stopping at this breakpoint");
+
+      /* Set SIMD lane mask, which defines which lanes have hit
+	 the breakpoint.  */
+      bs->hit_lane_mask = thread->is_active () ? lanes_mask : 0x0;
+    }
   else
     infrun_debug_printf ("not stopping at this breakpoint");
 }
@@ -12271,7 +12289,8 @@ ordinary_breakpoint::print_it (const bpstat *bs) const
 
   if (show_thread_that_caused_stop () && bs->hit_lane_mask != 0x0)
     {
-      if (inferior_thread ()->has_simd_lanes ())
+      if (inferior_thread ()->has_simd_lanes ()
+	  && inferior_thread ()->is_active ())
 	{
 	  std::vector<int> hit_lanes;
 	  for_active_lanes (bs->hit_lane_mask, [&] (int lane)

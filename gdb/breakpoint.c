@@ -4806,6 +4806,9 @@ maybe_print_thread_hit_breakpoint (struct ui_out *uiout)
 	  uiout->text ("\"");
 	}
 
+      if (!thr->is_active ())
+	  uiout->text (" (inactive)");
+
       uiout->text (" hit ");
     }
 }
@@ -5464,12 +5467,24 @@ bpstat_check_breakpoint_conditions (bpstat bs, thread_info *thread)
 
   unsigned int lanes_mask = thread->active_simd_lanes_mask ();
 
-  if (b->thread != -1
-      && b->thread == thread->global_num
-      && b->simd_lane_num >= 0)
+  if (lanes_mask != 0x0)
     {
-      /* If the breakpoint is set for a specific lane, mask all other lanes.  */
-      lanes_mask &= (0x1 << b->simd_lane_num);
+      if (b->thread != -1
+	  && b->thread == thread->global_num
+	  && b->simd_lane_num >= 0)
+	{
+	  /* If the breakpoint is set for a specific lane, mask all other
+	     lanes. */
+	  lanes_mask &= (0x1 << b->simd_lane_num);
+	}
+    }
+  else if (thread->has_simd_lanes ()
+	   && b->simd_lane_num == -1)
+    {
+      /* If the BP hit has happenned at an inactive thread and the BP did not
+	 specify a particular SIMD lane number, pretend that SIMD lane mask is
+	 0x1.  Thus, we will show the stop to a user.  */
+      lanes_mask = 0x1;
     }
 
   /* If this is a thread/task-specific breakpoint, don't waste cpu
@@ -13064,7 +13079,8 @@ bkpt_print_it (bpstat bs)
 		    signed_field ("bkptno", b->number));
   if (show_thread_that_caused_stop () && bs->simd_lane_mask != 0x0)
     {
-      if (inferior_thread ()->has_simd_lanes ())
+      if (inferior_thread ()->has_simd_lanes ()
+	  && inferior_thread ()->is_active ())
 	{
 	  std::vector<int> hit_lanes;
 	  for_active_lanes (bs->simd_lane_mask, [&] (int lane)

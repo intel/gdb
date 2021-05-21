@@ -457,6 +457,9 @@ public:
   /* Return active lanes mask for this thread.  */
   unsigned int active_simd_lanes_mask ();
 
+  /* Return true if thread has active SIMD lanes.  */
+  bool is_active ();
+
   /* Return the current simd lane.  */
   int current_simd_lane ();
 

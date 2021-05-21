@@ -120,6 +120,14 @@ thread_info::active_simd_lanes_mask ()
 
 /* See gdbthread.h.  */
 
+bool
+thread_info::is_active ()
+{
+  return active_simd_lanes_mask () != 0;
+}
+
+/* See gdbthread.h.  */
+
 int
 thread_info::current_simd_lane ()
 {
@@ -1749,7 +1757,7 @@ thread_try_catch_cmd (thread_info *thr, gdb::optional<int> ada_task,
       std::string lane_info = "";
       std::vector<int> lanes;
 
-      if (thr->has_simd_lanes () && thr->active_simd_lanes_mask () != 0x0)
+      if (thr->has_simd_lanes () && thr->is_active ())
 	{
 	  /* Show lane information only for active threads.  */
 	  int lane = thr->current_simd_lane ();
@@ -1779,7 +1787,7 @@ thread_try_catch_cmd (thread_info *thr, gdb::optional<int> ada_task,
       if (!flags.silent)
 	{
 	  if (!flags.quiet)
-	    printf_filtered (_("%s"), thr_header.c_str ());
+	    printf_filtered ("%s", thr_header.c_str ());
 	  if (flags.cont)
 	    printf_filtered ("%s\n", ex.what ());
 	  else
@@ -2423,7 +2431,7 @@ print_selected_thread_frame (struct ui_out *uiout,
 	{
 	  uiout->text ("[Switching to thread ");
 	  std::vector<int> lanes;
-	  bool is_active = tp->active_simd_lanes_mask () != 0;
+	  bool is_active = tp->is_active ();
 
 	  if (tp->has_simd_lanes () && is_active)
 	    lanes.push_back (tp->current_simd_lane ());

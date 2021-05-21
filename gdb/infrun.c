@@ -158,6 +158,7 @@ struct previous_thread_ptid_simd_lane
 {
   ptid_t ptid;
   int simd_lane;
+  unsigned int emask;
 };
 
 static previous_thread_ptid_simd_lane previous_thread_focus;
@@ -2977,6 +2978,7 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
   /* We'll update this if & when we switch to a new thread.  */
   previous_thread_focus.ptid = cur_thr->ptid;
   previous_thread_focus.simd_lane = cur_thr->current_simd_lane ();
+  previous_thread_focus.emask = cur_thr->active_simd_lanes_mask ();
 
   regcache = get_current_regcache ();
   gdbarch = regcache->arch ();
@@ -3248,12 +3250,16 @@ init_wait_for_inferior (void)
 
   previous_thread_focus.ptid = inferior_ptid;
   if (inferior_ptid == null_ptid)
-    previous_thread_focus.simd_lane = -1;
+    {
+      previous_thread_focus.simd_lane = -1;
+      previous_thread_focus.emask = 0x0;
+    }
   else
     {
       thread_info *current_thread = inferior_thread ();
 
       previous_thread_focus.simd_lane = current_thread->current_simd_lane ();
+      previous_thread_focus.emask = current_thread->active_simd_lanes_mask ();
     }
 }
 
@@ -8531,6 +8537,7 @@ normal_stop (void)
       current_thread->set_default_simd_lane ();
       bool has_simd_lanes = current_thread->has_simd_lanes ();
       int current_simd_lane = current_thread->current_simd_lane ();
+      unsigned int lanes_mask = current_thread->active_simd_lanes_mask ();
 
       /* Do not notify a user about thread switching in non-stop mode.
 	 In that mode, as we don't want GDB to switch threads behind
@@ -8551,8 +8558,15 @@ normal_stop (void)
 	      std::string lane_info = "";
 
 	      if (current_thread->has_simd_lanes ())
-		lane_info = " lane "
-		  + std::to_string (current_thread->current_simd_lane ());
+		{
+		  if (lanes_mask == 0x0)
+		    lane_info = " (inactive)";
+		  else
+		    {
+		      int lane = current_thread->current_simd_lane ();
+		      lane_info = " lane " + std::to_string (lane);
+		    }
+		}
 
 	      printf_filtered (_("[Switching to %s%s]\n"),
 			       target_pid_to_str (inferior_ptid).c_str (),
@@ -8564,19 +8578,29 @@ normal_stop (void)
 	     selected SIMD lane.  */
 	  previous_thread_focus.ptid = current_thread->ptid;
 	  previous_thread_focus.simd_lane = current_simd_lane;
+	  previous_thread_focus.emask = lanes_mask;
 	}
-      else if (has_simd_lanes)
+      else if (has_simd_lanes
+	       && previous_thread_focus.ptid == current_thread->ptid)
 	{
-	  /* If the current thread has SIMD lanes, it cannot have current SIMD
-	     lane set to -1.  */
-	  gdb_assert (current_simd_lane != -1);
-
-	  /* If the thread did not change, but SIMD lane has changed, notify
-	     a user.  In non-stop mode, too.  */
-	  if (previous_thread_focus.ptid == current_thread->ptid
-	      && previous_thread_focus.simd_lane != current_simd_lane)
+	  /* If the thread did not change, there could be a change in SIMD
+	     lanes.  */
+	  if (previous_thread_focus.emask != 0x0 && lanes_mask == 0x0)
 	    {
-	      /* Current thread is the same, but SIMD lane has changed.  */
+		/* Thread became inactive.  */
+		SWITCH_THRU_ALL_UIS ()
+		{
+		  target_terminal::ours_for_output ();
+
+		  printf_filtered (_("[%s became inactive]\n"),
+				   target_pid_to_str (inferior_ptid).c_str ());
+		}
+	    }
+	  else if ((previous_thread_focus.emask == 0x0 && lanes_mask != 0x0)
+		   || previous_thread_focus.simd_lane != current_simd_lane)
+	    {
+	      /* Current thread is the same, but either became active
+		 or SIMD lane has changed.  */
 	      SWITCH_THRU_ALL_UIS ()
 		{
 		  target_terminal::ours_for_output ();
@@ -8584,8 +8608,9 @@ normal_stop (void)
 		  printf_filtered (_("[Switching to SIMD lane %d]\n"),
 				   current_simd_lane);
 		}
-	      previous_thread_focus.simd_lane = current_simd_lane;
 	    }
+	  previous_thread_focus.simd_lane = current_simd_lane;
+	  previous_thread_focus.emask = lanes_mask;
 	}
     }
 

@@ -2388,25 +2388,31 @@ thread_command (const char *tidstr, int from_tty)
 	{
 	  struct thread_info *tp = inferior_thread ();
 	  std::string lane_info = "";
+	  std::string status_note = "";
 	  std::vector<int> lanes;
 
 	  if (tp->has_simd_lanes ())
 	    {
-	      int lane = tp->current_simd_lane ();
-	      lane_info = " lane " + std::to_string (lane);
-	      lanes.push_back (lane);
+	      if (tp->is_active ())
+		{
+		  int lane = tp->current_simd_lane ();
+		  lane_info = " lane " + std::to_string (lane);
+		  lanes.push_back (lane);
+		}
+	      else if (tp->state == THREAD_EXITED)
+		status_note = " (inactive, exited)";
+	      else
+		status_note = " (inactive)";
 	    }
+	  else if (tp->state == THREAD_EXITED)
+	    status_note = " (exited)";
 
-	  if (tp->state == THREAD_EXITED)
-	    printf_filtered (_("[Current thread is %s (%s%s) (exited)]\n"),
-			     print_thread_id (tp, &lanes),
-			     target_pid_to_str (inferior_ptid).c_str (),
-			     lane_info.c_str ());
-	  else
-	    printf_filtered (_("[Current thread is %s (%s%s)]\n"),
-			     print_thread_id (tp, &lanes),
-			     target_pid_to_str (inferior_ptid).c_str (),
-			     lane_info.c_str ());
+
+	  printf_filtered (_("[Current thread is %s (%s%s)%s]\n"),
+			   print_thread_id (tp, &lanes),
+			   target_pid_to_str (inferior_ptid).c_str (),
+			   lane_info.c_str (),
+			   status_note.c_str ());
 	}
       else
 	error (_("No stack."));

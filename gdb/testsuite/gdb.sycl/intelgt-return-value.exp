@@ -1,0 +1,265 @@
+# Copyright 2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for different return types on IntelGT architecture.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if { ![require_sycl_device "gpu" "Intel*"] } {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+# Set -mavx512f flag to avoid compiler warnings.
+if {[prepare_sycl_for_testing $binfile $srcfile {additional_flags="-mavx512f"}]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set fill "\[^\r\n\]*"
+
+# Helper function to test "finish" command.
+# FUNCTION_NAME defines the format of the name of the finishing function.
+# FUNCTION_ARGS defines the format for function's arguments.
+# EXPECTED_VALUE defines the expected format of the return value.
+# EXPECTED_OUTER_FRAME defines the format of the outer frame.
+# CALL_STACK_SUPPORTED indicates that at this run the call stack feature
+# was enabled.
+proc test_finish {function_name function_args expected_value expected_outer_frame call_stack_supported} {
+    with_test_prefix "$function_name" {
+	global fill valnum_re
+	set value_returned "(\r\nValue returned is $valnum_re = $expected_value)"
+	if {!$call_stack_supported} {
+	    append value_returned "?"
+	}
+
+	gdb_test "finish" [multi_line \
+			       "Run till exit from #0 ${fill}${function_name}$fill\\($function_args\\) $fill" \
+			       "${fill}${expected_outer_frame}${fill}" \
+			       "${fill}${value_returned}"] \
+	    "finish $function_name"
+    }
+}
+
+# The main test sequence.  We run it with and without call stack support.
+proc test_call_stack {call_stack_supported} {
+    global srcfile valnum_re decimal fill inferior_exited_re
+
+    set return_int_loc [gdb_get_line_number "bp-at-return_int"]
+    set return_int4_loc [gdb_get_line_number "bp-at-return_int4"]
+    set return_int4_after_prologue_loc [gdb_get_line_number \
+					    "return_int4-after-prologue"]
+    set return_int4_outer_loc [gdb_get_line_number "return_int4-outer"]
+    set do_smt_and_return_uchar_loc [gdb_get_line_number \
+					 "bp-at-do_smt_and_return_uchar"]
+    set return_uchar2_loc [gdb_get_line_number "bp-at-return_uchar2"]
+    set do_smt_and_return_uchar3_loc [gdb_get_line_number \
+				      "bp-at-do_smt_and_return_uchar3"]
+    set return_uchar4_loc [gdb_get_line_number "bp-at-return_uchar4"]
+    set return_uchar8_loc [gdb_get_line_number "bp-at-return_uchar8"]
+    set return_uchar10_loc [gdb_get_line_number "bp-at-return_uchar10"]
+    set do_smt_and_return_uchar10_loc [gdb_get_line_number \
+					   "bp-at-do_smt_and_return_uchar10"]
+    set tail_call_inner_int_loc [gdb_get_line_number "bp-at-tail_call_inner_int"]
+
+    gdb_breakpoint "return_int4" {temporary}
+
+    # Without the call stack feature GDB stops in the wrong location,
+    # however on certain OSs and NEO versions the FunctionControl
+    # flag can be ignored by IGC or the BP can be skipped.
+    gdb_test_multiple "continue" "stop at return_int4 after prologue" {
+	-re -wrap ".*$srcfile:$return_int4_after_prologue_loc.*" {
+	    pass $gdb_test_name
+	}
+	-re -wrap ".*$srcfile:$return_int4_outer_loc.*" {
+	    fail $gdb_test_name
+	    if {$call_stack_supported} {
+		# We end up here if the FunctionControl flag was not honored.
+		# This happens when a certain version of NEO is used on
+		# certain OSs.  Do not run tests in this case.
+		unsupported "FunctionControl flag is unsupported"
+		return
+	    }
+	}
+	-re -wrap "${inferior_exited_re}.*" {
+	    fail $gdb_test_name
+	    unsupported "FunctionControl flag is unsupported"
+	    return
+	}
+    }
+
+    # Switch to the SIMD lane 5.  All future expected output is tailored
+    # for this SIMD lane.
+    gdb_test "thread :5"
+
+    # Test different return types.
+    gdb_breakpoint $return_int4_loc {temporary}
+    gdb_breakpoint $return_uchar4_loc {temporary}
+    gdb_breakpoint $return_int_loc {temporary}
+    gdb_breakpoint $do_smt_and_return_uchar_loc {temporary}
+    gdb_breakpoint $return_uchar2_loc {temporary}
+    gdb_breakpoint $do_smt_and_return_uchar3_loc {temporary}
+    gdb_breakpoint $return_uchar8_loc {temporary}
+    gdb_breakpoint $return_uchar10_loc {temporary}
+    gdb_breakpoint $do_smt_and_return_uchar10_loc {temporary}
+    gdb_breakpoint $tail_call_inner_int_loc {temporary}
+
+    # Indicators that a certain BP was hit.
+    set hit_return_int4 false
+    set hit_return_uchar4 false
+    set hit_return_int false
+    set hit_do_smt_and_return_uchar false
+    set hit_return_uchar2 false
+    set hit_do_smt_and_return_uchar3 false
+    set hit_return_uchar8 false
+    set hit_return_uchar10 false
+    set hit_do_smt_and_return_uchar10 false
+    set hit_tail_call_inner_int false
+
+    # Loop helpers.
+    set should_continue true
+    set i 0
+
+    # We hit BPs in a while loop, to ensure that if some BP is not hit,
+    # other tests are not affected.  We also run "finish" tests only when
+    # we are at the correct location.  Afterwards, we check which BPs were
+    # hit.
+    while {$i < 10 && $should_continue} {
+        with_test_prefix "iteration $i" {
+	    gdb_test_multiple "continue" "iteration $i" {
+		-re -wrap ".*$srcfile:$return_int4_loc.*" {
+		    set hit_return_int4 true
+		    test_finish "return_int4" "dim0=5" "\\{500, 501, 502, 503\\}" \
+			"make_output \\(dim0=5\\)" $call_stack_supported
+		}
+		-re -wrap ".*$srcfile:$return_uchar4_loc.*" {
+		    set hit_return_uchar4 true
+		    test_finish "return_uchar4" \
+			"dim0=5" "\\{5, 10, 20, 40\\}" "make_output \\(dim0=5\\)" \
+			$call_stack_supported
+		}
+		-re -wrap ".*$srcfile:$return_int_loc.*" {
+		    set hit_return_int true
+
+		    # Here we will run finish 3 times to get into make_output function.
+		    test_finish "return_int"\
+			"i=501" "50100" "return_struct4 \\(u4${fill}\\)" \
+			$call_stack_supported
+
+		    test_finish "return_struct4" "u4${fill}" "\\{i = 50100\\}" \
+			"return_struct_greater_64b" $call_stack_supported
+
+		    test_finish "return_struct_greater_64b" "${fill}" \
+			"\\{ll = 500, int4 = \\{500, 501, 502, 503\\}, i = 701, uchar4 = \"\\\\005\\\\n\\\\024\\(\"\\}" \
+			"make_output" $call_stack_supported
+		}
+		-re -wrap ".*$srcfile:$do_smt_and_return_uchar_loc.*" {
+		    set hit_do_smt_and_return_uchar true
+		    set break_do_smt_uchar true
+
+		    test_finish "do_smt_and_return_uchar" "i=5" "5 '\\\\005'" \
+			"make_output" $call_stack_supported
+		}
+		-re -wrap ".*$srcfile:$return_uchar2_loc.*" {
+		    set hit_return_uchar2 true
+		    test_finish "return_uchar2" "dim0=5" "\\{50, 51\\}" \
+			"make_output" $call_stack_supported
+		}
+		-re -wrap ".*$srcfile:$do_smt_and_return_uchar3_loc.*" {
+		    set hit_do_smt_and_return_uchar3 true
+		    test_finish "do_smt_and_return_uchar3" "dim0=5" "\\{50, 51, 52\\}" \
+			"make_output" $call_stack_supported
+		}
+		-re -wrap ".*$srcfile:$return_uchar8_loc.*" {
+		    set hit_return_uchar8 true
+		    test_finish "return_uchar8" "dim0=5" \
+			"\\{50, 51, 52, 53, 54, 55, 56, 57\\}" "make_output" \
+			$call_stack_supported
+		}
+		-re -wrap ".*$srcfile:$return_uchar10_loc.*" {
+		    set hit_return_uchar10 true
+		    test_finish "return_uchar10" "dim0=5" \
+			"\\{50, 51, 52, 53, 54, 55, 56, 57, 58, 59\\}" \
+			"make_output" $call_stack_supported
+		}
+		-re -wrap ".*$srcfile:$do_smt_and_return_uchar10_loc.*" {
+		    set hit_do_smt_and_return_uchar10 true
+		    test_finish "do_smt_and_return_uchar10" "dim0=5" \
+			"\\{50, 51, 52, 53, 54, 55, 56, 57, 58, 59\\}" \
+			"make_output" $call_stack_supported
+		}
+		-re -wrap ".*$srcfile:$tail_call_inner_int_loc.*" {
+		    set hit_tail_call_inner_int true
+
+		    test_finish "tail_call_inner_int" "dim0=10" "20" \
+			"tail_call_outer_int" $call_stack_supported
+
+		    test_finish "tail_call_outer_int" "dim0=5" "20" \
+			"make_output" $call_stack_supported
+		}
+		-re -wrap "${inferior_exited_re}.*" {
+		    # Program has exited, we do not continue.
+		    set should_continue false
+		}
+	    }
+	    incr i
+	}
+    }
+
+    # Pass test NAME if VALUE is true, otherwise fail the test.
+    # Set the test as KFAIL if KFAIL
+    proc check_hit {name value {kfail false} {bug ""}} {
+	if {$kfail} {
+	    setup_kfail "$bug" *-*-*
+	}
+	gdb_assert $value $name
+    }
+
+    # Check that all BPs were hit.
+    check_hit "hit return_int4" ${hit_return_int4}
+    check_hit "hit return_uchar4" ${hit_return_uchar4}
+    check_hit "hit return_int" ${hit_return_int}
+    check_hit "hit do_smt_and_return_uchar" ${hit_do_smt_and_return_uchar}
+    check_hit "hit return_uchar2" ${hit_return_uchar2}
+    check_hit "hit do_smt_and_return_uchar3" ${hit_do_smt_and_return_uchar3}
+    check_hit "hit return_uchar8" ${hit_return_uchar8}
+    check_hit "hit return_uchar10" ${hit_return_uchar10}
+    check_hit "hit do_smt_and_return_uchar10" ${hit_do_smt_and_return_uchar10}
+    check_hit "hit tail_call_inner_int" ${hit_tail_call_inner_int}
+}
+
+with_test_prefix "FunctionControl=0" {
+    gdb_test "set env IGC_FunctionControl=0"
+    test_call_stack false
+}
+
+clean_restart $binfile
+# TEMP set IGC flags for the call stack.
+gdb_test "set env IGC_FunctionControl=3"
+gdb_test "set env IGC_ForceInlineStackCallWithImplArg=1"
+start_sycl_program
+with_test_prefix "FunctionControl=3" {
+    test_call_stack true
+}

@@ -463,7 +463,13 @@ static std::string
 inferior_pid_to_str (int pid)
 {
   if (pid != 0)
-    return target_pid_to_str (ptid_t (pid));
+    {
+      gdbarch *gdbarch = target_gdbarch ();
+      if (gdbarch_bfd_arch_info (gdbarch)->arch == bfd_arch_intelgt)
+	return string_printf ("device %d", pid);
+      else
+	return target_pid_to_str (ptid_t (pid));
+    }
   else
     return _("<null>");
 }

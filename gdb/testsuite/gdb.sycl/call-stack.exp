@@ -33,120 +33,204 @@ if {[start_sycl_program] < 0} {
     return -1
 }
 
-set inner_loc [gdb_get_line_number "ordinary-inner-loc"]
-set middle_loc [gdb_get_line_number "ordinary-middle-loc"]
-set outer_loc [gdb_get_line_number "ordinary-outer-loc"]
-set inlined_inner_loc [gdb_get_line_number "inlined-inner-loc"]
-set inlined_middle_loc [gdb_get_line_number "inlined-middle-loc"]
-set inlined_outer_loc [gdb_get_line_number "inlined-outer-loc"]
-
-set fill "\[^\r\n\]*"
-
-set inner_desc  "second ${fill} at ${fill}$srcfile:$inner_loc"
-set middle_desc "first ${fill} at ${fill}$srcfile:$middle_loc"
-set outer_desc  "${fill}operator\\(\\)${fill} at ${fill}$srcfile:$outer_loc"
-set inlined_inner_desc \
-    "inlined_second ${fill} at ${fill}$srcfile:$inlined_inner_loc"
-set inlined_middle_desc \
-    "inlined_first ${fill} at ${fill}$srcfile:$inlined_middle_loc"
-set inlined_outer_desc \
-    "${fill}operator\\(\\)${fill} at ${fill}$srcfile:$inlined_outer_loc"
-
-# Test breaking on function names inside the kernel.
-gdb_breakpoint "first"
-if {[require_sycl_device "gpu" "Intel*"]} {
-    setup_kfail "JIRA CMPLRXDEPS/797" "*-*-*"
+# Return the current line number.
+proc get_current_line {} {
+    global decimal gdb_prompt
+    gdb_test_multiple "info line" "get current line" {
+	-re "Line ($decimal).*$gdb_prompt $" {
+	    pass $gdb_test_name
+	    return $expect_out(1,string)
+	}
+	-re "$gdb_prompt $" {
+	    fail $gdb_test_name
+	    return 0
+	}
+    }
 }
-gdb_continue_to_breakpoint "break_at_first" ".*$srcfile:$middle_loc.*"
 
-# Set breakpoint inside the kernel.
-gdb_breakpoint "$srcfile:$inner_loc"
-gdb_continue_to_breakpoint "innermost-body" ".*$srcfile:$inner_loc.*"
+proc test_call_stack {call_stack_supported} {
+    global srcfile valnum_re decimal inferior_exited_re gdb_prompt
 
-# Limit the backtrace to 3 frames because frame #3
-# and beyond are implementation-specific to the SYCL runtime.
-gdb_test "backtrace 3" [multi_line \
-        "#0${fill} $inner_desc" \
-        "#1${fill} $middle_desc" \
-        "#2${fill} $outer_desc.*"] \
-    "first backtrace"
+    set inner_loc [gdb_get_line_number "ordinary-inner-loc"]
+    set middle_loc [gdb_get_line_number "ordinary-middle-loc"]
+    set outer_loc [gdb_get_line_number "ordinary-outer-loc"]
+    set inlined_inner_loc [gdb_get_line_number "inlined-inner-loc"]
+    set inlined_middle_loc [gdb_get_line_number "inlined-middle-loc"]
+    set inlined_outer_loc [gdb_get_line_number "inlined-outer-loc"]
 
-# Now switch frames and examine locals.
-gdb_test "frame 1" "#1${fill} $middle_desc.*" "switch to frame 1"
-gdb_test "print num1" "= 15" "print num1 at first bp"
-gdb_test "print num2" "= 3" "print num2 at first bp"
+    set fill "\[^\r\n\]*"
 
-gdb_test "frame 2" "#2${fill} $outer_desc.*" "switch to frame 2"
-gdb_test "print fourteen" "= 14" "print fourteen at first bp"
-gdb_test "print four" "= 4"
-gdb_test "print ten" "= 10"
+    set inner_desc  "second \\(x=20, y=9\\) at ${fill}$srcfile:$inner_loc"
+    set middle_desc "first \\(num1=15, num2=3\\) at ${fill}$srcfile:$middle_loc"
+    set outer_desc  "${fill}operator\\(\\)${fill} at ${fill}$srcfile:$outer_loc"
+    set inlined_inner_desc \
+	"inlined_second ${fill} at ${fill}$srcfile:$inlined_inner_loc"
+    set inlined_middle_desc \
+	"inlined_first ${fill} at ${fill}$srcfile:$inlined_middle_loc"
+    set inlined_outer_desc \
+	"${fill}operator\\(\\)${fill} at ${fill}$srcfile:$inlined_outer_loc"
 
-gdb_test "frame 0" "#0${fill} $inner_desc.*" "switch to frame 0"
-gdb_test "print x" "= 20" "print x at first bp"
-gdb_test "print y" "= 9" "print y at first bp"
+    # Test breaking on function names inside the kernel.
+    gdb_breakpoint "first"
 
-# Finish the function calls.  Normally we expect to see a "Value
-# returned is ..." line.  However, some SYCL device compilers may
-# inline the kernel functions.  In that case we won't get that line.
-set value_returned "(\r\nValue returned is $valnum_re = 180)?"
+    # Without the call stack feature GDB stops in the wrong location,
+    # with the call stack feature GDB skips the BP or the FunctionControl
+    # flag can be ignored by IGC.
+    gdb_test_multiple "continue" "break_at_first" {
+	-re ".*$srcfile:$middle_loc.*$gdb_prompt $" {
+	    pass $gdb_test_name
+	}
+	-re ".*$srcfile:$outer_loc.*$gdb_prompt $" {
+	    fail $gdb_test_name
+	    if {$call_stack_supported} {
+		# We end up here if the FunctionControl flag was not honored.
+		# This happens when a certain version of NEO is used on
+		# certain OSs.  Do not run tests in this case.
+		unsupported "FunctionControl flag is unsupported"
+		return
+	    }
+	}
+	-re "${inferior_exited_re}.*$gdb_prompt $" {
+	    # With certain versions of NEO, GDB does not stop at a BP with
+	    # IGC_FunctionControl=3.
+	    fail $gdb_test_name
+	    unsupported "FunctionControl flag is unsupported"
+	    return
+	}
+    }
 
-gdb_test "finish" [multi_line \
-	"Run till exit from #0 $fill second \\(x=20, y=9\\) $fill" \
-	"${fill}first \\(num1=15, num2=3\\)${fill}" \
-	"${fill}${value_returned}"] \
-    "finish the innermost frame"
+    # Set breakpoint inside the kernel.
+    gdb_breakpoint "$srcfile:$inner_loc"
+    gdb_continue_to_breakpoint "innermost-body" ".*$srcfile:$inner_loc.*"
 
-gdb_test "backtrace 2" [multi_line \
-        "#0${fill} $middle_desc" \
-        "#1${fill} $outer_desc.*"] \
-    "second backtrace"
+    # Limit the backtrace to 3 frames because frame #3
+    # and beyond are implementation-specific to the SYCL runtime.
+    gdb_test "backtrace 3" [multi_line \
+				"#0${fill} $inner_desc" \
+				"#1${fill} $middle_desc" \
+				"#2${fill} $outer_desc.*"] \
+	"first backtrace"
 
-# 'finish' may not have stopped at the perfect spot.  Redefine
-# 'middle_desc' to prevent error propagation.
-set middle_desc "first ${fill} at ${fill}$srcfile:$decimal"
+    # Now switch frames and examine locals.
+    gdb_test "frame 1" "#1${fill} $middle_desc.*" "switch to frame 1"
+    gdb_test "print num1" "= 15" "print num1 at first bp"
+    gdb_test "print num2" "= 3" "print num2 at first bp"
 
-set value_returned "(\r\nValue returned is $valnum_re = 210)?"
-gdb_test "finish" [multi_line \
-	"Run till exit from #0 $fill first \\(num1=15, num2=3\\) $fill.*" \
-	"${fill}operator\\(\\)${fill}" \
-	"${fill}${value_returned}"] \
-    "finish the middle frame"
+    gdb_test "frame 2" "#2${fill} $outer_desc.*" "switch to frame 2"
+    gdb_test "print fourteen" "= 14" "print fourteen at first bp"
+    gdb_test "print four" "= 4"
+    gdb_test "print ten" "= 10"
 
-gdb_test "backtrace 1" "#0${fill} $outer_desc.*" \
-    "third backtrace"
+    gdb_test "frame 0" "#0${fill} $inner_desc.*" "switch to frame 0"
+    gdb_test "print x" "= 20" "print x at first bp"
+    gdb_test "print y" "= 9" "print y at first bp"
 
-# Test inlined function calls.
-gdb_breakpoint $inlined_inner_loc
+    # Finish the function calls.  Normally we expect to see a "Value
+    # returned is ..." line.  However, some SYCL device compilers may
+    # inline the kernel functions.  In that case we won't get that line.
+    set value_returned "(\r\nValue returned is $valnum_re = 180)"
+    if {!$call_stack_supported} {
+	append value_returned "?"
+    }
 
-gdb_continue_to_breakpoint "inlined-body" ".*$srcfile:$inlined_inner_loc.*"
+    gdb_test "finish" [multi_line \
+			   "Run till exit from #0 $fill second \\(x=20, y=9\\) $fill" \
+			   "${fill}first \\(num1=15, num2=3\\)${fill}" \
+			   "${fill}${value_returned}"] \
+	"finish the innermost frame"
 
-gdb_test "backtrace 3" [multi_line \
-        "#0${fill} $inlined_inner_desc" \
-        "#1${fill} $inlined_middle_desc" \
-        "#2${fill} $inlined_outer_desc.*"] \
-    "backtrace for inlined calls"
+    gdb_test "backtrace 2" [multi_line \
+				"#0${fill} $middle_desc" \
+				"#1${fill} $outer_desc.*"] \
+	"second backtrace"
 
-gdb_test "frame 1" "#1${fill} $inlined_middle_desc.*" \
-    "switch to frame 1, inlined"
-gdb_test "print num1" "= 10" "print num1 at second bp"
-gdb_test "print num2" "= 2" "print num2 at second bp"
+    # 'finish' may not have stopped at the perfect spot.  Redefine
+    # 'middle_desc' to prevent error propagation.
+    set middle_desc "first \\(num1=3, num2=4\\) at ${fill}$srcfile:$decimal"
 
-gdb_test "frame 2" "#2${fill} $inlined_outer_desc.*" \
-    "switch to frame 2, inlined"
-gdb_test "print fourteen" "= 14" "print fourteen at second bp"
+    set value_returned "(\r\nValue returned is $valnum_re = 210)"
+    if {!$call_stack_supported} {
+	append value_returned "?"
+    }
+    gdb_test "finish" [multi_line \
+			   "Run till exit from #0 $fill first \\(num1=15, num2=3\\) $fill.*" \
+			   "${fill}operator\\(\\)${fill}" \
+			   "${fill}${value_returned}"] \
+	"finish the middle frame"
 
-gdb_test "frame 0" "#0${fill} $inlined_inner_desc.*" \
-    "switch to frame 0, inlined"
-gdb_test "print x" "= 15" "print x at second bp"
-gdb_test "print y" "= 6" "print y at second bp"
+    gdb_test "backtrace 1" "#0${fill} $outer_desc.*" \
+	"third backtrace"
 
-# Test defining a breakpoint using the function name.
-delete_breakpoints
-gdb_breakpoint "second"
+    # Test inlined function calls.
+    gdb_breakpoint $inlined_inner_loc
 
-gdb_continue_to_breakpoint "function 'second'" ".*"
-gdb_test "backtrace 3" [multi_line \
-	"#0${fill} second ${fill}" \
-	"#1${fill} $middle_desc" \
-	"#2${fill} main${fill}operator${fill}lambda${fill} at .*"] \
-    "fourth backtrace"
+    gdb_continue_to_breakpoint "inlined-body" ".*$srcfile:$inlined_inner_loc.*"
+
+    gdb_test "backtrace 3" [multi_line \
+				"#0${fill} $inlined_inner_desc" \
+				"#1${fill} $inlined_middle_desc" \
+				"#2${fill} $inlined_outer_desc.*"] \
+	"backtrace for inlined calls"
+
+    gdb_test "frame 1" "#1${fill} $inlined_middle_desc.*" \
+	"switch to frame 1, inlined"
+    gdb_test "print num1" "= 10" "print num1 at second bp"
+    gdb_test "print num2" "= 2" "print num2 at second bp"
+
+    gdb_test "frame 2" "#2${fill} $inlined_outer_desc.*" \
+	"switch to frame 2, inlined"
+    gdb_test "print fourteen" "= 14" "print fourteen at second bp"
+
+    gdb_test "frame 0" "#0${fill} $inlined_inner_desc.*" \
+	"switch to frame 0, inlined"
+    gdb_test "print x" "= 15" "print x at second bp"
+    gdb_test "print y" "= 6" "print y at second bp"
+
+    # Test defining a breakpoint using the function name.
+    delete_breakpoints
+    gdb_breakpoint "$inner_loc"
+
+    set inner_desc  "second ${fill} at ${fill}$srcfile:$inner_loc"
+    set middle_desc "first ${fill} at ${fill}$srcfile:$middle_loc"
+    gdb_continue_to_breakpoint "innermost-return" ".*$srcfile:$inner_loc.*"
+    set i 0
+    set current_line [get_current_line]
+
+    # Check the backtrace at each instruction until the return.  We do not
+    # check the args here, as they might become invalid at the last
+    # instructions.  Check that there are no additional messages after
+    # the backtrace except "(More stack frames follow...)".
+    while {$current_line == $inner_loc && $i < 20} {
+	with_test_prefix "iteration $i" {
+	    # Print the current instruction for logging purposes.
+	    gdb_test "x/i \$pc"
+	    gdb_test "backtrace 4" [multi_line \
+					"#0${fill} $inner_desc" \
+					"#1${fill} $middle_desc" \
+					"#2${fill} main${fill}operator${fill}lambda${fill} at .*" \
+					"#3${fill}(\r\n\\(More stack frames follow\\.\\.\\.\\))?${fill}"] \
+		"backtrace at last line of second"
+	    gdb_test "stepi"
+	    incr i
+	    set current_line [get_current_line]
+	}
+    }
+}
+
+with_test_prefix "FunctionControl=0" {
+    gdb_test "set env IGC_FunctionControl=0"
+    test_call_stack false
+}
+
+if {[require_sycl_device "gpu" "Intel*"]} {
+    clean_restart $binfile
+    # TEMP set IGC flags for the call stack.
+    gdb_test "set env IGC_FunctionControl=3"
+    gdb_test "set env IGC_ForceInlineStackCallWithImplArg=1"
+    start_sycl_program
+    with_test_prefix "FunctionControl=3" {
+	test_call_stack true
+    }
+} else {
+    unsupported "FunctionControl flag is unsupported"
+}

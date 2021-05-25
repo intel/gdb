@@ -61,7 +61,7 @@ main (int argc, char *argv[])
 	auto numbers
 	  = buf.get_access<cl::sycl::access::mode::read_write> (cgh);
 
-	cgh.single_task<class simple_kernel> ([=] ()
+	cgh.single_task ([=] ()
 	  {
 	    int ten = numbers[1] + 2;
 	    int four = numbers[2] - 5;

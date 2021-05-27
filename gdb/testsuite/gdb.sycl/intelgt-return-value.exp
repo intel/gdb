@@ -259,11 +259,16 @@ with_test_prefix "FunctionControl_undefined" {
     test_call_stack false
 }
 
-clean_restart $binfile
-# TEMP set IGC flags for the call stack.
-gdb_test "set env IGC_FunctionControl=3"
-gdb_test "set env IGC_ForceInlineStackCallWithImplArg=1"
-start_sycl_program
-with_test_prefix "FunctionControl=3" {
-    test_call_stack true
+# Older versions of NEO segfault with IGC_FunctionControl=3.
+if {[string compare $sycl_driver_version "21.11"] == 1} {
+    clean_restart $binfile
+    # TEMP set IGC flags for the call stack.
+    gdb_test "set env IGC_FunctionControl=3"
+    gdb_test "set env IGC_ForceInlineStackCallWithImplArg=1"
+    start_sycl_program
+    with_test_prefix "FunctionControl=3" {
+	test_call_stack true
+    }
+} else {
+    unsupported "FunctionControl flag is unsupported"
 }

@@ -228,7 +228,8 @@ with_test_prefix "FunctionControl_undefined" {
     test_call_stack false
 }
 
-if {[require_sycl_device "gpu" "Intel*"]} {
+# Older versions of NEO segfault with IGC_FunctionControl=3.
+if {[require_sycl_device "gpu" "Intel*"] && [string compare $sycl_driver_version "21.11"] == 1} {
     clean_restart $binfile
     # TEMP set IGC flags for the call stack.
     gdb_test "set env IGC_FunctionControl=3"

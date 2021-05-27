@@ -27,6 +27,7 @@
 #include "gdbthread.h"
 #include "inferior.h"
 #include <algorithm>
+#include <unordered_set>
 #include "cli/cli-style.h"
 
 /* The last program space number assigned.  */
@@ -406,8 +407,27 @@ void
 update_address_spaces (void)
 {
   int shared_aspace = gdbarch_has_shared_address_space (target_gdbarch ());
+  process_stratum_target *current_target
+    = current_inferior ()->process_target ();
+  gdb_assert (current_target != nullptr);
 
   init_address_spaces ();
+
+  /* Find the program spaces whose address spaces will be updated, and
+     adjust the address space counter.  */
+  std::unordered_set<program_space *> pspaces_to_update;
+  for (program_space *pspace : program_spaces)
+    {
+      for (inferior *inf : all_inferiors (current_target))
+	if (inf->pspace == pspace)
+	  {
+	    pspaces_to_update.insert (pspace);
+	    break;
+	  }
+
+      if (pspaces_to_update.count (pspace) == 0)
+	++highest_address_space_num;
+    }
 
   if (shared_aspace)
     {
@@ -415,16 +435,20 @@ update_address_spaces (void)
 
       free_address_space (current_program_space->aspace);
       for (struct program_space *pspace : program_spaces)
-	pspace->aspace = aspace;
+	if (pspaces_to_update.count (pspace) > 0)
+	  pspace->aspace = aspace;
     }
   else
     for (struct program_space *pspace : program_spaces)
       {
-	free_address_space (pspace->aspace);
-	pspace->aspace = new_address_space ();
+	if (pspaces_to_update.count (pspace) > 0)
+	  {
+	    free_address_space (pspace->aspace);
+	    pspace->aspace = new_address_space ();
+	  }
       }
 
-  for (inferior *inf : all_inferiors ())
+  for (inferior *inf : all_inferiors (current_target))
     if (gdbarch_has_global_solist (target_gdbarch ()))
       inf->aspace = maybe_new_address_space ();
     else

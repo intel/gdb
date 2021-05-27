@@ -38,6 +38,11 @@ if {[start_sycl_program] < 0} {
     return -1
 }
 
+if {[is_gen12]} {
+    kfail "JIRA DOQG/2168" "test fails on Gen12"
+    return -1
+}
+
 set fill "\[^\r\n\]*"
 
 # Helper function to test "finish" command.

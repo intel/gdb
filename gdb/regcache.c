@@ -1871,9 +1871,13 @@ selftest_skiparch (struct gdbarch *gdbarch)
        Stack backtrace will not work.
      We could instead capture the output and then filter out the warning, but
      that seems more trouble than it's worth.  */
+  /* The 'intelgt' arch populates the register sets dynamically based on
+     what the target reports.  With no target description, the register
+     file is empty.  */
   return (strcmp (name, "m68hc11") == 0
 	  || strcmp (name, "m68hc12") == 0
-	  || strcmp (name, "m68hc12:HCS12") == 0);
+	  || strcmp (name, "m68hc12:HCS12") == 0
+	  || strcmp (name, "intelgt") == 0);
 }
 
 /* Test regcache::cooked_read gets registers from raw registers and

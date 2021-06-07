@@ -19,204 +19,119 @@
 #define ARCH_INTELGT_H
 
 #include "gdbsupport/tdesc.h"
-#include <map>
 #include <string>
 #include <vector>
 
 namespace intelgt {
 
-/* Supported Intel(R) Graphics Technology versions.  */
-
-enum class version : unsigned char
-  {
-    Gen9 = 9,
-    Gen11 = 11,
-    Gen12 = 12,
-  };
-
-/* Register information.  */
-
-enum class reg_group : unsigned short
-  {
-    Address,
-    Accumulator,
-    Flag,
-    ChannelEnable,
-    StackPointer,
-    State,
-    Control,
-    NotificationCount,
-    InstructionPointer,
-    ThreadDependency,
-    Timestamp,
-    FlowControl,
-    Grf,
-    ExecMaskPseudo,
-    Mme,
-    Debug,
-  };
-
-struct gt_register
-{
-  /* The name of the register.  */
-  std::string name;
-
-  /* The group that the register belongs to.  */
-  reg_group group;
-
-  /* The index of the register within its group.  */
-  unsigned short local_index;
-
-  /* The size of the register in terms of bytes.  */
-  unsigned short size_in_bytes;
-
-  explicit gt_register (std::string name, reg_group group,
-			unsigned short local_index,
-			unsigned short size_in_bytes);
-};
+/* Various arch constants.  */
 
 enum breakpoint_kind
   {
     BP_INSTRUCTION = 1,
   };
 
-enum
-  {
-    /* The maximal length of an IntelGT instruction in bytes.  */
-    MAX_INST_LENGTH = 16
-  };
+/* The maximum length of an IntelGT instruction in bytes.  */
 
-/* Architectural information for an Intel(R) Graphics Technology
-   version.  One instance per Gen version is created.  Instances can
-   be accessed through the factory method 'get_or_create'.  */
+constexpr int MAX_INST_LENGTH = 16;
 
-class arch_info
+/* Feature names.  */
+
+constexpr const char* feature_sba = "org.gnu.gdb.intelgt.sba";
+constexpr const char* feature_grf = "org.gnu.gdb.intelgt.grf";
+constexpr const char* feature_addr = "org.gnu.gdb.intelgt.addr";
+constexpr const char* feature_flag = "org.gnu.gdb.intelgt.flag";
+constexpr const char* feature_acc = "org.gnu.gdb.intelgt.acc";
+constexpr const char* feature_mme = "org.gnu.gdb.intelgt.mme";
+
+/* Register sets/groups needed for DWARF mapping.  Used for
+   declaring static arrays for various mapping tables.  */
+
+enum dwarf_regsets : int
 {
-public:
-  arch_info (unsigned int num_grfs, unsigned int num_addresses,
-	     unsigned int num_accumulators, unsigned int num_flags,
-	     unsigned int num_mmes, unsigned int num_debug);
-
-  /* Return the total number of registers.  */
-  unsigned int num_registers ();
-
-  /* The number of GRF registers.  */
-  unsigned int grf_reg_count () const;
-
-  /* The number of address registers.  */
-  unsigned int address_reg_count () const;
-
-  /* The number of accumulator registers.  */
-  unsigned int acc_reg_count () const;
-
-  /* The number of flag registers.  */
-  unsigned int flag_reg_count () const;
-
-  /* The number of mme registers.  */
-  unsigned int mme_reg_count () const;
-
-  /* The number of the virtual debug registers.  */
-  unsigned int debug_reg_count () const;
-
-  /* The base index of address registers.  */
-  virtual unsigned int address_reg_base () const = 0;
-
-  /* The base index of accumulator registers.  */
-  virtual unsigned int acc_reg_base () const = 0;
-
-  /* The base index of flag registers.  */
-  virtual unsigned int flag_reg_base () const = 0;
-
-  /* The base index of mme registers.  */
-  virtual unsigned int mme_reg_base () const = 0;
-
-  /* The base index of virtual debug registers.  */
-  virtual unsigned int debug_reg_base () const = 0;
-
-  /* Return the register at INDEX.  */
-  const gt_register &get_register (int index);
-
-  /* Return the name of the register at INDEX.  */
-  const char *get_register_name (int index);
-
-  /* The length of an instruction in bytes.  */
-  virtual unsigned int inst_length_compacted () const = 0;
-
-  virtual unsigned int inst_length_full () const = 0;
-
-  /* The length of INST in bytes.  */
-  virtual unsigned int inst_length (const gdb_byte inst[]) const = 0;
-
-  /* The maximum size of a register.  */
-  virtual unsigned int max_reg_size () = 0;
-
-  /* Return true if the given INST is compacted; false otherwise.  */
-  virtual bool is_compacted_inst (const gdb_byte inst[]) const = 0;
-
-  /* The index of the PC register.  */
-  virtual int pc_regnum () const = 0;
-
-  /* The index of the SP register.  */
-  virtual int sp_regnum () const = 0;
-
-  /* The index of the 'emask' register.  */
-  virtual int emask_regnum () const = 0;
-
-  /* The return value register.  The vectorized return value is stored
-     in this register and onwards.  */
-  virtual int retval_regnum () const = 0;
-
-  /* Set the breakpoint bit in INST.
-
-     Returns the state of the bit prior to setting it:
-
-       false: clear
-       true : set.  */
-  virtual bool set_breakpoint (gdb_byte inst[]) const = 0;
-
-  /* Clear the breakpoint bit in INST.
-
-     Returns the state of the bit prior to clearing it:
-
-       false: clear
-       true : set.  */
-  virtual bool clear_breakpoint (gdb_byte inst[]) const = 0;
-
-  /* Get the state of the breakpoint bit in INST.
-
-       false: clear
-       true : set.  */
-  virtual bool has_breakpoint (const gdb_byte inst[]) const = 0;
-
-  /* Factory method to ensure one instance per version.  */
-  static arch_info *get_or_create (version vers);
-
-protected:
-
-  /* The collection of registers (GRF + ARF).  */
-  std::vector<gt_register> regs;
-
-  /* The offset in bits of the breakpoint bit in INST.  */
-  virtual int breakpoint_bit_offset (const gdb_byte inst[]) const = 0;
-
-private:
-
-  /* The arch info instances created per version.  */
-  static std::map<version, arch_info *> infos;
-
-  /* Number of registers of various categories.  */
-  const unsigned int num_grfs;
-
-  const unsigned int num_addresses;
-
-  const unsigned int num_accumulators;
-
-  const unsigned int num_flags;
-
-  const unsigned int num_mmes;
-
-  const unsigned int num_debug;
+  regset_sba = 0,
+  regset_grf,
+  regset_addr,
+  regset_flag,
+  regset_acc,
+  regset_mme,
+  regset_count
 };
+
+/* Map of dwarf_regset values to the target description
+   feature names.  */
+
+constexpr const char *dwarf_regset_features[regset_count] = {
+  feature_sba,
+  feature_grf,
+  feature_addr,
+  feature_flag,
+  feature_acc,
+  feature_mme
+};
+
+/* Get the bit at POS in INST.  */
+
+bool get_inst_bit (const gdb_byte inst[], int pos);
+
+/* Set the bit at POS in INST.  */
+
+bool set_inst_bit (gdb_byte inst[], int pos);
+
+/* Clear the bit at POS in INST.  */
+
+bool clear_inst_bit (gdb_byte inst[], int pos);
+
+static inline bool
+is_compacted_inst (const gdb_byte inst[])
+{
+  /* Check the CmptCtrl flag (bit 29).  */
+  return inst[3] & 0x20;
+}
+
+static inline int
+breakpoint_bit_offset (const gdb_byte inst[])
+{
+  return (is_compacted_inst (inst) ? 7 : 30);
+}
+
+static inline bool
+set_breakpoint (gdb_byte inst[])
+{
+  return set_inst_bit (inst, breakpoint_bit_offset (inst));
+}
+
+static inline bool
+clear_breakpoint (gdb_byte inst[])
+{
+  return clear_inst_bit (inst, breakpoint_bit_offset (inst));
+}
+
+static inline bool
+has_breakpoint (const gdb_byte inst[])
+{
+  return get_inst_bit (inst, breakpoint_bit_offset (inst));
+}
+
+static inline unsigned int
+inst_length_compacted ()
+{
+  return 8;
+}
+
+static inline unsigned int
+inst_length_full ()
+{
+  return 16;
+}
+
+static inline unsigned int
+inst_length (const gdb_byte inst[])
+{
+  return (is_compacted_inst (inst)
+	  ? inst_length_compacted ()
+	  : inst_length_full ());
+}
 
 } /* namespace intelgt */
 

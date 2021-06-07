@@ -58,6 +58,31 @@ static bool interrupt_in_progress = false;
     }								\
   while (0)
 
+
+/* gdbserver-gt register group information.  */
+
+enum class reg_group : unsigned short
+  {
+    Address = 0,
+    Accumulator,
+    Flag,
+    ChannelEnable,
+    StackPointer,
+    State,
+    Control,
+    NotificationCount,
+    InstructionPointer,
+    ThreadDependency,
+    Timestamp,
+    FlowControl,
+    Grf,
+    ExecMaskPseudo,
+    Mme,
+    SBA,
+    Debug,
+    Count
+  };
+
 /* Convert an igfxdbg library return value to string.  */
 
 static const char *
@@ -98,10 +123,46 @@ igfxdbg_result_to_string (APIResult result)
   return _("Unknown error");
 }
 
+/* Parse group string (e.g. from a feature xml) as reg_group.
+   Returns reg_group::Count if match was not found.  */
+
+static reg_group
+string_to_group (const std::string &name)
+{
+  static const char *names[(int) reg_group::Count]
+      = { "address",
+	  "accumulator",
+	  "flag",
+	  "channel_enable",
+	  "stack_pointer",
+	  "state",
+	  "control",
+	  "notification_count",
+	  "instruction_pointer",
+	  "thread_dependency",
+	  "timestamp",
+	  "flow_control",
+	  "grf",
+	  "exec_mask_pseudo",
+	  "mme",
+	  "sba",
+	  "vdr" };
+
+  int idx = 0;
+  for (const char *s : names)
+    {
+      if (name == s)
+	return (reg_group) idx;
+      ++idx;
+    }
+
+  return reg_group::Count;
+}
+
 /* Convert an internal register group to igfxdbg register type.  */
 
 static RegisterType
-igfxdbg_reg_type (intelgt::reg_group group)
+igfxdbg_reg_type (reg_group group)
 {
   using namespace intelgt;
 
@@ -134,10 +195,11 @@ igfxdbg_reg_type (intelgt::reg_group group)
     case reg_group::Grf:
       return eGrfRegister;
     case reg_group::ExecMaskPseudo:
+    case reg_group::Debug:
       return eExecMaskPseudoRegister;
     case reg_group::Mme:
       return eArfMmeRegister;
-    case reg_group::Debug:
+    case reg_group::SBA:
       return eDebugPseudoRegister;
     }
 
@@ -158,12 +220,33 @@ struct process_info_private : public nonstop_process_info
   /* DCD device index.  */
   unsigned int dcd_device_index;
 
-  /* Architectural info.  */
-  intelgt::arch_info *intelgt_info;
+  /* Map of global regnum to the in-group regnums */
+  std::unordered_map<int, int> regnum_groups;
 };
 
 static std::unordered_map<GTDeviceHandle,
 			  process_info_private *> process_infos;
+
+/* Calculate regnum relative to a register position
+   within own group and store it the returned map.  */
+
+static std::unordered_map<int, int>
+calculate_reg_groups (target_desc *tdesc)
+{
+  std::unordered_map<std::string, long> groups;
+  std::unordered_map<int, int> result;
+
+  for (tdesc_feature_up &feature : tdesc->features)
+    {
+      for (tdesc_reg_up &reg : feature->registers)
+	{
+	  result[reg->target_regnum] = groups[reg->group];
+	  groups[reg->group]++;
+	}
+    }
+
+  return result;
+}
 
 /* GT-specific thread info to save as thread_info's
    private target data.  */
@@ -181,15 +264,6 @@ static intelgt_thread *
 get_intelgt_thread (thread_info *thread)
 {
   return static_cast<intelgt_thread *> (get_thread_nti (thread));
-}
-
-/* Find the architectural info for the current process.  */
-
-static intelgt::arch_info *
-get_intelgt_info ()
-{
-  process_info *proc = current_process ();
-  return proc->priv->intelgt_info;
 }
 
 static process_info *add_new_gt_process (process_info_private *proc_priv);
@@ -402,7 +476,9 @@ intelgt_process_target::create_inferior (const char *program,
   return -1; /* Failure */
 }
 
-/* Create a GT target description.  */
+/* Create a GT target description.  Important requirement is
+   for each individual feature/regset to list registers in the same
+   order as the intended DWARF numbering order for that regset.  */
 
 static target_desc *
 create_target_description ()
@@ -416,7 +492,7 @@ create_target_description ()
   long regnum = 0;
   char reg_name[6] = {0};
 
-  feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.grf");
+  feature = tdesc_create_feature (tdesc.get (), intelgt::feature_grf);
   for (int i = 0; i <= 127; ++i)
     {
       snprintf (reg_name, 6, "r%d", i);
@@ -426,32 +502,47 @@ create_target_description ()
   feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.debug");
   tdesc_create_reg (feature, "emask", regnum++, 1, "vdr", 32, "uint32");
   tdesc_create_reg (feature, "iemask", regnum++, 1, "vdr", 32, "uint32");
-  tdesc_create_reg (feature, "btbase", regnum++, 1, "vdr", 64, "uint64");
-  tdesc_create_reg (feature, "scrbase", regnum++, 1, "vdr", 64, "uint64");
-  tdesc_create_reg (feature, "genstbase", regnum++, 1, "vdr", 64, "uint64");
-  tdesc_create_reg (feature, "sustbase", regnum++, 1, "vdr", 64, "uint64");
-  tdesc_create_reg (feature, "blsustbase", regnum++, 1, "vdr", 64, "uint64");
-  tdesc_create_reg (feature, "blsastbase", regnum++, 1, "vdr", 64, "uint64");
-  tdesc_create_reg (feature, "isabase", regnum++, 1, "vdr", 64, "uint64");
-  tdesc_create_reg (feature, "iobase", regnum++, 1, "vdr", 64, "uint64");
-  tdesc_create_reg (feature, "dynbase", regnum++, 1, "vdr", 64, "uint64");
 
-  feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.arf");
+  feature = tdesc_create_feature (tdesc.get (), intelgt::feature_sba);
+  tdesc_create_reg (feature, "btbase", regnum++, 1, "sba", 64, "uint64");
+  tdesc_create_reg (feature, "scrbase", regnum++, 1, "sba", 64, "uint64");
+  tdesc_create_reg (feature, "genstbase", regnum++, 1, "sba", 64, "uint64");
+  tdesc_create_reg (feature, "sustbase", regnum++, 1, "sba", 64, "uint64");
+  tdesc_create_reg (feature, "blsustbase", regnum++, 1, "sba", 64, "uint64");
+  tdesc_create_reg (feature, "blsastbase", regnum++, 1, "sba", 64, "uint64");
+  tdesc_create_reg (feature, "isabase", regnum++, 1, "sba", 64, "uint64");
+  tdesc_create_reg (feature, "iobase", regnum++, 1, "sba", 64, "uint64");
+  tdesc_create_reg (feature, "dynbase", regnum++, 1, "sba", 64, "uint64");
+
+  feature = tdesc_create_feature (tdesc.get (), intelgt::feature_addr);
   tdesc_create_reg (feature, "a0", regnum++, 1, "address", 256, "uint256");
+
+  feature = tdesc_create_feature (tdesc.get (), intelgt::feature_acc);
   for (int i = 0; i <= 9; ++i)
     {
       snprintf (reg_name, 6, "acc%d", i);
       tdesc_create_reg (feature, reg_name, regnum++, 1, "accumulator", 256, "uint256");
     }
+
+  feature = tdesc_create_feature (tdesc.get (), intelgt::feature_flag);
   tdesc_create_reg (feature, "f0", regnum++, 1, "flag", 32, "uint32");
   tdesc_create_reg (feature, "f1", regnum++, 1, "flag", 32, "uint32");
+  feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.ce");
   tdesc_create_reg (feature, "ce", regnum++, 1, "channel_enable", 32, "uint32");
+  feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.sp");
   tdesc_create_reg (feature, "sp", regnum++, 1, "stack_pointer", 128, "uint128");
+  feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.state");
   tdesc_create_reg (feature, "sr0", regnum++, 1, "state", 128, "uint128");
+  feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.control");
   tdesc_create_reg (feature, "cr0", regnum++, 1, "control", 128, "uint128");
+  feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.ip");
   tdesc_create_reg (feature, "ip", regnum++, 1, "instruction_pointer", 32, "uint32");
+  feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.td");
   tdesc_create_reg (feature, "tdr", regnum++, 1, "thread_dependency", 128, "uint128");
+  feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.timestamp");
   tdesc_create_reg (feature, "tm0", regnum++, 1, "timestamp", 128, "uint128");
+
+  feature = tdesc_create_feature (tdesc.get (), intelgt::feature_mme);
   for (int i = 0; i <= 7; ++i)
     {
       snprintf (reg_name, 6, "mme%d", i);
@@ -459,6 +550,20 @@ create_target_description ()
     }
 
   return tdesc.release ();
+}
+
+/* Iterate all features until the register with the requested
+   target regnum is found.  Shouldn't be necessary once gdbserver
+   tdesc.h is more in sync with gdbsupport/tdesc.h.  */
+static const tdesc_reg *
+tdesc_find_register (const target_desc *tdesc, int index)
+{
+  for (const tdesc_feature_up &feature : tdesc->features)
+    for (const tdesc_reg_up &reg : feature->registers)
+      if (reg->target_regnum == index)
+	return reg.get ();
+
+  return nullptr;
 }
 
 /* Add a new process using the given PROC_PRIV.  */
@@ -483,12 +588,10 @@ add_new_gt_process (process_info_private *proc_priv)
   target_desc *tdesc = create_target_description ();
   init_target_desc (tdesc, expedite_regs);
 
-  proc_priv->intelgt_info
-    = intelgt::arch_info::get_or_create (intelgt::version::Gen9);
-
   unsigned int device_index = proc_priv->dcd_device_index + 1;
 
   process_info *proc = add_process (device_index, 1 /* attached */);
+  proc_priv->regnum_groups = calculate_reg_groups (tdesc);
   proc->priv = proc_priv;
   proc->tdesc = tdesc;
 
@@ -516,11 +619,10 @@ intelgt_process_target::initialize_device (unsigned int dcd_device_index)
   if (result != eGfxDbgResultSuccess)
     error (_("failed to initialize intelgt device for debug"));
 
-  process_info_private *proc_priv = XCNEW (struct process_info_private);
+  process_info_private *proc_priv = new struct process_info_private;
   proc_priv->device_handle = device;
   proc_priv->device_info = info;
   proc_priv->dcd_device_index = dcd_device_index;
-  proc_priv->intelgt_info = nullptr;
 
   process_infos[device] = proc_priv;
 
@@ -617,7 +719,7 @@ intelgt_process_target::mourn (process_info *proc)
     }
 
   clear_all_threads (proc->pid);
-  free (proc->priv);
+  delete proc->priv;
   proc->priv = nullptr;
   remove_process (proc);
 }
@@ -1036,19 +1138,28 @@ void
 intelgt_process_target::read_gt_register (regcache *regcache,
 					  GTThreadHandle thread, int index)
 {
-  intelgt::arch_info *intelgt_info = get_intelgt_info ();
-  const intelgt::gt_register &reg = intelgt_info->get_register (index);
-  gdb_assert (reg.size_in_bytes <= intelgt_info->max_reg_size ());
-  unsigned int buffer_size = intelgt_info->max_reg_size ();
-  std::unique_ptr<gdb_byte[]> buffer (new gdb_byte[buffer_size]);
+  const tdesc_reg* reg = tdesc_find_register (current_process ()->tdesc, index);
+  if (reg == nullptr)
+    error (_("register %d was not found in tdesc"), index);
+  std::unique_ptr<gdb_byte[]> buffer (new gdb_byte[reg->bitsize / 8]);
+  reg_group group = string_to_group (reg->group);
+  if (group >= reg_group::Count)
+    error (_("register %d is of unknown group %s"), index,
+	   reg->group.c_str ());
 
+  RegisterType regtype = igfxdbg_reg_type (group);
+  int gindex = current_process ()->priv->regnum_groups[index];
   APIResult result
-    = igfxdbg_ReadRegisters (thread, igfxdbg_reg_type (reg.group),
-			     reg.local_index, buffer.get (),
-			     reg.size_in_bytes);
+    = igfxdbg_ReadRegisters (thread, regtype,
+			     /* igfxdbg includes iemask/emask in debug
+				group, adjust: */
+			     (regtype == eDebugPseudoRegister
+			      ? gindex + 2 : gindex),
+			     buffer.get (), reg->bitsize / 8);
+
   if (result != eGfxDbgResultSuccess)
-    error (_("could not read a register; result: %s"),
-	   igfxdbg_result_to_string (result));
+    error (_("could not read the register %d %d %d; result: %s"),
+	   index, regtype, gindex, igfxdbg_result_to_string (result));
 
   supply_register (regcache, index, buffer.get ());
 }
@@ -1061,10 +1172,9 @@ intelgt_process_target::fetch_registers (regcache *regcache, int regno)
   dprintf ("regno: %d", regno);
 
   GTThreadHandle handle = get_intelgt_thread (current_thread)->handle;
-  intelgt::arch_info *intelgt_info = get_intelgt_info ();
 
   if (regno == -1) /* All registers.  */
-    for (int i = 0; i < intelgt_info->num_registers (); i++)
+    for (int i = 0; i < regcache->tdesc->reg_defs.size (); i++)
       read_gt_register (regcache, handle, i);
   else
     read_gt_register (regcache, handle, regno);
@@ -1077,17 +1187,25 @@ void
 intelgt_process_target::write_gt_register (regcache *regcache,
 					   GTThreadHandle thread, int index)
 {
-  intelgt::arch_info *intelgt_info = get_intelgt_info ();
-  const intelgt::gt_register &reg = intelgt_info->get_register (index);
-  gdb_assert (reg.size_in_bytes <= intelgt_info->max_reg_size ());
-  unsigned int buffer_size = intelgt_info->max_reg_size ();
-  std::unique_ptr<gdb_byte[]> buffer (new gdb_byte[buffer_size]);
+  const tdesc_reg* reg = tdesc_find_register (current_process ()->tdesc, index);
+  if (reg == nullptr)
+    error (_("register %d was not found in tdesc"), index);
+  reg_group group = string_to_group (reg->group);
+  if (group >= reg_group::Count)
+    error (_("register %d is of unknown group %s"), index,
+	   reg->group.c_str ());
+  std::unique_ptr<gdb_byte[]> buffer (new gdb_byte[reg->bitsize / 8]);
 
   collect_register (regcache, index, buffer.get ());
+  RegisterType regtype = igfxdbg_reg_type (group);
+  int gindex = current_process ()->priv->regnum_groups[index];
   APIResult result
-    = igfxdbg_WriteRegisters (thread, igfxdbg_reg_type (reg.group),
-			      reg.local_index, buffer.get (),
-			      reg.size_in_bytes);
+    = igfxdbg_WriteRegisters (thread, igfxdbg_reg_type (group),
+			      /* igfxdbg includes iemask/emask in
+				 debug group, adjust: */
+			      (regtype == eDebugPseudoRegister
+			       ? gindex + 2 : gindex),
+			      buffer.get (), reg->bitsize / 8);
   if (result != eGfxDbgResultSuccess)
     error (_("could not write a register; result: %s"),
 	   igfxdbg_result_to_string (result));
@@ -1104,10 +1222,8 @@ intelgt_process_target::store_registers (regcache *regcache, int regno)
   if (!igfxdbg_IsThreadStopped (handle))
     return;
 
-  intelgt::arch_info *intelgt_info = get_intelgt_info ();
-
   if (regno == -1) /* All registers.  */
-    for (int i = 0; i < intelgt_info->num_registers (); i++)
+    for (int i = 0; i < regcache->tdesc->reg_defs.size (); i++)
       write_gt_register (regcache, handle, i);
   else
     write_gt_register (regcache, handle, regno);
@@ -1302,12 +1418,11 @@ intelgt_process_target::breakpoint_at (CORE_ADDR where)
 {
   dprintf ("where: %s", core_addr_to_string_nz (where));
 
-  intelgt::arch_info *intelgt_info = get_intelgt_info ();
   bool is_breakpoint = false;
   gdb_byte inst[intelgt::MAX_INST_LENGTH];
   int err = read_memory (where, inst, intelgt::MAX_INST_LENGTH);
   if (err == 0)
-    is_breakpoint = intelgt_info->has_breakpoint (inst);
+    is_breakpoint = intelgt::has_breakpoint (inst);
   else
     dprintf ("failed to read memory at %s", core_addr_to_string_nz (where));
 

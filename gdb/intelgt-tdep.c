@@ -34,12 +34,6 @@
 #include "gdbthread.h"
 #include "inferior.h"
 
-/* Feature names.  */
-
-#define GT_FEATURE_GRF		"org.gnu.gdb.intelgt.grf"
-#define GT_FEATURE_DEBUG	"org.gnu.gdb.intelgt.debug"
-#define GT_FEATURE_ARF		"org.gnu.gdb.intelgt.arf"
-
 /* Address space flags.
    We are assigning the TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 to the shared
    local memory address space.  */
@@ -62,13 +56,34 @@ static bool intelgt_debug = false;
     }								\
   while (0)
 
+/* Regnum pair describing the assigned regnum range for a single
+   regset.  */
+
+struct regnum_range
+{
+  int start;
+  int end;
+};
+
 /* The 'gdbarch_data' stuff specific for this architecture.  */
 
 static struct gdbarch_data *intelgt_gdbarch_data_handle;
 
 struct intelgt_gdbarch_data
 {
-  intelgt::arch_info *info;
+  /* $emask register number in the regcache.  */
+  int emask_regnum = -1;
+  /* Register number for the GRF containing function return value.  */
+  int retval_regnum = -1;
+  /* Assigned regnum ranges for DWARF regsets.  */
+  regnum_range regset_ranges[intelgt::regset_count];
+
+  /* Initialize ranges to -1 as "not-yet-set" indicator.  */
+  intelgt_gdbarch_data ()
+  {
+    memset (&regset_ranges, -1, sizeof regset_ranges);
+  }
+
 #if defined (HAVE_LIBIGA64)
   /* libiga context for disassembly.  */
   iga_context_t iga_ctx = nullptr;
@@ -78,7 +93,7 @@ struct intelgt_gdbarch_data
 static void *
 init_intelgt_gdbarch_data (obstack *obstack)
 {
-  return OBSTACK_ZALLOC (obstack, struct intelgt_gdbarch_data);
+  return obstack_new<struct intelgt_gdbarch_data> (obstack);
 }
 
 static intelgt_gdbarch_data *
@@ -88,118 +103,42 @@ get_intelgt_gdbarch_data (gdbarch *gdbarch)
 	  gdbarch_data (gdbarch, intelgt_gdbarch_data_handle));
 }
 
-static intelgt::arch_info *
-get_intelgt_arch_info (gdbarch *gdbarch)
-{
-  return get_intelgt_gdbarch_data (gdbarch)->info;
-}
-
-/* The 'register_name' gdbarch method.  */
-
-static const char *
-intelgt_register_name (gdbarch *gdbarch, int regno)
-{
-  dprintf ("regno: %d", regno);
-
-  if (tdesc_has_registers (gdbarch_target_desc (gdbarch)))
-    return tdesc_register_name (gdbarch, regno);
-  else
-    {
-      intelgt::arch_info *intelgt_info = get_intelgt_arch_info (gdbarch);
-      if (regno < intelgt_info->num_registers ())
-	return intelgt_info->get_register_name (regno);
-      else
-	return nullptr;
-    }
-}
-
-/* The 'register_type' gdbarch method.  */
-
-static type *
-intelgt_register_type (gdbarch *gdbarch, int regno)
-{
-  intelgt::arch_info *intelgt_info = get_intelgt_arch_info (gdbarch);
-  unsigned short reg_size
-    = (intelgt_info->get_register (regno)).size_in_bytes;
-  switch (reg_size)
-    {
-    case 4:
-      return builtin_type (gdbarch)->builtin_uint32;
-    case 8:
-      return builtin_type (gdbarch)->builtin_uint64;
-    case 16:
-      return builtin_type (gdbarch)->builtin_uint128;
-    case 32:
-    default:
-      return builtin_type (gdbarch)->builtin_uint256;
-    }
-}
-
-/* Convert a DWARF register number to a GDB register number.  */
+/* Convert a DWARF register number to a GDB register number.  This
+   function requires for the register listing in the target
+   description to be in the same order in each regeset as the
+   intended DWARF numbering order.  Currently this is always
+   holds true when gdbserver generates the target description.  */
 
 static int
 intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
 {
-  constexpr unsigned int IP = 0;
-  constexpr unsigned int EMask = 1;
-  constexpr unsigned int DebugBase = 5;
-  constexpr unsigned int DebugLast = 10;
-  constexpr unsigned int GRFBase = 16;
-  constexpr unsigned int A0Base = 272;
-  constexpr unsigned int F0Base = 288;
-  constexpr unsigned int Acc0Base = 304;
-  constexpr unsigned int Mme0Base = 335;
+  constexpr int ip = 0;
+  constexpr int emask = 1;
+  constexpr regnum_range dwarf_nums[intelgt::regset_count] = {
+    [intelgt::regset_sba] = { 5, 10 },
+    [intelgt::regset_grf] = { 16, 271 },
+    [intelgt::regset_addr] = { 272, 287 },
+    [intelgt::regset_flag] = { 288, 303 },
+    [intelgt::regset_acc] = { 304, 319 },
+    [intelgt::regset_mme] = { 320, 335 },
+  };
 
-  intelgt::arch_info *intelgt_info = get_intelgt_arch_info (gdbarch);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
 
-  const int grfs = intelgt_info->grf_reg_count ();
-  const int addresses = intelgt_info->address_reg_count ();
-  const int accumulators = intelgt_info->acc_reg_count ();
-  const int flags = intelgt_info->flag_reg_count ();
-  const int mmes = intelgt_info->mme_reg_count ();
+  if (num == ip)
+    return gdbarch_pc_regnum (gdbarch);
+  if (num == emask)
+    return data->emask_regnum;
 
-  if (num < GRFBase)
-    {
-      if (num == IP)
-	return intelgt_info->pc_regnum ();
-      if (num == EMask)
-	return intelgt_info->emask_regnum ();
-      if (num >= DebugBase && num <= DebugLast)
-	return intelgt_info->debug_reg_base () - DebugBase + num;
-    }
-  else if (num >= GRFBase && num < A0Base)
-    {
-      int regnum = num - GRFBase;
-      if (regnum < grfs)
-	return regnum;
-    }
-  else if (num >= A0Base && num < F0Base)
-    {
-      int regnum = num - A0Base;
-      if (regnum < addresses)
-	return intelgt_info->address_reg_base () + regnum;
-    }
-  else if (num >= F0Base && num < Acc0Base)
-    {
-      int regnum = num - F0Base;
-      if (regnum < flags)
-	return intelgt_info->flag_reg_base () + regnum;
+  for (int regset = 0; regset < intelgt::regset_count; ++regset)
+    if (num >= dwarf_nums[regset].start && num <= dwarf_nums[regset].end)
+      {
+	int candidate = data->regset_ranges[regset].start + num
+			- dwarf_nums[regset].start;
+	if (candidate <= data->regset_ranges[regset].end)
+	  return candidate;
+      }
 
-    }
-  else if (num >= Acc0Base && num < Mme0Base)
-    {
-      int regnum = num - Acc0Base;
-      if (regnum < accumulators)
-	return intelgt_info->acc_reg_base () + regnum;
-    }
-  else if (num >= Mme0Base)
-    {
-      int regnum = num - Mme0Base;
-      if (regnum < mmes)
-	return intelgt_info->mme_reg_base () + regnum;
-    }
-
-  dprintf ("Dwarf regnum %d not recognized", num);
   return -1;
 }
 
@@ -208,11 +147,10 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
 static unsigned int
 intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
 {
-  intelgt::arch_info *intelgt_info = get_intelgt_arch_info (gdbarch);
-  int regnum_emask = intelgt_info->emask_regnum ();
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
   regcache *thread_regcache = get_thread_regcache (tp);
 
-  return regcache_raw_get_unsigned (thread_regcache, regnum_emask);
+  return regcache_raw_get_unsigned (thread_regcache, data->emask_regnum);
 }
 
 /* Return the PC of the first real instruction.  */
@@ -249,12 +187,11 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
   bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   gdb_assert (inferior_ptid != null_ptid);
 
-  intelgt::arch_info *intelgt_info = get_intelgt_arch_info (gdbarch);
   int address_size_byte = gdbarch_addr_bit (gdbarch) / 8;
 
   /* The vectorized return value is stored at this register and onwards.  */
-  int retval_regnum = intelgt_info->retval_regnum ();
-  unsigned int max_reg_size = intelgt_info->max_reg_size ();
+  int retval_regnum = get_intelgt_gdbarch_data (gdbarch)->retval_regnum;
+  unsigned int retval_size = register_size (gdbarch, retval_regnum);
   int type_length = TYPE_LENGTH (valtype);
   int simd_lane = inferior_thread ()->current_simd_lane ();
 
@@ -267,11 +204,11 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
 	{
 	  CORE_ADDR offset = address_size_byte * simd_lane;
 	  /* One retval register contains that many addresses.  */
-	  int n_addresses_in_retval_reg = max_reg_size / address_size_byte;
+	  int n_addresses_in_retval_reg = retval_size / address_size_byte;
 
 	  /* Find at which register the return value address is stored
 	     for the current SIMD lane.  */
-	  while (offset > max_reg_size)
+	  while (offset > retval_size)
 	    {
 	      /* The register RETVAL_REGNUM does not contain the return value
 		 for the current SIMD lane.  Decrease the offset by the size of
@@ -316,7 +253,7 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
 	  int n_done_elements = 0;
 
 	  /* Buffer to read the register.  */
-	  gdb_byte reg_buf[max_reg_size];
+	  gdb_byte reg_buf[retval_size];
 
 	  /* Offset at the read register buffer.  */
 	  int reg_offset;
@@ -335,7 +272,7 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
 	      reg_offset = target_type_length * simd_lane;
 
 	      while (n_done_elements != n_elements_to_read
-		     && reg_offset < max_reg_size)
+		     && reg_offset < retval_size)
 		{
 		  /* Offset for the current element at the resulting
 		     buffer.  */
@@ -361,11 +298,11 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
 
 	  CORE_ADDR offset = type_length * simd_lane;
 	  /* One retval register contains that many values.  */
-	  int n_values_in_retval_reg = max_reg_size / type_length;
+	  int n_values_in_retval_reg = retval_size / type_length;
 
 	  /* Find at which register the return value is stored
 	     for the current SIMD lane.  */
-	  while (offset > max_reg_size)
+	  while (offset > retval_size)
 	    {
 	      /* The register RETVAL_REGNUM does not contain the return value
 		 for the current SIMD lane.  Decrease the offset by the size of
@@ -476,11 +413,8 @@ intelgt_memory_insert_breakpoint (gdbarch *gdbarch, struct bp_target_info *bp)
       return err;
     }
 
-  const intelgt::arch_info * const intelgt_info
-    = get_intelgt_arch_info (gdbarch);
-
   bp->placed_address = bp->reqstd_address;
-  bp->shadow_len = intelgt_info->inst_length (inst);
+  bp->shadow_len = intelgt::inst_length (inst);
 
   /* Make a copy before we set the breakpoint so we can restore the
      original instruction when removing the breakpoint again.
@@ -488,7 +422,7 @@ intelgt_memory_insert_breakpoint (gdbarch *gdbarch, struct bp_target_info *bp)
      This isn't strictly necessary but it saves one target access.  */
   memcpy (bp->shadow_contents, inst, bp->shadow_len);
 
-  const bool already = intelgt_info->set_breakpoint (inst);
+  const bool already = intelgt::set_breakpoint (inst);
   if (already)
     {
       /* Warn if the breakpoint bit is already set.
@@ -520,11 +454,8 @@ intelgt_memory_remove_breakpoint (gdbarch *gdbarch, struct bp_target_info *bp)
 	   paddress (gdbarch, bp->reqstd_address),
 	   paddress (gdbarch, bp->placed_address));
 
-  const intelgt::arch_info * const intelgt_info
-    = get_intelgt_arch_info (gdbarch);
-
   /* Warn if we're inserting a permanent breakpoint.  */
-  if (intelgt_info->has_breakpoint (bp->shadow_contents))
+  if (intelgt::has_breakpoint (bp->shadow_contents))
     warning (_("Re-inserting permanent breakpoint at %s."),
 	     paddress (gdbarch, bp->placed_address));
 
@@ -557,9 +488,7 @@ intelgt_program_breakpoint_here_p (gdbarch *gdbarch, CORE_ADDR pc)
       return err;
     }
 
-  const intelgt::arch_info * const intelgt_info
-    = get_intelgt_arch_info (gdbarch);
-  const bool is_bkpt = intelgt_info->has_breakpoint (inst);
+  const bool is_bkpt = intelgt::has_breakpoint (inst);
 
   dprintf ("%sbreakpoint found.", is_bkpt ? "" : "no ");
 
@@ -590,27 +519,6 @@ intelgt_sw_breakpoint_from_kind (gdbarch *gdbarch, int kind, int *size)
      intelgt_memory_insert_breakpoint.  */
   *size = 0;
   return nullptr;
-}
-
-/* Initialize architectural information.  The TDESC must be validated
-   prior to calling this function.  */
-
-static void
-intelgt_initialize_gdbarch_data (const target_desc *tdesc,
-				 gdbarch *gdbarch)
-{
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
-  data->info = intelgt::arch_info::get_or_create (intelgt::version::Gen9);
-
-#if defined (HAVE_LIBIGA64)
-  /* There is currently no way to know on GDB side what GEN exactly it is
-     working with.  Some testing has shown that using GEN9 for all supported
-     platforms works at least for commonly used instructions.  Should be updated
-     once remote protocol allows to report the used GEN version.  */
-  iga_gen_t iga_version = IGA_GEN9;
-  const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);
-  iga_context_create (&options, &data->iga_ctx);
-#endif
 }
 
 /* Generic pointers are tagged in order to preserve the address
@@ -663,13 +571,8 @@ intelgt_disasm_sym_cb (int addr, void *ctx)
 static int
 intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
 {
-  gdb_disassembler *di
-    = static_cast<gdb_disassembler *>(info->application_data);
-  struct gdbarch *gdbarch = di->arch ();
-  intelgt::arch_info *intelgt_info = get_intelgt_arch_info (gdbarch);
-
-  unsigned int full_length = intelgt_info->inst_length_full ();
-  unsigned int compact_length = intelgt_info->inst_length_compacted ();
+  unsigned int full_length = intelgt::inst_length_full ();
+  unsigned int compact_length = intelgt::inst_length_compacted ();
 
   std::unique_ptr<bfd_byte[]> insn (new bfd_byte[full_length]);
 
@@ -681,7 +584,7 @@ intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
       (*info->memory_error_func) (status, memaddr, info);
       return -1;
     }
-  if (!intelgt_info->is_compacted_inst ((gdb_byte *) insn.get ()))
+  if (!intelgt::is_compacted_inst ((gdb_byte *) insn.get ()))
     {
       status = (*info->read_memory_func) (memaddr, insn.get (),
 					  full_length, info);
@@ -696,6 +599,9 @@ intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
 #if defined (HAVE_LIBIGA64)
   char *dbuf;
   iga_disassemble_options_t dopts = IGA_DISASSEMBLE_OPTIONS_INIT();
+  gdb_disassembler *di
+    = static_cast<gdb_disassembler *>(info->application_data);
+  struct gdbarch *gdbarch = di->arch ();
 
   iga_context_t iga_ctx
     = get_intelgt_gdbarch_data (gdbarch)->iga_ctx;
@@ -708,7 +614,7 @@ intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
 
   (*info->fprintf_func) (info->stream, "%s", dbuf);
 
-  if (intelgt_info->is_compacted_inst ((gdb_byte *) insn.get ()))
+  if (intelgt::is_compacted_inst ((gdb_byte *) insn.get ()))
     return compact_length;
   else
     return full_length;
@@ -761,6 +667,46 @@ intelgt_address_space_from_type_flags (struct gdbarch *gdbarch,
   return 0;
 }
 
+/* Called by tdesc_use_registers each time a new regnum
+   is assigned.  Used to track down assigned numbers for
+   any important regnums.  */
+
+static int
+intelgt_unknown_register_cb (struct gdbarch *gdbarch, tdesc_feature *feature,
+			     const char *reg_name, int possible_regnum)
+{
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+  /* First, check if this a beginning of a not yet tracked regset
+     assignment.  */
+
+  for (int regset = 0; regset < intelgt::regset_count; ++regset)
+    {
+      if (data->regset_ranges[regset].start == -1
+	  && feature->name == intelgt::dwarf_regset_features[regset])
+	{
+	  data->regset_ranges[regset].start = possible_regnum;
+	  data->regset_ranges[regset].end
+	      = feature->registers.size () + possible_regnum;
+	  break;
+	}
+    }
+
+  /* Second, check if it is any specific individual register that
+     needs to be tracked.  */
+
+  if (strcmp ("sp", reg_name) == 0)
+    set_gdbarch_sp_regnum (gdbarch, possible_regnum);
+  else if (strcmp ("ip", reg_name) == 0)
+    set_gdbarch_pc_regnum (gdbarch, possible_regnum);
+  else if (strcmp ("r26", reg_name) == 0)
+    data->retval_regnum = possible_regnum;
+  else if (strcmp ("emask", reg_name) == 0)
+    data->emask_regnum = possible_regnum;
+
+  return possible_regnum;
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -773,86 +719,52 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
   const target_desc *tdesc = info.target_desc;
   gdbarch *gdbarch = gdbarch_alloc (&info, nullptr);
-  intelgt_initialize_gdbarch_data (tdesc, gdbarch);
-  intelgt::arch_info *intelgt_info = get_intelgt_arch_info (gdbarch);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
 
-  /* Populate tdesc_data if registers are available.  */
-  tdesc_arch_data *tdesc_data = nullptr;
+#if defined (HAVE_LIBIGA64)
+  /* There is currently no way to know on GDB side what GEN exactly it is
+     working with.  Some testing has shown that using GEN9 for all supported
+     platforms works at least for commonly used instructions.  Should be updated
+     once remote protocol allows to report the used GEN version.  */
+  iga_gen_t iga_version = IGA_GEN9;
+  const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);
+  iga_context_create (&options, &data->iga_ctx);
+#endif
+
+  /* Initialize register info.  */
+  set_gdbarch_num_regs (gdbarch, 0);
+  set_gdbarch_register_name (gdbarch, tdesc_register_name);
+
   if (tdesc_has_registers (tdesc))
     {
-      tdesc_data = tdesc_data_alloc ();
+      tdesc_arch_data *tdesc_data = tdesc_data_alloc ();
 
-      /* Fill in data for GRF registers.  */
-      const tdesc_feature *feature
-	= tdesc_find_feature (tdesc, GT_FEATURE_GRF);
-      gdb_assert (feature != nullptr);
+      /* First assign register numbers to all registers.  The
+	 callback function will record any relevant metadata
+	 about it in the intelgt_gdbarch_data instance to be
+	 inspected after.  */
 
-      for (int i = 0; i < intelgt_info->grf_reg_count (); i++)
-	{
-	  const char *name = intelgt_info->get_register_name (i);
-	  int valid
-	    = tdesc_numbered_register (feature, tdesc_data, i, name);
+      tdesc_use_registers (gdbarch, tdesc, tdesc_data,
+			   intelgt_unknown_register_cb);
 
-	  if (!valid)
-	    {
-	      dprintf ("GRF register %d '%s' not found", i, name);
-	      tdesc_data_cleanup (tdesc_data);
-	      return nullptr;
-	    }
-	}
+      /* Now check the collected metadata to ensure that all
+	 mandatory pieces are in place.  */
 
-      /* Fill in data for the virtual debug registers.  */
-      feature = tdesc_find_feature (tdesc, GT_FEATURE_DEBUG);
-      gdb_assert (feature != nullptr);
-      int start = intelgt_info->debug_reg_base ();
-      int count = intelgt_info->debug_reg_count ();
-      for (int i = start; i < start + count; i++)
-	{
-	  const char *name = intelgt_info->get_register_name (i);
-	  int valid
-	    = tdesc_numbered_register (feature, tdesc_data, i, name);
-
-	  if (!valid)
-	    {
-	      dprintf ("Debug register %d '%s' not found", i, name);
-	      tdesc_data_cleanup (tdesc_data);
-	      return nullptr;
-	    }
-	}
-
-      /* Fill in data for ARF registers.  */
-      feature = tdesc_find_feature (tdesc, GT_FEATURE_ARF);
-      gdb_assert (feature != nullptr);
-
-      dprintf ("Found feature %s", feature->name.c_str ());
-      int i = intelgt_info->address_reg_base ();
-      for (; i < intelgt_info->num_registers (); i++)
-	{
-	  const char *name = intelgt_info->get_register_name (i);
-	  int valid
-	    = tdesc_numbered_register (feature, tdesc_data, i, name);
-
-	  if (!valid)
-	    {
-	      dprintf ("ARF register %d '%s' not found", i, name);
-	      tdesc_data_cleanup (tdesc_data);
-	      return nullptr;
-	    }
-	}
+      if (gdbarch_sp_regnum (gdbarch) == -1)
+	error ("Debugging requires $sp to be provided by the target");
+      if (gdbarch_pc_regnum (gdbarch) == -1)
+	error ("Debugging requires $ip to be provided by the target");
+      if (data->emask_regnum == -1)
+	error ("Debugging requires $emask provided by the target");
+      if (data->retval_regnum == -1)
+	error ("Debugging requires return value register to be provided by "
+	       "the target");
     }
 
   /* Populate gdbarch fields.  */
   set_gdbarch_ptr_bit (gdbarch, 64);
   set_gdbarch_addr_bit (gdbarch, 64);
 
-  set_gdbarch_num_regs (gdbarch, intelgt_info->num_registers ());
-  dprintf ("PC regnum: %d, SP regnum: %d, EMASK regnum: %d",
-	   intelgt_info->pc_regnum (), intelgt_info->sp_regnum (),
-	   intelgt_info->emask_regnum ());
-  set_gdbarch_pc_regnum (gdbarch, intelgt_info->pc_regnum ());
-  set_gdbarch_sp_regnum (gdbarch, intelgt_info->sp_regnum ());
-  set_gdbarch_register_name (gdbarch, intelgt_register_name);
-  set_gdbarch_register_type (gdbarch, intelgt_register_type);
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, intelgt_dwarf_reg_to_regnum);
 
   set_gdbarch_skip_prologue (gdbarch, intelgt_skip_prologue);
@@ -880,9 +792,6 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_print_insn (gdbarch, intelgt_print_insn);
 
   set_gdbarch_active_lanes_mask (gdbarch, &intelgt_active_lanes_mask);
-
-  if (tdesc_data != nullptr)
-    tdesc_use_registers (gdbarch, tdesc, tdesc_data);
 
 #if defined (USE_WIN32API)
   set_gdbarch_has_dos_based_file_system (gdbarch, 1);

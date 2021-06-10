@@ -1,3 +1,8 @@
+2021-06-10  Bhuvanendra Kumar N  <Bhuvanendra.KumarN@amd.com>
+
+	* gdb.base/foll-exec.c: convert the multi-line function call into
+	single line.
+
 2021-05-06  Tankut Baris Aktemur  <tankut.baris.aktemur@intel.com>
 
 	* gdb.mi/mi-break.exp (test_forced_conditions): Add a test

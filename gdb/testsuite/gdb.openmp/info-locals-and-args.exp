@@ -65,6 +65,12 @@ gdb_test_multiple "info locals fifteen" "info locals fifteen" {
 
 gdb_continue_to_breakpoint "bp 2" ".*$srcfile:$inner_loc.*"
 gdb_test "info locals" "total = 180.*" "info locals 2"
+if {$openmp_program_extension eq "f90"} {
+    if {![info exists env(LIBOMPTARGET_DEVICETYPE)] || \
+	[require_openmp_device "GPU"]} {
+	setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+    }
+}
 gdb_test "info args"  [multi_line \
     "num1 = 16" \
     "num2 = 3"]

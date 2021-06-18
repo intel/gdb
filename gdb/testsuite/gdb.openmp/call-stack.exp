@@ -56,12 +56,23 @@ set inlined_outer_desc \
 
 # Test breaking on function names inside the kernel.
 gdb_breakpoint "$srcfile:first"
+
+# Without the call stack feature GDB stops in the wrong location,
+# with the call stack feature GDB skips the BP or the FunctionControl
+# flag can be ignored by IGC.
+if {[require_openmp_device "GPU"]} {
+    setup_kfail "JIRA DOQG/2257" "*-*-*"
+}
 gdb_continue_to_breakpoint "break_at_first" ".*$srcfile:$middle_loc.*"
 
 # Set breakpoint inside the kernel.
 gdb_breakpoint "$srcfile:$inner_loc"
 gdb_continue_to_breakpoint "innermost-body" ".*$srcfile:$inner_loc.*"
 
+# Function arguments optimization issue on host and GPU targets in F90.
+if {$openmp_program_extension eq "f90" && [require_openmp_device "GPU"]} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}
 # Limit the backtrace to 3 frames because frame #3
 # and beyond are implementation-specific to the OpenMP runtime.
 gdb_test "backtrace 3" [multi_line \
@@ -69,6 +80,13 @@ gdb_test "backtrace 3" [multi_line \
     "#1.* $middle_desc" \
     "#2.* $outer_desc.*"] \
     "backtrace, test 1"
+
+# Function arguments optimization issue on host and GPU targets in F90.
+if {$openmp_program_extension eq "f90"
+    && (![info exists env(LIBOMPTARGET_DEVICETYPE)]
+        || [require_openmp_device "GPU"])} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}
 
 # Now switch frames and examine locals.
 gdb_test "frame 1" ".*#1.* $middle_desc.*" "switch to frame 1"
@@ -88,6 +106,13 @@ gdb_test "print y" "= 9" "print y at first bp"
 # returned is ..." line.  However, some OpenMP device compilers may
 # inline the kernel functions.  In that case we won't get that line.
 set value_returned "(\r\nValue returned is $valnum_re = 180)?"
+
+# Function arguments optimization issue on host and GPU targets in F90.
+if {$openmp_program_extension eq "f90"
+    && (![info exists env(LIBOMPTARGET_DEVICETYPE)]
+        || [require_openmp_device "GPU"])} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}
 gdb_test "finish" [multi_line \
     "Run till exit from #0 $fill second \\(x=20, y=9\\) $fill" \
     "${fill}first \\(num1=16, num2=3\\)${fill}" \
@@ -104,6 +129,13 @@ gdb_test "backtrace 2" [multi_line \
     "backtrace, test 2"
 
 set value_returned "(\r\nValue returned is $valnum_re = 210)?"
+
+# Function arguments optimization issue on host and GPU targets in F90.
+if {$openmp_program_extension eq "f90"
+    && (![info exists env(LIBOMPTARGET_DEVICETYPE)]
+        || [require_openmp_device "GPU"])} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}
 gdb_test "finish" [multi_line \
     "Run till exit from #0 $fill first \\(num1=16, num2=3\\) $fill.*" \
     "${fill}$main_func_name${fill}" \

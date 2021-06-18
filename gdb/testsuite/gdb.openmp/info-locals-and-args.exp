@@ -36,6 +36,9 @@ gdb_breakpoint "$inner_loc"
 
 gdb_continue_to_breakpoint "bp 1" ".*$srcfile:$outer_loc.*"
 
+if {$openmp_program_extension eq "f90" && [require_openmp_device "CPU"]} {
+    setup_kfail "JIRA DOQG/2356" "*-*-*"
+}
 gdb_test_multiple "info locals ten" "info locals ten" {
     -re -wrap "ten = 10\r\nten = (-)?$decimal\t<shadowed>" {
 	pass $gdb_test_name
@@ -45,6 +48,9 @@ gdb_test_multiple "info locals ten" "info locals ten" {
     }
 }
 
+if {$openmp_program_extension eq "f90" && [require_openmp_device "CPU"]} {
+    setup_kfail "JIRA DOQG/2356" "*-*-*"
+}
 gdb_test_multiple "info locals five" "info locals five" {
     -re -wrap "five = 5\r\nfive = (-)?$decimal\t<shadowed>" {
 	pass $gdb_test_name
@@ -54,6 +60,9 @@ gdb_test_multiple "info locals five" "info locals five" {
     }
 }
 
+if {$openmp_program_extension eq "f90" && [require_openmp_device "CPU"]} {
+    setup_kfail "JIRA DOQG/2356" "*-*-*"
+}
 gdb_test_multiple "info locals fifteen" "info locals fifteen" {
     -re -wrap "fifteen = 15\r\nfifteen = (-)?$decimal\t<shadowed>" {
 	pass $gdb_test_name
@@ -65,6 +74,12 @@ gdb_test_multiple "info locals fifteen" "info locals fifteen" {
 
 gdb_continue_to_breakpoint "bp 2" ".*$srcfile:$inner_loc.*"
 gdb_test "info locals" "total = 180.*" "info locals 2"
+if {$openmp_program_extension eq "f90"} {
+    if {![info exists env(LIBOMPTARGET_DEVICETYPE)] || \
+	[require_openmp_device "GPU"]} {
+	setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+    }
+}
 gdb_test "info args"  [multi_line \
     "num1 = 16" \
     "num2 = 3"]

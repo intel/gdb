@@ -32,6 +32,14 @@ set inside [gdb_get_line_number "ordinary-outer-loc"]
 gdb_breakpoint $inside
 gdb_continue_to_breakpoint "inside" ".*$srcfile:$inside.*"
 
+if {[require_openmp_device "GPU"] && ![is_gen12]} {
+    setup_kfail "JIRA DOQG/2086" "*-*-*"
+} elseif {[require_openmp_device "CPU"]} {
+    setup_kfail "JIRA DOQG/2346" "*-*-*"
+}
 gdb_test "step" "first .* at .*" "step into function"
 
+if {[require_openmp_device "GPU"] && ![is_gen12]} {
+    setup_kfail "JIRA DOQG/2086" "*-*-*"
+}
 continue_openmp_program_to_termination

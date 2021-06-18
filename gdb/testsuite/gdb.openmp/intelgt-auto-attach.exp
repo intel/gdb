@@ -130,6 +130,12 @@ if {[openmp_run_to_main  $openmp_program_extension]} {
     return -1
 }
 
+# Running the tests below causes a device reset in Gen12.
+if {[is_gen12]} {
+    kfail "JIRA DOQG/2351" "*-*-*"
+    return 0
+}
+
 # Re-run multiple times, where either the host or the gt inferior
 # is killed/detached.
 

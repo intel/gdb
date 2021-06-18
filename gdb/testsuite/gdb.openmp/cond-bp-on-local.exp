@@ -72,6 +72,9 @@ for {set j 1} {$j <= 3} {incr j} {
 
 gdb_assert {$count == 3}
 
+if {$openmp_program_extension eq "f90" && [require_openmp_device "GPU"]} {
+    setup_kfail "JIRA DOQG/2359" "*-*-*"
+}
 # Continuing now should hit the end-of-program marker
 gdb_continue_to_breakpoint "end of program" \
     ".*$srcfile:$end_marker.*"

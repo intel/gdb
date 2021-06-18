@@ -40,8 +40,18 @@ set ten 0
 set four 0
 set fourteen 0
 
+if {$openmp_program_extension eq "f90" && [require_openmp_device "CPU"]} {
+    setup_kfail "JIRA DOQG/2356" "*-*-*"
+} elseif {[require_openmp_device "CPU"] || [require_openmp_device "GPU"]} {
+    setup_kfail "JIRA DOQG/2347" "*-*-*"
+}
 gdb_test "info locals ten" "ten = 10"
 
+if {$openmp_program_extension eq "f90" && [require_openmp_device "CPU"]} {
+    setup_kfail "JIRA DOQG/2356" "*-*-*"
+} elseif {[require_openmp_device "CPU"] || [require_openmp_device "GPU"]} {
+    setup_kfail "JIRA DOQG/2347" "*-*-*"
+}
 gdb_test_multiple "info locals four" "info locals four" {
     -re "four = 4\r\nfourteen = 14\r\n$gdb_prompt $" {
 	pass $gdb_test_name
@@ -53,6 +63,12 @@ gdb_test_multiple "info locals four" "info locals four" {
 
 gdb_continue_to_breakpoint "bp 2" ".*$srcfile:$inner_loc.*"
 gdb_test "info locals" "total = 180.*" "info locals 2"
+if {$openmp_program_extension eq "f90"} {
+    if {![info exists env(LIBOMPTARGET_DEVICETYPE)] || \
+	[require_openmp_device "GPU"]} {
+	setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+    }
+}
 gdb_test "info args"  [multi_line \
     "num1 = 15" \
     "num2 = 3"]

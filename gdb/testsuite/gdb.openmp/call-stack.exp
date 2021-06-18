@@ -55,6 +55,9 @@ set inlined_middle_desc \
 
 # Test breaking on function names inside the kernel.
 gdb_breakpoint "first"
+if {[require_openmp_device "GPU"]} {
+    setup_kfail "JIRA DOQG/2350" "*-*-*"
+}
 gdb_continue_to_breakpoint "break_at_first" ".*$srcfile:$middle_loc.*"
 
 # Set breakpoint inside the kernel.
@@ -71,7 +74,17 @@ gdb_test "backtrace 3" [multi_line \
 
 # Now switch frames and examine locals.
 gdb_test "frame 1" ".*#1.* $middle_desc.*" "switch to frame 1"
+if {![info exists env(LIBOMPTARGET_DEVICETYPE)] && \
+    $openmp_program_extension eq "f90"} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}
 gdb_test "print num1" "= 15" "print num1 at first bp"
+
+if {$openmp_program_extension eq "f90"
+    && (![info exists env(LIBOMPTARGET_DEVICETYPE)]
+	|| [require_openmp_device "GPU"])} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}
 gdb_test "print num2" "= 3" "print num2 at first bp"
 
 gdb_test "frame 2" ".*#2.* $outer_desc.*" "switch to frame 2"
@@ -84,6 +97,9 @@ gdb_test "print x" "= 20" "print x at first bp"
 gdb_test "print y" "= 9" "print y at first bp"
 
 # Finish the two function calls.
+if {[require_openmp_device "GPU"]} {
+    setup_kfail "JIRA DOQG/2350" "*-*-*"
+}
 gdb_test "finish" \
     ".*Value returned is $valnum_re = 180" \
     "finish the innermost frame"
@@ -97,9 +113,17 @@ gdb_test "backtrace 2" [multi_line \
     "#1.* $outer_desc.*"] \
     "backtrace, test 2"
 
+if {[require_openmp_device "GPU"]} {
+    setup_kfail "JIRA DOQG/2350" "*-*-*"
+}
 gdb_test "finish" \
     ".*Value returned is $valnum_re = 210" \
     "finish the middle frame"
+
+# On GPU, the failure above causes a domino effect.
+if {[require_openmp_device "GPU"]} {
+    return 1
+}
 
 gdb_test "backtrace 1" "#0.* $outer_desc.*" \
     "backtrace, test 3"
@@ -117,8 +141,13 @@ gdb_test "backtrace 3" [multi_line \
 
 gdb_test "frame 1" ".*#1.* $inlined_middle_desc.*" \
     "switch to frame 1; inlined"
-gdb_test "print num1" "= 10" "print num1 at second bp"
-gdb_test "print num2" "= 2" "print num2 at second bp"
+if {![info exists env(LIBOMPTARGET_DEVICETYPE)] && \
+    $openmp_program_extension eq "f90"} {
+    kfail "JIRA CMPLRLLVM/25254" "info args fails on IFX OpenMP Host offload"
+} else {
+    gdb_test "print num1" "= 10" "print num1 at second bp"
+    gdb_test "print num2" "= 2" "print num2 at second bp"
+}
 
 gdb_test "frame 2" ".*#2.* $inlined_outer_desc.*" \
     "switch to frame 2; inlined"

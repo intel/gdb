@@ -42,13 +42,22 @@ for {set i 1} {$i <= $num_kernel_locations} {incr i} {
 
 # Test that we actually hit the breakpoints.
 for {set i 1} {$i <= $num_kernel_locations} {incr i} {
+    if {[require_openmp_device "CPU"] && $i != 2} {
+	setup_kfail "JIRA DOQG/2348" "*-*-*"
+    }
     gdb_continue_to_breakpoint "kernel line $i" \
 	".*$srcfile:$bp_locations_kernel($i).*"
 }
 
+if {[require_openmp_device "CPU"]} {
+    setup_kfail "JIRA DOQG/2348" "*-*-*"
+}
 gdb_continue_to_breakpoint "line after kernel" \
     ".*$srcfile:[gdb_get_line_number line-after-kernel].*"
 
 # Now we should be able to run to the end without hitting
 # any other kernel/non-kernel breakpoints.
+if {[require_openmp_device "CPU"]} {
+    setup_kfail "JIRA DOQG/2348" "*-*-*"
+}
 continue_openmp_program_to_termination

@@ -65,6 +65,13 @@
       break;					\
     }
 
+#define require_process_or_break(BUF)		\
+  if (get_first_process () == nullptr)		\
+    {						\
+      write_enn (BUF);				\
+      break;					\
+    }
+
 /* String containing the current directory (what getwd would return).  */
 
 char *current_directory;
@@ -4382,7 +4389,7 @@ process_serial_event (void)
       break;
     case 'm':
       {
-	require_running_or_break (cs.own_buf);
+	require_process_or_break (cs.own_buf);
 	decode_m_packet (&cs.own_buf[1], &mem_addr, &len);
 	int res = gdb_read_memory (mem_addr, mem_buf, len);
 	if (res < 0)
@@ -4392,7 +4399,7 @@ process_serial_event (void)
       }
       break;
     case 'M':
-      require_running_or_break (cs.own_buf);
+      require_process_or_break (cs.own_buf);
       decode_M_packet (&cs.own_buf[1], &mem_addr, &len, &mem_buf);
       if (gdb_write_memory (mem_addr, mem_buf, len) == 0)
 	write_ok (cs.own_buf);
@@ -4400,7 +4407,7 @@ process_serial_event (void)
 	write_enn (cs.own_buf);
       break;
     case 'X':
-      require_running_or_break (cs.own_buf);
+      require_process_or_break (cs.own_buf);
       if (decode_X_packet (&cs.own_buf[1], packet_len - 1,
 			   &mem_addr, &len, &mem_buf) < 0
 	  || gdb_write_memory (mem_addr, mem_buf, len) != 0)

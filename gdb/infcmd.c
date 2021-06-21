@@ -290,21 +290,24 @@ post_create_inferior (struct target_ops *target, int from_tty)
      don't need to.  */
   target_find_description ();
 
-  /* Now that we know the register layout, retrieve current PC.  But
-     if the PC is unavailable (e.g., we're opening a core file with
-     missing registers info), ignore it.  */
-  thread_info *thr = inferior_thread ();
+  if (inferior_ptid != null_ptid)
+    {
+      /* Now that we know the register layout, retrieve current PC.  But
+	 if the PC is unavailable (e.g., we're opening a core file with
+	 missing registers info), ignore it.  */
+      thread_info *thr = inferior_thread ();
 
-  thr->suspend.stop_pc = 0;
-  try
-    {
-      regcache *rc = get_thread_regcache (thr);
-      thr->suspend.stop_pc = regcache_read_pc (rc);
-    }
-  catch (const gdb_exception_error &ex)
-    {
-      if (ex.error != NOT_AVAILABLE_ERROR)
-	throw;
+      thr->suspend.stop_pc = 0;
+      try
+	{
+	  regcache *rc = get_thread_regcache (thr);
+	  thr->suspend.stop_pc = regcache_read_pc (rc);
+	}
+      catch (const gdb_exception_error &ex)
+	{
+	  if (ex.error != NOT_AVAILABLE_ERROR)
+	    throw;
+	}
     }
 
   if (exec_bfd)
@@ -2687,34 +2690,39 @@ notice_new_inferior (thread_info *thr, int leave_running, int from_tty)
 
   gdb::optional<scoped_restore_current_thread> restore_thread;
 
-  if (inferior_ptid != null_ptid)
-    restore_thread.emplace ();
-
-  /* Avoid reading registers -- we haven't fetched the target
-     description yet.  */
-  switch_to_thread_no_regs (thr);
-
-  /* When we "notice" a new inferior we need to do all the things we
-     would normally do if we had just attached to it.  */
-
-  if (thr->executing)
+  /* THR may be null if we received an inferior event before a thread
+     is available, such as a file load.  */
+  if (thr != nullptr)
     {
-      struct inferior *inferior = current_inferior ();
+      if (inferior_ptid != null_ptid)
+	restore_thread.emplace ();
 
-      /* We're going to install breakpoints, and poke at memory,
-	 ensure that the inferior is stopped for a moment while we do
-	 that.  */
-      target_stop (inferior_ptid);
+      /* Avoid reading registers -- we haven't fetched the target
+	 description yet.  */
+      switch_to_thread_no_regs (thr);
 
-      inferior->control.stop_soon = STOP_QUIETLY_REMOTE;
+      /* When we "notice" a new inferior we need to do all the things we
+	 would normally do if we had just attached to it.  */
 
-      /* Wait for stop before proceeding.  */
-      inferior->add_continuation ([=] ()
+      if (thr->executing)
 	{
-	  attach_post_wait (from_tty, mode);
-	});
+	  struct inferior *inferior = current_inferior ();
 
-      return;
+	  /* We're going to install breakpoints, and poke at memory,
+	     ensure that the inferior is stopped for a moment while we do
+	     that.  */
+	  target_stop (inferior_ptid);
+
+	  inferior->control.stop_soon = STOP_QUIETLY_REMOTE;
+
+	  /* Wait for stop before proceeding.  */
+	  inferior->add_continuation ([=] ()
+	    {
+	      attach_post_wait (from_tty, mode);
+	    });
+
+	  return;
+	}
     }
 
   attach_post_wait (from_tty, mode);

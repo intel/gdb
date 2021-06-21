@@ -2524,9 +2524,12 @@ remote_target::remote_notice_new_inferior (ptid_t currthread, int executing)
 				     currthread.pid (), -1, 1);
 	}
 
-      /* This is really a new thread.  Add it.  */
-      thread_info *new_thr
-	= remote_add_thread (currthread, running, executing);
+      thread_info *new_thr = nullptr;
+      if (!currthread.is_pid ())
+	{
+	  /* This is really a new thread.  Add it.  */
+	  new_thr = remote_add_thread (currthread, running, executing);
+	}
 
       /* If we found a new inferior, let the common code do whatever
 	 it needs to with it (e.g., read shared libraries, insert
@@ -6342,7 +6345,11 @@ remote_target::resume (ptid_t ptid, int step, enum gdb_signal siggnal)
       remote_thread_info *remote_thr;
 
       if (minus_one_ptid == ptid || ptid.is_pid ())
-	remote_thr = get_remote_thread_info (this, inferior_ptid);
+	{
+	  if (inferior_ptid == null_ptid)
+	    return;
+	  remote_thr = get_remote_thread_info (this, inferior_ptid);
+	}
       else
 	remote_thr = get_remote_thread_info (this, ptid);
 
@@ -7793,11 +7800,14 @@ remote_target::process_stop_reply (struct stop_reply *stop_reply,
 	}
 
       remote_notice_new_inferior (ptid, 0);
-      remote_thread_info *remote_thr = get_remote_thread_info (this, ptid);
-      remote_thr->core = stop_reply->core;
-      remote_thr->stop_reason = stop_reply->stop_reason;
-      remote_thr->watch_data_address = stop_reply->watch_data_address;
-      remote_thr->vcont_resumed = 0;
+      if (!ptid.is_pid ())
+	{
+	  remote_thread_info *remote_thr = get_remote_thread_info (this, ptid);
+	  remote_thr->core = stop_reply->core;
+	  remote_thr->stop_reason = stop_reply->stop_reason;
+	  remote_thr->watch_data_address = stop_reply->watch_data_address;
+	  remote_thr->vcont_resumed = 0;
+	}
     }
 
   delete stop_reply;

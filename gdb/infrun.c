@@ -4177,7 +4177,10 @@ context_switch (execution_control_state *ecs)
 			   target_pid_to_str (ecs->ptid).c_str ());
     }
 
-  switch_to_thread (ecs->event_thread);
+  if (ecs->ptid.is_pid ())
+    switch_to_target_no_thread (ecs->target);
+  else
+    switch_to_thread (ecs->event_thread);
 }
 
 /* If the target can't tell whether we've hit breakpoints
@@ -5241,7 +5244,8 @@ handle_inferior_event (struct execution_control_state *ecs)
     }
 
   if (ecs->ws.kind != TARGET_WAITKIND_EXITED
-      && ecs->ws.kind != TARGET_WAITKIND_SIGNALLED)
+      && ecs->ws.kind != TARGET_WAITKIND_SIGNALLED
+      && !ecs->ptid.is_pid ())
     {
       ecs->event_thread = find_thread_ptid (ecs->target, ecs->ptid);
       /* If it's a new thread, add it to the thread database.  */
@@ -5300,7 +5304,7 @@ handle_inferior_event (struct execution_control_state *ecs)
          established.  */
 
       stop_soon = get_inferior_stop_soon (ecs);
-      if (stop_soon == NO_STOP_QUIETLY)
+      if (stop_soon == NO_STOP_QUIETLY && ecs->event_thread != nullptr)
 	{
 	  struct regcache *regcache;
 
@@ -5337,6 +5341,20 @@ handle_inferior_event (struct execution_control_state *ecs)
 	      stop_waiting (ecs);
 	      return;
 	    }
+	}
+
+      if (stop_soon == NO_STOP_QUIETLY && ecs->event_thread == nullptr)
+	{
+	  handle_solib_event ();
+	  /* TODO: stop_on_solib_events */
+	  insert_breakpoints ();
+	  target_terminal::inferior ();
+	  target_resume (ecs->ptid, 0, GDB_SIGNAL_0);
+	  target_commit_resume ();
+	  if (target_can_async_p ())
+	    target_async (1);
+	  prepare_to_wait (ecs);
+	  return;
 	}
 
       /* If we are skipping through a shell, or through shared library

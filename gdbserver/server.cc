@@ -1561,7 +1561,7 @@ handle_qxfer_libraries (const char *annex,
   if (writebuf != NULL)
     return -2;
 
-  if (annex[0] != '\0' || current_thread == NULL)
+  if (annex[0] != '\0' || !has_current_process ())
     return -1;
 
   std::string document = "<library-list version=\"1.0\">\n";

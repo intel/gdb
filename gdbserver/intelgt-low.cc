@@ -551,12 +551,48 @@ intelgt_process_target::attach (unsigned long device_index)
   if (proc_priv == nullptr)
     error (_("no device with index %lu is found"), device_index);
 
-  add_new_gt_process (proc_priv);
+  process_info *proc = add_new_gt_process (proc_priv);
 
-  /* FIXME: At this point, we have not added any threads, yet.
-     This creates a problem in nonstop mode.
-     We may want to hang here until the first thread creation event
-     is received.  */
+  /* At this point, we have not added any threads, yet.  Wait the
+     device until we obtain a thread.  */
+  GTDeviceHandle device_handle = proc->priv->device_handle;
+  GTEvent gt_event;
+  gt_event.size_of_this = sizeof (gt_event);
+
+  bool has_thread = false;
+  while (!has_thread)
+    {
+      APIResult result = igfxdbg_WaitForEvent (device_handle,
+					       &gt_event,
+					       TIMEOUT_INFINITE);
+      if (result != eGfxDbgResultSuccess)
+	{
+	  dprintf (_("failed to wait on the device; result: %s"),
+		   igfxdbg_result_to_string (result));
+	  return -1;
+	}
+
+      next_event = &gt_event;
+
+      while (next_event != nullptr && !has_thread)
+	{
+	  struct target_waitstatus event_status;
+	  process_single_event (next_event, &event_status, 0);
+	  next_event = next_event->next;
+
+	  if (find_any_thread_of_pid (proc->pid) != nullptr)
+	    has_thread = true;
+	}
+
+      if (next_event == nullptr)
+	{
+	  result = igfxdbg_ReleaseEvent (device_handle, &gt_event);
+	  if (result != eGfxDbgResultSuccess)
+	    dprintf (_("failed to release the event; result: %s"),
+		     igfxdbg_result_to_string (result));
+	}
+    }
+
   if (target_is_async_p ())
     async_file_mark ();
 

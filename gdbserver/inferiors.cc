@@ -148,6 +148,9 @@ add_process (int pid, int attached)
 
   all_processes.push_back (process);
 
+  if (!has_current_process ())
+    switch_to_process (process);
+
   return process;
 }
 

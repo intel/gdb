@@ -253,6 +253,12 @@ switch_to_thread (thread_info *thread)
 void
 switch_to_process (process_info *proc)
 {
+  if (proc == nullptr)
+    {
+      switch_to_thread (nullptr);
+      return;
+    }
+
   int pid = pid_of (proc);
 
   switch_to_thread (find_any_thread_of_pid (pid));

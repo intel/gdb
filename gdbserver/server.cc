@@ -2219,22 +2219,25 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 
       /* For qSymbol, GDB only changes the current thread if the
 	 previous current thread was of a different process.  So if
-	 the previous thread is gone, we need to pick another one of
-	 the same process.  This can happen e.g., if we followed an
-	 exec in a non-leader thread.  */
-      if (current_thread == NULL)
+	 the previous thread, and hence the process, is gone, we need
+	 to pick the process again.  This can happen e.g., if we
+	 followed an exec in a non-leader thread.  For symbol queries,
+	 we only need to refer to the process.  So, don't force the
+	 existence of a current thread.  */
+      if (!has_current_process ())
 	{
-	  thread_info *any_thread
-	    = find_any_thread_of_pid (cs.general_thread.pid ());
-	  switch_to_thread (any_thread);
+	  process_info *proc
+	    = find_process_pid (cs.general_thread.pid ());
 
-	  /* Just in case, if we didn't find a thread, then bail out
-	     instead of crashing.  */
-	  if (current_thread == NULL)
+	  /* If we didn't find a process, bail out instead of
+	     crashing.  */
+	  if (proc == nullptr)
 	    {
 	      write_enn (own_buf);
 	      return;
 	    }
+
+	  switch_to_process (proc);
 	}
 
       /* GDB is suggesting new symbols have been loaded.  This may
@@ -2252,8 +2255,7 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
       if (target_supports_tracepoints ())
 	tracepoint_look_up_symbols ();
 
-      if (current_thread != NULL)
-	the_target->look_up_symbols ();
+      the_target->look_up_symbols ();
 
       strcpy (own_buf, "OK");
       return;

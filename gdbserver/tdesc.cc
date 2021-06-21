@@ -126,7 +126,7 @@ copy_target_description (struct target_desc *dest,
 const struct target_desc *
 current_target_desc (void)
 {
-  if (current_thread == NULL)
+  if (!has_current_process ())
     return &default_description;
 
   return current_process ()->tdesc;

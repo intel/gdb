@@ -74,6 +74,15 @@ prepare_to_access_memory (void)
   if (res != 0)
     return res;
 
+  process_info *process = find_process_pid (prev_general_thread.pid ());
+  if (process == nullptr)
+    {
+      /* Undo the effects of target->prepare_to_access_memory() and
+	 return error.  */
+      done_accessing_memory ();
+      return 1;
+    }
+
   for_each_thread (prev_general_thread.pid (), [&] (thread_info *thread)
     {
       if (mythread_alive (thread->id))
@@ -97,26 +106,29 @@ prepare_to_access_memory (void)
     });
 
   /* The thread we end up choosing.  */
-  struct thread_info *thread;
+  struct thread_info *thread = nullptr;
 
   /* Prefer a stopped thread.  If none is found, try the current
      thread.  Otherwise, take the first thread in the process.  If
-     none is found, undo the effects of
-     target->prepare_to_access_memory() and return error.  */
+     none is found, try the process.  Some architectures do not require
+     a particular thread to access the memory.  */
   if (stopped != NULL)
     thread = stopped;
   else if (current != NULL)
     thread = current;
   else if (first != NULL)
     thread = first;
+
+  if (thread != nullptr)
+    {
+      switch_to_thread (thread);
+      cs.general_thread = ptid_of (thread);
+    }
   else
     {
-      done_accessing_memory ();
-      return 1;
+      switch_to_process (process);
+      cs.general_thread = ptid_t {process->pid};
     }
-
-  switch_to_thread (thread);
-  cs.general_thread = ptid_of (thread);
 
   return 0;
 }
@@ -132,7 +144,7 @@ done_accessing_memory (void)
 
   /* Restore the previous selected thread.  */
   cs.general_thread = prev_general_thread;
-  switch_to_thread (the_target, cs.general_thread);
+  set_desired_thread ();
 }
 
 int

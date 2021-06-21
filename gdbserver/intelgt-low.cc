@@ -1113,11 +1113,15 @@ intelgt_process_target::read_memory (CORE_ADDR memaddr,
       return 0;
     }
 
-  GTThreadHandle handle = get_intelgt_thread (current_thread)->handle;
+  GTThreadHandle handle = nullptr;
+  if (current_thread != nullptr)
+    handle = get_intelgt_thread (current_thread)->handle;
+
+  GTDeviceHandle device = current_process ()->priv->device_handle;
 
   unsigned read_size = 0;
   APIResult result = igfxdbg_ReadMemory (handle, memaddr, myaddr,
-					 len, &read_size);
+					 len, &read_size, device);
   if (result != eGfxDbgResultSuccess)
     {
       dprintf (_("failed to read memory; result: %s"),
@@ -1145,11 +1149,15 @@ intelgt_process_target::write_memory (CORE_ADDR memaddr,
       return 0;
     }
 
-  GTThreadHandle handle = get_intelgt_thread (current_thread)->handle;
+  GTThreadHandle handle = nullptr;
+  if (current_thread != nullptr)
+    handle = get_intelgt_thread (current_thread)->handle;
+
+  GTDeviceHandle device = current_process ()->priv->device_handle;
 
   unsigned written_size = 0;
   APIResult result = igfxdbg_WriteMemory (handle, memaddr, myaddr,
-					  len, &written_size);
+					  len, &written_size, device);
   if (result != eGfxDbgResultSuccess)
     {
       dprintf (_("failed to write memory; result: %s"),

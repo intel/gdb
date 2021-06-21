@@ -4146,7 +4146,7 @@ process_serial_event (void)
     case 'H':
       if (cs.own_buf[1] == 'c' || cs.own_buf[1] == 'g' || cs.own_buf[1] == 's')
 	{
-	  require_running_or_break (cs.own_buf);
+	  require_process_or_break (cs.own_buf);
 
 	  ptid_t thread_id = read_ptid (&cs.own_buf[2], NULL);
 
@@ -4181,16 +4181,20 @@ process_serial_event (void)
 		{
 		  /* GDB is telling us to choose any thread.  Check if
 		     the currently selected thread is still valid. If
-		     it is not, select the first available.  */
+		     it is not, select the first available.  Select
+		     a process only as the last option.  */
 		  thread_info *thread = find_thread_ptid (cs.general_thread);
-		  if (thread == NULL)
+		  if (thread == nullptr)
 		    thread = get_first_thread ();
-		  thread_id = thread->id;
+		  if (thread == nullptr)
+		    thread_id = ptid_t {pid_of (get_first_process ())};
+		  else
+		    thread_id = thread->id;
 		}
 
 	      cs.general_thread = thread_id;
 	      set_desired_thread ();
-	      gdb_assert (current_thread != NULL);
+	      gdb_assert (has_current_process ());
 	    }
 	  else if (cs.own_buf[1] == 'c')
 	    cs.cont_thread = thread_id;

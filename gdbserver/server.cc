@@ -1531,7 +1531,7 @@ handle_qxfer_features (const char *annex,
   if (writebuf != NULL)
     return -2;
 
-  if (!target_running ())
+  if (!has_current_process ())
     return -1;
 
   /* Grab the correct annex.  */

@@ -4923,12 +4923,20 @@ stop_all_threads (void)
 			 have to be appended to a per-inferior event list,
 			 which does not exist (and if it did, we'd have
 			 to adjust run control command to be able to
-			 resume such an inferior).  We assert here instead
-			 of going into an infinite loop.  */
-		      gdb_assert (t != nullptr);
-
-		      infrun_debug_printf
-			("using %s", target_pid_to_str (t->ptid).c_str ());
+			 resume such an inferior).  We have to mourn now.  */
+		      if (t == nullptr)
+			{
+			  switch_to_inferior_no_thread (inf);
+			  mark_non_executing_threads (event.target,
+						      event.ptid,
+						      event.ws);
+			  event.target->mourn_inferior ();
+			}
+		      else
+			{
+			  infrun_debug_printf
+			    ("using %s", target_pid_to_str (t->ptid).c_str ());
+			}
 		    }
 		  else
 		    {

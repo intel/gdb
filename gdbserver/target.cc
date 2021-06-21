@@ -33,10 +33,18 @@ int
 set_desired_thread ()
 {
   client_state &cs = get_client_state ();
-  thread_info *found = find_thread_ptid (cs.general_thread);
-
-  switch_to_thread (found);
-  return (current_thread != NULL);
+  if (cs.general_thread.is_pid ())
+    {
+      process_info *proc = find_process_pid (cs.general_thread.pid ());
+      switch_to_process (proc);
+      return (proc != nullptr);
+    }
+  else
+    {
+      thread_info *found = find_thread_ptid (cs.general_thread);
+      switch_to_thread (found);
+      return (current_thread != nullptr);
+    }
 }
 
 /* The thread that was current before prepare_to_access_memory was

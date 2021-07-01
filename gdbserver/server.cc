@@ -351,7 +351,10 @@ attach_inferior (int pid)
     }
   else if (!non_stop)
     {
-      cs.last_ptid = mywait (ptid_t (pid), &cs.last_status, 0, 0);
+      /* Wait for any event from the target.  Most likely, this will be an event
+	 for PTID but we want to allow targets that want to report more than one
+	 process.  */
+      cs.last_ptid = mywait (minus_one_ptid, &cs.last_status, 0, 0);
 
       /* GDB knows to ignore the first SIGSTOP after attaching to a running
 	 process using the "attach" command, but this is different; it's

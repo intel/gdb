@@ -1,0 +1,132 @@
+# Copyright 2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Check access keywords in the output of the ptype command.
+
+load_lib sycl.exp
+load_lib "cp-support.exp"
+
+standard_testfile .cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+
+# ##############################################
+proc check_outer_struct { objname } {
+    cp_test_ptype_class "$objname" "" "struct" "outer_struct" {
+	{ field public     "int m_public;" }
+	{ field public     "inner_struct m_public_s;" }
+	{ field public     "inner_class m_public_c;" }
+	{ field protected  "int m_protected;" }
+	{ field protected  "inner_struct m_protected_s;" }
+	{ field protected  "inner_class m_protected_c;" }
+	{ field private    "int m_private;" }
+	{ field private    "inner_struct m_private_s;" }
+	{ field private    "inner_class m_private_c;" }
+	{ method public    "void setPublic(int);" }
+	{ method protected "void setProtected(int);" }
+	{ method private   "void setPrivate(int);" }
+    }
+}
+
+# ##############################################
+proc check_outer_class { objname } {
+    cp_test_ptype_class "$objname" "" "class" "outer_class" {
+	{ field private    "int m_private;" }
+	{ field private    "inner_struct m_private_s;" }
+	{ field private    "inner_class m_private_c;" }
+	{ field protected  "int m_protected;" }
+	{ field protected  "inner_struct m_protected_s;" }
+	{ field protected  "inner_class m_protected_c;" }
+	{ field public     "int m_public;" }
+	{ field public     "inner_struct m_public_s;" }
+	{ field public     "inner_class m_public_c;" }
+	{ method private   "void setPrivate(int);" }
+	{ method protected "void setProtected(int);" }
+	{ method public    "void setPublic(int);" }
+    }
+}
+
+# ##############################################
+proc check_inner_struct { objname } {
+    cp_test_ptype_class "$objname" "" "struct" "inner_struct" {
+	{ field public     "int m_public;" }
+	{ field public     "char m_public_c;" }
+	{ field protected  "int m_protected;" }
+	{ field protected  "char m_protected_c;" }
+	{ field private    "int m_private;" }
+	{ field private    "char m_private_c;" }
+	{ method public    "void setPublic(int);" }
+	{ method protected "void setProtected(int);" }
+	{ method private   "void setPrivate(int);" }
+    }
+}
+
+# ##############################################
+proc check_inner_class { objname } {
+    cp_test_ptype_class "$objname" "" "class" "inner_class" {
+	{ field private    "int m_private;" }
+	{ field protected  "int m_protected;" }
+	{ field public     "int m_public;" }
+	{ method private   "void setPrivate(int);" }
+	{ method protected "void setProtected(int);" }
+	{ method public    "void setPublic(int);" }
+    }
+}
+
+
+# ##############################################
+# Arguments:
+#   context     : "host" or "kernel"
+#   struct_obj  : outer_struct object
+#   class_obj   : outer_class object
+proc check_all_types { context struct_obj class_obj } {
+    with_test_prefix "$context" {
+	check_outer_struct $struct_obj
+	check_inner_struct $struct_obj.m_public_s
+	check_inner_class  $struct_obj.m_public_c
+
+	check_outer_class  $class_obj
+	check_inner_struct $class_obj.m_public_s
+	check_inner_class  $class_obj.m_public_c
+    }
+}
+
+
+# Break in the kernel, and try ptype for structure and classobjects.
+set kernel_line [gdb_get_line_number "kernel-line"]
+gdb_breakpoint $kernel_line
+gdb_continue_to_breakpoint "kernel line" ".*$srcfile:$kernel_line.*"
+
+check_all_types "kernel" "sObj" "cObj"
+
+
+# Break in the host, and try ptype for structure and classobjects.
+set host_line [gdb_get_line_number "host-line"]
+gdb_breakpoint $host_line
+gdb_continue_to_breakpoint "host line" ".*$srcfile:$host_line.*"
+
+check_all_types "host" "sObj" "cObj"

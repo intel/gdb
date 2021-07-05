@@ -35,6 +35,7 @@
 #endif /* defined (HAVE_LIBIGA64)  */
 #include "gdbthread.h"
 #include "inferior.h"
+#include <algorithm>
 
 /* Address space flags.
    We are assigning the TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 to the shared
@@ -75,13 +76,31 @@ struct intelgt_gdbarch_data
   int emask_regnum = -1;
   /* Register number for the GRF containing function return value.  */
   int retval_regnum = -1;
+  /* Register number for the control register.  */
+  int cr0_regnum = -1;
+  /* Register number for the instruction base virtual register.  */
+  int isabase_regnum = -1;
   /* Assigned regnum ranges for DWARF regsets.  */
   regnum_range regset_ranges[intelgt::regset_count];
+  /* Enabled pseudo-register for the current target description.  */
+  std::vector<std::string> enabled_pseudo_regs;
+  /* Cached $framedesc pseudo-register type.  */
+  type *framedesc_type = nullptr;
 
   /* Initialize ranges to -1 as "not-yet-set" indicator.  */
   intelgt_gdbarch_data ()
   {
     memset (&regset_ranges, -1, sizeof regset_ranges);
+  }
+
+  /* Return regnum where frame descriptors are stored.  */
+
+  int
+  framedesc_base_regnum ()
+  {
+    /* For EM_INTELGT frame descriptors are stored at MAX_GRF - 1.  */
+    gdb_assert (regset_ranges[intelgt::regset_grf].end > 1);
+    return regset_ranges[intelgt::regset_grf].end - 1;
   }
 
 #if defined (HAVE_LIBIGA64)
@@ -111,6 +130,9 @@ intelgt_register_type (gdbarch *gdbarch, int regno)
   return typ;
 }
 
+static int
+intelgt_pseudo_register_num (gdbarch *arch, const char *name);
+
 /* Convert a DWARF register number to a GDB register number.  This
    function requires for the register listing in the target
    description to be in the same order in each regeset as the
@@ -137,7 +159,7 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
 
   if (num == ip)
-    return gdbarch_pc_regnum (gdbarch);
+    return intelgt_pseudo_register_num (gdbarch, "ip");
   if (num == emask)
     return data->emask_regnum;
 
@@ -619,15 +641,184 @@ intelgt_address_space_from_type_flags (struct gdbarch *gdbarch,
   return 0;
 }
 
+/* Utility function to lookup the pseudo-register number by name.  Exact
+   amount of pseudo-registers may differ and thus fixed constants can't be
+   used for this.  */
+
+static int
+intelgt_pseudo_register_num (gdbarch *arch, const char *name)
+{
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  auto iter = std::find (data->enabled_pseudo_regs.begin (),
+			 data->enabled_pseudo_regs.end (), name);
+  gdb_assert (iter != data->enabled_pseudo_regs.end ());
+  return gdbarch_num_regs (arch) + (iter - data->enabled_pseudo_regs.begin ());
+}
+
+static CORE_ADDR
+intelgt_read_pc (readable_regcache *regcache)
+{
+  gdbarch *arch = regcache->arch ();
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  /* $ip is uint32_t, but uint64_t is used here to comply with cooked_read
+     signature.  */
+  uint64_t ip;
+  int ip_regnum = intelgt_pseudo_register_num (arch, "ip");
+  if (regcache->cooked_read (ip_regnum, &ip) != REG_VALID)
+    throw_error (NOT_AVAILABLE_ERROR,
+		 _("Register %d (ip) is not available"),
+		 ip_regnum);
+
+  /* Program counter is $ip + $isabase.  */
+  gdb_assert (data->isabase_regnum != -1);
+  uint64_t isabase;
+  if (regcache->cooked_read (data->isabase_regnum, &isabase) != REG_VALID)
+    throw_error (NOT_AVAILABLE_ERROR,
+		 _("Register %d (isabase) is not available"),
+		 data->isabase_regnum);
+  return isabase + ip;
+}
+
+static void
+intelgt_write_pc (struct regcache *regcache, CORE_ADDR pc)
+{
+  gdbarch *arch = regcache->arch ();
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  /* Program counter is $ip + $isabase, can only modify $ip.  Need
+     to ensure that the new value fits within $ip modification rannge
+     and propagate the write accordingly.  */
+  uint64_t isabase;
+  gdb_assert (data->isabase_regnum != -1);
+  if (regcache->cooked_read (data->isabase_regnum, &isabase) != REG_VALID)
+    throw_error (NOT_AVAILABLE_ERROR,
+		 _("Register %d (isabase) is not available"),
+		 data->isabase_regnum);
+  if (pc < isabase || pc > isabase + UINT32_MAX)
+    error ("Can't update $pc to value 0x%lx, out of range", pc);
+  /* $ip is uint32_t, but uint64_t is used here to comply with cooked_write
+     signature.  */
+  uint64_t ip = pc - isabase;
+  int ip_regnum = intelgt_pseudo_register_num (arch, "ip");
+  regcache->cooked_write (ip_regnum, ip);
+}
+
+/* Return the name of pseudo-register REGNUM.  */
+
+static const char *
+intelgt_pseudo_register_name (gdbarch *arch, int regnum)
+{
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  int base_num = gdbarch_num_regs (arch);
+  if (regnum < base_num
+      || regnum >= base_num + data->enabled_pseudo_regs.size ())
+    error ("Invalid pseudo-register regnum %d", regnum);
+  return data->enabled_pseudo_regs[regnum - base_num].c_str ();
+}
+
+/* Return the GDB type object for the "standard" data type of data in
+   pseudo-register REGNUM.  */
+
+static type *
+intelgt_pseudo_register_type (gdbarch *arch, int regnum)
+{
+  const char *name = intelgt_pseudo_register_name (arch, regnum);
+  const struct builtin_type *bt = builtin_type (arch);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+  if (strcmp (name, "framedesc") == 0)
+    {
+      if (data->framedesc_type != nullptr)
+	return data->framedesc_type;
+      type *frame = arch_composite_type (arch, "frame_desc", TYPE_CODE_STRUCT);
+      append_composite_type_field (frame, "return_ip", bt->builtin_uint32);
+      append_composite_type_field (frame, "return_callmask",
+				   bt->builtin_uint32);
+      append_composite_type_field (frame, "be_sp", bt->builtin_uint32);
+      append_composite_type_field (frame, "be_fp", bt->builtin_uint32);
+      append_composite_type_field (frame, "fe_fp", bt->builtin_uint64);
+      append_composite_type_field (frame, "fe_sp", bt->builtin_uint64);
+      data->framedesc_type = frame;
+      return frame;
+    }
+  else if (strcmp (name, "ip") == 0)
+    return bt->builtin_uint32;
+
+  return nullptr;
+}
+
+/* Read the value of a pseudo-register REGNUM.  */
+
+static struct value *
+intelgt_pseudo_register_read_value (gdbarch *arch,
+				    const frame_info_ptr &next_frame,
+				    int pseudo_regnum)
+{
+  const char *name = intelgt_pseudo_register_name (arch, pseudo_regnum);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+  if (strcmp (name, "framedesc") == 0)
+    {
+      int grf_num = data->framedesc_base_regnum ();
+      return pseudo_from_raw_part (next_frame, pseudo_regnum, grf_num, 0);
+    }
+  else if (strcmp (name, "ip") == 0)
+    {
+      int regsize = register_size (arch, pseudo_regnum);
+      /* Instruction pointer is stored in CR0.2.  */
+      gdb_assert (data->cr0_regnum != -1);
+      /* CR0 elements are 4 byte wide.  */
+      gdb_assert (regsize + 8 <= register_size (arch, data->cr0_regnum));
+
+      return pseudo_from_raw_part (next_frame, pseudo_regnum,
+				   data->cr0_regnum, 8);
+    }
+
+  return nullptr;
+}
+
+/* Write the value of a pseudo-register REGNUM.  */
+
+static void
+intelgt_pseudo_register_write (gdbarch *arch,
+			       const frame_info_ptr &next_frame,
+			       int pseudo_regnum,
+			       gdb::array_view<const gdb_byte> buf)
+{
+  const char *name = intelgt_pseudo_register_name (arch, pseudo_regnum);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+  if (strcmp (name, "framedesc") == 0)
+    {
+      int grf_num = data->framedesc_base_regnum ();
+      int grf_size = register_size (arch, grf_num);
+      int desc_size = register_size (arch, pseudo_regnum);
+      gdb_assert (grf_size >= desc_size);
+      pseudo_to_raw_part (next_frame, buf, grf_num, 0);
+    }
+  else if (strcmp (name, "ip") == 0)
+    {
+      /* Instruction pointer is stored in CR0.2.  */
+      gdb_assert (data->cr0_regnum != -1);
+      int cr0_size = register_size (arch, data->cr0_regnum);
+
+      /* CR0 elements are 4 byte wide.  */
+      int reg_size = register_size (arch, pseudo_regnum);
+      gdb_assert (reg_size + 8 <= cr0_size);
+      pseudo_to_raw_part (next_frame, buf, data->cr0_regnum, 8);
+    }
+  else
+    error ("Pseudo-register %s is read-only", name);
+}
+
 /* Called by tdesc_use_registers each time a new regnum
    is assigned.  Used to track down assigned numbers for
    any important regnums.  */
 
 static int
-intelgt_unknown_register_cb (struct gdbarch *gdbarch, tdesc_feature *feature,
+intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
 			     const char *reg_name, int possible_regnum)
 {
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
 
   /* First, check if this a beginning of a not yet tracked regset
      assignment.  */
@@ -647,12 +838,12 @@ intelgt_unknown_register_cb (struct gdbarch *gdbarch, tdesc_feature *feature,
   /* Second, check if it is any specific individual register that
      needs to be tracked.  */
 
-  if (strcmp ("sp", reg_name) == 0)
-    set_gdbarch_sp_regnum (gdbarch, possible_regnum);
-  else if (strcmp ("ip", reg_name) == 0)
-    set_gdbarch_pc_regnum (gdbarch, possible_regnum);
-  else if (strcmp ("r26", reg_name) == 0)
+  if (strcmp ("r26", reg_name) == 0)
     data->retval_regnum = possible_regnum;
+  else if (strcmp ("cr0", reg_name) == 0)
+    data->cr0_regnum = possible_regnum;
+  else if (strcmp ("isabase", reg_name) == 0)
+    data->isabase_regnum = possible_regnum;
   else if (strcmp ("emask", reg_name) == 0)
     data->emask_regnum = possible_regnum;
 
@@ -702,15 +893,28 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
       /* Now check the collected metadata to ensure that all
 	 mandatory pieces are in place.  */
 
-      if (gdbarch_sp_regnum (gdbarch) == -1)
-	error ("Debugging requires $sp to be provided by the target");
-      if (gdbarch_pc_regnum (gdbarch) == -1)
-	error ("Debugging requires $ip to be provided by the target");
       if (data->emask_regnum == -1)
 	error ("Debugging requires $emask provided by the target");
       if (data->retval_regnum == -1)
 	error ("Debugging requires return value register to be provided by "
 	       "the target");
+      if (data->cr0_regnum == -1)
+	error ("Debugging requires control register to be provided by "
+	       "the target");
+
+      /* Unconditionally enabled pseudo-registers:  */
+      data->enabled_pseudo_regs.push_back ("ip");
+      data->enabled_pseudo_regs.push_back ("framedesc");
+
+      set_gdbarch_num_pseudo_regs (gdbarch, data->enabled_pseudo_regs.size ());
+      set_gdbarch_pseudo_register_read_value (
+	  gdbarch, intelgt_pseudo_register_read_value);
+      set_gdbarch_pseudo_register_write (gdbarch,
+					 intelgt_pseudo_register_write);
+      set_tdesc_pseudo_register_type (gdbarch, intelgt_pseudo_register_type);
+      set_tdesc_pseudo_register_name (gdbarch, intelgt_pseudo_register_name);
+      set_gdbarch_read_pc (gdbarch, intelgt_read_pc);
+      set_gdbarch_write_pc (gdbarch, intelgt_write_pc);
     }
 
   /* Populate gdbarch fields.  */

@@ -33,6 +33,7 @@
 #endif /* defined (HAVE_LIBIGA64)  */
 #include "gdbthread.h"
 #include "inferior.h"
+#include <algorithm>
 
 /* Address space flags.
    We are assigning the TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 to the shared
@@ -75,8 +76,14 @@ struct intelgt_gdbarch_data
   int emask_regnum = -1;
   /* Register number for the GRF containing function return value.  */
   int retval_regnum = -1;
+  /* Register number for the control register.  */
+  int cr0_regnum = -1;
   /* Assigned regnum ranges for DWARF regsets.  */
   regnum_range regset_ranges[intelgt::regset_count];
+  /* Enabled pseudo-register for the current target description.  */
+  std::vector<std::string> enabled_pseudo_regs;
+  /* Cached $framedesc pseudo-register type.  */
+  type *framedesc_type = nullptr;
 
   /* Initialize ranges to -1 as "not-yet-set" indicator.  */
   intelgt_gdbarch_data ()
@@ -667,15 +674,137 @@ intelgt_address_space_from_type_flags (struct gdbarch *gdbarch,
   return 0;
 }
 
+/* Utility function to lookup the pseudo-register number by name.  Exact
+   amount of pseudo-registers may differ and thus fixed constants can't be
+   used for this.  */
+
+static int
+intelgt_pseudo_register_num (gdbarch *arch, const char *name)
+{
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  auto iter = std::find (data->enabled_pseudo_regs.begin (),
+			 data->enabled_pseudo_regs.end (), name);
+  gdb_assert (iter != data->enabled_pseudo_regs.end ());
+  return gdbarch_num_regs (arch) + (iter - data->enabled_pseudo_regs.begin ());
+}
+
+/* Return the name of pseudo-register REGNUM.  */
+
+static const char *
+intelgt_pseudo_register_name (gdbarch *arch, int regnum)
+{
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  int base_num = gdbarch_num_regs (arch);
+  if (regnum < base_num
+      || regnum >= base_num + data->enabled_pseudo_regs.size ())
+    error ("Invalid pseudo-register regnum %d", regnum);
+  return data->enabled_pseudo_regs[regnum - base_num].c_str ();
+}
+
+/* Return the GDB type object for the "standard" data type of data in
+   pseudo-register REGNUM.  */
+
+static type *
+intelgt_pseudo_register_type (gdbarch *arch, int regnum)
+{
+  const char *name = intelgt_pseudo_register_name (arch, regnum);
+  const struct builtin_type *bt = builtin_type (arch);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+  if (strcmp (name, "framedesc") == 0)
+    {
+      if (data->framedesc_type != nullptr)
+	return data->framedesc_type;
+      type *frame = arch_composite_type (arch, "frame_desc", TYPE_CODE_STRUCT);
+      append_composite_type_field (frame, "return_ip", bt->builtin_uint32);
+      append_composite_type_field (frame, "return_emask", bt->builtin_uint32);
+      append_composite_type_field (frame, "be_sp", bt->builtin_uint32);
+      append_composite_type_field (frame, "be_fp", bt->builtin_uint32);
+      append_composite_type_field (frame, "fe_fp", bt->builtin_uint64);
+      append_composite_type_field (frame, "fe_sp", bt->builtin_uint64);
+      data->framedesc_type = frame;
+      return frame;
+    }
+  else if (strcmp (name, "ip") == 0)
+    return bt->builtin_uint32;
+
+  return nullptr;
+}
+
+/* Read the value of a pseudo-register REGNUM.  */
+
+static struct value *
+intelgt_pseudo_register_read_value (gdbarch *arch,
+				    readable_regcache *regcache, int regnum)
+{
+  const char *name = intelgt_pseudo_register_name (arch, regnum);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  type *regtype = register_type (arch, regnum);
+  int regsize = register_size (arch, regnum);
+
+  value *result = allocate_value (regtype);
+  VALUE_LVAL (result) = lval_register;
+  VALUE_REGNUM (result) = regnum;
+  gdb_byte *result_buf = value_contents_writeable (result);
+
+  if (strcmp (name, "framedesc") == 0)
+    {
+      /* Frame description is stored in GRF count-3.  */
+      gdb_assert (data->regset_ranges[intelgt::regset_grf].end > 3);
+      int grf_num = data->regset_ranges[intelgt::regset_grf].end - 3;
+      value *grf = regcache->cooked_read_value (grf_num);
+      if (!value_entirely_available (grf))
+	throw_error (NOT_AVAILABLE_ERROR, _ ("Register %d is not available"),
+		     grf_num);
+      gdb_assert (regsize <= register_size (arch, grf_num));
+      memcpy (result_buf, value_contents_raw (grf), regsize);
+      return result;
+    }
+  else if (strcmp (name, "ip") == 0)
+    {
+      /* Instruction pointer is stored in CR0.2.  */
+      value *cr0 = regcache->cooked_read_value (data->cr0_regnum);
+      memcpy (result_buf, value_contents_raw (cr0) + 8,
+	      register_size (arch, regnum));
+      return result;
+    }
+
+  return nullptr;
+}
+
+/* Write the value of a pseudo-register REGNUM.  */
+
+static void
+intelgt_pseudo_register_write (gdbarch *arch,
+			       regcache *regcache, int regnum,
+			       const gdb_byte *buf)
+{
+  const char *name = intelgt_pseudo_register_name (arch, regnum);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+  if (strcmp (name, "framedesc") == 0)
+    {
+      /* Frame description is stored in GRF count-3.  */
+      gdb_assert (data->regset_ranges[intelgt::regset_grf].end > 3);
+      int grf_num = data->regset_ranges[intelgt::regset_grf].end - 3;
+      int grf_size = register_size (arch, grf_num);
+      int desc_size = register_size (arch, regnum);
+      gdb_assert (grf_size >= desc_size);
+      regcache->raw_write (grf_num, buf);
+    }
+  else
+    error ("Pseudo-register %s is read-only", name);
+}
+
 /* Called by tdesc_use_registers each time a new regnum
    is assigned.  Used to track down assigned numbers for
    any important regnums.  */
 
 static int
-intelgt_unknown_register_cb (struct gdbarch *gdbarch, tdesc_feature *feature,
+intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
 			     const char *reg_name, int possible_regnum)
 {
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
 
   /* First, check if this a beginning of a not yet tracked regset
      assignment.  */
@@ -695,12 +824,12 @@ intelgt_unknown_register_cb (struct gdbarch *gdbarch, tdesc_feature *feature,
   /* Second, check if it is any specific individual register that
      needs to be tracked.  */
 
-  if (strcmp ("sp", reg_name) == 0)
-    set_gdbarch_sp_regnum (gdbarch, possible_regnum);
-  else if (strcmp ("ip", reg_name) == 0)
-    set_gdbarch_pc_regnum (gdbarch, possible_regnum);
+  if (strcmp ("ip", reg_name) == 0)
+    set_gdbarch_pc_regnum (arch, possible_regnum);
   else if (strcmp ("r26", reg_name) == 0)
     data->retval_regnum = possible_regnum;
+  else if (strcmp ("cr0", reg_name) == 0)
+    data->cr0_regnum = possible_regnum;
   else if (strcmp ("emask", reg_name) == 0)
     data->emask_regnum = possible_regnum;
 
@@ -750,8 +879,6 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
       /* Now check the collected metadata to ensure that all
 	 mandatory pieces are in place.  */
 
-      if (gdbarch_sp_regnum (gdbarch) == -1)
-	error ("Debugging requires $sp to be provided by the target");
       if (gdbarch_pc_regnum (gdbarch) == -1)
 	error ("Debugging requires $ip to be provided by the target");
       if (data->emask_regnum == -1)
@@ -759,6 +886,21 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
       if (data->retval_regnum == -1)
 	error ("Debugging requires return value register to be provided by "
 	       "the target");
+      if (data->cr0_regnum == -1)
+	error ("Debugging requires control register to be provided by "
+	       "the target");
+
+      /* Unconditionally enabled pseudo-registers:  */
+      data->enabled_pseudo_regs.push_back ("ip");
+      data->enabled_pseudo_regs.push_back ("framedesc");
+
+      set_gdbarch_num_pseudo_regs (gdbarch, data->enabled_pseudo_regs.size ());
+      set_gdbarch_pseudo_register_read_value (
+	  gdbarch, intelgt_pseudo_register_read_value);
+      set_gdbarch_pseudo_register_write (gdbarch,
+					 intelgt_pseudo_register_write);
+      set_tdesc_pseudo_register_type (gdbarch, intelgt_pseudo_register_type);
+      set_tdesc_pseudo_register_name (gdbarch, intelgt_pseudo_register_name);
     }
 
   /* Populate gdbarch fields.  */

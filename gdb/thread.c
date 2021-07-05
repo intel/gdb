@@ -1469,6 +1469,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
       }
 
     int selected_lane = ((current_thread != nullptr)
+			 && (current_thread->state == THREAD_STOPPED)
 			 ? current_thread->current_simd_lane () : -1);
 
     for (inferior *inf : all_inferiors ())
@@ -1485,10 +1486,17 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	  /* Switch to the thread (and inferior / target).  */
 	  switch_to_thread (tp);
 
-	  unsigned int active_lanes_mask = tp->active_simd_lanes_mask ();
-	  unsigned int selected_lane_mask = 0x0;
+	  /* We cannot access the thread's active SIMD lanes mask if it
+	     isn't stopped.  Just print a single row for such threads.  */
 	  bool current = (tp == current_thread);
+	  if (tp->state != THREAD_STOPPED)
+	    {
+	      print_thread_row (uiout, tp, false, current, 0x0,
+				show_global_ids);
+	      continue;
+	    }
 
+	  unsigned int active_lanes_mask = tp->active_simd_lanes_mask ();
 	  if (active_lanes_mask != 0)
 	    {
 	      /* The thread has at least one active lane.  */
@@ -1496,6 +1504,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	      /* SIMD lanes, which we are going to display are non-zero
 		 in this mask.  */
 	      unsigned int active_lanes_to_display = active_lanes_mask;
+	      unsigned int selected_lane_mask = 0x0;
 
 	      /* In MI we do not distinguish the current thread and lane.  */
 	      if (current && !uiout->is_mi_like_p ())
@@ -2369,7 +2378,7 @@ thread_command (const char *tidstr, int from_tty)
 	  std::string status_note = "";
 	  std::vector<int> lanes;
 
-	  if (tp->has_simd_lanes ())
+	  if (tp->state == THREAD_STOPPED && tp->has_simd_lanes ())
 	    {
 	      if (tp->is_active ())
 		{
@@ -2568,7 +2577,7 @@ print_selected_thread_frame (struct ui_out *uiout,
 	  uiout->field_string ("new-thread-id", print_thread_id (tp, &lanes));
 	  uiout->text (" (");
 	  uiout->text (target_pid_to_str (inferior_ptid));
-	  if (tp->has_simd_lanes ())
+	  if (tp->state == THREAD_STOPPED && tp->has_simd_lanes ())
 	    {
 	      if (is_active)
 		{

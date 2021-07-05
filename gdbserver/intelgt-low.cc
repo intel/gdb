@@ -530,8 +530,6 @@ create_target_description ()
   tdesc_create_reg (feature, "f1", regnum++, 1, "flag", 32, "uint32");
   feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.ce");
   tdesc_create_reg (feature, "ce", regnum++, 1, "channel_enable", 32, "uint32");
-  feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.sp");
-  tdesc_create_reg (feature, "sp", regnum++, 1, "stack_pointer", 128, "uint128");
   feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.state");
   tdesc_create_reg (feature, "sr0", regnum++, 1, "state", 128, "uint128");
   feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.control");
@@ -571,7 +569,7 @@ tdesc_find_register (const target_desc *tdesc, int index)
 static process_info *
 add_new_gt_process (process_info_private *proc_priv)
 {
-  static const char *expedite_regs[] = {"ip", "sp", "emask", nullptr};
+  static const char *expedite_regs[] = {"ip", "emask", nullptr};
 
   GTDeviceInfo &info = proc_priv->device_info;
   switch (info.gen_major)

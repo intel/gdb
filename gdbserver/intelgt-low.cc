@@ -71,7 +71,7 @@ enum class reg_group : unsigned short
     State,
     Control,
     NotificationCount,
-    InstructionPointer,
+    ProgramCounter,
     ThreadDependency,
     Timestamp,
     FlowControl,
@@ -138,7 +138,7 @@ string_to_group (const std::string &name)
 	  "state",
 	  "control",
 	  "notification_count",
-	  "instruction_pointer",
+	  "program_counter",
 	  "thread_dependency",
 	  "timestamp",
 	  "flow_control",
@@ -184,7 +184,7 @@ igfxdbg_reg_type (reg_group group)
       return eArfControlRegister;
     case reg_group::NotificationCount:
       return eArfNotificationCountRegister;
-    case reg_group::InstructionPointer:
+    case reg_group::ProgramCounter:
       return eArfInstructionPointerRegister;
     case reg_group::ThreadDependency:
       return eArfThreadDependencyRegister;
@@ -533,8 +533,6 @@ create_target_description ()
   tdesc_create_reg (feature, "sr0", regnum++, 1, "state", 128, "uint128");
   feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.control");
   tdesc_create_reg (feature, "cr0", regnum++, 1, "control", 128, "uint128");
-  feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.ip");
-  tdesc_create_reg (feature, "ip", regnum++, 1, "instruction_pointer", 32, "uint32");
   feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.td");
   tdesc_create_reg (feature, "tdr", regnum++, 1, "thread_dependency", 128, "uint128");
   feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.timestamp");
@@ -568,7 +566,7 @@ tdesc_find_register (const target_desc *tdesc, int index)
 static process_info *
 add_new_gt_process (process_info_private *proc_priv)
 {
-  static const char *expedite_regs[] = {"ip", "emask", nullptr};
+  static const char *expedite_regs[] = {"cr0", "emask", nullptr};
 
   GTDeviceInfo &info = proc_priv->device_info;
   switch (info.gen_major)
@@ -1140,7 +1138,18 @@ intelgt_process_target::read_gt_register (regcache *regcache,
   const tdesc_reg* reg = tdesc_find_register (current_process ()->tdesc, index);
   if (reg == nullptr)
     error (_("register %d was not found in tdesc"), index);
-  std::unique_ptr<gdb_byte[]> buffer (new gdb_byte[reg->bitsize / 8]);
+  int regsize = reg->bitsize / 8;
+  std::unique_ptr<gdb_byte[]> buffer (new gdb_byte[regsize]);
+  memset (buffer.get (), 0, regsize);
+
+  if (reg->name == "isabase")
+    {
+      /* Need to pretend $isabase is always 0 for the legacy ELF binary
+	 format to work, as it expects $pc to be the same as $ip.  */
+      supply_register (regcache, index, buffer.get ());
+      return;
+    }
+
   reg_group group = string_to_group (reg->group);
   if (group >= reg_group::Count)
     error (_("register %d is of unknown group %s"), index,
@@ -1154,7 +1163,7 @@ intelgt_process_target::read_gt_register (regcache *regcache,
 				group, adjust: */
 			     (regtype == eDebugPseudoRegister
 			      ? gindex + 2 : gindex),
-			     buffer.get (), reg->bitsize / 8);
+			     buffer.get (), regsize);
 
   if (result != eGfxDbgResultSuccess)
     error (_("could not read the register %d %d %d; result: %s"),
@@ -1193,7 +1202,9 @@ intelgt_process_target::write_gt_register (regcache *regcache,
   if (group >= reg_group::Count)
     error (_("register %d is of unknown group %s"), index,
 	   reg->group.c_str ());
-  std::unique_ptr<gdb_byte[]> buffer (new gdb_byte[reg->bitsize / 8]);
+  int regsize = reg->bitsize / 8;
+  std::unique_ptr<gdb_byte[]> buffer (new gdb_byte[regsize]);
+  memset (buffer.get (), 0, regsize);
 
   collect_register (regcache, index, buffer.get ());
   RegisterType regtype = igfxdbg_reg_type (group);
@@ -1204,7 +1215,7 @@ intelgt_process_target::write_gt_register (regcache *regcache,
 				 debug group, adjust: */
 			      (regtype == eDebugPseudoRegister
 			       ? gindex + 2 : gindex),
-			      buffer.get (), reg->bitsize / 8);
+			      buffer.get (), regsize);
   if (result != eGfxDbgResultSuccess)
     error (_("could not write a register; result: %s"),
 	   igfxdbg_result_to_string (result));
@@ -1356,22 +1367,26 @@ intelgt_process_target::supports_z_point_type (char z_type)
 CORE_ADDR
 intelgt_process_target::read_pc (struct regcache *regcache)
 {
-  int regno = find_regno (regcache->tdesc, "ip");
-  unsigned int buf;
-  collect_register (regcache, regno, &buf);
-  dprintf ("regno: %d, ip: %x", regno, buf);
-
-  return (CORE_ADDR) buf;
+  int regno = find_regno (regcache->tdesc, "cr0");
+  uint8_t cr0[16];
+  collect_register (regcache, regno, &cr0);
+  /* CR0 elements are 4 byte wide.  $ip is the same as CR0.2 */
+  CORE_ADDR ip = * (CORE_ADDR*) (cr0 + 8);
+  dprintf ("ip: %lx", ip);
+  return ip;
 }
 
 /* The 'write_pc' target op.  */
 
 void
-intelgt_process_target::write_pc (struct regcache *regcache, CORE_ADDR pc)
+intelgt_process_target::write_pc (struct regcache *regcache, CORE_ADDR ip)
 {
-  int regno = find_regno (regcache->tdesc, "ip");
-  dprintf ("regno: %d, ip: %s", regno, core_addr_to_string_nz (pc));
-  supply_register (regcache, regno, &pc);
+  int regno = find_regno (regcache->tdesc, "cr0");
+  dprintf ("ip: %s", core_addr_to_string_nz (ip));
+  uint8_t cr0[16];
+  collect_register (regcache, regno, &cr0);
+  * (CORE_ADDR*) (cr0 + 8) = ip;
+  supply_register (regcache, regno, &cr0);
 }
 
 /* The 'thread_stopped' target op.  */

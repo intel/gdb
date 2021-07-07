@@ -538,6 +538,16 @@ startup_inferior (process_stratum_target *proc_target, pid_t pid, int ntraps,
 	    resume_signal = ws.value.sig;
 	    switch_to_thread (proc_target, event_ptid);
 	    break;
+
+	case TARGET_WAITKIND_UNAVAILABLE:
+	  /* We tried to interrupt the target but it responded that it is
+	     currently unavailable.
+
+	     There is no guarantee that it will become available any time
+	     soon.  That's good enough for starting up the inferior,
+	     however.  */
+	  switch_to_thread (proc_target, event_ptid);
+	  return resume_ptid;
 	}
 
       if (resume_signal != GDB_SIGNAL_TRAP)

@@ -5571,7 +5571,12 @@ handle_inferior_event (struct execution_control_state *ecs)
 	}
     }
 
-  mark_non_executing_threads (ecs->target, ecs->ptid, ecs->ws);
+  /* Unavailable threads are still executing.
+
+     They were idle when we tried to stop them but they may start
+     executing work at any time.  */
+  if (ecs->ws.kind != TARGET_WAITKIND_UNAVAILABLE)
+    mark_non_executing_threads (ecs->target, ecs->ptid, ecs->ws);
 
   switch (ecs->ws.kind)
     {
@@ -6010,6 +6015,12 @@ handle_inferior_event (struct execution_control_state *ecs)
 
       gdb::observers::no_history.notify ();
       stop_waiting (ecs);
+      return;
+
+    case TARGET_WAITKIND_UNAVAILABLE:
+      context_switch (ecs);
+      infrun_debug_printf ("unavailable");
+      /* FIXME: do we need to pretend we stopped?  */
       return;
     }
 }

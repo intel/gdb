@@ -67,6 +67,8 @@ target_waitstatus_to_string (const struct target_waitstatus *ws)
     case TARGET_WAITKIND_THREAD_EXITED:
       return string_printf ("%sthread exited, status = %d",
 			    kind_str, ws->value.integer);
+    case TARGET_WAITKIND_UNAVAILABLE:
+      return string_printf ("%sunavailable", kind_str);
     default:
       return string_printf ("%sunknown???", kind_str);
     }

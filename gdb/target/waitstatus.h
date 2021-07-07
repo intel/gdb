@@ -99,6 +99,19 @@ enum target_waitkind
 
   /* The thread has exited.  The exit status is in value.integer.  */
   TARGET_WAITKIND_THREAD_EXITED,
+
+  /* The thread is unavailable.  We tried to stop it but it did not
+     respond in reasonable time.  Chances are that we won't be able to
+     stop it.
+
+     On GPUs, if we model hardware threads to avoid frequent entry/exit
+     notifications, idle threads may not respond to interrupts and hence
+     cannot be stopped by us.
+
+     They become responsive again when they pick up new work and they may
+     create events such as hitting breakpoints.  But we cannot tell when
+     this will happen - if at all.  */
+  TARGET_WAITKIND_UNAVAILABLE,
 };
 
 struct target_waitstatus

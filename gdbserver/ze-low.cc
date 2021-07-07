@@ -1162,7 +1162,31 @@ ze_target::fetch_events (ze_device_info &device)
 	  continue;
 
 	case ZET_DEBUG_EVENT_TYPE_THREAD_UNAVAILABLE:
-	  break;
+	  {
+	    ze_device_thread_t tid = event.info.thread.thread;
+	    ze_ack_event (device, event);
+
+	    /* We would not remain attached without a process.  */
+	    process_info *process = device.process;
+	    gdb_assert (process != nullptr);
+
+	    for_each_thread (device, tid, [&] (thread_info *tp)
+	      {
+		ze_thread_info *zetp = ze_thread (tp);
+		gdb_assert (zetp != nullptr);
+
+		/* Ignore threads we know to be stopped.
+
+		   They would not be considered in the response event for
+		   an interrupt request.  */
+		if (zetp->exec_state == ze_thread_state_stopped)
+		  return;
+
+		zetp->exec_state = ze_thread_state_unavailable;
+		zetp->waitstatus = { TARGET_WAITKIND_UNAVAILABLE };
+	      });
+	  }
+	  continue;
 	}
 
       /* We only get here if we have not processed EVENT.  */

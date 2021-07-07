@@ -3625,7 +3625,8 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 		   respond anymore.  This may be the case, e.g., if a
 		   step-over was started in this target.  If we started
 		   a step-over in the current thread we skip it here.  */
-		if (tp->executing () || (step_over_started && tp == cur_thr))
+		if ((tp->executing () && tp->resumed ())
+		      || (step_over_started && tp == cur_thr))
 		  continue;
 
 		INFRUN_SCOPED_DEBUG_START_END
@@ -5265,7 +5266,19 @@ mark_non_executing_threads (process_stratum_target *target,
   else
     mark_ptid = event_ptid;
 
-  set_executing (target, mark_ptid, false);
+  /* Unavailable threads are still executing.
+
+     They were idle when we tried to stop them but they may start
+     executing work at any time.
+
+     In all-stop mode, because the target does not listen to debug
+     events, those threads are practically not executing.  But in
+     non-stop mode, the target can receive debug events from those
+     threads and the user can send interrupts to them.  So, we leave
+     them as executing.  */
+  if (!(target_is_non_stop_p ()
+	&& ws.kind () == TARGET_WAITKIND_UNAVAILABLE))
+    set_executing (target, mark_ptid, false);
 
   /* Likewise the resumed flag.  */
   set_resumed (target, mark_ptid, false);
@@ -6296,6 +6309,14 @@ handle_inferior_event (struct execution_control_state *ecs)
 	return;
 
       interps_notify_no_history ();
+      stop_waiting (ecs);
+      return;
+
+    case TARGET_WAITKIND_UNAVAILABLE:
+      context_switch (ecs);
+      infrun_debug_printf ("unavailable");
+
+      stop_print_frame = false;
       stop_waiting (ecs);
       return;
     }

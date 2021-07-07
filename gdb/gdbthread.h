@@ -923,9 +923,15 @@ extern bool threads_are_executing (process_stratum_target *targ);
 /* Merge the executing property of thread PTID of TARG over to its
    thread state property (frontend running/stopped view).
 
-   "not executing" -> "stopped"
-   "executing"     -> "running"
-   "exited"	-> "exited"
+   "not executing or not resumed"	-> "stopped"
+   "executing and resumed"		-> "running"
+   "exited"				-> "exited"
+
+   On GPUs, threads may exist but not currently be available, e.g. because
+   they are idle or are executing a dispatch of another process.  We call
+   them unavailable and we model them as executing but not resumed.  From
+   the front-end perspective, they are stopped.  From the target
+   perspective, they are running.
 
    If PTID is minus_one_ptid, go over all threads of TARG.
 

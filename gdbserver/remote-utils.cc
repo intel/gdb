@@ -1268,6 +1268,11 @@ prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
     case TARGET_WAITKIND_NO_RESUMED:
       sprintf (buf, "N");
       break;
+    case TARGET_WAITKIND_UNAVAILABLE:
+      sprintf (buf, "U");
+      buf += strlen (buf);
+      buf = write_ptid (buf, ptid);
+      break;
     default:
       error ("unhandled waitkind");
       break;

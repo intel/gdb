@@ -92,6 +92,9 @@ bool run_once;
 /* Whether to report TARGET_WAITKIND_NO_RESUMED events.  */
 static bool report_no_resumed;
 
+/* Whether to report TARGET_WAITKIND_UNAVAILABLE events.  */
+static bool report_unavailable;
+
 /* The event loop checks this to decide whether to continue accepting
    events.  */
 static bool keep_processing_events = true;
@@ -2548,6 +2551,12 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 		  if (target_supports_memory_tagging ())
 		    cs.memory_tagging_feature = true;
 		}
+	      else if (feature == "unavailable+")
+		{
+		  /* GDB supports and wants TARGET_WAITKIND_UNAVAILABLE
+		     events.  */
+		  report_unavailable = true;
+		}
 	      else if (feature == "qXfer:libraries:read:in-memory-library+")
 		cs.in_memory_library_supported = true;
 	      else if (feature == "vAck:library+")
@@ -3176,6 +3185,16 @@ resume (struct thread_resume *actions, size_t num_actions)
 	  /* The client does not support this stop reply.  At least
 	     return error.  */
 	  sprintf (cs.own_buf, "E.No unwaited-for children left.");
+	  disable_async_io ();
+	  return;
+	}
+
+      if (cs.last_status.kind == TARGET_WAITKIND_UNAVAILABLE
+	  && !report_unavailable)
+	{
+	  /* The client does not support this stop reply.  At least
+	     return error.  */
+	  sprintf (cs.own_buf, "E.Unavailable.");
 	  disable_async_io ();
 	  return;
 	}
@@ -4879,6 +4898,15 @@ handle_target_event (int err, gdb_client_data client_data)
     {
       if (gdb_connected () && report_no_resumed)
 	push_stop_notification (null_ptid, &cs.last_status);
+    }
+  else if (cs.last_status.kind == TARGET_WAITKIND_UNAVAILABLE)
+    {
+      /* Update the thread state but otherwise silently ignore this.
+
+	 We do need to report thread unavailability on resume or stop
+	 requests, but not as async target events.  */
+      if (current_thread != nullptr)
+	current_thread->last_status = cs.last_status;
     }
   else if (cs.last_status.kind != TARGET_WAITKIND_IGNORE)
     {

@@ -23943,6 +23943,10 @@ are:
 @tab @code{no resumed thread left stop reply}
 @tab Tracking thread lifetime.
 
+@item @code{unavailable-stop-reply}
+@tab @code{thread unavailable stop reply}
+@tab Tracking thread lifetime.
+
 @end multitable
 
 @node Remote Stub
@@ -41670,6 +41674,17 @@ reply packet from the target.  The latest @samp{C}, @samp{c}, @samp{S}
 or @samp{s} action is expected to be continued.  @xref{File-I/O Remote
 Protocol Extension}, for more details.
 
+@item U @var{thread-id}
+The program is currently unavailable.  The remote target tried to stop
+it but it would not respond.  The thread designator @var{thread-id}
+has the format and interpretation described in @ref{thread-id syntax}.
+
+This packet should not be sent by default; older @value{GDBN} versions
+did not support it.  @value{GDBN} requests it, by supplying an
+appropriate @samp{qSupported} feature (@pxref{qSupported}).  The
+remote stub must also supply the appropriate @samp{qSupported} feature
+indicating support.
+
 @end table
 
 @node General Query Packets
@@ -42847,6 +42862,11 @@ These are the currently defined stub features and their properties:
 @tab @samp{-}
 @tab No
 
+@item @samp{unavailable}
+@tab No
+@tab @samp{-}
+@tab No
+
 @end multitable
 
 These are the currently defined stub features, in more detail:
@@ -43079,6 +43099,9 @@ functionality and understands the @samp{qMemTags} (@pxref{qMemTags}) and
 For AArch64 GNU/Linux systems, this feature also requires access to the
 @file{/proc/@var{pid}/smaps} file so memory mapping page flags can be inspected.
 This is done via the @samp{vFile} requests.
+
+@item unavailable
+The remote stub reports the @samp{U} stop reply.
 
 @end table
 

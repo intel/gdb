@@ -280,6 +280,9 @@ enum {
      packets and the tag violation stop replies.  */
   PACKET_memory_tagging_feature,
 
+  /* Support TARGET_WAITKIND_UNAVAILABLE.  */
+  PACKET_unavailable,
+
   PACKET_MAX
 };
 
@@ -5476,6 +5479,8 @@ static const struct protocol_feature remote_protocol_features[] = {
     PACKET_memory_tagging_feature },
   { "vRun", PACKET_ENABLE, remote_supported_packet, PACKET_vRun },
   { "R", PACKET_ENABLE, remote_supported_packet, PACKET_R },
+  { "unavailable", PACKET_DISABLE, remote_supported_packet,
+    PACKET_unavailable },
   { "vAck:library", PACKET_DISABLE, remote_supported_packet,
     PACKET_vAck_library },
   { "vAck:in-memory-library", PACKET_DISABLE, remote_supported_packet,
@@ -5586,6 +5591,10 @@ remote_target::remote_query_supported ()
       if (m_features.packet_set_cmd_state (PACKET_memory_tagging_feature)
 	  != AUTO_BOOLEAN_FALSE)
 	remote_query_supported_append (&q, "memory-tagging+");
+
+      if (m_features.packet_set_cmd_state (PACKET_unavailable)
+	  != AUTO_BOOLEAN_FALSE)
+	remote_query_supported_append (&q, "unavailable+");
 
       if (m_features.packet_set_cmd_state
 		(PACKET_multi_address_space_feature) != AUTO_BOOLEAN_FALSE)
@@ -8023,6 +8032,10 @@ Packet: '%s'\n"),
       event->ws.kind = TARGET_WAITKIND_NO_RESUMED;
       event->ptid = minus_one_ptid;
       break;
+    case 'U':
+      event->ws.kind = TARGET_WAITKIND_UNAVAILABLE;
+      event->ptid = read_ptid (&buf[1], NULL);
+      break;
     }
 }
 
@@ -8433,7 +8446,7 @@ remote_target::wait_as (ptid_t ptid, target_waitstatus *status,
 	 again.  Keep waiting for events.  */
       rs->waiting_for_stop_reply = 1;
       break;
-    case 'N': case 'T': case 'S': case 'X': case 'W':
+    case 'N': case 'T': case 'S': case 'X': case 'W': case 'U':
       {
 	/* There is a stop reply to handle.  */
 	rs->waiting_for_stop_reply = 0;
@@ -15615,6 +15628,9 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
 
   add_packet_config_cmd (&remote_protocol_packets[PACKET_memory_tagging_feature],
 			 "memory-tagging-feature", "memory-tagging-feature", 0);
+
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_unavailable],
+			 "U stop reply", "unavailable-stop-reply", 0);
 
   /* Assert that we've registered "set remote foo-packet" commands
      for all packet configs.  */

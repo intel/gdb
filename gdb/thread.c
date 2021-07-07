@@ -1142,7 +1142,7 @@ finish_thread_state (process_stratum_target *targ, ptid_t ptid)
   bool any_started = false;
 
   for (thread_info *tp : all_non_exited_threads (targ, ptid))
-    if (set_running_thread (tp, tp->executing ()))
+    if (set_running_thread (tp, tp->executing () && tp->resumed ()))
       any_started = true;
 
   if (any_started)

@@ -4753,7 +4753,11 @@ remote_target::process_initial_stop_replies (int from_tty)
 	  || ws.sig () != GDB_SIGNAL_0)
 	evthread->set_pending_waitstatus (ws);
 
-      set_executing (this, event_ptid, false);
+      /* Unavailable threads are executing (i.e. they may report events
+	 and we cannot access their state) but not running (i.e. we tried
+	 to stop them) from GDB's point of view.  */
+      if (ws.kind () != TARGET_WAITKIND_UNAVAILABLE)
+	set_executing (this, event_ptid, false);
       set_running (this, event_ptid, false);
       get_remote_thread_info (evthread)->set_not_resumed ();
     }

@@ -4271,16 +4271,9 @@ linux_process_target::resume_one_lwp (lwp_info *lwp, int step, int signal,
     }
 }
 
-/* This function is called once per thread via for_each_thread.
-   We look up which resume request applies to THREAD and mark it with a
-   pointer to the appropriate resume request.
-
-   This algorithm is O(threads * resume elements), but resume elements
-   is small (and will remain small at least until GDB supports thread
-   suspension).  */
-
-static void
-linux_set_resume_request (thread_info *thread, thread_resume *resume, size_t n)
+void
+linux_process_target::set_resume_request (thread_info *thread,
+					  thread_resume *resume, size_t n)
 {
   struct lwp_info *lwp = get_thread_lwp (thread);
 
@@ -4295,63 +4288,8 @@ linux_set_resume_request (thread_info *thread, thread_resume *resume, size_t n)
 	      && (ptid.is_pid ()
 		  || ptid.lwp () == -1)))
 	{
-	  if (resume[ndx].kind == resume_stop
-	      && thread->last_resume_kind == resume_stop)
-	    {
-	      if (debug_threads)
-		debug_printf ("already %s LWP %ld at GDB's request\n",
-			      (thread->last_status.kind
-			       == TARGET_WAITKIND_STOPPED)
-			      ? "stopped"
-			      : "stopping",
-			      lwpid_of (thread));
-
-	      continue;
-	    }
-
-	  /* Ignore (wildcard) resume requests for already-resumed
-	     threads.  */
-	  if (resume[ndx].kind != resume_stop
-	      && thread->last_resume_kind != resume_stop)
-	    {
-	      if (debug_threads)
-		debug_printf ("already %s LWP %ld at GDB's request\n",
-			      (thread->last_resume_kind
-			       == resume_step)
-			      ? "stepping"
-			      : "continuing",
-			      lwpid_of (thread));
-	      continue;
-	    }
-
-	  /* Don't let wildcard resumes resume fork children that GDB
-	     does not yet know are new fork children.  */
-	  if (lwp->fork_relative != NULL)
-	    {
-	      struct lwp_info *rel = lwp->fork_relative;
-
-	      if (rel->status_pending_p
-		  && (rel->waitstatus.kind == TARGET_WAITKIND_FORKED
-		      || rel->waitstatus.kind == TARGET_WAITKIND_VFORKED))
-		{
-		  if (debug_threads)
-		    debug_printf ("not resuming LWP %ld: has queued stop reply\n",
-				  lwpid_of (thread));
-		  continue;
-		}
-	    }
-
-	  /* If the thread has a pending event that has already been
-	     reported to GDBserver core, but GDB has not pulled the
-	     event out of the vStopped queue yet, likewise, ignore the
-	     (wildcard) resume request.  */
-	  if (in_queued_stop_replies (thread->id))
-	    {
-	      if (debug_threads)
-		debug_printf ("not resuming LWP %ld: has queued stop reply\n",
-			      lwpid_of (thread));
-	      continue;
-	    }
+	  if (!resume_request_applies_to_thread (thread, resume[ndx]))
+	    continue;
 
 	  lwp->resume = &resume[ndx];
 	  thread->last_resume_kind = lwp->resume->kind;
@@ -4359,21 +4297,7 @@ linux_set_resume_request (thread_info *thread, thread_resume *resume, size_t n)
 	  lwp->step_range_start = lwp->resume->step_range_start;
 	  lwp->step_range_end = lwp->resume->step_range_end;
 
-	  /* If we had a deferred signal to report, dequeue one now.
-	     This can happen if LWP gets more than one signal while
-	     trying to get out of a jump pad.  */
-	  if (lwp->stopped
-	      && !lwp->status_pending_p
-	      && dequeue_one_deferred_signal (lwp, &lwp->status_pending))
-	    {
-	      lwp->status_pending_p = 1;
-
-	      if (debug_threads)
-		debug_printf ("Dequeueing deferred signal %d for LWP %ld, "
-			      "leaving status pending.\n",
-			      WSTOPSIG (lwp->status_pending),
-			      lwpid_of (thread));
-	    }
+	  post_set_resume_request (thread);
 
 	  return;
 	}
@@ -4381,6 +4305,93 @@ linux_set_resume_request (thread_info *thread, thread_resume *resume, size_t n)
 
   /* No resume action for this thread.  */
   lwp->resume = NULL;
+}
+
+bool
+linux_process_target::resume_request_applies_to_thread (thread_info *thread,
+							thread_resume &resume)
+{
+  lwp_info *lwp = get_thread_lwp (thread);
+
+  if (resume.kind == resume_stop
+      && thread->last_resume_kind == resume_stop)
+    {
+      if (debug_threads)
+	debug_printf ("already %s LWP %ld at GDB's request\n",
+		      (thread->last_status.kind == TARGET_WAITKIND_STOPPED)
+		      ? "stopped"
+		      : "stopping",
+		      lwpid_of (thread));
+
+      return false;
+    }
+
+  /* Ignore (wildcard) resume requests for already-resumed
+     threads.  */
+  if (resume.kind != resume_stop
+      && thread->last_resume_kind != resume_stop)
+    {
+      if (debug_threads)
+	debug_printf ("already %s LWP %ld at GDB's request\n",
+		      (thread->last_resume_kind == resume_step)
+		      ? "stepping"
+		      : "continuing",
+		      lwpid_of (thread));
+      return false;
+    }
+
+  /* Don't let wildcard resumes resume fork children that GDB
+     does not yet know are new fork children.  */
+  if (lwp->fork_relative != nullptr)
+    {
+      struct lwp_info *rel = lwp->fork_relative;
+
+      if (rel->status_pending_p
+	  && (rel->waitstatus.kind == TARGET_WAITKIND_FORKED
+	      || rel->waitstatus.kind == TARGET_WAITKIND_VFORKED))
+	{
+	  if (debug_threads)
+	    debug_printf ("not resuming LWP %ld: has queued stop reply\n",
+			  lwpid_of (thread));
+	  return false;
+	}
+    }
+
+  /* If the thread has a pending event that has already been
+     reported to GDBserver core, but GDB has not pulled the
+     event out of the vStopped queue yet, likewise, ignore the
+     (wildcard) resume request.  */
+  if (in_queued_stop_replies (thread->id))
+    {
+      if (debug_threads)
+	debug_printf ("not resuming LWP %ld: has queued stop reply\n",
+		      lwpid_of (thread));
+      return false;
+    }
+
+  return true;
+}
+
+void
+linux_process_target::post_set_resume_request (thread_info *thread)
+{
+  lwp_info *lwp = get_thread_lwp (thread);
+
+  /* If we had a deferred signal to report, dequeue one now.
+     This can happen if LWP gets more than one signal while
+     trying to get out of a jump pad.  */
+  if (lwp->stopped
+      && !lwp->status_pending_p
+      && dequeue_one_deferred_signal (lwp, &lwp->status_pending))
+    {
+      lwp->status_pending_p = 1;
+
+      if (debug_threads)
+	debug_printf ("Dequeueing deferred signal %d for LWP %ld, "
+		      "leaving status pending.\n",
+		      WSTOPSIG (lwp->status_pending),
+		      lwpid_of (thread));
+    }
 }
 
 bool
@@ -4755,9 +4766,9 @@ linux_process_target::resume (thread_resume *resume_info, size_t n)
       debug_printf ("linux_resume:\n");
     }
 
-  for_each_thread ([&] (thread_info *thread)
+  for_each_thread ([=] (thread_info *thread)
     {
-      linux_set_resume_request (thread, resume_info, n);
+      set_resume_request (thread, resume_info, n);
     });
 
   /* If there is a thread which would otherwise be resumed, which has

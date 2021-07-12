@@ -446,6 +446,26 @@ private:
      disappears while we try to resume it.  */
   void resume_one_lwp (lwp_info *lwp, int step, int signal, siginfo_t *info);
 
+  /* This function is called once per thread via for_each_thread.
+     We look up which resume request applies to THREAD and mark it with a
+     pointer to the appropriate resume request.
+
+     This algorithm is O(threads * resume elements), but resume elements
+     is small (and will remain small at least until GDB supports thread
+     suspension).  */
+  void set_resume_request (thread_info *thread, thread_resume *resume,
+			   size_t n);
+
+  /* Return true if RESUME is a request that applies to THREAD.
+     Return false, otherwise.  */
+  bool resume_request_applies_to_thread (thread_info *thread,
+					 thread_resume &resume);
+
+  /* This method is called after a resume request has been set for
+     THREAD.  It is the target's chance to do any post-setups, such as
+     dequeuing a deferred signal.  */
+  void post_set_resume_request (thread_info *thread);
+
   /* This function is called once per thread.  We check the thread's
      last resume request, which will tell us whether to resume, step, or
      leave the thread stopped.  Any signal the client requested to be

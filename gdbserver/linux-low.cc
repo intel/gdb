@@ -4283,33 +4283,6 @@ linux_process_target::resume_request_applies_to_thread (thread_info *thread,
 {
   lwp_info *lwp = get_thread_lwp (thread);
 
-  if (resume.kind == resume_stop
-      && thread->last_resume_kind == resume_stop)
-    {
-      if (debug_threads)
-	debug_printf ("already %s LWP %ld at GDB's request\n",
-		      (thread->last_status.kind == TARGET_WAITKIND_STOPPED)
-		      ? "stopped"
-		      : "stopping",
-		      lwpid_of (thread));
-
-      return false;
-    }
-
-  /* Ignore (wildcard) resume requests for already-resumed
-     threads.  */
-  if (resume.kind != resume_stop
-      && thread->last_resume_kind != resume_stop)
-    {
-      if (debug_threads)
-	debug_printf ("already %s LWP %ld at GDB's request\n",
-		      (thread->last_resume_kind == resume_step)
-		      ? "stepping"
-		      : "continuing",
-		      lwpid_of (thread));
-      return false;
-    }
-
   /* Don't let wildcard resumes resume fork children that GDB
      does not yet know are new fork children.  */
   if (lwp->fork_relative != nullptr)
@@ -4327,19 +4300,8 @@ linux_process_target::resume_request_applies_to_thread (thread_info *thread,
 	}
     }
 
-  /* If the thread has a pending event that has already been
-     reported to GDBserver core, but GDB has not pulled the
-     event out of the vStopped queue yet, likewise, ignore the
-     (wildcard) resume request.  */
-  if (in_queued_stop_replies (thread->id))
-    {
-      if (debug_threads)
-	debug_printf ("not resuming LWP %ld: has queued stop reply\n",
-		      lwpid_of (thread));
-      return false;
-    }
-
-  return true;
+  return nonstop_process_target::resume_request_applies_to_thread (thread,
+								   resume);
 }
 
 void

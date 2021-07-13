@@ -435,6 +435,7 @@ private:
      disappears while we try to resume it.  */
   void resume_one_lwp (lwp_info *lwp, int step, int signal, siginfo_t *info);
 
+  /* Override the base implementation to also check fork children.  */
   bool resume_request_applies_to_thread (thread_info *thread,
 					 thread_resume &resume) override;
 

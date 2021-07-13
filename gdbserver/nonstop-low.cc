@@ -199,3 +199,130 @@ nonstop_process_target::wait (ptid_t ptid,
 
   return event_ptid;
 }
+
+void
+nonstop_process_target::resume (thread_resume *resume_info, size_t n)
+{
+  thread_info *need_step_over = nullptr;
+
+  if (debug_threads)
+    {
+      debug_enter ();
+      debug_printf ("resume:\n");
+    }
+
+  for_each_thread ([=] (thread_info *thread)
+    {
+      set_resume_request (thread, resume_info, n);
+    });
+
+  /* If there is a thread which would otherwise be resumed, which has
+     a pending status, then don't resume any threads - we can just
+     report the pending status.  Make sure to queue any signals that
+     would otherwise be sent.  In non-stop mode, we'll apply this
+     logic to each thread individually.  We consume all pending events
+     before considering to start a step-over (in all-stop).  */
+  bool any_pending = false;
+  if (!non_stop)
+    any_pending = find_thread ([this] (thread_info *thread)
+		    {
+		      nonstop_thread_info *nti = get_thread_nti (thread);
+
+		      /* Threads that will not be resumed are not
+			 interesting, because we might not wait for
+			 them next time through 'wait'.  */
+		      if (nti->resume == nullptr)
+			return false;
+
+		      return thread_still_has_status_pending (thread);
+		    }) != nullptr;
+
+  /* If there is a thread which would otherwise be resumed, which is
+     stopped at a breakpoint that needs stepping over, then don't
+     resume any threads - have it step over the breakpoint with all
+     other threads stopped, then resume all threads again.  Make sure
+     to queue any signals that would otherwise be delivered or
+     queued.  */
+  if (!any_pending && supports_breakpoints ())
+    need_step_over = find_thread ([this] (thread_info *thread)
+		       {
+			 return thread_needs_step_over (thread);
+		       });
+
+  bool leave_all_stopped = (need_step_over != NULL || any_pending);
+
+  if (debug_threads)
+    {
+      if (need_step_over != NULL)
+	debug_printf ("Not resuming all, need step over\n");
+      else if (any_pending)
+	debug_printf ("Not resuming, all-stop and found "
+		      "a thread with pending status\n");
+      else
+	debug_printf ("Resuming, no pending status or step over needed\n");
+    }
+
+  /* Even if we're leaving threads stopped, resume them because e.g.
+     we may have to queue all signals we'd otherwise deliver.  */
+  for_each_thread ([&] (thread_info *thread)
+    {
+      resume_one_thread (thread, leave_all_stopped);
+    });
+
+  if (need_step_over != nullptr)
+    start_step_over (need_step_over);
+
+  if (debug_threads)
+    {
+      debug_printf ("resume done\n");
+      debug_exit ();
+    }
+
+  /* We may have events that were pending that can/should be sent to
+     the client now.  Trigger a 'wait' call.  */
+  if (target_is_async_p ())
+    async_file_mark ();
+}
+
+void
+nonstop_process_target::set_resume_request (thread_info *thread,
+					    thread_resume *resume,
+					    size_t n)
+{
+  nonstop_thread_info *nti = get_thread_nti (thread);
+
+  for (int ndx = 0; ndx < n; ndx++)
+    {
+      ptid_t ptid = resume[ndx].thread;
+      if (ptid == minus_one_ptid
+	  || ptid == thread->id
+	  /* Handle both 'pPID' and 'pPID.-1' as meaning 'all threads
+	     of PID'.  */
+	  || (ptid.pid () == pid_of (thread)
+	      && (ptid.is_pid ()
+		  || ptid.lwp () == -1)))
+	{
+	  if (!resume_request_applies_to_thread (thread, resume[ndx]))
+	    continue;
+
+	  nti->resume = &resume[ndx];
+	  thread->last_resume_kind = nti->resume->kind;
+
+	  nti->step_range_start = nti->resume->step_range_start;
+	  nti->step_range_end = nti->resume->step_range_end;
+
+	  post_set_resume_request (thread);
+
+	  return;
+	}
+    }
+
+  /* No resume action for this thread.  */
+  nti->resume = NULL;
+}
+
+void
+nonstop_process_target::post_set_resume_request (thread_info *thread)
+{
+  /* Do nothing by default.  */
+}

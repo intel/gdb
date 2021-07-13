@@ -155,8 +155,6 @@ public:
 
   bool thread_alive (ptid_t pid) override;
 
-  void resume (thread_resume *resume_info, size_t n) override;
-
   void fetch_registers (regcache *regcache, int regno) override;
 
   void store_registers (regcache *regcache, int regno) override;
@@ -359,16 +357,7 @@ private:
      NULL.  This undoes a stop_all_lwps call.  */
   void unstop_all_lwps (int unsuspend, lwp_info *except);
 
-  /* Start a step-over operation on LWP.  When LWP stopped at a
-     breakpoint, to make progress, we need to remove the breakpoint out
-     of the way.  If we let other threads run while we do that, they may
-     pass by the breakpoint location and miss hitting it.  To avoid
-     that, a step-over momentarily stops all threads while LWP is
-     single-stepped by either hardware or software while the breakpoint
-     is temporarily uninserted from the inferior.  When the single-step
-     finishes, we reinsert the breakpoint, and let all threads that are
-     supposed to be running, run again.  */
-  void start_step_over (lwp_info *lwp);
+  void start_step_over (thread_info *thread) override;
 
   /* If there's a step over in progress, wait until all threads stop
      (that is, until the stepping thread finishes its step), and
@@ -446,25 +435,10 @@ private:
      disappears while we try to resume it.  */
   void resume_one_lwp (lwp_info *lwp, int step, int signal, siginfo_t *info);
 
-  /* This function is called once per thread via for_each_thread.
-     We look up which resume request applies to THREAD and mark it with a
-     pointer to the appropriate resume request.
-
-     This algorithm is O(threads * resume elements), but resume elements
-     is small (and will remain small at least until GDB supports thread
-     suspension).  */
-  void set_resume_request (thread_info *thread, thread_resume *resume,
-			   size_t n);
-
-  /* Return true if RESUME is a request that applies to THREAD.
-     Return false, otherwise.  */
   bool resume_request_applies_to_thread (thread_info *thread,
-					 thread_resume &resume);
+					 thread_resume &resume) override;
 
-  /* This method is called after a resume request has been set for
-     THREAD.  It is the target's chance to do any post-setups, such as
-     dequeuing a deferred signal.  */
-  void post_set_resume_request (thread_info *thread);
+  void post_set_resume_request (thread_info *thread) override;
 
   /* This function is called once per thread.  We check the thread's
      last resume request, which will tell us whether to resume, step, or
@@ -476,20 +450,8 @@ private:
      on that particular thread, and leave all others stopped.  */
   void proceed_one_lwp (thread_info *thread, lwp_info *except);
 
-  /* This function is called once per thread.  We check the thread's
-     resume request, which will tell us whether to resume, step, or
-     leave the thread stopped; and what signal, if any, it should be
-     sent.
-
-     For threads which we aren't explicitly told otherwise, we preserve
-     the stepping flag; this is used for stepping over gdbserver-placed
-     breakpoints.
-
-     If pending_flags was set in any thread, we queue any needed
-     signals, since we won't actually resume.  We already have a pending
-     event to report, so we don't need to preserve any step requests;
-     they should be re-issued if necessary.  */
-  void resume_one_thread (thread_info *thread, bool leave_all_stopped);
+  void resume_one_thread (thread_info *thread,
+			  bool leave_all_stopped) override;
 
   /* Return true if this lwp has an interesting status pending.  */
   bool status_pending_p_callback (thread_info *thread, ptid_t ptid);
@@ -501,20 +463,9 @@ private:
   /* Unsuspend THREAD, except EXCEPT, and proceed.  */
   void unsuspend_and_proceed_one_lwp (thread_info *thread, lwp_info *except);
 
-  /* Return true if this lwp still has an interesting status pending.
-     If not (e.g., it had stopped for a breakpoint that is gone), return
-     false.  */
-  bool thread_still_has_status_pending (thread_info *thread);
+  bool thread_still_has_status_pending (thread_info *thread) override;
 
-  /* Return true if this lwp is to-be-resumed and has an interesting
-     status pending.  */
-  bool resume_status_pending (thread_info *thread);
-
-  /* Return true if this lwp that GDB wants running is stopped at an
-     internal breakpoint that we need to step over.  It assumes that
-     any required STOP_PC adjustment has already been propagated to
-     the inferior's regcache.  */
-  bool thread_needs_step_over (thread_info *thread);
+  bool thread_needs_step_over (thread_info *thread) override;
 
   /* Single step via hardware or software single step.
      Return 1 if hardware single stepping, 0 if software single stepping
@@ -624,6 +575,8 @@ protected:
   virtual CORE_ADDR low_get_pc (regcache *regcache);
 
   virtual void low_set_pc (regcache *regcache, CORE_ADDR newpc);
+
+  virtual bool supports_breakpoints () override final;
 
   /* Find the next possible PCs after the current instruction executes.
      Targets that override this method should also override
@@ -798,22 +751,12 @@ struct lwp_info : public nonstop_thread_info
      level on this process was a single-step.  */
   int stepping;
 
-  /* Range to single step within.  This is a copy of the step range
-     passed along the last resume request.  See 'struct
-     thread_resume'.  */
-  CORE_ADDR step_range_start;	/* Inclusive */
-  CORE_ADDR step_range_end;	/* Exclusive */
-
   /* If this flag is set, we need to set the event request flags the
      next time we see this LWP stop.  */
   int must_set_ptrace_flags;
 
   /* A chain of signals that need to be delivered to this process.  */
   std::list<pending_signal> pending_signals;
-
-  /* A link used when resuming.  It is initialized from the resume request,
-     and then processed and cleared in linux_resume_one_lwp.  */
-  struct thread_resume *resume;
 
   /* Information bout this lwp's fast tracepoint collection status (is it
      currently stopped in the jump pad, and if so, before or at/after the

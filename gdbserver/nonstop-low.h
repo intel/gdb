@@ -38,6 +38,16 @@ struct nonstop_thread_info
 {
   /* Backlink to the parent object.  */
   thread_info *thread;
+
+  /* A link used when resuming.  It is initialized from the resume request,
+     and then processed and cleared when the thread is resumed.  */
+  thread_resume *resume;
+
+  /* Range to single step within.  This is a copy of the step range
+     passed along the last resume request.  See 'struct
+     thread_resume'.  */
+  CORE_ADDR step_range_start;	/* Inclusive */
+  CORE_ADDR step_range_end;	/* Exclusive */
 };
 
 /* The target that defines abstract nonstop behavior without relying
@@ -56,7 +66,70 @@ public:
   ptid_t wait (ptid_t ptid, target_waitstatus *status,
 	       int options) override final;
 
+  void resume (thread_resume *resume_info, size_t n) override;
+
 protected:
+
+  /* This function is called once per thread via for_each_thread.
+     We look up which resume request applies to THREAD and mark it with a
+     pointer to the appropriate resume request.
+
+     This algorithm is O(threads * resume elements), but resume elements
+     is small (and will remain small at least until GDB supports thread
+     suspension).  */
+  virtual void set_resume_request (thread_info *thread,
+				   thread_resume *resume, size_t n);
+
+  /* Return true if RESUME is a request that applies to THREAD.
+     Return false, otherwise.  */
+  virtual bool resume_request_applies_to_thread (thread_info *thread,
+						 thread_resume &resume) = 0;
+
+  /* This method is called after a resume request has been set for
+     THREAD.  It is the target's chance to do any post-setups, such as
+     dequeuing a deferred signal.  */
+  virtual void post_set_resume_request (thread_info *thread);
+
+  /* Return true if THREAD still has an interesting status pending.
+     If not (e.g., it had stopped for a breakpoint that is gone), return
+     false.  */
+  virtual bool thread_still_has_status_pending (thread_info *thread) = 0;
+
+  /* Return true if THREAD that GDB wants running is stopped at an
+     internal breakpoint that we need to step over.  It assumes that
+     any required STOP_PC adjustment has already been propagated to
+     the inferior's regcache.  */
+  virtual bool thread_needs_step_over (thread_info *thread) = 0;
+
+  /* Return true if breakpoints are supported.  */
+  virtual bool supports_breakpoints () = 0;
+
+  /* This function is called once per thread.  We check the thread's
+     resume request, which will tell us whether to resume, step, or
+     leave the thread stopped; and what signal, if any, it should be
+     sent.
+
+     For threads which we aren't explicitly told otherwise, we preserve
+     the stepping flag; this is used for stepping over gdbserver-placed
+     breakpoints.
+
+     If the thread should be left with a pending event, we queue any needed
+     signals, since we won't actually resume.  We already have a pending
+     event to report, so we don't need to preserve any step requests;
+     they should be re-issued if necessary.  */
+  virtual void resume_one_thread (thread_info *thread,
+				  bool leave_all_stopped) = 0;
+
+  /* Start a step-over operation on THREAD.  When THREAD stopped at a
+     breakpoint, to make progress, we need to remove the breakpoint out
+     of the way.  If we let other threads run while we do that, they may
+     pass by the breakpoint location and miss hitting it.  To avoid
+     that, a step-over momentarily stops all threads while THREAD is
+     single-stepped by either hardware or software while the breakpoint
+     is temporarily uninserted from the inferior.  When the single-step
+     finishes, we reinsert the breakpoint, and let all threads that are
+     supposed to be running, run again.  */
+  virtual void start_step_over (thread_info *thread) = 0;
 
   /* Wait for process, return status.  */
   virtual ptid_t low_wait (ptid_t ptid, target_waitstatus *ourstatus,

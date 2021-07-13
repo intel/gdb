@@ -275,6 +275,12 @@ static int check_ptrace_stopped_lwp_gone (struct lwp_info *lp);
 ptid_t step_over_bkpt;
 
 bool
+linux_process_target::supports_breakpoints ()
+{
+  return low_supports_breakpoints ();
+}
+
+bool
 linux_process_target::low_supports_breakpoints ()
 {
   return false;
@@ -4271,42 +4277,6 @@ linux_process_target::resume_one_lwp (lwp_info *lwp, int step, int signal,
     }
 }
 
-void
-linux_process_target::set_resume_request (thread_info *thread,
-					  thread_resume *resume, size_t n)
-{
-  struct lwp_info *lwp = get_thread_lwp (thread);
-
-  for (int ndx = 0; ndx < n; ndx++)
-    {
-      ptid_t ptid = resume[ndx].thread;
-      if (ptid == minus_one_ptid
-	  || ptid == thread->id
-	  /* Handle both 'pPID' and 'pPID.-1' as meaning 'all threads
-	     of PID'.  */
-	  || (ptid.pid () == pid_of (thread)
-	      && (ptid.is_pid ()
-		  || ptid.lwp () == -1)))
-	{
-	  if (!resume_request_applies_to_thread (thread, resume[ndx]))
-	    continue;
-
-	  lwp->resume = &resume[ndx];
-	  thread->last_resume_kind = lwp->resume->kind;
-
-	  lwp->step_range_start = lwp->resume->step_range_start;
-	  lwp->step_range_end = lwp->resume->step_range_end;
-
-	  post_set_resume_request (thread);
-
-	  return;
-	}
-    }
-
-  /* No resume action for this thread.  */
-  lwp->resume = NULL;
-}
-
 bool
 linux_process_target::resume_request_applies_to_thread (thread_info *thread,
 							thread_resume &resume)
@@ -4392,19 +4362,6 @@ linux_process_target::post_set_resume_request (thread_info *thread)
 		      WSTOPSIG (lwp->status_pending),
 		      lwpid_of (thread));
     }
-}
-
-bool
-linux_process_target::resume_status_pending (thread_info *thread)
-{
-  struct lwp_info *lwp = get_thread_lwp (thread);
-
-  /* LWPs which will not be resumed are not interesting, because
-     we might not wait for them next time through linux_wait.  */
-  if (lwp->resume == NULL)
-    return false;
-
-  return thread_still_has_status_pending (thread);
 }
 
 bool
@@ -4539,9 +4496,9 @@ linux_process_target::thread_needs_step_over (thread_info *thread)
 }
 
 void
-linux_process_target::start_step_over (lwp_info *lwp)
+linux_process_target::start_step_over (thread_info *thread)
 {
-  struct thread_info *thread = get_lwp_thread (lwp);
+  struct lwp_info *lwp = get_thread_lwp (thread);
   struct thread_info *saved_thread;
   CORE_ADDR pc;
   int step;
@@ -4756,82 +4713,6 @@ linux_process_target::resume_one_thread (thread_info *thread,
 }
 
 void
-linux_process_target::resume (thread_resume *resume_info, size_t n)
-{
-  struct thread_info *need_step_over = NULL;
-
-  if (debug_threads)
-    {
-      debug_enter ();
-      debug_printf ("linux_resume:\n");
-    }
-
-  for_each_thread ([=] (thread_info *thread)
-    {
-      set_resume_request (thread, resume_info, n);
-    });
-
-  /* If there is a thread which would otherwise be resumed, which has
-     a pending status, then don't resume any threads - we can just
-     report the pending status.  Make sure to queue any signals that
-     would otherwise be sent.  In non-stop mode, we'll apply this
-     logic to each thread individually.  We consume all pending events
-     before considering to start a step-over (in all-stop).  */
-  bool any_pending = false;
-  if (!non_stop)
-    any_pending = find_thread ([this] (thread_info *thread)
-		    {
-		      return resume_status_pending (thread);
-		    }) != nullptr;
-
-  /* If there is a thread which would otherwise be resumed, which is
-     stopped at a breakpoint that needs stepping over, then don't
-     resume any threads - have it step over the breakpoint with all
-     other threads stopped, then resume all threads again.  Make sure
-     to queue any signals that would otherwise be delivered or
-     queued.  */
-  if (!any_pending && low_supports_breakpoints ())
-    need_step_over = find_thread ([this] (thread_info *thread)
-		       {
-			 return thread_needs_step_over (thread);
-		       });
-
-  bool leave_all_stopped = (need_step_over != NULL || any_pending);
-
-  if (debug_threads)
-    {
-      if (need_step_over != NULL)
-	debug_printf ("Not resuming all, need step over\n");
-      else if (any_pending)
-	debug_printf ("Not resuming, all-stop and found "
-		      "an LWP with pending status\n");
-      else
-	debug_printf ("Resuming, no pending status or step over needed\n");
-    }
-
-  /* Even if we're leaving threads stopped, queue all signals we'd
-     otherwise deliver.  */
-  for_each_thread ([&] (thread_info *thread)
-    {
-      resume_one_thread (thread, leave_all_stopped);
-    });
-
-  if (need_step_over)
-    start_step_over (get_thread_lwp (need_step_over));
-
-  if (debug_threads)
-    {
-      debug_printf ("linux_resume done\n");
-      debug_exit ();
-    }
-
-  /* We may have events that were pending that can/should be sent to
-     the client now.  Trigger a linux_wait call.  */
-  if (target_is_async_p ())
-    async_file_mark ();
-}
-
-void
 linux_process_target::proceed_one_lwp (thread_info *thread, lwp_info *except)
 {
   struct lwp_info *lwp = get_thread_lwp (thread);
@@ -4966,7 +4847,7 @@ linux_process_target::proceed_all_lwps ()
 			  "thread %ld needing a step-over\n",
 			  lwpid_of (need_step_over));
 
-	  start_step_over (get_thread_lwp (need_step_over));
+	  start_step_over (need_step_over);
 	  return;
 	}
     }

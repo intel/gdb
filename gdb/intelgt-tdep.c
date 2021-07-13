@@ -289,18 +289,18 @@ intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
   regcache *thread_regcache = get_thread_regcache (tp);
 
-  ULONGEST emask
-    = regcache_raw_get_unsigned (thread_regcache, data->emask_regnum);
+  /* Default to zero if the emask register is not available.  This may
+     happen if TP is not available.  */
+  ULONGEST emask = 0ull;
+  regcache_cooked_read_unsigned (thread_regcache, data->emask_regnum,
+				 &emask);
 
   /* The higher bits of emask are undefined if they are outside the
      dispatch mask range.  Clear them explicitly using the dispatch
      mask, which is at SR0.2.  SR0 elements are 4 byte wide.  */
   uint32_t sr0_2 = 0;
-  if (thread_regcache->raw_read_part (data->sr0_regnum, sizeof (uint32_t) * 2,
-				      sizeof (sr0_2), (gdb_byte *) &sr0_2)
-      != REG_VALID)
-    throw_error (NOT_AVAILABLE_ERROR, _("Register %d (sr0) is not available"),
-		 data->sr0_regnum);
+  thread_regcache->raw_read_part (data->sr0_regnum, sizeof (uint32_t) * 2,
+				  sizeof (sr0_2), (gdb_byte *) &sr0_2);
 
   dprintf ("emask: %lx, dmask: %x", emask, sr0_2);
 

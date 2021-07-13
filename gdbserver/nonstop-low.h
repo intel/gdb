@@ -83,7 +83,7 @@ protected:
   /* Return true if RESUME is a request that applies to THREAD.
      Return false, otherwise.  */
   virtual bool resume_request_applies_to_thread (thread_info *thread,
-						 thread_resume &resume) = 0;
+						 thread_resume &resume);
 
   /* This method is called after a resume request has been set for
      THREAD.  It is the target's chance to do any post-setups, such as

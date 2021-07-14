@@ -395,3 +395,106 @@ nonstop_process_target::send_sigstop (nonstop_thread_info *nti)
   nti->stop_expected = true;
   low_send_sigstop (nti);
 }
+
+void
+nonstop_process_target::resume_one_thread (thread_info *thread,
+					   bool leave_all_stopped)
+{
+  nonstop_thread_info *nti = get_thread_nti (thread);
+  const char *pid_str = target_pid_to_str (ptid_of (thread));
+
+  if (nti->resume == nullptr)
+    return;
+
+  if (nti->resume->kind == resume_stop)
+    {
+      if (debug_threads)
+	debug_printf ("resume_stop request for %s\n", pid_str);
+
+      if (!nti->stopped)
+	{
+	  if (debug_threads)
+	    debug_printf ("stopping %s\n", pid_str);
+
+	  /* Stop the thread, and wait for the event asynchronously,
+	     through the event loop.  */
+	  send_sigstop (nti);
+	}
+      else
+	{
+	  if (debug_threads)
+	    debug_printf ("already stopped %s\n", pid_str);
+
+	  /* The LWP may have been stopped in an internal event that
+	     was not meant to be notified back to GDB (e.g., gdbserver
+	     breakpoint), so we should be reporting a stop event in
+	     this case too.  */
+
+	  /* If the thread already has a pending SIGSTOP, this is a
+	     no-op.  Otherwise, something later will presumably resume
+	     the thread and this will cause it to cancel any pending
+	     operation, due to last_resume_kind == resume_stop.  If
+	     the thread already has a pending status to report, we
+	     will still report it the next time we wait - see
+	     status_pending_p_callback.  */
+
+	  /* Give the low target a chance to process the request.  */
+	  resume_stop_one_stopped_thread (nti);
+	}
+
+      /* For stop requests, we're done.  */
+      nti->resume = nullptr;
+      thread->last_status.kind = TARGET_WAITKIND_IGNORE;
+      return;
+    }
+
+  /* If this thread which is about to be resumed has a pending status,
+     then don't resume it - we can just report the pending status.
+     Likewise if it is suspended, because e.g., another thread is
+     stepping past a breakpoint.  Make sure to queue any signals that
+     would otherwise be sent.  In all-stop mode, we do this decision
+     based on if *any* thread has a pending status.  If there's a
+     thread that needs the step-over-breakpoint dance, then don't
+     resume any other thread but that particular one.  */
+  bool leave_pending = has_pending_status (nti) || leave_all_stopped;
+
+  /* If we have a new signal, enqueue the signal.  */
+  if (nti->resume->sig != 0)
+    enqueue_signal_pre_resume (nti, nti->resume->sig);
+
+  if (!leave_pending)
+    {
+      if (debug_threads)
+	debug_printf ("resuming %s\n", pid_str);
+
+      proceed_one_nti (nti, nullptr);
+    }
+  else
+    {
+      if (debug_threads)
+	debug_printf ("leaving %s stopped\n", pid_str);
+    }
+
+  thread->last_status.kind = TARGET_WAITKIND_IGNORE;
+  nti->resume = nullptr;
+}
+
+void
+nonstop_process_target::resume_stop_one_stopped_thread
+  (nonstop_thread_info *nti)
+{
+  /* Do nothing by default.  */
+}
+
+bool
+nonstop_process_target::has_pending_status (nonstop_thread_info *nti)
+{
+  return nti->thread->status_pending_p;
+}
+
+void
+nonstop_process_target::enqueue_signal_pre_resume (nonstop_thread_info *nti,
+						   int signal)
+{
+  /* Do nothing by default.  */
+}

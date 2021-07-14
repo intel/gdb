@@ -3954,6 +3954,28 @@ enqueue_pending_signal (struct lwp_info *lwp, int signal, siginfo_t *info)
 }
 
 void
+linux_process_target::enqueue_signal_pre_resume (nonstop_thread_info *nti,
+						 int signal)
+{
+  gdb_assert (signal != 0);
+
+  lwp_info *lwp = static_cast<lwp_info *> (nti);
+  siginfo_t info, *info_p;
+
+  /* If this is the same signal we were previously stopped by,
+     make sure to queue its siginfo.  */
+  if (WIFSTOPPED (lwp->last_status)
+      && WSTOPSIG (lwp->last_status) == signal
+      && ptrace (PTRACE_GETSIGINFO, lwpid_of (lwp->thread),
+		 (PTRACE_TYPE_ARG3) 0, &info) == 0)
+    info_p = &info;
+  else
+    info_p = nullptr;
+
+  enqueue_pending_signal (lwp, signal, info_p);
+}
+
+void
 linux_process_target::install_software_single_step_breakpoints (lwp_info *lwp)
 {
   struct thread_info *thread = get_lwp_thread (lwp);
@@ -4551,113 +4573,34 @@ linux_process_target::complete_ongoing_step_over ()
 }
 
 void
-linux_process_target::resume_one_thread (thread_info *thread,
-					 bool leave_all_stopped)
+linux_process_target::resume_stop_one_stopped_thread (nonstop_thread_info *nti)
 {
-  struct lwp_info *lwp = get_thread_lwp (thread);
-  int leave_pending;
+  gdb_assert (nti->resume != nullptr);
+  gdb_assert (nti->resume->kind == resume_stop);
+  gdb_assert (nti->stopped);
 
-  if (lwp->resume == NULL)
-    return;
+  lwp_info *lwp = static_cast<lwp_info *> (nti);
 
-  if (lwp->resume->kind == resume_stop)
-    {
-      if (debug_threads)
-	debug_printf ("resume_stop request for LWP %ld\n", lwpid_of (thread));
+  /* If we already have a pending signal to report, then there's no
+     need to queue a SIGSTOP, as this means we're midway through
+     moving the LWP out of the jumppad, and we will report the pending
+     signal as soon as that is finished.  */
+  if (lwp->pending_signals_to_report.empty ())
+    send_sigstop (lwp);
+}
 
-      if (!lwp->stopped)
-	{
-	  if (debug_threads)
-	    debug_printf ("stopping LWP %ld\n", lwpid_of (thread));
-
-	  /* Stop the thread, and wait for the event asynchronously,
-	     through the event loop.  */
-	  send_sigstop (lwp);
-	}
-      else
-	{
-	  if (debug_threads)
-	    debug_printf ("already stopped LWP %ld\n",
-			  lwpid_of (thread));
-
-	  /* The LWP may have been stopped in an internal event that
-	     was not meant to be notified back to GDB (e.g., gdbserver
-	     breakpoint), so we should be reporting a stop event in
-	     this case too.  */
-
-	  /* If the thread already has a pending SIGSTOP, this is a
-	     no-op.  Otherwise, something later will presumably resume
-	     the thread and this will cause it to cancel any pending
-	     operation, due to last_resume_kind == resume_stop.  If
-	     the thread already has a pending status to report, we
-	     will still report it the next time we wait - see
-	     status_pending_p_callback.  */
-
-	  /* If we already have a pending signal to report, then
-	     there's no need to queue a SIGSTOP, as this means we're
-	     midway through moving the LWP out of the jumppad, and we
-	     will report the pending signal as soon as that is
-	     finished.  */
-	  if (lwp->pending_signals_to_report.empty ())
-	    send_sigstop (lwp);
-	}
-
-      /* For stop requests, we're done.  */
-      lwp->resume = NULL;
-      thread->last_status.kind = TARGET_WAITKIND_IGNORE;
-      return;
-    }
-
-  /* If this thread which is about to be resumed has a pending status,
-     then don't resume it - we can just report the pending status.
-     Likewise if it is suspended, because e.g., another thread is
-     stepping past a breakpoint.  Make sure to queue any signals that
-     would otherwise be sent.  In all-stop mode, we do this decision
-     based on if *any* thread has a pending status.  If there's a
-     thread that needs the step-over-breakpoint dance, then don't
-     resume any other thread but that particular one.  */
-  leave_pending = (lwp->suspended
-		   || lwp->status_pending_p
-		   || leave_all_stopped);
-
-  /* If we have a new signal, enqueue the signal.  */
-  if (lwp->resume->sig != 0)
-    {
-      siginfo_t info, *info_p;
-
-      /* If this is the same signal we were previously stopped by,
-	 make sure to queue its siginfo.  */
-      if (WIFSTOPPED (lwp->last_status)
-	  && WSTOPSIG (lwp->last_status) == lwp->resume->sig
-	  && ptrace (PTRACE_GETSIGINFO, lwpid_of (thread),
-		     (PTRACE_TYPE_ARG3) 0, &info) == 0)
-	info_p = &info;
-      else
-	info_p = NULL;
-
-      enqueue_pending_signal (lwp, lwp->resume->sig, info_p);
-    }
-
-  if (!leave_pending)
-    {
-      if (debug_threads)
-	debug_printf ("resuming LWP %ld\n", lwpid_of (thread));
-
-      proceed_one_lwp (thread, NULL);
-    }
-  else
-    {
-      if (debug_threads)
-	debug_printf ("leaving LWP %ld stopped\n", lwpid_of (thread));
-    }
-
-  thread->last_status.kind = TARGET_WAITKIND_IGNORE;
-  lwp->resume = NULL;
+bool
+linux_process_target::has_pending_status (nonstop_thread_info *nti)
+{
+  lwp_info *lwp = static_cast<lwp_info *> (nti);
+  return lwp->suspended || lwp->status_pending_p;
 }
 
 void
-linux_process_target::proceed_one_lwp (thread_info *thread, lwp_info *except)
+linux_process_target::proceed_one_nti (nonstop_thread_info *nti,
+				       nonstop_thread_info *except)
 {
+  thread_info *thread = nti->thread;
   struct lwp_info *lwp = get_thread_lwp (thread);
   int step;
 
@@ -4665,7 +4608,7 @@ linux_process_target::proceed_one_lwp (thread_info *thread, lwp_info *except)
     return;
 
   if (debug_threads)
-    debug_printf ("proceed_one_lwp: lwp %ld\n", lwpid_of (thread));
+    debug_printf ("proceed_one_nti: lwp %ld\n", lwpid_of (thread));
 
   if (!lwp->stopped)
     {
@@ -4763,7 +4706,7 @@ linux_process_target::unsuspend_and_proceed_one_lwp (thread_info *thread,
 
   lwp_suspended_decr (lwp);
 
-  proceed_one_lwp (thread, except);
+  proceed_one_nti (lwp, except);
 }
 
 void
@@ -4800,7 +4743,7 @@ linux_process_target::proceed_all_lwps ()
 
   for_each_thread ([this] (thread_info *thread)
     {
-      proceed_one_lwp (thread, NULL);
+      proceed_one_nti (get_thread_lwp (thread), NULL);
     });
 }
 
@@ -4825,7 +4768,7 @@ linux_process_target::unstop_all_lwps (int unsuspend, lwp_info *except)
   else
     for_each_thread ([&] (thread_info *thread)
       {
-	proceed_one_lwp (thread, except);
+	proceed_one_nti (get_thread_lwp (thread), except);
       });
 
   if (debug_threads)

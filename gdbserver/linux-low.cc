@@ -321,8 +321,6 @@ lwp_in_step_range (struct lwp_info *lwp)
   return (pc >= lwp->step_range_start && pc < lwp->step_range_end);
 }
 
-static void send_sigstop (struct lwp_info *lwp);
-
 /* Return non-zero if HEADER is a 64-bit ELF file.  */
 
 static int
@@ -3700,30 +3698,13 @@ kill_lwp (unsigned long lwpid, int signo)
 void
 linux_stop_lwp (struct lwp_info *lwp)
 {
-  send_sigstop (lwp);
+  the_linux_target->send_sigstop (lwp);
 }
 
-static void
-send_sigstop (struct lwp_info *lwp)
+void
+linux_process_target::low_send_sigstop (nonstop_thread_info *nti)
 {
-  int pid;
-
-  pid = lwpid_of (get_lwp_thread (lwp));
-
-  /* If we already have a pending stop signal for this process, don't
-     send another.  */
-  if (lwp->stop_expected)
-    {
-      if (debug_threads)
-	debug_printf ("Have pending sigstop for lwp %d\n", pid);
-
-      return;
-    }
-
-  if (debug_threads)
-    debug_printf ("Sending sigstop to lwp %d\n", pid);
-
-  lwp->stop_expected = 1;
+  int pid = lwpid_of (nti->thread);
   kill_lwp (pid, SIGSTOP);
 }
 
@@ -3739,7 +3720,7 @@ send_sigstop (thread_info *thread, lwp_info *except)
   if (lwp->stopped)
     return;
 
-  send_sigstop (lwp);
+  the_linux_target->send_sigstop (lwp);
 }
 
 /* Increment the suspend count of an LWP, and stop it, if not stopped
@@ -3945,7 +3926,7 @@ linux_process_target::stop_all_lwps (int suspend, lwp_info *except)
   else
     for_each_thread ([&] (thread_info *thread)
       {
-	 send_sigstop (thread, except);
+	::send_sigstop (thread, except);
       });
 
   wait_for_sigstop ();

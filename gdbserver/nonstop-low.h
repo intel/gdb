@@ -48,6 +48,14 @@ struct nonstop_thread_info
      thread_resume'.  */
   CORE_ADDR step_range_start;	/* Inclusive */
   CORE_ADDR step_range_end;	/* Exclusive */
+
+  /* If this flag is set, the next stop request (e.g.  SIGSTOP) will be
+     ignored (the process will be immediately resumed).  This means
+     that either we sent the SIGSTOP to it ourselves and got some
+     other pending event (so the SIGSTOP is still pending), or that we
+     stopped the inferior implicitly (e.g. via PTRACE_ATTACH) and have
+     not waited for it yet.  */
+  bool stop_expected;
 };
 
 /* The target that defines abstract nonstop behavior without relying
@@ -67,6 +75,9 @@ public:
 	       int options) override final;
 
   void resume (thread_resume *resume_info, size_t n) override;
+
+  /* Send a stop request to NTI.  */
+  void send_sigstop (nonstop_thread_info *nti);
 
 protected:
 
@@ -130,6 +141,9 @@ protected:
      finishes, we reinsert the breakpoint, and let all threads that are
      supposed to be running, run again.  */
   virtual void start_step_over (thread_info *thread) = 0;
+
+  /* The target-specific way of sending a stop request to NTI.  */
+  virtual void low_send_sigstop (nonstop_thread_info *nti) = 0;
 
   /* Wait for process, return status.  */
   virtual ptid_t low_wait (ptid_t ptid, target_waitstatus *ourstatus,

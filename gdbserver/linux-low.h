@@ -310,6 +310,8 @@ public:
      visibility because proc-service uses it.  */
   virtual const regs_info *get_regs_info () = 0;
 
+  virtual void low_send_sigstop (nonstop_thread_info *nti) override;
+
 private:
 
   /* Handle a GNU/Linux extended wait response.  If we see a clone,
@@ -741,14 +743,6 @@ struct lwp_info : public nonstop_thread_info
 
     return this->fork_relative;
   }
-
-  /* If this flag is set, the next SIGSTOP will be ignored (the
-     process will be immediately resumed).  This means that either we
-     sent the SIGSTOP to it ourselves and got some other pending event
-     (so the SIGSTOP is still pending), or that we stopped the
-     inferior implicitly via PTRACE_ATTACH and have not waited for it
-     yet.  */
-  int stop_expected = 0;
 
   /* When this is true, we shall not try to resume this thread, even
      if last_resume_kind isn't resume_stop.  */

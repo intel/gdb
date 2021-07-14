@@ -162,7 +162,23 @@ protected:
      breakpoint that needs stepping over, we start a step-over operation
      on that particular thread, and leave all others stopped.  */
   virtual void proceed_one_nti (nonstop_thread_info *nti,
-				nonstop_thread_info *except) = 0;
+				nonstop_thread_info *except);
+
+  /* Handle a resume_stop request for an NTI.  */
+  virtual void proceed_one_nti_for_resume_stop (nonstop_thread_info *nti);
+
+  /* NTI is about to be resumed.  Return true if it should be stepped,
+     false otherwise.  */
+  virtual bool resume_one_nti_should_step (nonstop_thread_info *nti);
+
+  /* Resume execution of NTI.  If STEP, single-step it.  If SIGNAL is
+     nonzero, give it that signal.  No error is thrown if NTI
+     disappears while we try to resume it.  */
+  virtual void resume_one_nti (nonstop_thread_info *nti, bool step,
+			       int signal, void *siginfo) = 0;
+
+  /* Return true if THREAD is doing hardware single step.  */
+  bool maybe_hw_step (thread_info *thread);
 
   /* Start a step-over operation on THREAD.  When THREAD stopped at a
      breakpoint, to make progress, we need to remove the breakpoint out

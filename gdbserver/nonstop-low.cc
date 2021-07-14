@@ -374,3 +374,24 @@ nonstop_process_target::resume_request_applies_to_thread (thread_info *thread,
 
   return true;
 }
+
+void
+nonstop_process_target::send_sigstop (nonstop_thread_info *nti)
+{
+  const char *pid_str = target_pid_to_str (ptid_of (nti->thread));
+
+  /* If we already have a pending stop signal, don't send another.  */
+  if (nti->stop_expected)
+    {
+      if (debug_threads)
+	debug_printf ("Have pending sigstop for %s\n", pid_str);
+
+      return;
+    }
+
+  if (debug_threads)
+    debug_printf ("Sending sigstop to %s\n", pid_str);
+
+  nti->stop_expected = true;
+  low_send_sigstop (nti);
+}

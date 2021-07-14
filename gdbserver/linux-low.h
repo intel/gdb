@@ -384,7 +384,7 @@ private:
 
   /* The reason we resume in the caller, is because we want to be able
      to pass lwp->status_pending as WSTAT, and we need to clear
-     status_pending_p before resuming, otherwise, resume_one_lwp
+     status_pending_p before resuming, otherwise, resume_one_nti
      refuses to resume.  */
   bool maybe_move_out_of_jump_pad (lwp_info *lwp, int *wstat);
 
@@ -431,14 +431,13 @@ private:
      architecture.  Returns true if we now have the LWP's stop PC.  */
   bool save_stop_reason (lwp_info *lwp);
 
-  /* Resume execution of LWP.  If STEP is nonzero, single-step it.  If
+  /* Resume execution of NTI.  If STEP, single-step it.  If
      SIGNAL is nonzero, give it that signal.  */
-  void resume_one_lwp_throw (lwp_info *lwp, int step, int signal,
-			     siginfo_t *info);
+  void resume_one_nti_throw (nonstop_thread_info *nti, bool step,
+			     int signal, siginfo_t *info);
 
-  /* Like resume_one_lwp_throw, but no error is thrown if the LWP
-     disappears while we try to resume it.  */
-  void resume_one_lwp (lwp_info *lwp, int step, int signal, siginfo_t *info);
+  void resume_one_nti (nonstop_thread_info *nti, bool step, int signal,
+		       void *siginfo) override;
 
   /* Override the base implementation to also check fork children.  */
   bool resume_request_applies_to_thread (thread_info *thread,
@@ -446,12 +445,13 @@ private:
 
   void post_set_resume_request (thread_info *thread) override;
 
-  void proceed_one_nti (nonstop_thread_info *nti,
-			nonstop_thread_info *except) override;
-
   void resume_stop_one_stopped_thread (nonstop_thread_info *nti) override;
 
   bool has_pending_status (nonstop_thread_info *nti) override;
+
+  void proceed_one_nti_for_resume_stop (nonstop_thread_info *nti) override;
+
+  bool resume_one_nti_should_step (nonstop_thread_info *nti) override;
 
   /* Return true if this lwp has an interesting status pending.  */
   bool status_pending_p_callback (thread_info *thread, ptid_t ptid);
@@ -471,9 +471,6 @@ private:
      Return 1 if hardware single stepping, 0 if software single stepping
      or can't single step.  */
   int single_step (lwp_info* lwp);
-
-  /* Return true if THREAD is doing hardware single step.  */
-  bool maybe_hw_step (thread_info *thread);
 
   /* Install breakpoints for software single stepping.  */
   void install_software_single_step_breakpoints (lwp_info *lwp);

@@ -605,9 +605,9 @@ linux_process_target::handle_extended_wait (lwp_info **orig_event_lwp,
       new_lwp = add_lwp (ptid);
 
       /* Either we're going to immediately resume the new thread
-	 or leave it stopped.  resume_one_lwp is a nop if it
+	 or leave it stopped.  resume_one_nti is a nop if it
 	 thinks the thread is currently running, so set this first
-	 before calling resume_one_lwp.  */
+	 before calling resume_one_nti.  */
       new_lwp->stopped = 1;
 
       /* If we're suspending all threads, leave this one suspended
@@ -1744,7 +1744,7 @@ linux_process_target::status_pending_p_callback (thread_info *thread,
   if (lp->status_pending_p
       && !thread_still_has_status_pending (thread))
     {
-      resume_one_lwp (lp, lp->stepping, GDB_SIGNAL_0, NULL);
+      resume_one_nti (lp, lp->stepping, GDB_SIGNAL_0, nullptr);
       return 0;
     }
 
@@ -2441,7 +2441,7 @@ linux_process_target::filter_event (int lwpid, int wstat)
 			  child->stepping ? "step" : "continue",
 			  target_pid_to_str (ptid_of (thread)));
 
-	  resume_one_lwp (child, child->stepping, 0, NULL);
+	  resume_one_nti (child, child->stepping, 0, nullptr);
 	  return NULL;
 	}
     }
@@ -2449,20 +2449,6 @@ linux_process_target::filter_event (int lwpid, int wstat)
   child->status_pending_p = 1;
   child->status_pending = wstat;
   return child;
-}
-
-bool
-linux_process_target::maybe_hw_step (thread_info *thread)
-{
-  if (supports_hardware_single_step ())
-    return true;
-  else
-    {
-      /* GDBserver must insert single-step breakpoint for software
-	 single step.  */
-      gdb_assert (has_single_step_breakpoints (thread));
-      return false;
-    }
 }
 
 void
@@ -2486,7 +2472,7 @@ linux_process_target::resume_stopped_resumed_lwps (thread_info *thread)
 		      paddress (lp->stop_pc),
 		      step);
 
-      resume_one_lwp (lp, step, GDB_SIGNAL_0, NULL);
+      resume_one_nti (lp, step, GDB_SIGNAL_0, nullptr);
     }
 }
 
@@ -2534,7 +2520,7 @@ linux_process_target::wait_for_event_filtered (ptid_t wait_ptid,
 				       &requested_child->status_pending);
 	  requested_child->status_pending_p = 0;
 	  requested_child->status_pending = 0;
-	  resume_one_lwp (requested_child, 0, 0, NULL);
+	  resume_one_nti (requested_child, 0, 0, nullptr);
 	}
 
       if (requested_child->suspended
@@ -3192,7 +3178,7 @@ linux_process_target::low_wait (ptid_t ptid, target_waitstatus *ourstatus,
 	    debug_printf ("Signal %d for LWP %ld deferred (in jump pad)\n",
 			  WSTOPSIG (w), lwpid_of (current_thread));
 
-	  resume_one_lwp (event_child, 0, 0, NULL);
+	  resume_one_nti (event_child, 0, 0, nullptr);
 
 	  if (debug_threads)
 	    debug_exit ();
@@ -3292,7 +3278,7 @@ linux_process_target::low_wait (ptid_t ptid, target_waitstatus *ourstatus,
 			lwpid_of (current_thread));
 	}
 
-      resume_one_lwp (event_child, event_child->stepping, 0, NULL);
+      resume_one_nti (event_child, event_child->stepping, 0, nullptr);
 
       if (debug_threads)
 	debug_exit ();
@@ -3348,7 +3334,7 @@ linux_process_target::low_wait (ptid_t ptid, target_waitstatus *ourstatus,
 	}
       else
 	{
-	  resume_one_lwp (event_child, event_child->stepping,
+	  resume_one_nti (event_child, event_child->stepping,
 			  WSTOPSIG (w), info_p);
 	}
 
@@ -3879,7 +3865,7 @@ linux_process_target::move_out_of_jump_pad (thread_info *thread)
 			  WSTOPSIG (*wstat), lwpid_of (thread));
 	}
 
-      resume_one_lwp (lwp, 0, 0, NULL);
+      resume_one_nti (lwp, 0, 0, nullptr);
     }
   else
     lwp_suspended_inc (lwp);
@@ -4027,9 +4013,11 @@ lwp_signal_can_be_delivered (struct lwp_info *lwp)
 }
 
 void
-linux_process_target::resume_one_lwp_throw (lwp_info *lwp, int step,
-					    int signal, siginfo_t *info)
+linux_process_target::resume_one_nti_throw (nonstop_thread_info *nti,
+					    bool step, int signal,
+					    siginfo_t *info)
 {
+  lwp_info *lwp = static_cast<lwp_info *> (nti);
   struct thread_info *thread = get_lwp_thread (lwp);
   struct thread_info *saved_thread;
   int ptrace_request;
@@ -4266,12 +4254,14 @@ check_ptrace_stopped_lwp_gone (struct lwp_info *lp)
 }
 
 void
-linux_process_target::resume_one_lwp (lwp_info *lwp, int step, int signal,
-				      siginfo_t *info)
+linux_process_target::resume_one_nti (nonstop_thread_info *nti, bool step,
+				      int signal, void *siginfo)
 {
+  lwp_info *lwp = static_cast<lwp_info *> (nti);
+  siginfo_t *info = static_cast<siginfo_t *> (siginfo);
   try
     {
-      resume_one_lwp_throw (lwp, step, signal, info);
+      resume_one_nti_throw (nti, step, signal, info);
     }
   catch (const gdb_exception_error &ex)
     {
@@ -4501,7 +4491,7 @@ linux_process_target::start_step_over (thread_info *thread)
 
   current_thread = saved_thread;
 
-  resume_one_lwp (lwp, step, 0, NULL);
+  resume_one_nti (lwp, step, 0, nullptr);
 
   /* Require next event from this LWP.  */
   step_over_bkpt = thread->id;
@@ -4593,78 +4583,38 @@ bool
 linux_process_target::has_pending_status (nonstop_thread_info *nti)
 {
   lwp_info *lwp = static_cast<lwp_info *> (nti);
+  gdb_assert (lwp->suspended >= 0);
   return lwp->suspended || lwp->status_pending_p;
 }
 
 void
-linux_process_target::proceed_one_nti (nonstop_thread_info *nti,
-				       nonstop_thread_info *except)
+linux_process_target::proceed_one_nti_for_resume_stop
+  (nonstop_thread_info *nti)
 {
-  thread_info *thread = nti->thread;
-  struct lwp_info *lwp = get_thread_lwp (thread);
-  int step;
+  gdb_assert (nti->thread->last_resume_kind == resume_stop);
 
-  if (lwp == except)
-    return;
+  lwp_info *lwp = static_cast<lwp_info *> (nti);
 
-  if (debug_threads)
-    debug_printf ("proceed_one_nti: lwp %ld\n", lwpid_of (thread));
-
-  if (!lwp->stopped)
-    {
-      if (debug_threads)
-	debug_printf ("   LWP %ld already running\n", lwpid_of (thread));
-      return;
-    }
-
-  if (thread->last_resume_kind == resume_stop
-      && thread->last_status.kind != TARGET_WAITKIND_IGNORE)
-    {
-      if (debug_threads)
-	debug_printf ("   client wants LWP to remain %ld stopped\n",
-		      lwpid_of (thread));
-      return;
-    }
-
-  if (lwp->status_pending_p)
-    {
-      if (debug_threads)
-	debug_printf ("   LWP %ld has pending status, leaving stopped\n",
-		      lwpid_of (thread));
-      return;
-    }
-
-  gdb_assert (lwp->suspended >= 0);
-
-  if (lwp->suspended)
-    {
-      if (debug_threads)
-	debug_printf ("   LWP %ld is suspended\n", lwpid_of (thread));
-      return;
-    }
-
-  if (thread->last_resume_kind == resume_stop
-      && lwp->pending_signals_to_report.empty ()
+  /* Note that if the LWP already has a SIGSTOP pending, this is a
+     no-op.  */
+  if (lwp->pending_signals_to_report.empty ()
       && (lwp->collecting_fast_tracepoint
 	  == fast_tpoint_collect_result::not_collecting))
     {
-      /* We haven't reported this LWP as stopped yet (otherwise, the
-	 last_status.kind check above would catch it, and we wouldn't
-	 reach here.  This LWP may have been momentarily paused by a
-	 stop_all_lwps call while handling for example, another LWP's
-	 step-over.  In that case, the pending expected SIGSTOP signal
-	 that was queued at vCont;t handling time will have already
-	 been consumed by wait_for_sigstop, and so we need to requeue
-	 another one here.  Note that if the LWP already has a SIGSTOP
-	 pending, this is a no-op.  */
-
       if (debug_threads)
 	debug_printf ("Client wants LWP %ld to stop. "
 		      "Making sure it has a SIGSTOP pending\n",
-		      lwpid_of (thread));
+		      lwpid_of (nti->thread));
 
       send_sigstop (lwp);
     }
+}
+
+bool
+linux_process_target::resume_one_nti_should_step (nonstop_thread_info *nti)
+{
+  thread_info *thread = nti->thread;
+  lwp_info *lwp = static_cast<lwp_info *> (nti);
 
   if (thread->last_resume_kind == resume_step)
     {
@@ -4679,7 +4629,7 @@ linux_process_target::proceed_one_nti (nonstop_thread_info *nti,
 	  && !has_single_step_breakpoints (thread))
 	install_software_single_step_breakpoints (lwp);
 
-      step = maybe_hw_step (thread);
+      return maybe_hw_step (thread);
     }
   else if (lwp->bp_reinsert != 0)
     {
@@ -4687,12 +4637,10 @@ linux_process_target::proceed_one_nti (nonstop_thread_info *nti,
 	debug_printf ("   stepping LWP %ld, reinsert set\n",
 		      lwpid_of (thread));
 
-      step = maybe_hw_step (thread);
+      return maybe_hw_step (thread);
     }
   else
-    step = 0;
-
-  resume_one_lwp (lwp, step, 0, NULL);
+    return false;
 }
 
 void
@@ -4954,7 +4902,7 @@ regsets_store_inferior_registers (struct regsets_info *regsets_info,
 	      /* At this point, ESRCH should mean the process is
 		 already gone, in which case we simply ignore attempts
 		 to change its registers.  See also the related
-		 comment in resume_one_lwp.  */
+		 comment in resume_one_nti.  */
 	      free (buf);
 	      return 0;
 	    }
@@ -5095,7 +5043,7 @@ linux_process_target::store_register (const usrregs_info *usrregs,
 	  /* At this point, ESRCH should mean the process is
 	     already gone, in which case we simply ignore attempts
 	     to change its registers.  See also the related
-	     comment in resume_one_lwp.  */
+	     comment in resume_one_nti.  */
 	  if (errno == ESRCH)
 	    return;
 

@@ -498,3 +498,99 @@ nonstop_process_target::enqueue_signal_pre_resume (nonstop_thread_info *nti,
 {
   /* Do nothing by default.  */
 }
+
+void
+nonstop_process_target::proceed_one_nti (nonstop_thread_info *nti,
+					 nonstop_thread_info *except)
+{
+  thread_info *thread = nti->thread;
+  const char *pid_str = target_pid_to_str (ptid_of (thread));
+
+  if (nti == except)
+    return;
+
+  if (debug_threads)
+    debug_printf ("proceed_one_nti: %s\n", pid_str);
+
+  if (!nti->stopped)
+    {
+      if (debug_threads)
+	debug_printf ("   %s already running\n", pid_str);
+      return;
+    }
+
+  if (thread->last_resume_kind == resume_stop
+      && thread->last_status.kind != TARGET_WAITKIND_IGNORE)
+    {
+      if (debug_threads)
+	debug_printf ("   client wants %s to remain stopped\n", pid_str);
+      return;
+    }
+
+  if (has_pending_status (nti))
+    {
+      if (debug_threads)
+	debug_printf ("   %s has pending status, leaving stopped\n",
+		      pid_str);
+      return;
+    }
+
+  if (thread->last_resume_kind == resume_stop)
+    {
+      /* We haven't reported this thread as stopped yet (otherwise,
+	 the last_status.kind check above would catch it, and we
+	 wouldn't reach here.  This thread may have been momentarily
+	 paused by a stop_all call while handling for example, another
+	 thread's step-over.  In that case, the pending expected
+	 SIGSTOP signal that was queued at vCont;t handling time will
+	 have already been consumed by wait_for_sigstop, and so we
+	 need to requeue another one here.  */
+      proceed_one_nti_for_resume_stop (nti);
+    }
+
+  bool step = resume_one_nti_should_step (nti);
+  resume_one_nti (nti, step, 0, nullptr);
+}
+
+void
+nonstop_process_target::proceed_one_nti_for_resume_stop
+  (nonstop_thread_info *nti)
+{
+  if (debug_threads)
+    debug_printf ("Client wants %s to stop. "
+		  "Making sure it has a SIGSTOP pending\n",
+		  target_pid_to_str (ptid_of (nti->thread)));
+
+  send_sigstop (nti);
+}
+
+bool
+nonstop_process_target::resume_one_nti_should_step (nonstop_thread_info *nti)
+{
+  thread_info *thread = nti->thread;
+  const char *pid_str = target_pid_to_str (ptid_of (thread));
+
+  if (thread->last_resume_kind == resume_step)
+    {
+      if (debug_threads)
+	debug_printf ("   stepping %s, client wants it stepping\n",
+		      pid_str);
+      return maybe_hw_step (thread);
+    }
+  else
+    return false;
+}
+
+bool
+nonstop_process_target::maybe_hw_step (thread_info *thread)
+{
+  if (supports_hardware_single_step ())
+    return true;
+  else
+    {
+      /* GDBserver must insert single-step breakpoint for software
+	 single step.  */
+      gdb_assert (has_single_step_breakpoints (thread));
+      return false;
+    }
+}

@@ -56,6 +56,14 @@ struct nonstop_thread_info
      stopped the inferior implicitly (e.g. via PTRACE_ATTACH) and have
      not waited for it yet.  */
   bool stop_expected;
+
+  /* If this flag is set, the thread is known to be stopped right now (stop
+     event already received in a wait()).  */
+  bool stopped;
+
+  /* The reason the thread last stopped, if we need to track it
+     (breakpoint, watchpoint, etc.)  */
+  enum target_stop_reason stop_reason;
 };
 
 /* The target that defines abstract nonstop behavior without relying
@@ -129,7 +137,32 @@ protected:
      event to report, so we don't need to preserve any step requests;
      they should be re-issued if necessary.  */
   virtual void resume_one_thread (thread_info *thread,
-				  bool leave_all_stopped) = 0;
+				  bool leave_all_stopped);
+
+  /* Handle a resume_stop request for an already-stopped thread.  Any
+     target-specific handling that's not done in resume_one_thread can
+     be done in this method.  */
+  virtual void resume_stop_one_stopped_thread (nonstop_thread_info *nti);
+
+  /* Return true if NTI, which is about to be resumed, has a pending
+     status.  False, otherwise.  */
+  virtual bool has_pending_status (nonstop_thread_info *nti);
+
+  /* Enqueue the signal SIG for NTI, which is about to be resumed.
+     By default, this is a no-op.  */
+  virtual void enqueue_signal_pre_resume (nonstop_thread_info *nti,
+					  int signal);
+
+  /* This function is called once per thread.  We check the thread's
+     last resume request, which will tell us whether to resume, step, or
+     leave the thread stopped.  Any signal the client requested to be
+     delivered has already been enqueued at this point.
+
+     If any thread that GDB wants running is stopped at an internal
+     breakpoint that needs stepping over, we start a step-over operation
+     on that particular thread, and leave all others stopped.  */
+  virtual void proceed_one_nti (nonstop_thread_info *nti,
+				nonstop_thread_info *except) = 0;
 
   /* Start a step-over operation on THREAD.  When THREAD stopped at a
      breakpoint, to make progress, we need to remove the breakpoint out

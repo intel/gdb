@@ -309,6 +309,9 @@ public:
 
   virtual void low_send_sigstop (nonstop_thread_info *nti) override;
 
+  virtual void enqueue_signal_pre_resume (nonstop_thread_info *nti,
+					  int signal) override;
+
 private:
 
   /* Handle a GNU/Linux extended wait response.  If we see a clone,
@@ -443,18 +446,12 @@ private:
 
   void post_set_resume_request (thread_info *thread) override;
 
-  /* This function is called once per thread.  We check the thread's
-     last resume request, which will tell us whether to resume, step, or
-     leave the thread stopped.  Any signal the client requested to be
-     delivered has already been enqueued at this point.
+  void proceed_one_nti (nonstop_thread_info *nti,
+			nonstop_thread_info *except) override;
 
-     If any thread that GDB wants running is stopped at an internal
-     breakpoint that needs stepping over, we start a step-over operation
-     on that particular thread, and leave all others stopped.  */
-  void proceed_one_lwp (thread_info *thread, lwp_info *except);
+  void resume_stop_one_stopped_thread (nonstop_thread_info *nti) override;
 
-  void resume_one_thread (thread_info *thread,
-			  bool leave_all_stopped) override;
+  bool has_pending_status (nonstop_thread_info *nti) override;
 
   /* Return true if this lwp has an interesting status pending.  */
   bool status_pending_p_callback (thread_info *thread, ptid_t ptid);
@@ -692,10 +689,6 @@ struct lwp_info : public nonstop_thread_info
      if last_resume_kind isn't resume_stop.  */
   int suspended;
 
-  /* If this flag is set, the lwp is known to be stopped right now (stop
-     event already received in a wait()).  */
-  int stopped;
-
   /* Signal whether we are in a SYSCALL_ENTRY or
      in a SYSCALL_RETURN event.
      Values:
@@ -727,10 +720,6 @@ struct lwp_info : public nonstop_thread_info
      been reported.  */
   int status_pending_p;
   int status_pending;
-
-  /* The reason the LWP last stopped, if we need to track it
-     (breakpoint, watchpoint, etc.)  */
-  enum target_stop_reason stop_reason;
 
   /* On architectures where it is possible to know the data address of
      a triggered watchpoint, STOPPED_DATA_ADDRESS is non-zero, and

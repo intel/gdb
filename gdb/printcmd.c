@@ -2387,7 +2387,8 @@ clear_dangling_display_expressions (struct objfile *objfile)
 void
 print_variable_and_value (const char *name, struct symbol *var,
 			  struct frame_info *frame,
-			  struct ui_file *stream, int indent)
+			  struct ui_file *stream, int indent,
+			  bool shadowed)
 {
 
   if (!name)
@@ -2409,6 +2410,11 @@ print_variable_and_value (const char *name, struct symbol *var,
       get_user_print_options (&opts);
       opts.deref_ref = 1;
       common_val_print_checked (val, stream, indent, &opts, current_language);
+
+      /* Print <shadowed> after the variable value only when it is variable
+	 shadowing case.  */
+      if (shadowed)
+	fprintf_styled (stream, metadata_style.style (), _("\t<shadowed>"));
 
       /* common_val_print invalidates FRAME when a pretty printer calls inferior
 	 function.  */

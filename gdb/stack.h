@@ -32,7 +32,8 @@ gdb::unique_xmalloc_ptr<char> find_frame_funname (struct frame_info *frame,
 
 typedef void (*iterate_over_block_arg_local_vars_cb) (const char *print_name,
 						      struct symbol *sym,
-						      void *cb_data);
+						      void *cb_data,
+						      bool shadowed);
 
 void iterate_over_block_arg_vars (const struct block *block,
 				  iterate_over_block_arg_local_vars_cb cb,

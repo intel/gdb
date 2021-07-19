@@ -56,6 +56,7 @@
 #include "cli/cli-option.h"
 #include "cli/cli-style.h"
 #include "gdbsupport/buildargv.h"
+#include <unordered_set>
 
 /* The possible choices of "set print frame-arguments", and the value
    of this setting.  */
@@ -2242,10 +2243,14 @@ backtrace_command_completer (struct cmd_list_element *ignore,
 
 static void
 iterate_over_block_locals (const struct block *b,
-			   iterate_over_block_arg_local_vars_cb cb)
+			   iterate_over_block_arg_local_vars_cb cb,
+			   std::unordered_set<std::string> &collected_vars)
 {
   for (struct symbol *sym : block_iterator_range (b))
     {
+      const char *name = sym->print_name ();
+      bool already_collected
+	= collected_vars.find (name) != collected_vars.end ();
       switch (sym->aclass ())
 	{
 	case LOC_CONST:
@@ -2258,7 +2263,27 @@ iterate_over_block_locals (const struct block *b,
 	    break;
 	  if (sym->domain () == COMMON_BLOCK_DOMAIN)
 	    break;
-	  cb (sym->print_name (), sym);
+	  /* Only for C/C++/Fortran languages, in case of variables shadowing
+	     print <shadowed> after the superblock variable.  Iteration of
+	     block starts from inner block so collected_vars variable keeps
+	     track of the variables in the innerblock.  */
+	  if ((current_language->la_language == language_c
+	       || current_language->la_language == language_cplus
+	       || current_language->la_language == language_fortran)
+	      && already_collected)
+	    cb (sym->print_name (), sym, true);
+	  /* In case of rust language it is possible to declare variable with
+	     same name multiple times and only latest declaration of variable
+	     is accessible.  So print only the first instance and there is no
+	     need of printing duplicates.  */
+	  else if (current_language->la_language == language_rust
+		   && already_collected)
+	    break;
+	  else
+	    {
+	      collected_vars.insert (name);
+	      cb (sym->print_name (), sym, false);
+	    }
 	  break;
 
 	default:
@@ -2275,9 +2300,10 @@ void
 iterate_over_block_local_vars (const struct block *block,
 			       iterate_over_block_arg_local_vars_cb cb)
 {
+  std::unordered_set<std::string> collected_vars;
   while (block)
     {
-      iterate_over_block_locals (block, cb);
+      iterate_over_block_locals (block, cb, collected_vars);
       /* After handling the function's top-level block, stop.  Don't
 	 continue to its superblock, the block of per-file
 	 symbols.  */
@@ -2299,14 +2325,15 @@ struct print_variable_and_value_data
   struct ui_file *stream;
   int values_printed;
 
-  void operator() (const char *print_name, struct symbol *sym);
+  void operator() (const char *print_name, struct symbol *sym, bool shadowed);
 };
 
 /* The callback for the locals and args iterators.  */
 
 void
 print_variable_and_value_data::operator() (const char *print_name,
-					   struct symbol *sym)
+					   struct symbol *sym,
+					   bool shadowed)
 {
   frame_info_ptr frame;
 
@@ -2326,7 +2353,8 @@ print_variable_and_value_data::operator() (const char *print_name,
       return;
     }
 
-  print_variable_and_value (print_name, sym, frame, stream, num_tabs);
+  print_variable_and_value (print_name, sym, frame, stream, num_tabs,
+			    shadowed);
 
   /* print_variable_and_value invalidates FRAME.  */
   frame = NULL;
@@ -2509,7 +2537,7 @@ iterate_over_block_arg_vars (const struct block *b,
 	  struct symbol *sym2
 	    = lookup_symbol_search_name (sym->search_name (),
 					 b, VAR_DOMAIN).symbol;
-	  cb (sym->print_name (), sym2);
+	  cb (sym->print_name (), sym2, false);
 	}
     }
 }

@@ -1537,7 +1537,8 @@ extern void print_variable_and_value (const char *name,
 				      struct symbol *var,
 				      frame_info_ptr frame,
 				      struct ui_file *stream,
-				      int indent);
+				      int indent,
+				      bool shadowed);
 
 extern void typedef_print (struct type *type, struct symbol *news,
 			   struct ui_file *stream);

@@ -1058,7 +1058,8 @@ collection_list::add_local_symbols (struct gdbarch *gdbarch, CORE_ADDR pc,
   int count = 0;
 
   auto do_collect_symbol = [&] (const char *print_name,
-				struct symbol *sym)
+				struct symbol *sym,
+				bool shadowed)
     {
       collect_symbol (sym, gdbarch, frame_regno,
 		      frame_offset, pc, trace_string);

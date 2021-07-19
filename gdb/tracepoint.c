@@ -1054,7 +1054,8 @@ struct add_local_symbols_data
 static void
 do_collect_symbol (const char *print_name,
 		   struct symbol *sym,
-		   void *cb_data)
+		   void *cb_data,
+		   bool shadowed)
 {
   struct add_local_symbols_data *p = (struct add_local_symbols_data *) cb_data;
 

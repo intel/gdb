@@ -2338,7 +2338,16 @@ resume_1 (enum gdb_signal sig)
       step = false;
     }
 
-  CORE_ADDR pc = regcache_read_pc (regcache);
+  /* Allow resuming threads that do not have registers available.
+
+     This may happen on GPUs for threads that we tried to stop but that
+     did not respond.  We model them as unavailable threads.
+
+     PC will be zero in that case and we do not expect any breakpoints at
+     this address so we're not adding any extra checks.  */
+  CORE_ADDR pc = step
+    ? regcache_read_pc (regcache)
+    : regcache_read_pc_protected (regcache);
 
   infrun_debug_printf ("step=%d, signal=%s, trap_expected=%d, "
 		       "current thread [%s] at %s",

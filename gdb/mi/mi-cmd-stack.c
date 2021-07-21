@@ -36,6 +36,7 @@
 #include "mi-parse.h"
 #include "gdbsupport/gdb_optional.h"
 #include "safe-ctype.h"
+#include <unordered_set>
 
 enum what_to_list { locals, arguments, all };
 
@@ -484,7 +485,8 @@ mi_cmd_stack_list_variables (const char *command, char **argv, int argc)
 
 static void
 list_arg_or_local (const struct frame_arg *arg, enum what_to_list what,
-		   enum print_values values, int skip_unavailable)
+		   enum print_values values, int skip_unavailable,
+		   std::unordered_set<std::string> &collected_vars)
 {
   struct ui_out *uiout = current_uiout;
 
@@ -514,6 +516,15 @@ list_arg_or_local (const struct frame_arg *arg, enum what_to_list what,
     tuple_emitter.emplace (uiout, nullptr);
 
   string_file stb;
+  bool already_collected
+    = collected_vars.find (arg->sym->print_name ()) != collected_vars.end ();
+
+  /* In case of rust language it is possible to declare variable with
+     same name multiple times and only latest declaration of variable
+     is accessible.  So print only the first instance and there is no
+     need of printing duplicates.  */
+  if (current_language->la_language == language_rust && already_collected)
+    return;
 
   stb.puts (arg->sym->print_name ());
   if (arg->entry_kind == print_entry_values_only)
@@ -522,6 +533,19 @@ list_arg_or_local (const struct frame_arg *arg, enum what_to_list what,
 
   if (what == all && SYMBOL_IS_ARGUMENT (arg->sym))
     uiout->field_signed ("arg", 1);
+
+  /* Only for C/C++/Fortran languages, in case of variables shadowing
+     print shadowed field after the superblock variable.  Iteration of
+     block starts from inner block so collected_vars variable keeps
+     track of the variables in the innerblock.  */
+  if ((current_language->la_language == language_c
+       || current_language->la_language == language_cplus
+       || current_language->la_language == language_fortran)
+       && !(values == PRINT_NO_VALUES && what == locals)
+       && already_collected)
+    uiout->field_string ("shadowed", "true");
+  else
+    collected_vars.insert (arg->sym->print_name ());
 
   if (values == PRINT_SIMPLE_VALUES)
     {
@@ -572,6 +596,7 @@ list_args_or_locals (const frame_print_options &fp_opts,
   struct type *type;
   const char *name_of_result;
   struct ui_out *uiout = current_uiout;
+  std::unordered_set<std::string> collected_vars;
 
   block = get_frame_block (fi, 0);
 
@@ -663,9 +688,11 @@ list_args_or_locals (const frame_print_options &fp_opts,
 		}
 
 	      if (arg.entry_kind != print_entry_values_only)
-		list_arg_or_local (&arg, what, values, skip_unavailable);
+		list_arg_or_local (&arg, what, values,
+				   skip_unavailable, collected_vars);
 	      if (entryarg.entry_kind != print_entry_values_no)
-		list_arg_or_local (&entryarg, what, values, skip_unavailable);
+		list_arg_or_local (&entryarg, what, values,
+				   skip_unavailable, collected_vars);
 	    }
 	}
 

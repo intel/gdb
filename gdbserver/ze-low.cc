@@ -22,7 +22,79 @@
 #include "ze-low.h"
 
 #include <level_zero/zet_api.h>
+#include <exception>
 
+#ifndef USE_WIN32API
+#  include <signal.h>
+#  include <fcntl.h>
+#endif
+
+
+#ifndef USE_WIN32API
+/* Async interaction stuff.
+
+   The read/write ends of the pipe registered as waitable file in the
+   event loop.  */
+static int ze_event_pipe[2] = { -1, -1 };
+#endif
+
+/* Return whether we're in async mode.  */
+
+static bool
+ze_is_async ()
+{
+#ifndef USE_WIN32API
+  return (ze_event_pipe[0] != -1);
+#else
+  return false;
+#endif
+}
+
+/* Get rid of any pending event in the pipe.  */
+
+static void
+ze_async_flush ()
+{
+  if (!ze_is_async ())
+    return;
+
+#ifndef USE_WIN32API
+  int ret;
+  char buf;
+
+  errno = 0;
+  do
+    ret = read (ze_event_pipe[0], &buf, 1);
+  while (ret >= 0 || (ret == -1 && errno == EINTR));
+#else
+  error (_("%s: tbd"), __FUNCTION__);
+#endif
+}
+
+/* Put something in the pipe, so the event loop wakes up.  */
+
+static void
+ze_async_mark ()
+{
+  if (!ze_is_async ())
+    return;
+
+#ifndef USE_WIN32API
+  int ret;
+
+  ze_async_flush ();
+
+  errno = 0;
+  do
+    ret = write (ze_event_pipe[1], "+", 1);
+  while (ret == 0 || (ret == -1 && errno == EINTR));
+
+  /* Ignore EAGAIN.  If the pipe is full, the event loop will already
+     be awakened anyway.  */
+#else
+  error (_("%s: tbd"), __FUNCTION__);
+#endif
+}
 
 void
 ze_target::init ()
@@ -36,6 +108,75 @@ ze_target::init ()
     default:
       error (_("Failed to initialize level-zero: %x"), status);
     }
+}
+
+bool
+ze_target::async (bool enable)
+{
+  bool previous = ze_is_async ();
+  if (previous != enable)
+    {
+#ifndef USE_WIN32API
+      if (enable)
+	{
+	  try
+	    {
+	      errno = 0;
+	      int status = pipe (ze_event_pipe);
+	      if (status == -1)
+		error (_("Failed to create event pipe: %s."),
+		       safe_strerror (errno));
+
+	      status = fcntl (ze_event_pipe[0], F_SETFL, O_NONBLOCK);
+	      if (status == -1)
+		error (_("Failed to set pipe[0] to non-blocking: %s."),
+		       safe_strerror (errno));
+
+	      status = fcntl (ze_event_pipe[1], F_SETFL, O_NONBLOCK);
+	      if (status == -1)
+		error (_("Failed to set pipe[1] to non-blocking: %s."),
+		       safe_strerror (errno));
+
+	      /* Register the event loop handler.  */
+	      add_file_handler (ze_event_pipe[0],
+				handle_target_event, NULL,
+				"ze-low");
+
+	      /* Always trigger a wait.  */
+	      ze_async_mark ();
+	    }
+	  catch (std::exception &ex)
+	    {
+	      warning ("%s", ex.what ());
+
+	      if (ze_event_pipe[0] != -1)
+		{
+		  close (ze_event_pipe[0]);
+		  ze_event_pipe[0] = -1;
+		}
+
+	      if (ze_event_pipe[1] != -1)
+		{
+		  close (ze_event_pipe[1]);
+		  ze_event_pipe[1] = -1;
+		}
+	    }
+	}
+      else
+	{
+	  delete_file_handler (ze_event_pipe[0]);
+
+	  close (ze_event_pipe[0]);
+	  close (ze_event_pipe[1]);
+	  ze_event_pipe[0] = -1;
+	  ze_event_pipe[1] = -1;
+	}
+#else
+      error (_("%s: tbd"), __FUNCTION__);
+#endif
+    }
+
+  return previous;
 }
 
 int

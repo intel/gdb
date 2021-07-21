@@ -4770,8 +4770,6 @@ process_serial_event (void)
 void
 handle_serial_event (int err, gdb_client_data client_data)
 {
-  threads_debug_printf ("handling possible serial event");
-
   /* Really handle it.  */
   if (process_serial_event () < 0)
     {

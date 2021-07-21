@@ -241,6 +241,6 @@ gdb_test "bt 1" "#0 .* foo \\(i=\[-\]?$decimal, i@entry=2, j=\[-\]?$decimal, j@e
 # Test that unavailable "j@entry" is not shown when command option
 # --skip-unavailable is used.
 gdb_test "interpreter-exec mi \"-stack-list-arguments --skip-unavailable --simple-values\"" \
-    "\r\n\\^done,stack-args=\\\[frame={level=\"0\",args=\\\[{name=\"i\",type=\"int\",value=\".*\"},{name=\"i@entry\",type=\"int\",value=\"2\"},{name=\"j\",type=\"int\",value=\".*\"}\\\]},frame=.*\\\].*"
+    "\r\n\\^done,stack-args=\\\[frame={level=\"0\",args=\\\[{name=\"i\",type=\"int\",value=\".*\"},{name=\"i@entry\",shadowed=\"true\",type=\"int\",value=\"2\"},{name=\"j\",type=\"int\",value=\".*\"}\\\]},frame=.*\\\].*"
 
 gdb_test "tfind" "Target failed to find requested trace frame\..*"

@@ -40,7 +40,9 @@ public:
 
   bool supports_multi_process () override { return true; }
   bool supports_non_stop () override { return true; }
-  int start_non_stop (bool enable) override { return 0; }
+  int start_non_stop (bool enable) override { async (enable); return 0; }
+
+  bool async (bool enable) override;
 
   int create_inferior (const char *program,
 		       const std::vector<char *> &argv) override;

@@ -476,13 +476,32 @@ solib_bfd_fopen (const char *pathname, int fd)
   return abfd;
 }
 
+/* Initialize an opened BFD.  */
+
+static void
+solib_bfd_init (bfd *abfd)
+{
+
+  /* Check bfd format.  */
+  if (!bfd_check_format (abfd, bfd_object))
+    error (_("`%s': not in executable format: %s"),
+	   bfd_get_filename (abfd), bfd_errmsg (bfd_get_error ()));
+
+  /* Check bfd arch.  */
+  const struct bfd_arch_info *b = gdbarch_bfd_arch_info (target_gdbarch ());
+  if (!b->compatible (b, bfd_get_arch_info (abfd)))
+    warning (_("`%s': Shared library architecture %s is not compatible "
+	       "with target architecture %s."), bfd_get_filename (abfd),
+	     bfd_get_arch_info (abfd)->printable_name,
+	     b->printable_name);
+}
+
 /* Find shared library PATHNAME and open a BFD for it.  */
 
 gdb_bfd_ref_ptr
 solib_bfd_open (const char *pathname)
 {
   int found_file;
-  const struct bfd_arch_info *b;
 
   /* Search for shared library file.  */
   gdb::unique_xmalloc_ptr<char> found_pathname
@@ -500,18 +519,24 @@ solib_bfd_open (const char *pathname)
   /* Open bfd for shared library.  */
   gdb_bfd_ref_ptr abfd (solib_bfd_fopen (found_pathname.get (), found_file));
 
-  /* Check bfd format.  */
-  if (!bfd_check_format (abfd.get (), bfd_object))
-    error (_("`%s': not in executable format: %s"),
-	   bfd_get_filename (abfd.get ()), bfd_errmsg (bfd_get_error ()));
+  solib_bfd_init (abfd.get ());
 
-  /* Check bfd arch.  */
-  b = gdbarch_bfd_arch_info (target_gdbarch ());
-  if (!b->compatible (b, bfd_get_arch_info (abfd.get ())))
-    warning (_("`%s': Shared library architecture %s is not compatible "
-	       "with target architecture %s."), bfd_get_filename (abfd.get ()),
-	     bfd_get_arch_info (abfd.get ())->printable_name,
-	     b->printable_name);
+  return abfd;
+}
+
+/* See solist.h.  */
+
+gdb_bfd_ref_ptr
+solib_bfd_open_from_target_memory (CORE_ADDR begin, CORE_ADDR size,
+				   const char *target, const char *filename)
+{
+  /* Open bfd for shared library.  */
+  gdb_bfd_ref_ptr abfd
+    = gdb_bfd_open_from_target_memory (begin, size, target, filename);
+  if (abfd == nullptr)
+    error (_("Could not open `%s' at address %s with size %s."), filename,
+	   core_addr_to_string_nz (begin), core_addr_to_string_nz (size));
+  solib_bfd_init (abfd.get ());
 
   return abfd;
 }

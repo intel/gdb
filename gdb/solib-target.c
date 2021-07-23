@@ -585,7 +585,7 @@ _initialize_solib_target ()
     = solib_target_in_dynsym_resolve_code;
   solib_target_so_ops.bfd_open = solib_bfd_open;
   solib_target_so_ops.bfd_open_from_target_memory
-    = gdb_bfd_open_from_target_memory;
+    = solib_bfd_open_from_target_memory;
   solib_target_so_ops.ack_library = solib_target_ack_library;
 
   /* Set current_target_so_ops to solib_target_so_ops if not already

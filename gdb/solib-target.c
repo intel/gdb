@@ -582,6 +582,6 @@ const struct target_so_ops solib_target_so_ops =
   nullptr,
   nullptr,
   nullptr,
-  gdb_bfd_open_from_target_memory,
+  solib_bfd_open_from_target_memory,
   solib_target_ack_library,
 };

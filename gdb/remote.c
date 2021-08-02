@@ -8120,8 +8120,15 @@ Packet: '%s'\n"),
       event->ptid = minus_one_ptid;
       break;
     case 'U':
-      event->ws.set_unavailable ();
-      event->ptid = read_ptid (&buf[1], NULL);
+      {
+	const char *opt = nullptr;
+
+	event->ws.set_unavailable ();
+	event->ptid = read_ptid (&buf[1], &opt);
+
+	if (strcmp (opt, ";library") == 0)
+	  event->ws.set_loaded ();
+      }
       break;
     }
 }

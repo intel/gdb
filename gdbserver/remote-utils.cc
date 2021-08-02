@@ -1269,9 +1269,27 @@ prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
       sprintf (buf, "N");
       break;
     case TARGET_WAITKIND_UNAVAILABLE:
-      sprintf (buf, "U");
-      buf += strlen (buf);
-      buf = write_ptid (buf, ptid);
+      {
+	sprintf (buf, "U");
+	buf += strlen (buf);
+	buf = write_ptid (buf, ptid);
+
+	process_info *proc = find_process_pid (ptid.pid ());
+	gdb_assert (proc != nullptr);
+	if (proc->dlls_changed)
+	  {
+	    strcpy (buf, ";library");
+	    buf += strlen (buf);
+	    proc->dlls_changed = false;
+
+	    /* GDB will want to query the libraries.  Change the
+	       general thread so that we respond from the right
+	       context.  But don't change in non-stop mode behind
+	       GDB's back.  */
+	    if (!non_stop)
+	      cs.general_thread = ptid;
+	  }
+      }
       break;
     default:
       error ("unhandled waitkind");

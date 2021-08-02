@@ -41675,9 +41675,14 @@ or @samp{s} action is expected to be continued.  @xref{File-I/O Remote
 Protocol Extension}, for more details.
 
 @item U @var{thread-id}
+@itemx U @var{thread-id};library
 The program is currently unavailable.  The remote target tried to stop
 it but it would not respond.  The thread designator @var{thread-id}
 has the format and interpretation described in @ref{thread-id syntax}.
+
+If @samp{;library} is appended, the loaded libraries have changed.
+@value{GDBN} should use @samp{qXfer:libraries:read} to fetch a new
+list of loaded libraries.
 
 This packet should not be sent by default; older @value{GDBN} versions
 did not support it.  @value{GDBN} requests it, by supplying an

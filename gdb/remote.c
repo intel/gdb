@@ -8033,8 +8033,15 @@ Packet: '%s'\n"),
       event->ptid = minus_one_ptid;
       break;
     case 'U':
-      event->ws.kind = TARGET_WAITKIND_UNAVAILABLE;
-      event->ptid = read_ptid (&buf[1], NULL);
+      {
+	const char *opt = nullptr;
+
+	event->ws.kind = TARGET_WAITKIND_UNAVAILABLE;
+	event->ptid = read_ptid (&buf[1], &opt);
+
+	if (strcmp (opt, ";library") == 0)
+	  event->ws.kind = TARGET_WAITKIND_LOADED;
+      }
       break;
     }
 }

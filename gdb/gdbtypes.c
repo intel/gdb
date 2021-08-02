@@ -2305,7 +2305,9 @@ resolve_dynamic_array_or_string (struct type *type,
   range_type = resolve_dynamic_range (range_type, addr_stack, resolve_p);
 
   ary_dim = check_typedef (TYPE_TARGET_TYPE (type));
-  if (ary_dim != NULL && ary_dim->code () == TYPE_CODE_ARRAY)
+  if (ary_dim != NULL
+      && (ary_dim->code () == TYPE_CODE_ARRAY
+	  || ary_dim->code () == TYPE_CODE_STRING))
     elt_type = resolve_dynamic_array_or_string (ary_dim, addr_stack, resolve_p);
   else
     elt_type = TYPE_TARGET_TYPE (type);
@@ -2330,8 +2332,11 @@ resolve_dynamic_array_or_string (struct type *type,
   else
     bit_stride = TYPE_FIELD_BITSIZE (type, 0);
 
-  return create_array_type_with_stride (type, elt_type, range_type, NULL,
-					bit_stride);
+  if (type->code () == TYPE_CODE_STRING)
+    return create_string_type (type, elt_type, range_type);
+  else
+    return create_array_type_with_stride (type, elt_type, range_type, NULL,
+					  bit_stride);
 }
 
 /* Resolve dynamic bounds of members of the union TYPE to static

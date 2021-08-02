@@ -69,6 +69,7 @@ struct regnum_range
 /* The 'gdbarch_data' stuff specific for this architecture.  */
 
 static struct gdbarch_data *intelgt_gdbarch_data_handle;
+static int intelgt_pseudo_register_num (gdbarch*, const char*);
 
 struct intelgt_gdbarch_data
 {
@@ -333,17 +334,43 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
   return RETURN_VALUE_REGISTER_CONVENTION;
 }
 
+static void
+intelgt_init_reg (struct gdbarch *gdbarch, int regnum,
+		  struct dwarf2_frame_state_reg *reg,
+		  struct frame_info *this_frame)
+{
+  int ip_regnum = intelgt_pseudo_register_num (gdbarch, "ip");
+  if (regnum == ip_regnum)
+    reg->how = DWARF2_FRAME_REG_RA;
+  else if (regnum == gdbarch_sp_regnum (gdbarch))
+    reg->how = DWARF2_FRAME_REG_CFA;
+}
+
 /* The 'unwind_pc' gdbarch method.  */
 
 static CORE_ADDR
 intelgt_unwind_pc (gdbarch *gdbarch, frame_info *next_frame)
 {
-  int pc_regnum = gdbarch_pc_regnum (gdbarch);
-  CORE_ADDR prev_pc = frame_unwind_register_unsigned (next_frame,
-						      pc_regnum);
-  dprintf ("prev_pc: %lx", prev_pc);
+  /* Use ip register here, as IGC uses 32bit values (pc is 64bit).  */
+  int ip_regnum = intelgt_pseudo_register_num (gdbarch, "ip");
+  CORE_ADDR prev_ip = frame_unwind_register_unsigned (next_frame,
+						      ip_regnum);
+  dprintf ("prev_ip: %lx", prev_ip);
 
-  return prev_pc;
+  /* Program counter is $ip + $isabase.  Read directly from the
+     regcache instead of unwinding, as the frame unwind info may
+     simply be unavailable.  The isabase register does not change
+     during kernel execution, so this must be safe.  */
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  gdb_assert (data->isabase_regnum != -1);
+  uint64_t isabase = 0;
+  if (get_current_regcache ()->cooked_read (data->isabase_regnum,
+					    &isabase) != REG_VALID)
+    throw_error (NOT_AVAILABLE_ERROR,
+		 _ ("Register %d (isabase) is not available"),
+		 data->isabase_regnum);
+
+  return (CORE_ADDR) isabase + prev_ip;
 }
 
 /* Frame unwinding.  */
@@ -997,6 +1024,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 				       intelgt_sw_breakpoint_from_kind);
   set_gdbarch_can_step_over_breakpoint (gdbarch, 1);
   set_gdbarch_pointer_to_address (gdbarch, intelgt_pointer_to_address);
+  dwarf2_frame_set_init_reg (gdbarch, intelgt_init_reg);
 
   /* Disassembly */
   set_gdbarch_print_insn (gdbarch, intelgt_print_insn);

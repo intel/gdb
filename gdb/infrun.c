@@ -5454,7 +5454,7 @@ handle_one (const wait_one_event &event)
 	    }
 
 	  regcache = get_thread_regcache (t);
-	  t->set_stop_pc (regcache_read_pc (regcache));
+	  t->set_stop_pc (regcache_read_pc_protected (regcache));
 
 	  infrun_debug_printf ("saved stop_pc=%s for %s "
 			       "(currently_stepping=%d)",
@@ -5885,7 +5885,8 @@ handle_inferior_event (struct execution_control_state *ecs)
 
 	    handle_solib_event ();
 
-	    ecs->event_thread->set_stop_pc (regcache_read_pc (regcache));
+	    ecs->event_thread->set_stop_pc
+	      (regcache_read_pc_protected (regcache));
 	    ecs->event_thread->control.stop_bpstat
 	      = bpstat_stop_status_nowatch (regcache->aspace (),
 					    ecs->event_thread->stop_pc (),

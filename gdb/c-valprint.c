@@ -446,6 +446,7 @@ c_value_print_inner (struct value *val, struct ui_file *stream, int recurse,
   switch (type->code ())
     {
     case TYPE_CODE_ARRAY:
+    case TYPE_CODE_STRING:
       c_value_print_array (val, stream, recurse, options);
       break;
 

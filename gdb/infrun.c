@@ -5149,7 +5149,7 @@ handle_one (const wait_one_event &event)
 	    }
 
 	  regcache = get_thread_regcache (t);
-	  t->suspend.stop_pc = regcache_read_pc (regcache);
+	  t->suspend.stop_pc = regcache_read_pc_protected (regcache);
 
 	  infrun_debug_printf ("saved stop_pc=%s for %s "
 			       "(currently_stepping=%d)",

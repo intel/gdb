@@ -3501,6 +3501,7 @@ i386_tmm_type (struct gdbarch *gdbarch, int regnum)
       uint8_t m_uint8[rows][bytes_per_row];
       int32_t m_int32[rows][bytes_per_row/4];
       bfloat16_t m_bfloat16[rows][bytes_per_row/2];
+      float16_t m_fp16[rows][bytes_per_row/2];
       float m_int32[rows][bytes_per_row/4];
     };
 #endif
@@ -3526,6 +3527,11 @@ i386_tmm_type (struct gdbarch *gdbarch, int regnum)
     (t, "m_bf16",
      init_vector_type
       (init_vector_type (bt->builtin_bfloat16, bytes_per_row / 2), rows));
+
+  append_composite_type_field
+    (t, "m_fp16",
+     init_vector_type
+      (init_vector_type (bt->builtin_half, bytes_per_row / 2), rows));
 
   append_composite_type_field
     (t, "m_fp32",

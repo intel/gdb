@@ -21,6 +21,9 @@
   <vector id="v_bf16" type="bfloat16" count="32"/>
   <vector id="matrix_bf16" type="v_bf16" count="128"/>
 
+  <vector id="v_fp16" type="ieee_half" count="32"/>
+  <vector id="matrix_fp16" type="v_fp16" count="128"/>
+
   <vector id="v_fp32" type="ieee_single" count="16"/>
   <vector id="matrix_fp32" type="v_fp32" count="128"/>
 
@@ -29,6 +32,7 @@
     <field name="m_uint8" type="matrix_ui8"/>
     <field name="m_int32" type="matrix_i32"/>
     <field name="m_bf16" type="matrix_bf16"/>
+    <field name="m_fp16" type="matrix_fp16"/>
     <field name="m_fp32" type="matrix_fp32"/>
   </union>
 

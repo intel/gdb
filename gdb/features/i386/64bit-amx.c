@@ -34,6 +34,12 @@ create_feature_i386_64bit_amx (struct target_desc *result, long regnum)
   element_type = tdesc_named_type (feature, "v_bf16");
   tdesc_create_vector (feature, "matrix_bf16", element_type, 128);
 
+  element_type = tdesc_named_type (feature, "ieee_half");
+  tdesc_create_vector (feature, "v_fp16", element_type, 32);
+
+  element_type = tdesc_named_type (feature, "v_fp16");
+  tdesc_create_vector (feature, "matrix_fp16", element_type, 128);
+
   element_type = tdesc_named_type (feature, "ieee_single");
   tdesc_create_vector (feature, "v_fp32", element_type, 16);
 
@@ -51,6 +57,8 @@ create_feature_i386_64bit_amx (struct target_desc *result, long regnum)
   tdesc_add_field (type_with_fields, "m_int32", field_type);
   field_type = tdesc_named_type (feature, "matrix_bf16");
   tdesc_add_field (type_with_fields, "m_bf16", field_type);
+  field_type = tdesc_named_type (feature, "matrix_fp16");
+  tdesc_add_field (type_with_fields, "m_fp16", field_type);
   field_type = tdesc_named_type (feature, "matrix_fp32");
   tdesc_add_field (type_with_fields, "m_fp32", field_type);
 

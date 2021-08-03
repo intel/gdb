@@ -302,6 +302,14 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
       return;
     }
 
+  if ((regprop.byteSize & (regprop.byteSize - 1)) != 0)
+    {
+      /* FIXME: DOQG-2381.  */
+      warning (_("Ignoring regset %u with irregular size %u in %s."),
+	       regprop.type, regprop.byteSize, device.name);
+      return;
+    }
+
   switch (regprop.type)
     {
     case ZET_DEBUG_REGSET_TYPE_GRF_INTEL_GPU:

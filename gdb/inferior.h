@@ -306,6 +306,12 @@ struct inferior_control_state
 
   /* See the definition of stop_kind above.  */
   enum stop_kind stop_soon;
+
+  /* The waitstatus for this inferior's last event.  */
+  struct target_waitstatus waitstatus {};
+
+  /* If true WAITSTATUS hasn't been handled yet.  */
+  bool waitstatus_pending_p = false;
 };
 
 /* Return a pointer to the current inferior.  */

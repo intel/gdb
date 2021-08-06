@@ -2248,7 +2248,27 @@ resume_1 (enum gdb_signal sig)
   gdb_assert (!tp->stop_requested);
   gdb_assert (!thread_is_in_step_over_chain (tp));
 
-  process_stratum_target *target = tp->inf->process_target ();
+  inferior *inf = tp->inf;
+  process_stratum_target *target = inf->process_target ();
+  if (inf->control.waitstatus_pending_p)
+    {
+      infrun_debug_printf
+	("inferior %s has pending wait status %s.",
+	 target_pid_to_str (ptid_t (inf->pid)).c_str (),
+	 target_waitstatus_to_string (&inf->control.waitstatus).c_str ());
+
+      target->threads_executing = true;
+
+      if (target_can_async_p ())
+	{
+	  target_async (1);
+	  /* Tell the event loop we have an event to process.  */
+	  mark_async_event_handler (infrun_async_inferior_event_token);
+	}
+
+      return;
+    }
+
   ptid_t check_ptid = target_is_non_stop_p () ? tp->ptid : minus_one_ptid;
   bool any_pending = false;
   for (thread_info *thread : all_non_exited_threads (target, check_ptid))
@@ -3660,6 +3680,20 @@ do_target_wait_1 (inferior *inf, ptid_t ptid,
      the wait code relies on it - doing so is always a mistake.  */
   switch_to_inferior_no_thread (inf);
 
+  /* Check if we have any saved waitstatus for the inferior itself.  */
+  if (inf->control.waitstatus_pending_p)
+    {
+      /* Wake up the event loop again, until all pending events are
+	 processed.  */
+      if (target_is_async_p ())
+	mark_async_event_handler (infrun_async_inferior_event_token);
+
+      *status = inf->control.waitstatus;
+      inf->control.waitstatus_pending_p = false;
+
+      return ptid_t (inf->pid);
+    }
+
   /* First check if there is a resumed thread with a wait status
      pending.  */
   if (ptid == minus_one_ptid || ptid.is_pid ())
@@ -5024,6 +5058,23 @@ handle_one (const wait_one_event &event)
 	  save_waitstatus (t, &event.ws);
 	  t->stop_requested = false;
 	}
+    }
+  else if (event.ptid.is_pid ())
+    {
+      /* This may be the first time we see the inferior report
+	 a stop.  */
+      inferior *inf = find_inferior_ptid (event.target, event.ptid);
+      if (inf->needs_setup)
+	setup_inferior (0);
+
+      /* This is needed to mark all the relevant threads in
+	 case the event is received from an all-stop
+	 target.  */
+      mark_non_executing_threads (event.target, event.ptid, event.ws);
+
+      /* Save the waitstatus for later.  */
+      inf->control.waitstatus = event.ws;
+      inf->control.waitstatus_pending_p = true;
     }
   else
     {

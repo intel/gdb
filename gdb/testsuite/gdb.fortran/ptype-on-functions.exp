@@ -29,23 +29,44 @@ if ![fortran_runto_main] then {
     continue
 }
 
-gdb_test "ptype some_module::get_number" \
-    "type = integer\\(kind=4\\) \\(Type __class_some_module_Number(_t)?\\)"
+set int [fortran_int4]
+set logical4 [fortran_logical4]
+set intN [fortran_integerN]
 
-gdb_test "ptype some_module::set_number" \
-    "type = void \\(Type __class_some_module_Number(_t)?, integer\\(kind=4\\)\\)"
+gdb_test_multiple "ptype some_module::get_number" "ptype some_module::get_number" {
+    -re -wrap "type = $int \\(Type __class_some_module_Number(_t)?\\)" {
+	pass $gdb_test_name
+    }
+    -re -wrap "type = $int \\(PTR TO \-\> \\( Type number \\)\\)" {
+	pass $gdb_test_name
+    }
+}
+
+gdb_test_multiple "ptype some_module::set_number" "ptype some_module::set_number" {
+    -re -wrap "type = void \\(Type __class_some_module_Number(_t)?, $int\\)" {
+	pass $gdb_test_name
+    }
+    -re -wrap "type = void \\(PTR TO \-\> \\( Type number \\), $int\\)" {
+	pass $gdb_test_name
+    }
+}
 
 gdb_test "ptype is_bigger" \
-    "type = logical\\(kind=4\\) \\(integer\\(kind=4\\), integer\\(kind=4\\)\\)"
+    "type = $logical4 \\($int, $int\\)"
 
 gdb_test "ptype say_numbers" \
-    "type = void \\(integer\\(kind=4\\), integer\\(kind=4\\), integer\\(kind=4\\)\\)"
+    "type = void \\($int, $int, $int\\)"
 
-gdb_test "ptype fun_ptr" \
-    "type = PTR TO -> \\( integer\\(kind=4\\) \\(\\) \\(REF TO -> \\( integer\\(kind=4\\) \\)\\) \\)"
-
+gdb_test_multiple "ptype fun_ptr" "ptype fun_ptr" {
+    -re -wrap "type = PTR TO -> \\( $int \\(\\) \\(REF TO -> \\( $int \\)\\) \\)"  {
+	pass $gdb_test_name
+    }
+    -re -wrap "type = PTR TO -> \\( $int \\(\\) \\($int\\) \\)"  {
+	pass $gdb_test_name
+    }
+}
 gdb_test "ptype say_string" \
-    "type = void \\(character\\*\\(\\*\\), integer\\(kind=\\d+\\)\\)"
+    "type = void \\(character\\*\\(\\*\\), $intN\\)"
 
 gdb_test "ptype say_array" \
-    "type = void \\(integer\\(kind=4\\) \\(:,:\\)\\)"
+    "type = void \\($int \\(:,:\\)\\)"

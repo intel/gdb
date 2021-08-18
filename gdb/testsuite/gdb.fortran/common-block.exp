@@ -54,8 +54,8 @@ gdb_test "whatis fo_o$suffix" "No symbol \"fo_o$suffix\" in current context."
 gdb_test "ptype fo_o$suffix" "No symbol \"fo_o$suffix\" in current context."
 gdb_test "p fo_o$suffix" "No symbol \"fo_o$suffix\" in current context."
 
-gdb_test "info locals" "ix_x = 11\r\niy_y = 22\r\niz_z = 33\r\nix = 1\r\niy = 2\r\niz = 3" "info locals out"
-gdb_test "info common" "Contents of F77 COMMON block 'fo_o':\r\nix_x = 11\r\niy_y = 22\r\niz_z = 33\r\n\r\nContents of F77 COMMON block 'foo':\r\nix = 1\r\niy = 2\r\niz = 3" "info common out"
+gdb_test "info locals" "(ix_x = 11|ix = 1)\r\n(iy_y = 22|iy = 2)\r\n(iz_z = 33|iz = 3)\r\n(ix_x = 11|ix = 1)\r\n(iy_y = 22|iy = 2)\r\n(iz_z = 33|iz = 3)" "info locals out"
+gdb_test "info common" "Contents of F77 COMMON block '(fo_o|foo)':\r\n(ix_x = 11|ix = 1)\r\n(iy_y = 22|iy = 2)\r\n(iz_z = 33|iz = 3)\r\n\r\nContents of F77 COMMON block '(fo_o|foo)':\r\n(ix_x = 11|ix = 1)\r\n(iy_y = 22|iy = 2)\r\n(iz_z = 33|iz = 3)" "info common out"
 
 gdb_test "ptype ix" "type = $int4" "ptype ix out"
 gdb_test "ptype iy" "type = $real4" "ptype iy out"
@@ -81,7 +81,7 @@ gdb_test "whatis fo_o$suffix" "No symbol \"fo_o$suffix\" in current context." "w
 gdb_test "ptype fo_o$suffix" "No symbol \"fo_o$suffix\" in current context." "ptype fo_o$suffix in"
 gdb_test "p fo_o$suffix" "No symbol \"fo_o$suffix\" in current context." "p fo_o$suffix in"
 
-gdb_test "info locals" "ix = 11\r\niy2 = 22\r\niz = 33\r\nix_x = 1\r\niy_y = 2\r\niz_z2 = 3\r\niy = 5\r\niz_z = 55" "info locals in"
+gdb_test "info locals" "ix = 11\r\niy2 = 22\r\niz = 33\r\nix_x = 1\r\niy_y = 2\r\niz_z2 = 3\r\n(iy = 5|iz_z = 55)\r\n(iz_z = 55|iy = 5)" "info locals in"
 gdb_test "info common" "Contents of F77 COMMON block 'fo_o':\r\nix = 11\r\niy2 = 22\r\niz = 33\r\n\r\nContents of F77 COMMON block 'foo':\r\nix_x = 1\r\niy_y = 2\r\niz_z2 = 3" "info common in"
 
 gdb_test "ptype ix" "type = $int4" "ptype ix in"

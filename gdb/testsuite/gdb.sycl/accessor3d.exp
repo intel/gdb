@@ -37,8 +37,11 @@ set line [gdb_get_line_number "kernel-line"]
 gdb_breakpoint $line {temporary}
 gdb_continue_to_breakpoint "3d" ".*$srcfile:$line.*"
 
+setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
 gdb_test_exact "ptype input\[id\]" "type = struct user_type {\n    int x;\n}" "3D element type"
+setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
 gdb_test "print output\[id\].x == input\[id\].x" "true" "3D access via id<3>"
+setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
 gdb_test_exact "print input\[0\]" \
     "Cannot resolve function operator\[\] to any overloaded instance" \
     "reject 3D access via size_t"

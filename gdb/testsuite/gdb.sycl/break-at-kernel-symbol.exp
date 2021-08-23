@@ -40,7 +40,9 @@ if {[start_sycl_program] < 0} {
 set kernel_symbol "_ZTSZZ4mainENKUlRN2cl4sycl7handlerEE31_25clES2_E13simple_kernel"
 gdb_breakpoint $kernel_symbol {allow-pending}
 
+setup_kfail "JIRA DOQG/2446" "*-*-*"
 gdb_test "continue" ".* Breakpoint .*${kernel_symbol}.*"
 
+setup_kfail "JIRA DOQG/2446" "*-*-*"
 # The BP should be hit once only.
 continue_sycl_program_to_termination

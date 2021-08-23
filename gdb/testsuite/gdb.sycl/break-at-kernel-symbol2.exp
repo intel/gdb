@@ -70,11 +70,14 @@ while {$keep_going} {
 	}
 	-re "Breakpoint .*$srcfile:$program_end.*$gdb_prompt $" {
 	    gdb_assert {$num_body_hits > 0}
+	    setup_kfail "JIRA DOQG/2446" "*-*-*"
 	    gdb_assert {$num_symbol_hits > 0}
+	    setup_kfail "JIRA DOQG/2446" "*-*-*"
 	    gdb_assert {$num_body_hits == $num_symbol_hits} "bp hits equal"
 	    verbose -log "body: $num_body_hits, symbol: $num_symbol_hits"
 	}
 	-re "$gdb_prompt $" {
+	    setup_kfail "JIRA DOQG/2446" "*-*-*"
 	    fail "hit bps"
 	}
     }

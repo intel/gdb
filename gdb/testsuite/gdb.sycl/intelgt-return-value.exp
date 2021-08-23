@@ -168,6 +168,7 @@ proc test_call_stack {call_stack_supported} {
 			"i=501" "50100" "return_struct4 \\(u4${fill}\\)" \
 			$call_stack_supported
 
+		    setup_kfail "JIRA DOQG/2447" "*-*-*"
 		    test_finish "return_struct4" "u4${fill}" "\\{i = 50100\\}" \
 			"return_struct_greater_64b" $call_stack_supported
 

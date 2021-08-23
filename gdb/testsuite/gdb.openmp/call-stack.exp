@@ -82,15 +82,20 @@ gdb_test "backtrace 3" [multi_line \
     "backtrace, test 1"
 
 # Function arguments optimization issue on host and GPU targets in F90.
-if {$openmp_program_extension eq "f90"
-    && (![info exists env(LIBOMPTARGET_DEVICETYPE)]
-        || [require_openmp_device "GPU"])} {
+if {$openmp_program_extension eq "f90" && [require_openmp_device "GPU"]} {
     setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
 }
 
 # Now switch frames and examine locals.
 gdb_test "frame 1" ".*#1.* $middle_desc.*" "switch to frame 1"
+if {$openmp_program_extension eq "f90" && [require_openmp_device "GPU"]} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}
 gdb_test "print num1" "= 16" "print num1 at first bp"
+
+if {$openmp_program_extension eq "f90" && [require_openmp_device "GPU"]} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}
 gdb_test "print num2" "= 3" "print num2 at first bp"
 
 gdb_test "frame 2" ".*#2.* $outer_desc.*" "switch to frame 2"
@@ -98,8 +103,21 @@ gdb_test "print fifteen" "= 15" "print fifteen at first bp"
 gdb_test "print five" "= 5"
 gdb_test "print ten" "= 10"
 
+# x and y argument values are unexpected.
+if {$openmp_program_extension eq "f90" && [require_openmp_device "GPU"]} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}
 gdb_test "frame 0" ".*#0.* $inner_desc.*" "switch to frame 0"
+
+# x value is unexpected.
+if {$openmp_program_extension eq "f90" && [require_openmp_device "GPU"]} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}
 gdb_test "print x" "= 20" "print x at first bp"
+# y value is unexpected.
+if {$openmp_program_extension eq "f90" && [require_openmp_device "GPU"]} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}
 gdb_test "print y" "= 9" "print y at first bp"
 
 # Finish the function calls.  Normally we expect to see a "Value
@@ -108,9 +126,7 @@ gdb_test "print y" "= 9" "print y at first bp"
 set value_returned "(\r\nValue returned is $valnum_re = 180)?"
 
 # Function arguments optimization issue on host and GPU targets in F90.
-if {$openmp_program_extension eq "f90"
-    && (![info exists env(LIBOMPTARGET_DEVICETYPE)]
-        || [require_openmp_device "GPU"])} {
+if {$openmp_program_extension eq "f90" && [require_openmp_device "GPU"]} {
     setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
 }
 gdb_test "finish" [multi_line \
@@ -131,9 +147,7 @@ gdb_test "backtrace 2" [multi_line \
 set value_returned "(\r\nValue returned is $valnum_re = 210)?"
 
 # Function arguments optimization issue on host and GPU targets in F90.
-if {$openmp_program_extension eq "f90"
-    && (![info exists env(LIBOMPTARGET_DEVICETYPE)]
-        || [require_openmp_device "GPU"])} {
+if {$openmp_program_extension eq "f90" && [require_openmp_device "GPU"]} {
     setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
 }
 gdb_test "finish" [multi_line \
@@ -158,7 +172,13 @@ gdb_test "backtrace 3" [multi_line \
 
 gdb_test "frame 1" ".*#1.* $inlined_middle_desc.*" \
     "switch to frame 1; inlined"
+if {$openmp_program_extension eq "f90" && [require_openmp_device "GPU"]} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}
 gdb_test "print num1" "= 10" "print num1 at second bp"
+if {$openmp_program_extension eq "f90" && [require_openmp_device "GPU"]} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}    
 gdb_test "print num2" "= 2" "print num2 at second bp"
 
 gdb_test "frame 2" ".*#2.* $inlined_outer_desc.*" \
@@ -167,7 +187,13 @@ gdb_test "print fifteen" "= 15" "print fifteen at second bp"
 
 gdb_test "frame 0" ".*#0.* $inlined_inner_desc.*" \
     "switch to frame 0; inlined"
+if {$openmp_program_extension eq "f90" && [require_openmp_device "GPU"]} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}
 gdb_test "print x" "= 14" "print x at second bp"
+if {$openmp_program_extension eq "f90" && [require_openmp_device "GPU"]} {
+    setup_kfail "JIRA CMPLRLLVM/25254" "*-*-*"
+}
 gdb_test "print y" "= 6" "print y at second bp"
 
 # Test defining a breakpoint using the function name.

@@ -44,17 +44,32 @@ proc test_bp_1 {} {
     gdb_test "print wi" " = .*"
     gdb_test "print lid" " = .*"
 
+    if {[require_sycl_device "host" ""]} {
+	setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
+    }
     # Call operator() explicitly to work around known limitations.
     set v1 [get_valueof "" "pgid.operator() (wi)" "NONE"]
     set v2 [get_valueof "" "gid" "NONE"]
+    if {[require_sycl_device "host" ""]} {
+	setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
+    }
     gdb_assert {{$v1 eq $v2}} "pgid.operator() (wi) == gid"
 
+    if {[require_sycl_device "host" ""]} {
+	setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
+    }
     gdb_test_expr_eq "ain\[gid\]" "in"
+
+    if {[require_sycl_device "host" ""]} {
+	setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
+    }
     gdb_test_expr_eq "acs\[lid\].c" "cs"
 
     # LCS may be implemented as reference.  Skip some output.
     if {[require_sycl_device "gpu" "Intel*"]} {
 	setup_kfail "JIRA DOQG/1630" "*-*-*"
+    } elseif {[require_sycl_device "host" ""]} {
+	setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
     }
     gdb_test "print lcs" " = .* 4"
 }
@@ -84,23 +99,39 @@ proc test_bp_2 { {lane 0} } {
     gdb_test "print wi" " = .*"
     gdb_test "print lid" " = .*"
 
+    if {[require_sycl_device "host" ""]} {
+	setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
+    }
     # Call operator() explicitly to work around known limitations.
     set v1 [get_valueof "" "pgid.operator() (wi)" "NONE"]
     set v2 [get_valueof "" "gid" "NONE"]
+    if {[require_sycl_device "host" ""]} {
+	setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
+    }
     gdb_assert {{$v1 eq $v2}} "pgid.operator() (wi) == gid"
 
+    if {[require_sycl_device "host" ""]} {
+	setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
+    }
     set v1 [get_valueof "" "atmp\[gid\].a" "NONE"]
     set v2 [get_valueof "" "in" "NONE"]
     if {[require_sycl_device "gpu" "Intel*"] && $lane == 4 || [is_gen12]} {
 	setup_kfail "JIRA DOQG/2107" "*-*-*"
+    } elseif {[require_sycl_device "host" ""]} {
+	setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
     }
     gdb_assert {{$v1 eq $v2}} "atmp\[gid\].a == in"
 
+    if {[require_sycl_device "host" ""]} {
+	setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
+    }
     gdb_test_expr_eq "aout\[gid\]" "out"
 
     # LCS may be implemented as reference.  Skip some output.
     if {[require_sycl_device "gpu" "Intel*"]} {
 	setup_kfail "JIRA DOQG/1630" "*-*-*"
+    } elseif {[require_sycl_device "host" ""]} {
+	setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
     }
     gdb_test "print lcs" " = .* 4"
     gdb_test "print cs" " = 4"

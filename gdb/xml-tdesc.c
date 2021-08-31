@@ -125,6 +125,17 @@ tdesc_end_osabi (struct gdb_xml_parser *parser,
     set_tdesc_osabi (data->tdesc, osabi);
 }
 
+/* Handle the end of a <device> element and its value.  */
+
+static void
+tdesc_end_device (struct gdb_xml_parser *parser,
+		 const struct gdb_xml_element *element,
+		 void *user_data, const char *body_text)
+{
+  struct tdesc_parsing_data *data = (struct tdesc_parsing_data *) user_data;
+  set_tdesc_device (data->tdesc, body_text);
+}
+
 /* Handle the end of a <compatible> element and its value.  */
 
 static void
@@ -600,6 +611,8 @@ static const struct gdb_xml_element target_children[] = {
     NULL, tdesc_end_arch },
   { "osabi", NULL, NULL, GDB_XML_EF_OPTIONAL,
     NULL, tdesc_end_osabi },
+  { "device", NULL, NULL, GDB_XML_EF_OPTIONAL,
+    NULL, tdesc_end_device },
   { "compatible", NULL, NULL, GDB_XML_EF_OPTIONAL | GDB_XML_EF_REPEATABLE,
     NULL, tdesc_end_compatible },
   { "feature", feature_attributes, feature_children,

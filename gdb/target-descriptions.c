@@ -367,6 +367,9 @@ struct target_desc : tdesc_element
      otherwise.  */
   enum gdb_osabi osabi = GDB_OSABI_UNKNOWN;
 
+  /* The device reported by the target, if any.  */
+  std::string device;
+
   /* The list of compatible architectures reported by the target.  */
   std::vector<tdesc_compatible_info_up> compatible;
 
@@ -718,6 +721,14 @@ tdesc_osabi_name (const struct target_desc *target_desc)
   if (osabi > GDB_OSABI_UNKNOWN && osabi < GDB_OSABI_INVALID)
     return gdbarch_osabi_name (osabi);
   return nullptr;
+}
+
+/* See gdbsupport/tdesc.h.  */
+
+const std::string &
+tdesc_device_name (const struct target_desc *target_desc)
+{
+  return target_desc->device;
 }
 
 /* Return 1 if this target description includes any registers.  */
@@ -1304,6 +1315,14 @@ set_tdesc_osabi (struct target_desc *target_desc, enum gdb_osabi osabi)
   target_desc->osabi = osabi;
 }
 
+
+/* See gdbsupport/tdesc.h.  */
+
+void
+set_tdesc_device (struct target_desc *target_desc, const char *name)
+{
+  target_desc->device = name;
+}
 
 static struct cmd_list_element *tdesc_set_cmdlist, *tdesc_show_cmdlist;
 static struct cmd_list_element *tdesc_unset_cmdlist;

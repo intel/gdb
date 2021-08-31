@@ -482,12 +482,13 @@ intelgt_process_target::create_inferior (const char *program,
    order as the intended DWARF numbering order for that regset.  */
 
 static target_desc *
-create_target_description ()
+create_target_description (GTDeviceInfo &info)
 {
   target_desc_up tdesc = allocate_target_description ();
 
   set_tdesc_architecture (tdesc.get (), "intelgt");
   set_tdesc_osabi (tdesc.get (), "GNU/Linux");
+  set_tdesc_device (tdesc.get (), std::to_string (info.gen_major).c_str ());
 
   struct tdesc_feature *feature;
   long regnum = 0;
@@ -582,7 +583,7 @@ add_new_gt_process (process_info_private *proc_priv)
 	     info.gen_major, info.gen_minor);
     }
 
-  target_desc *tdesc = create_target_description ();
+  target_desc *tdesc = create_target_description (info);
   init_target_desc (tdesc, expedite_regs);
 
   unsigned int device_index = proc_priv->dcd_device_index + 1;

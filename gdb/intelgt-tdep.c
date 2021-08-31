@@ -946,11 +946,21 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
 
 #if defined (HAVE_LIBIGA64)
-  /* There is currently no way to know on GDB side what GEN exactly it is
-     working with.  Some testing has shown that using GEN9 for all supported
-     platforms works at least for commonly used instructions.  Should be updated
-     once remote protocol allows to report the used GEN version.  */
-  iga_gen_t iga_version = IGA_GEN9;
+  iga_gen_t iga_version = IGA_GEN_INVALID;
+
+  if (tdesc != nullptr)
+    {
+      const std::string &device = tdesc_device_name (tdesc);
+      dprintf (_("device: Gen%s"), device.c_str ());
+
+      if (device.compare ("9") == 0)
+	iga_version = IGA_GEN9;
+      if (device.compare ("11") == 0)
+	iga_version = IGA_GEN11;
+      if (device.compare ("12") == 0)
+	iga_version = IGA_GEN12p1;
+    }
+
   const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);
   iga_context_create (&options, &data->iga_ctx);
 #endif

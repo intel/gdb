@@ -413,6 +413,10 @@ void print_xml_feature::visit_pre (const target_desc *e)
   if (osabi != nullptr)
     add_line ("<osabi>%s</osabi>", osabi);
 
+  const std::string &device = tdesc_device_name (e);
+  if (!device.empty ())
+    add_line ("<device>%s</device>", device.c_str ());
+
   const std::vector<tdesc_compatible_info_up> &compatible_list
     = tdesc_compatible_info_list (e);
   for (const auto &c : compatible_list)

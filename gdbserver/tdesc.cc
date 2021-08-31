@@ -188,6 +188,22 @@ set_tdesc_osabi (struct target_desc *target_desc, const char *name)
 
 /* See gdbsupport/tdesc.h.  */
 
+const std::string &
+tdesc_device_name (const struct target_desc *target_desc)
+{
+  return target_desc->device;
+}
+
+/* See gdbsupport/tdesc.h.  */
+
+void
+set_tdesc_device (struct target_desc *target_desc, const char *name)
+{
+  target_desc->device = name;
+}
+
+/* See gdbsupport/tdesc.h.  */
+
 const char *
 tdesc_get_features_xml (const target_desc *tdesc)
 {

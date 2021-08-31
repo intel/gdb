@@ -891,11 +891,41 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
 
 #if defined (HAVE_LIBIGA64)
-  /* There is currently no way to know on GDB side what GEN exactly it is
-     working with.  Some testing has shown that using GEN9 for all supported
-     platforms works at least for commonly used instructions.  Should be updated
-     once remote protocol allows to report the used GEN version.  */
-  iga_gen_t iga_version = IGA_GEN9;
+  iga_gen_t iga_version = IGA_GEN_INVALID;
+
+  if (tdesc != nullptr)
+    {
+      const tdesc_device *device_info = tdesc_device_info (tdesc);
+      if (!(device_info->vendor_id.has_value ()
+	    && device_info->target_id.has_value ()))
+	{
+	  warning (_("Device vendor id and target id not found."));
+	  gdbarch_free (gdbarch);
+	  return nullptr;
+	}
+
+      uint32_t vendor_id = *device_info->vendor_id;
+      uint32_t device_id = *device_info->target_id;
+      if (vendor_id != 0x8086)
+	{
+	  warning (_("Device not recognized: vendor id=0x%04x,"
+		     " device id=0x%04x"), vendor_id, device_id);
+	  gdbarch_free (gdbarch);
+	  return nullptr;
+	}
+      else
+	{
+	  iga_version = (iga_gen_t) IGA_XE_HPC;
+	  if (iga_version == IGA_GEN_INVALID)
+	    warning (_("Intel GT device id is unrecognized: ID 0x%04x"),
+		     device_id);
+	}
+    }
+
+  /* Take the best guess in case IGA_VERSION is still invalid.  */
+  if (iga_version == IGA_GEN_INVALID)
+    iga_version = IGA_XE_HPC;
+
   const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);
   iga_context_create (&options, &data->iga_ctx);
 #endif

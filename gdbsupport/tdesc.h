@@ -349,6 +349,13 @@ void set_tdesc_osabi (target_desc *target_desc, const char *name);
    or NULL if no osabi was specified.  */
 const char *tdesc_osabi_name (const struct target_desc *target_desc);
 
+/* Set TARGET_DESC's device by NAME.  */
+void set_tdesc_device (target_desc *target_desc, const char *name);
+
+/* Return the device associated with this target description as a string,
+   or an empty string if no device was specified.  */
+const std::string &tdesc_device_name (const struct target_desc *target_desc);
+
 /* Return the type associated with ID in the context of FEATURE, or
    NULL if none.  */
 struct tdesc_type *tdesc_named_type (const struct tdesc_feature *feature,

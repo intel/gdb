@@ -1886,6 +1886,7 @@ do_start_initialization ()
       || gdbpy_initialize_registers () < 0
       || gdbpy_initialize_xmethods () < 0
       || gdbpy_initialize_unwind () < 0
+      || gdbpy_initialize_connection () < 0
       || gdbpy_initialize_tui () < 0)
     return false;
 
@@ -2259,6 +2260,10 @@ Set the value of the convenience variable $NAME." },
     "register_window_type (NAME, CONSTRUCSTOR) -> None\n\
 Register a TUI window constructor." },
 #endif	/* TUI */
+
+  { "connections", gdbpy_connections, METH_NOARGS,
+    "connections () -> List.\n\
+Return a list of gdb.TargetConnection objects." },
 
   {NULL, NULL, 0, NULL}
 };

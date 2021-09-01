@@ -24,6 +24,21 @@ maint jit dump
      event is triggered once GDB decides it is going to exit, but
      before GDB starts to clean up its internal state.
 
+  ** New gdb.TargetConnection object type that represents a connection
+     (as displayed by the 'info connections' command).
+
+  ** The gdb.Inferior type now has a 'connection' property which is an
+     instance of gdb.TargetConnection, the connection used by this
+     inferior.  This can be None if the inferior has no connection.
+
+  ** New 'gdb.events.connection_removed' event registry, which emits a
+     'gdb.ConnectionEvent' when a connection is removed from GDB.
+     This event has a 'connection' property, a gdb.TargetConnection
+     object for the connection being removed.
+
+  ** New gdb.connections() function that returns a list of all
+     currently active connections.
+
 *** Changes in GDB 11
 
 * The 'set disassembler-options' command now supports specifying options

@@ -1185,48 +1185,45 @@ prepare_resume_reply (char *buf, ptid_t ptid,
 
 	scoped_restore_current_thread restore_thread;
 
-	if (!ptid.is_pid ())
+	switch_to_thread (the_target, ptid);
+
+	regp = current_target_desc ()->expedite_regs;
+
+	regcache = get_thread_regcache (current_thread, 1);
+
+	if (the_target->stopped_by_watchpoint ())
 	  {
-	    switch_to_thread (the_target, ptid);
+	    CORE_ADDR addr;
+	    int i;
 
-	    regp = current_target_desc ()->expedite_regs;
+	    memcpy (buf, "watch:", 6);
+	    buf += 6;
 
-	    regcache = get_thread_regcache (current_thread, 1);
+	    addr = the_target->stopped_data_address ();
 
-	    if (the_target->stopped_by_watchpoint ())
-	      {
-		CORE_ADDR addr;
-		int i;
+	    /* Convert each byte of the address into two hexadecimal
+	       chars.  Note that we take sizeof (void *) instead of
+	       sizeof (addr); this is to avoid sending a 64-bit
+	       address to a 32-bit GDB.  */
+	    for (i = sizeof (void *) * 2; i > 0; i--)
+	      *buf++ = tohex ((addr >> (i - 1) * 4) & 0xf);
+	    *buf++ = ';';
+	  }
+	else if (cs.swbreak_feature && target_stopped_by_sw_breakpoint ())
+	  {
+	    sprintf (buf, "swbreak:;");
+	    buf += strlen (buf);
+	  }
+	else if (cs.hwbreak_feature && target_stopped_by_hw_breakpoint ())
+	  {
+	    sprintf (buf, "hwbreak:;");
+	    buf += strlen (buf);
+	  }
 
-		memcpy (buf, "watch:", 6);
-		buf += 6;
-
-		addr = the_target->stopped_data_address ();
-
-		/* Convert each byte of the address into two hexadecimal
-		   chars.  Note that we take sizeof (void *) instead of
-		   sizeof (addr); this is to avoid sending a 64-bit
-		   address to a 32-bit GDB.  */
-		for (i = sizeof (void *) * 2; i > 0; i--)
-		  *buf++ = tohex ((addr >> (i - 1) * 4) & 0xf);
-		*buf++ = ';';
-	      }
-	    else if (cs.swbreak_feature && target_stopped_by_sw_breakpoint ())
-	      {
-		sprintf (buf, "swbreak:;");
-		buf += strlen (buf);
-	      }
-	    else if (cs.hwbreak_feature && target_stopped_by_hw_breakpoint ())
-	      {
-		sprintf (buf, "hwbreak:;");
-		buf += strlen (buf);
-	      }
-
-	    while (*regp)
-	      {
-		buf = outreg (regcache, find_regno (regcache->tdesc, *regp), buf);
-		regp ++;
-	      }
+	while (*regp)
+	  {
+	    buf = outreg (regcache, find_regno (regcache->tdesc, *regp), buf);
+	    regp ++;
 	  }
 	*buf = '\0';
 
@@ -1250,7 +1247,7 @@ prepare_resume_reply (char *buf, ptid_t ptid,
 		int core = -1;
 		/* In non-stop, don't change the general thread behind
 		   GDB's back.  */
-		if (!non_stop || cs.general_thread == null_ptid)
+		if (!non_stop)
 		  cs.general_thread = ptid;
 		sprintf (buf, "thread:");
 		buf += strlen (buf);
@@ -1271,13 +1268,11 @@ prepare_resume_reply (char *buf, ptid_t ptid,
 	      }
 	  }
 
-	process_info *proc = find_process_pid (ptid.pid ());
-	gdb_assert (proc != nullptr);
-	if (proc->dlls_changed)
+	if (current_process ()->dlls_changed)
 	  {
 	    strcpy (buf, "library:;");
 	    buf += strlen (buf);
-	    proc->dlls_changed = false;
+	    current_process ()->dlls_changed = false;
 	  }
       }
       break;

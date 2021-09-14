@@ -2929,8 +2929,7 @@ resume (struct thread_resume *actions, size_t num_actions)
 
       if (cs.last_status.kind != TARGET_WAITKIND_EXITED
           && cs.last_status.kind != TARGET_WAITKIND_SIGNALLED
-	  && cs.last_status.kind != TARGET_WAITKIND_NO_RESUMED
-	  && current_thread != nullptr)
+	  && cs.last_status.kind != TARGET_WAITKIND_NO_RESUMED)
 	current_thread->last_status = cs.last_status;
 
       /* From the client's perspective, all-stop mode always stops all
@@ -4541,11 +4540,8 @@ handle_target_event (int err, gdb_client_data client_data)
 	  /* We're reporting this thread as stopped.  Update its
 	     "want-stopped" state to what the client wants, until it
 	     gets a new resume action.  */
-	  if (current_thread != nullptr)
-	    {
-	      current_thread->last_resume_kind = resume_stop;
-	      current_thread->last_status = cs.last_status;
-	    }
+	  current_thread->last_resume_kind = resume_stop;
+	  current_thread->last_status = cs.last_status;
 	}
 
       if (forward_event)

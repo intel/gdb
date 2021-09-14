@@ -440,7 +440,7 @@ private:
 
   void wait_for_sigstop ();
 
-  ptid_t handle_kernel_loaded (GTEvent *event, target_waitstatus *status);
+  void handle_kernel_loaded (GTEvent *event);
 
   void handle_kernel_unloaded (GTEvent *event);
 
@@ -761,9 +761,8 @@ intelgt_process_target::thread_alive (ptid_t ptid)
 
 /* Handle a 'kernel loaded' event.  */
 
-ptid_t
-intelgt_process_target::handle_kernel_loaded (GTEvent *event,
-					      target_waitstatus *status)
+void
+intelgt_process_target::handle_kernel_loaded (GTEvent *event)
 {
   gdb_assert (event->type == eGfxDbgEventKernelLoaded);
   gdb_assert (event->kernel != nullptr);
@@ -771,10 +770,6 @@ intelgt_process_target::handle_kernel_loaded (GTEvent *event,
   process_info *proc = find_process_from_gt_event (event);
   loaded_dll (proc, event->details.kernel_load_event.pathname,
 	      event->details.kernel_load_event.load_address);
-
-  status->kind = TARGET_WAITKIND_LOADED;
-  status->value.sig = GDB_SIGNAL_0;
-  return ptid_t {proc->pid};
 }
 
 /* Handle a 'kernel unloaded' event.  */
@@ -1003,7 +998,8 @@ intelgt_process_target::process_single_event (GTEvent *event,
 
     case eGfxDbgEventKernelLoaded:
       dprintf ("Processing a kernel loaded event");
-      return handle_kernel_loaded (event, status);
+      handle_kernel_loaded (event);
+      return null_ptid;
 
     case eGfxDbgEventThreadExited:
       dprintf ("Processing a thread exited event");

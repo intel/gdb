@@ -920,6 +920,9 @@ ze_discard_regcache (thread_info *tp)
 static void
 ze_resume (ze_device_info &device, ze_device_thread_t thread)
 {
+  dprintf ("device %lu=%s, thread=%s", device.ordinal,
+	   device.properties.name, ze_thread_id_str (thread).c_str ());
+
   ze_result_t status = zetDebugResume (device.session, thread);
   switch (status)
     {
@@ -976,6 +979,9 @@ ze_resume (ze_device_info &device, ze_device_thread_t thread)
 static void
 ze_interrupt (ze_device_info &device, ze_device_thread_t thread)
 {
+  dprintf ("device %lu=%s, thread=%s", device.ordinal,
+	   device.properties.name, ze_thread_id_str (thread).c_str ());
+
   ze_result_t status = zetDebugInterrupt (device.session, thread);
   switch (status)
     {
@@ -2084,6 +2090,10 @@ ze_target::write_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
   ze_device_thread_t thread = context.first;
   ze_device_info *device = context.second;
   gdb_assert (device != nullptr);
+
+  dprintf ("writing %d bytes of memory to %s with %s",
+	   len, core_addr_to_string_nz (memaddr),
+	   ze_thread_id_str (thread).c_str ());
 
   ze_result_t status = zetDebugWriteMemory (device->session, thread, &desc,
 					    len, myaddr);

@@ -405,6 +405,14 @@ intelgt_ze_target::create_tdesc
   set_tdesc_architecture (tdesc.get (), "intelgt");
   set_tdesc_osabi (tdesc.get (), "GNU/Linux");
 
+  /* FIXME: device
+
+     We should probably use the vendor and device identifiers, here.  */
+  tdesc_add_device_attribute (tdesc.get (), "gen_major",
+			      std::to_string (12));
+  tdesc_add_device_attribute (tdesc.get (), "gen_minor",
+			      std::to_string (71));
+
   long regnum = 0;
   for (const zet_debug_regset_properties_t &regprop : regset_properties)
     add_regset (tdesc.get (), properties, regprop, regnum, regsets, expedite);

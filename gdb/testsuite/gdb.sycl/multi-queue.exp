@@ -35,10 +35,12 @@ if {[start_sycl_program] < 0} {
 
 set line1 [gdb_get_line_number "inside-kernel1"]
 gdb_breakpoint $line1
+# In case of GPU offload breakpoint is not hitting at line1.
 gdb_continue_to_breakpoint "kernel1" ".*$srcfile:$line1.*"
 
 set line2 [gdb_get_line_number "inside-kernel2"]
 gdb_breakpoint $line2
+# In case of GPU offload breakpoint is not hitting at line2.
 gdb_continue_to_breakpoint "kernel2" ".*$srcfile:$line2.*"
 
 continue_sycl_program_to_termination

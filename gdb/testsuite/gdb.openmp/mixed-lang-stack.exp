@@ -1,0 +1,138 @@
+# Copyright 2009-2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/> .
+
+# Tests the call stack (between host - target variations), the value
+# of frame arguments (in frames of different language) for a OpenMP
+# program written in C++ and Fortran. The evaluation is done inside
+# kernel.
+# 
+# One important aspect of this test is that we set the language in
+# turn to auto, fortran, c, and c++, and carry out the full test in
+# each case to ensure that trying to print objects or types from one
+# language, while GDB's language is set to another, doesn't crash GDB.
+
+load_lib openmp.exp
+
+if {[skip_openmp_tests] || [skip_fortran_tests] } {
+    untested "skipping openmp test"
+    return 0
+} elseif {$openmp_program_extension eq "cpp"} {
+    unsupported "this test is fortran only"
+    return 0
+}
+
+standard_testfile mixed-lang-stack.cpp mixed-lang-stack.f90
+set options_cpp [regexp -all -inline {\S+} "[openmp_compilation_options "cpp"]"]
+set options_f90 [regexp -all -inline {\S+} "[openmp_compilation_options "f90"]"]
+set options [lsort -unique [concat $options_f90 $options_cpp]]
+
+if {[prepare_for_testing_full "failed to prepare" \
+	 [list ${binfile} $options \
+	      $srcfile $options_cpp \
+	      $srcfile2 $options_f90]]} {
+    return -1
+}
+
+# Runs the test program and examins the stack.  LANG is a string, the
+# value to pass to GDB's 'set language ...' command.
+proc run_tests { lang } {
+    with_test_prefix "lang=${lang}" {
+	global binfile hex
+
+	clean_restart ${binfile}
+
+	if ![runto_main] {
+	    untested "could not run to main"
+	    return -1
+	}
+
+	gdb_breakpoint "breakpt"
+	gdb_continue_to_breakpoint "breakpt"
+
+	gdb_test_no_output "set backtrace limit unlimited"
+
+	if { $lang == "c" || $lang == "c++" } {
+	    gdb_test "set language $lang" \
+		"Warning: the current language does not match this frame."
+	} else {
+	    gdb_test_no_output "set language $lang"
+	}
+
+	set to_end "\[^\r\n\]+"
+
+	with_test_prefix "fortran(host/target)->cpp(target)" {
+	    gdb_test "bt -frame-arguments all" [multi_line \
+		    "#0\\s+breakpt \\(\\) at $to_end" \
+		    "#1\\s+$hex in mixed_func_1e \\(\\) at $to_end" \
+		    "#2\\s+$hex in mixed_func_1d \\(a=1, b=2, c=3, string=$hex .*this is a string from C\\+\\+.*\\) at $to_end" \
+		    "#3\\s+$hex in mixed_func_1c \\(a=1, b=2, c=3, d=.*\\) at $to_end" \
+		    "#4\\s+$hex in mixed_func_1b \\(a=1, b=2, c=3, d=.*\\) at $to_end" \
+		    "#6\\s+$hex in mixed_func_1a(.)* \\((.)*\\) at .*"]
+
+	    # Check the language for frame #0.
+	    gdb_test "info frame" "source language fortran\..*" \
+		"info frame in frame #0"
+
+	    # Check the language for frame #3.
+	    gdb_test "info frame 3" "source language c\\+\\+\..*" \
+		"info frame in frame #3"
+
+	    # Check the arguments
+	    gdb_test "frame 3" "#3\\s+$hex in mixed_func_1c.*" \
+		"select frame #3"
+
+	    if { $lang == "fortran" } {
+		set d_pattern "\\(4,5\\)"
+	    } else {
+		set d_pattern "4 \\+ 5i"
+	    }
+	    gdb_test "info args" \
+		[multi_line \
+		    "a = 1" \
+		    "b = 2" \
+		    "c = 3" \
+		    "d = ${d_pattern}"] \
+		"info args in frame #3"
+	}
+
+	with_test_prefix "cpp(host/target)->fortran(target)" {
+	    gdb_continue_to_breakpoint "breakpt"
+	    set 1i_args "obj=\[^\r\n\]+"
+	    gdb_test "bt -frame-arguments all" [multi_line \
+		    "#0\\s+breakpt \\(\\) at $to_end" \
+		    "#1\\s+$hex in mixed_func_1e \\(\\) at $to_end" \
+		    "#2\\s+$hex in mixed_func_1i \\($1i_args\\) at $to_end" \
+		    "#3\\s+$hex in mixed_func_1h(.)* \\((.)*\\) at .*"]
+
+	    # Check the language for frame #2.
+	    gdb_test "frame 2" "#2\\s+$hex in mixed_func_1i.*" \
+		"select frame #2"
+	    gdb_test "info frame" "mixed_func_1i \\((.)*mixed-lang-stack.cpp\:(\[0-9\]+)\\).*" \
+		"info frame in frame #2"
+
+	    if { $lang == "fortran" } {
+		set obj_pattern " = \\( base_one = \\( num1 = 1, num2 = 2, num3 = 3 \\), base_two = \\( string = $hex 'Something in C\\+\\+\\\\000', val = 3.5 \\), xxx = 9, yyy = 10.5 \\)"
+	    } else {
+		set obj_pattern " = \\{<base_one> = \\{num1 = 1, num2 = 2, num3 = 3\\}, <base_two> = \\{string = $hex \"Something in C\\+\\+\", val = 3.5\\}, xxx = 9, yyy = 10.5\\}"
+	    }
+	    gdb_test "print obj" "${obj_pattern}"
+	}
+    }
+}
+
+run_tests "auto"
+run_tests "fortran"
+run_tests "c"
+run_tests "c++"

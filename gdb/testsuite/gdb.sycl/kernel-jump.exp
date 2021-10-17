@@ -1,0 +1,59 @@
+# Copyright 2020-2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test being able to check the jump command inside the kernel.
+# Scenario:
+#     - Define a breakpoint at "kernel-line-3" in the "single-task.cpp" file
+#     - Continue the program to that line
+#     - Define a breakpoint at "kernel-line-2"
+#     - Use the "jump" command to jump backward to "kernel-line-1"
+#     - The breakpoint at line "kernel-line-2" should be hit
+#     - Then, the continue command should hit the "kernel-line-3"
+
+load_lib sycl.exp
+
+standard_testfile single-task.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set inside_kernel_1 [gdb_get_line_number "kernel-line-1"]
+set inside_kernel_2 [gdb_get_line_number "kernel-line-2"]
+set inside_kernel_3 [gdb_get_line_number "kernel-line-3"]
+
+gdb_breakpoint "$srcfile:$inside_kernel_3"
+gdb_continue_to_breakpoint "kernel line 3" \
+    ".*$srcfile:$inside_kernel_3.*"
+
+gdb_breakpoint "$srcfile:$inside_kernel_2"
+
+gdb_test "jump ${inside_kernel_1}" ".*Breakpoint.* $srcfile:$inside_kernel_2.*" \
+    "Jump inside the kernel"
+
+gdb_continue_to_breakpoint "hit breakpoint at line 3 again" \
+    ".*$srcfile:$inside_kernel_3.*"
+
+# Continue until termination
+continue_sycl_program_to_termination

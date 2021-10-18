@@ -13,14 +13,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Test being able to check the jump command inside the kernel.
-# Scenario:
-#     - Define a breakpoint at "kernel-line-3" in the "single-task.cpp" file
-#     - Continue the program to that line
-#     - Define a breakpoint at "kernel-line-2"
-#     - Use the "jump" command to jump backward to "kernel-line-1"
-#     - The breakpoint at line "kernel-line-2" should be hit
-#     - Then, the continue command should hit the "kernel-line-3"
+# Test being able to check the jump command inside a SYCL kernel.
+#
+# Check that jumping backwards hits a breakpoint that is introduced
+# between the current breakpoint and the jump destination.
 
 load_lib sycl.exp
 
@@ -28,6 +24,11 @@ standard_testfile single-task.cpp
 
 if {[skip_sycl_tests]} {
     unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[require_sycl_device "host" "*"]} {
+    kfail "JIRA DOQG/2529" "jump does not work on HOST"
     return 0
 }
 
@@ -55,5 +56,5 @@ gdb_test "jump ${inside_kernel_1}" ".*Breakpoint.* $srcfile:$inside_kernel_2.*" 
 gdb_continue_to_breakpoint "hit breakpoint at line 3 again" \
     ".*$srcfile:$inside_kernel_3.*"
 
-# Continue until termination
+# Continue until termination.
 continue_sycl_program_to_termination

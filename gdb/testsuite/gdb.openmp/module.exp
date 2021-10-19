@@ -1,0 +1,79 @@
+# Copyright 2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests inside kernel the visibility, and evaluation of variables
+# declared in modules (on host).
+
+load_lib fortran.exp
+load_lib openmp.exp
+
+if {[skip_openmp_tests] || [skip_fortran_tests] } {
+    untested "skipping openmp test"
+    return 0
+} elseif {$openmp_program_extension eq "cpp"} {
+    unsupported "this test is fortran only"
+    return 0
+}
+
+standard_testfile .f90
+
+if {[start_openmp_program]} {
+    return -1
+}
+
+gdb_breakpoint [gdb_get_line_number "locals-check"]
+gdb_continue_to_breakpoint "locals-check" ".*locals-check.*"
+gdb_test "print var_d" " = 11" "print var_d value 11"
+gdb_test "print var_c" " = 12" "print var_c value 12"
+
+set state 0
+set int_type [fortran_int4]
+set mod_re [multi_line \
+	"\\d+:\[ \t\]+${int_type} module_declarations::var_c;" \
+	"\\d+:\[ \t\]+${int_type} module_declarations::var_d;"]
+gdb_test_multiple "info variables -n" "" {
+    -re "\r\nAll defined variables:" {
+	if { $state == 0 } { set state 1 }
+	exp_continue
+    }
+    -re "\r\n\r\nFile .*[string_to_regexp $srcfile]:" {
+	if { $state == 1 } { set state 2 }
+	exp_continue
+    }
+    -re $mod_re {
+	if { $state == 2 } { set state 3 }
+	exp_continue
+    }
+    -re "\r\n\r\nFile \[^\r\n\]*:" {
+	exp_continue
+    }
+    -re -wrap "" {
+	if { $state == 3} {
+	    pass $gdb_test_name
+	} else {
+	    fail $gdb_test_name
+	}
+    }
+}
+
+gdb_breakpoint [gdb_get_line_number "args-check"]
+with_test_prefix "call1" {
+    gdb_continue_to_breakpoint "args-check" ".*args-check.*"
+    gdb_test "print val_a" " = 11" "print var_a value 11"
+}
+with_test_prefix "call2" {
+    gdb_continue_to_breakpoint "args-check" ".*args-check.*"
+    gdb_test "print val_a" " = 12" "print var_a value 12"
+}

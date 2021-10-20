@@ -16,10 +16,10 @@
 """Auto-attach to debug kernels offloaded to Intel GPU
 
 The python script allows the debugger to spawn an instance of
-'gdbserver-gt' to listen to debug events from the GPU.  This is done
-to ensure debuggability in case the kernel is offloaded to GPU.  The
-auto-attach feature is turned on by default, and it is harmless to the
-debugging capability on the CPU device.
+'gdbserver-gt' or 'gdbserver-ze' to listen to debug events from the
+GPU.  This is done to ensure debuggability in case the kernel is
+offloaded to GPU.  The auto-attach feature is turned on by default,
+and it is harmless to the debugging capability on the CPU device.
 
 The auto-attach feature can be disabled by setting the OS environment
 variable 'INTELGT_AUTO_ATTACH_DISABLE' to a non-zero value.  It can be
@@ -59,10 +59,12 @@ import gdb
 
 # Breakpoint function for executing the auto-attach.
 BP_FCT = "igfxdbgxchgDebuggerHook"
+BP_ZET = "zeContextCreate"
 
 # Function call to query the number of devices.
 NUM_DEVICES_FCT = "(int)igfxdbgxchgNumDevices()"
 
+# pylint: disable-next=too-many-instance-attributes
 class IntelgtAutoAttach(gdb.Breakpoint):
     """Class to debug kernels offloaded to Intel GPU"""
     def __init__(self):
@@ -75,7 +77,12 @@ class IntelgtAutoAttach(gdb.Breakpoint):
         self.host_inf_for_auto_remove = None
         self.is_nonstop = False
         self.hook_bp = None
-        self.gdbserver_gt_binary = "gdbserver-gt"
+        env_value = self.get_env_variable("ZET_ENABLE_PROGRAM_DEBUGGING")
+        self.use_dcd = env_value is None or env_value == "0"
+        if self.use_dcd:
+            self.gdbserver_gt_binary = "gdbserver-gt"
+        else:
+            self.gdbserver_gt_binary = "gdbserver-ze"
         self.enable_schedule_multiple_at_gt_removal = False
         # Env variable to pass custom flags to gdbserver such as
         # "--debug" and "--remote-debug" for debugging purposes.
@@ -109,13 +116,23 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
         if event is None:
             return
 
-        if not 'libigfxdbgxchg64.so' in event.new_objfile.filename:
+        if not ('libigfxdbgxchg64.so' in event.new_objfile.filename or
+                'libze_loader.so' in event.new_objfile.filename):
             return
 
         if self.is_auto_attach_disabled():
             return
 
-        self.hook_bp = gdb.Breakpoint(BP_FCT, type=gdb.BP_BREAKPOINT,
+        if ('libigfxdbgxchg64.so' in event.new_objfile.filename
+            and self.use_dcd):
+            the_bp = BP_FCT
+        elif ('libze_loader.so' in event.new_objfile.filename
+              and not self.use_dcd):
+            the_bp = BP_ZET
+        else:
+            return
+
+        self.hook_bp = gdb.Breakpoint(the_bp, type=gdb.BP_BREAKPOINT,
                                       internal=1, temporary=0)
         self.hook_bp.silent = True
         commands = ("python gdb.function.intelgt_auto_attach" +
@@ -141,9 +158,10 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
     def remove_gt_inf_for(self, host_inf):
         """First detach from, then remove the gt inferiors that were created
         for HOST_INF."""
-        gt_connection = self.inf_dict[host_inf]
-        if gt_connection is None:
+        gt_pair = self.inf_dict[host_inf]
+        if gt_pair is None:
             return
+        (gt_inf, gt_connection) = gt_pair
 
         cli_suppressed = self.set_suppress_notifications("on")
 
@@ -153,20 +171,28 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
             if an_inf.connection_num == gt_connection:
                 gt_infs.append(an_inf)
 
+        # With the --attach scenario, the gt_inf may have lost its connection.
+        # Double-check.
+        if not gt_inf in gt_infs:
+            gt_infs.append(gt_inf)
+
         # First, detach all gt inferiors.
         for gt_inf in gt_infs:
             if gt_inf.pid != 0:
                 gdb.execute(f"detach inferiors {gt_inf.num}", False, True)
 
-        # Terminate the gdbserver session.  We should do this from a gt inf.
-        if gt_infs and gdb.selected_inferior() not in gt_infs:
-            cmd = f"inferior {gt_infs[0].num}"
-            self.protected_gdb_execute(cmd, True)
+        # gdbserver-gt uses the --multi mode whereas gdbserver-ze uses
+        # --attach.  We need to explicitly make gdbserver-gt quit.
+        if self.use_dcd:
+            # Terminate gdbserver.  We should do this from a gt inf.
+            if gt_infs and gdb.selected_inferior() not in gt_infs:
+                cmd = f"inferior {gt_infs[0].num}"
+                self.protected_gdb_execute(cmd, True)
 
-        # Check if switching to gt inf was successful.
-        # Otherwise, we cannot send 'monitor exit' command.
-        if gdb.selected_inferior() in gt_infs:
-            gdb.execute("monitor exit")
+            # Check if switching to gt inf was successful.
+            # Otherwise, we cannot send 'monitor exit' command.
+            if gdb.selected_inferior() in gt_infs:
+                gdb.execute("monitor exit")
 
         # Switch to host to be able to remove gt infs.
         # Catch exceptions, since the switch will likely raise
@@ -266,10 +292,13 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
                         gdb.execute("set schedule-multiple off")
                         self.enable_schedule_multiple_at_gt_removal = True
         else:
-            for key, gt_connection in self.inf_dict.items():
-                if gt_connection is None:
+            for key, value in self.inf_dict.items():
+                if value is None:
                     continue
+                (gt_inf, gt_connection) = value
                 if event.inferior.connection_num == gt_connection:
+                    self.host_inf_for_auto_remove = key
+                elif event.inferior == gt_inf:
                     self.host_inf_for_auto_remove = key
 
     def handle_gdb_exiting_event(self, event):
@@ -316,7 +345,10 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
           self.get_env_variable("INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH")
 
         binary = self.gdbserver_gt_binary + self.gdbserver_args
-        gdbserver_gt_attach_str = f"{binary} --multi --hostpid={inf.pid} - "
+        if self.use_dcd:
+            gdbserver_gt_attach_str = f"{binary} --multi --hostpid={inf.pid} -"
+        else:
+            gdbserver_gt_attach_str = f"{binary} --attach - {inf.pid}"
 
         if gdbserver_gt_path_env_var:
             gdbserver_gt_attach_str = \
@@ -352,7 +384,11 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
         gdb.execute("set sysroot /")
         target_remote_str = \
             " ".join((f"{ld_lib_path} {gdbserver_cmd}").split())
-        target_cmd = "target extended-remote"
+
+        if self.use_dcd:
+            target_cmd = "target extended-remote"
+        else:
+            target_cmd = "target remote"
 
         # If the user set args for gdbserver, do not capture and suppress
         # the output, because the user wants to see the full output.
@@ -371,11 +407,13 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
             print(f"intelgt: {self.gdbserver_gt_binary} started for "
                   f"process {inf.pid}.")
 
-        # Set a pending attach.
-        connection_output = gdb.execute("attach 0", False, True)
-        # Print the first line only.  It contains useful device id and
-        # architecture info.
-        print(connection_output.split("\n")[0])
+        # gdbserver-gt uses the --multi mode.  We need to make a pending attach.
+        if self.use_dcd:
+            # Set a pending attach.
+            connection_output = gdb.execute("attach 0", False, True)
+            # Print the first line only.  It contains useful device id and
+            # architecture info.
+            print(connection_output.split("\n")[0])
 
     def make_remote_gdbserver(self, inf, ld_lib_path, gdbserver_cmd):
         """Spawn and connect to a remote instance of gdbserver."""
@@ -460,15 +498,16 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
 
         self.hook_bp.delete()
 
-        if not self.igfxdcd_is_loaded():
-            print("""\
+        if self.use_dcd:
+            if not self.igfxdcd_is_loaded():
+                print("""\
 intelgt: the igfxdcd module (i.e. the debug driver) is not loaded.""")
-            return
+                return
 
-        num_devices = gdb.parse_and_eval(NUM_DEVICES_FCT)
-        if num_devices == 0:
-            print("""intelgt: no GPU device is available for debug.""")
-            return
+            num_devices = gdb.parse_and_eval(NUM_DEVICES_FCT)
+            if num_devices == 0:
+                print("""intelgt: no GPU device is available for debug.""")
+                return
 
         if host_inf not in self.inf_dict or self.inf_dict[host_inf] is None:
             if not self.is_nonstop:
@@ -488,7 +527,10 @@ intelgt: the igfxdcd module (i.e. the debug driver) is not loaded.""")
             except (KeyboardInterrupt, gdb.error):
                 self.handle_error(host_inf)
 
-            self.inf_dict[host_inf] = gdb.inferiors()[-1].connection_num
+            gt_inf = gdb.inferiors()[-1]
+            # For the --attach scenario we use gt_inf; for the
+            # --multi scenario we use gt_inf's connection num.
+            self.inf_dict[host_inf] = (gt_inf, gt_inf.connection_num)
 
             # Switch to the host inferior.
             gdb.execute(f"inferior {host_inf.num}", False, True)

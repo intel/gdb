@@ -1,0 +1,102 @@
+# Copyright 2009-2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests if GDB can evaluate the type (structure) and the value
+# of dope vectors passed on target.
+
+require allow_fortran_tests
+
+load_lib fortran.exp
+load_lib openmp.exp
+
+standard_testfile .f90
+
+if ![string match -nocase "*f90*" ${openmp_languages_list}] {
+    untested "Fortran is not enabled in openmp_languages_list"
+    return 0
+}
+
+set device_list [omp_get_device_list]
+if {[llength ${device_list}] == 0} {
+    unsupported "target does not support OpenMP"
+    return 0
+}
+
+if {[build_executable "failed to compile ${srcfile}" \
+    ${binfile} ${srcfile} {openmp f90 debug}]} {
+    return -1
+}
+
+foreach device_info "${device_list}" {
+    with_test_prefix [string cat [init_openmp_device ${device_info}] ":f90"] {
+
+	clean_restart ${binfile}
+	if {![fortran_runto_main]} {
+	    untested "Failed to run to main"
+	    continue
+	}
+
+	# Try to access vla string / vla string array / string array values
+	gdb_breakpoint [gdb_get_line_number "breakpt"]
+	gdb_continue_to_breakpoint "breakpt" ".*breakpt.*"
+
+	if {[require_openmp_device "GPU"]} {
+	    set kfail_ticket "JIRA CMPLRLLVM/35716"
+	}
+	if {[require_openmp_device "CPU"]} {
+	    set kfail_ticket "JIRA CMPLRLLVM/35712"
+	}
+
+	if {[require_openmp_device "GPU"] || [require_openmp_device "CPU"]} {
+	    setup_kfail "$kfail_ticket" "*-*-*"
+	}
+	if [test_compiler_info "gcc*"] { setup_xfail *-*-* gcc/101826 }
+	gdb_test "print arr_vla1"  \
+	    " = \\\('vlaaryvlaary', 'vlaaryvlaary', 'vlaaryvlaary', 'vlaaryvlaary', 'vlaaryvlaary'\\\)"  \
+	    "print vla string array"
+
+	if {[require_openmp_device "GPU"] || [require_openmp_device "CPU"]} {
+	    setup_kfail "$kfail_ticket" "*-*-*"
+	}
+	if [test_compiler_info "gcc*"] { setup_xfail *-*-* gcc/101826 }
+	gdb_test "ptype arr_vla1"  \
+	    "type = character\\*12 \\(5\\)"  \
+	    "print variable length string array type"
+	if {[require_openmp_device "GPU"] || [require_openmp_device "CPU"]} {
+	    setup_kfail "$kfail_ticket" "*-*-*"
+	}
+	gdb_test "print arr_vla2"  \
+	    " = 'vlaary'"  \
+	    "print variable length string"
+	if {[require_openmp_device "GPU"] || [require_openmp_device "CPU"]} {
+	    setup_kfail "$kfail_ticket" "*-*-*"
+	}
+	gdb_test "ptype arr_vla2"  \
+	    "type = character\\*6"  \
+	    "print variable length string type"
+	if {[require_openmp_device "GPU"] || [require_openmp_device "CPU"]} {
+	    setup_kfail "$kfail_ticket" "*-*-*"
+	}
+	gdb_test "print arr2"  \
+	    " = \\\('vlaaryvla', 'vlaaryvla', 'vlaaryvla'\\\)"  \
+	    "print string array"
+	if {[require_openmp_device "GPU"]} {
+	    setup_kfail "$kfail_ticket" "*-*-*"
+	}
+	gdb_test "ptype arr2"  \
+	    "type = character\\*9 \\(3\\)"  \
+	    "print string array type"
+    }
+}

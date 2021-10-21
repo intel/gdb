@@ -131,9 +131,9 @@ switch $env(appdbg_architecture) {
 }
 
 
-switch $env(appdbg_boardfile) {
-	sycl-intelgt {
-		load_board_description "sycl-intelgt"
+switch -glob $env(appdbg_boardfile) {
+	sycl-intelgt* {
+		load_board_description "$env(appdbg_boardfile)"
 	}
 	sycl-cpu-intel {
 		load_board_description "sycl-cpu-intel"

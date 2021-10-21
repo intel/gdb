@@ -73,6 +73,10 @@ proc run_tests { lang } {
 	set to_end "\[^\r\n\]+"
 
 	with_test_prefix "fortran(host/target)->cpp(target)" {
+	    if {[require_openmp_device "CPU"]
+	       || [require_openmp_device "GPU"]} {
+		setup_kfail "JIRA DOQG/2694" "*-*-*"
+	    }
 	    gdb_test "bt -frame-arguments all" [multi_line \
 		    "#0\\s+breakpt \\(\\) at $to_end" \
 		    "#1\\s+$hex in mixed_func_1e \\(\\) at $to_end" \
@@ -132,7 +136,13 @@ proc run_tests { lang } {
     }
 }
 
-run_tests "auto"
-run_tests "fortran"
-run_tests "c"
-run_tests "c++"
+if {[require_openmp_device "GPU"]} {
+    kfail "JIRA CMPLRLLVM/33523" "bug in offload to GPU"
+} elseif {[require_openmp_device "CPU"]} {
+    kfail "JIRA DOQG/2784 && DOQG/2526" "bug in bt for offload to CPU and breakpoint not hit"
+} else {
+    run_tests "auto"
+    run_tests "fortran"
+    run_tests "c"
+    run_tests "c++"
+}

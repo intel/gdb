@@ -43,6 +43,9 @@ set int_type [fortran_int4]
 set mod_re [multi_line \
 	"\\d+:\[ \t\]+${int_type} module_declarations::var_c;" \
 	"\\d+:\[ \t\]+${int_type} module_declarations::var_d;"]
+if {[require_openmp_device "GPU"]} {
+    setup_kfail "JIRA DOQG/2610" "*-*-*"
+}
 gdb_test_multiple "info variables -n" "" {
     -re "\r\nAll defined variables:" {
 	if { $state == 0 } { set state 1 }
@@ -71,9 +74,15 @@ gdb_test_multiple "info variables -n" "" {
 gdb_breakpoint [gdb_get_line_number "args-check"]
 with_test_prefix "call1" {
     gdb_continue_to_breakpoint "args-check" ".*args-check.*"
+    if {[require_openmp_device "GPU"]} {
+	setup_kfail "JIRA DOQG/2537" "*-*-*"
+    }
     gdb_test "print val_a" " = 11" "print var_a value 11"
 }
 with_test_prefix "call2" {
     gdb_continue_to_breakpoint "args-check" ".*args-check.*"
+    if {[require_openmp_device "GPU"]} {
+	setup_kfail "JIRA DOQG/2537" "*-*-*"
+    }
     gdb_test "print val_a" " = 12" "print var_a value 12"
 }

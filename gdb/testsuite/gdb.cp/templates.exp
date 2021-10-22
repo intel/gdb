@@ -473,6 +473,8 @@ gdb_test_multiple "ptype/r bazint" "ptype bazint" {
 
 if {[test_compiler_info {clang-*}]} {
 	setup_kfail "llvm/52262 " "*-*-*"
+} elseif {[test_compiler_info {intel*}]} {
+	setup_kfail "JIRA CMPLRLLVM/32143" "*-*-*"
 }
 gdb_test "ptype cfoo" [multi_line \
 "type = (class |)Cfoo<double> \\\[with DataT = double\\\] \\{" \
@@ -491,6 +493,8 @@ gdb_test "ptype cfoo" [multi_line \
 
 if {[test_compiler_info {clang-*}]} {
 	setup_kfail "llvm/52262 " "*-*-*"
+} elseif {[test_compiler_info {intel*}]} {
+	setup_kfail "JIRA CMPLRLLVM/32143" "*-*-*"
 }
 gdb_test "ptype/r cfoo" [multi_line \
 "type = (class |)Cfoo<double> \\{" \

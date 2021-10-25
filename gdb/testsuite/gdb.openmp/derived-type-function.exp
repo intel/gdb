@@ -35,9 +35,15 @@ if {[start_openmp_program]} {
 gdb_breakpoint [gdb_get_line_number "breakpt"]
 gdb_continue_to_breakpoint "breakpt"
 
+if {[require_openmp_device "GPU"] || [require_openmp_device "CPU"]} {
+    setup_kfail "JIRA DOQG/2549" "*-*-*"
+}
 gdb_test "print aRec" "= \\( a = 2, b = 3 \\)" \
 "Print rectangle structure with members' name"
 
+if {[require_openmp_device "GPU"] || [require_openmp_device "CPU"]} {
+    setup_kfail "JIRA DOQG/2549" "*-*-*"
+}
 gdb_test "ptype aRec" \
 	[multi_line \
 	    "type \\= Type rectangle" \

@@ -1,0 +1,71 @@
+# Copyright 2009-2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/> .
+
+# It tests the evaluation of strides of uni-dimensional array of structures,
+# inside kernel.
+
+require allow_fortran_tests
+
+load_lib fortran.exp
+load_lib openmp.exp
+
+# Unfortunately recent versions of GCC broke the stride information in
+# the DEBUG so tests in this file will fail.
+set gcc_with_broken_stride [test_compiler_info {gcc-[89]-*}]
+
+standard_testfile .f90
+
+if ![string match -nocase "*f90*" ${openmp_languages_list}] {
+    untested "Fortran is not enabled in openmp_languages_list"
+    return 0
+}
+
+set device_list [omp_get_device_list]
+if {[llength ${device_list}] == 0} {
+    unsupported "target does not support OpenMP"
+    return 0
+}
+
+if {[build_executable "failed to compile ${srcfile}" \
+    ${binfile} ${srcfile} {openmp f90 debug}]} {
+    return -1
+}
+
+foreach device_info ${device_list} {
+    with_test_prefix [string cat [init_openmp_device ${device_info}] ":f90"] {
+
+	clean_restart ${binfile}
+	if {![fortran_runto_main]} {
+	    untested "Failed to run to main"
+	    continue
+	}
+
+	gdb_breakpoint [gdb_get_line_number "breakpt"]
+	gdb_continue_to_breakpoint "breakpt"
+
+	# Test homogeneous derived type.
+	setup_kfail "JIRA DOQG/2552" "*-*-*"
+	if { ${gcc_with_broken_stride} } { setup_kfail *-*-* gcc/92775 }
+	gdb_test "p point_dimension" "= \\\(2, 2, 2, 2, 2, 2, 2, 2, 2\\\)"
+
+	# Test mixed type derived type.
+	setup_kfail "JIRA DOQG/2552" "*-*-*"
+	if { ${gcc_with_broken_stride} } { setup_kfail *-*-* gcc/92775 }
+	gdb_test "p point_mixed_dimension" "= \\\(3, 3, 3, 3\\\)"
+
+	setup_kfail "JIRA DOQG/2552" "*-*-*"
+	gdb_test "p cloud_slice" " = \\\(\\\( x = 1, y = 2, z = 3 \\\)\\\)"
+    }
+}

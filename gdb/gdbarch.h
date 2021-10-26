@@ -1786,6 +1786,11 @@ extern const char **gdbarch_printable_names (void);
 
 extern struct gdbarch_list *gdbarch_list_lookup_by_info (struct gdbarch_list *arches, const struct gdbarch_info *info);
 
+/* Helper function.  Search the list of ARCHES for a INTELGT GDBARCH that
+   matches the information provided by INFO.  */
+
+extern struct gdbarch_list *gdbarch_get_intelgt_lookup_initalized_tdesc (struct gdbarch_list *arches);
+
 
 /* Helper function.  Create a preliminary ``struct gdbarch''.  Perform
    basic initialization using values obtained from the INFO and TDEP

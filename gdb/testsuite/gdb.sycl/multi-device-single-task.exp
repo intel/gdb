@@ -1,0 +1,102 @@
+# Copyright 2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests debugging kernels running asynchronously on two different
+# devices.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Wrap the entire test in a namespace to avoid contaminating other tests.
+namespace eval $testfile {
+
+set num_devices_check [gdb_get_line_number "num-devices-check"]
+gdb_breakpoint $num_devices_check {temporary}
+gdb_continue_to_breakpoint "num devices check" \
+    ".*$srcfile:$num_devices_check.*"
+
+set num_devices [get_integer_valueof "num_devices" 0]
+if {$num_devices < 2} {
+    unsupported "test is aimed at multi-device machines"
+    return 0
+}
+
+set bp1 [gdb_get_line_number "kernel-line-1"]
+gdb_breakpoint $bp1
+set bp2 [gdb_get_line_number "kernel-line-2"]
+gdb_breakpoint $bp2
+set end_bp [gdb_get_line_number "end-marker"]
+gdb_breakpoint $end_bp
+
+# The kernels are submitted asynchronously and are not dependent on
+# each other.  Use the value of the "point" variable to distinguish
+# the device.
+
+proc get_device {} {
+    set point_value [get_integer_valueof "point" 0]
+    return $point_value
+}
+
+# We should now hit each kernel BP once on each device.
+variable bp1_hit
+variable bp2_hit
+array set bp1_hit {}
+array set bp2_hit {}
+for {set i 1} {$i <= $num_devices} {incr i} {
+    set bp1_hit($i) 0
+    set bp2_hit($i) 0
+}
+
+# Two hits per device is expected.
+set num_trips [expr $num_devices * 2]
+
+for {set trip 1} {$trip <= $num_trips} {incr trip} {
+    with_test_prefix "trip $trip" {
+	gdb_test_multiple "continue" "resume" {
+	    -re -wrap ".*$srcfile:$bp1.*" {
+		set device [get_device]
+		gdb_assert {$bp1_hit($device) == 0}
+		gdb_assert {$bp2_hit($device) == 0}
+		set bp1_hit($device) 1
+	    }
+	    -re -wrap ".*$srcfile:$bp2.*" {
+		set device [get_device]
+		gdb_assert {$bp1_hit($device) == 1}
+		gdb_assert {$bp2_hit($device) == 0}
+		set bp2_hit($device) 1
+	    }
+	}
+    }
+}
+
+gdb_continue_to_breakpoint "post-kernel bp" ".*$srcfile:$end_bp.*"
+
+continue_sycl_program_to_termination
+
+}

@@ -142,8 +142,11 @@ gdb_caching_proc skip_sycl_tests {
 	    set sycl_driver_platform $platform
 	    exp_continue
 	}
-	-re "$inferior_exited_re normally].*$gdb_prompt $" {
+	-re -wrap "$inferior_exited_re normally].*" {
 	    set result 0
+	}
+	-re -wrap "$inferior_exited_re with code.*" {
+	    set result 1
 	}
     }
 

@@ -1,0 +1,51 @@
+# Copyright 2009-2021 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/> .
+
+# It tests the evaluation of strides of uni-dimensional array of structures,
+# inside kernel.
+
+load_lib fortran.exp
+load_lib openmp.exp
+
+# Unfortunately recent versions of GCC broke the stride information in
+# the DEBUG so tests in this file will fail.
+set gcc_with_broken_stride [test_compiler_info {gcc-[89]-*}]
+
+if {[skip_openmp_tests] || [skip_fortran_tests] } {
+    untested "skipping openmp test"
+    return 0
+} elseif {$openmp_program_extension eq "cpp"} {
+    unsupported "this test is fortran only"
+    return 0
+}
+
+standard_testfile .f90
+
+if {[start_openmp_program]} {
+    return -1
+}
+
+gdb_breakpoint [gdb_get_line_number "breakpt"]
+gdb_continue_to_breakpoint "breakpt"
+
+# Test homogeneous derived type.
+if { $gcc_with_broken_stride } { setup_kfail *-*-* gcc/92775 }
+gdb_test "p point_dimension" "= \\\(2, 2, 2, 2, 2, 2, 2, 2, 2\\\)"
+
+# Test mixed type derived type.
+if { $gcc_with_broken_stride } { setup_kfail *-*-* gcc/92775 }
+gdb_test "p point_mixed_dimension" "= \\\(3, 3, 3, 3\\\)"
+
+gdb_test "p cloud_slice" " = \\\(\\\( x = 1, y = 2, z = 3 \\\)\\\)"

@@ -963,7 +963,6 @@ intelgt_process_target::handle_interrupt_timedout (GTEvent *event,
 						   target_waitstatus *status)
 {
   gdb_assert (event->type == eGfxDbgEventInterruptTimedOut);
-  gdb_assert (interrupt_in_progress);
   interrupt_in_progress = false;
   status->kind = TARGET_WAITKIND_NO_RESUMED;
 

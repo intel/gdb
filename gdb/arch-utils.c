@@ -1360,6 +1360,22 @@ gdbarch_list_lookup_by_info (struct gdbarch_list *arches,
 }
 
 
+/* Look for an Intelgt architecture with tdesc info using gdbarch_list.  */
+
+static struct gdbarch_list *
+gdbarch_get_intelgt_lookup_initialized_tdesc (struct gdbarch_list *arches)
+{
+  for (; arches != NULL; arches = arches->next)
+    {
+      if (arches->gdbarch->bfd_arch_info->arch != bfd_arch_intelgt)
+	continue;
+      if (arches->gdbarch->target_desc == nullptr)
+	continue;
+      return arches;
+    }
+  return NULL;
+}
+
 /* Find an architecture that matches the specified INFO.  Create a new
    architecture if needed.  Return that new architecture.  */
 
@@ -1410,6 +1426,15 @@ gdbarch_find_by_info (struct gdbarch_info info)
 	gdb_printf (gdb_stdlog, "gdbarch_find_by_info: "
 		    "No matching architecture\n");
       return nullptr;
+    }
+
+  if (info.bfd_arch_info->arch == bfd_arch_intelgt
+     && info.abfd != nullptr && info.target_desc == nullptr)
+    {
+      rego->arches
+	= gdbarch_get_intelgt_lookup_initialized_tdesc (rego->arches);
+      if (rego->arches != nullptr)
+	info.target_desc = rego->arches->gdbarch->target_desc;
     }
 
   /* Ask the tdep code for an architecture that matches "info".  */

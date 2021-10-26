@@ -41,11 +41,14 @@ gdb_breakpoint [gdb_get_line_number "breakpt"]
 gdb_continue_to_breakpoint "breakpt"
 
 # Test homogeneous derived type.
+setup_kfail "JIRA DOQG/2552" "*-*-*"
 if { $gcc_with_broken_stride } { setup_kfail *-*-* gcc/92775 }
 gdb_test "p point_dimension" "= \\\(2, 2, 2, 2, 2, 2, 2, 2, 2\\\)"
 
 # Test mixed type derived type.
+setup_kfail "JIRA DOQG/2552" "*-*-*"
 if { $gcc_with_broken_stride } { setup_kfail *-*-* gcc/92775 }
 gdb_test "p point_mixed_dimension" "= \\\(3, 3, 3, 3\\\)"
 
+setup_kfail "JIRA DOQG/2552" "*-*-*"
 gdb_test "p cloud_slice" " = \\\(\\\( x = 1, y = 2, z = 3 \\\)\\\)"

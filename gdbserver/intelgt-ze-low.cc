@@ -239,6 +239,8 @@ protected:
   void prepare_thread_resume (thread_info *tp,
 			      enum resume_kind rkind) override;
 
+  bool is_at_breakpoint (thread_info *tp);
+
 private:
   /* Add a register set for REGPROP on DEVICE to REGSETS and increment REGNUM
      accordingly.
@@ -515,6 +517,20 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
   return TARGET_STOPPED_BY_NO_REASON;
 }
 
+bool
+intelgt_ze_target::is_at_breakpoint (thread_info *tp)
+{
+  regcache *regcache = get_thread_regcache (tp, 1);
+  CORE_ADDR pc = read_pc (regcache);
+
+  gdb_byte inst[intelgt::MAX_INST_LENGTH];
+  int status = read_memory (pc, inst, intelgt::MAX_INST_LENGTH);
+  if (status != 0)
+    return false;
+
+  return intelgt::has_breakpoint (inst);
+}
+
 void
 intelgt_ze_target::prepare_thread_resume (thread_info *tp,
 					  enum resume_kind rkind)
@@ -554,10 +570,7 @@ intelgt_ze_target::prepare_thread_resume (thread_info *tp,
 
      This requires breakpoints to be already inserted when this function
      is called.  It also handles permanent breakpoints.  */
-  gdb_byte inst[intelgt::MAX_INST_LENGTH];
-  CORE_ADDR pc = read_pc (regcache);
-  int status = read_memory (pc, inst, intelgt::MAX_INST_LENGTH);
-  if ((status == 0) && intelgt::has_breakpoint (inst))
+  if (is_at_breakpoint (tp))
     cr0[0] |= (1 << intelgt_cr0_0_breakpoint_suppress);
 
   intelgt_write_cr0 (regcache, 0, cr0[0]);

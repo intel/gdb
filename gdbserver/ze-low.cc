@@ -1627,9 +1627,38 @@ ze_target::resume (const ze_device_info &device, enum resume_kind rkind)
 	   We ignore those threads and the unavailable event they report.  */
 	int pid = ze_device_pid (device);
 	thread_info *eventing
-	  = find_thread (pid, [] (thread_info *tp)
+	  = find_thread (pid, [this] (thread_info *tp)
 	      {
-		return ze_has_priority_waitstatus (tp);
+		if (!ze_has_priority_waitstatus (tp))
+		  return false;
+
+		/* TP may have stopped at a breakpoint that is already
+		   deleted by GDB.  Consider TP as an eventing thread only
+		   if the BP is still there.  Because we are inside the
+		   'resume' request, if the BP is valid, GDB must have
+		   already re-inserted it.
+
+		   FIXME: Keep track of the stop_pc and compare
+		   it with the current (i.e. to-be-resumed) pc.  */
+		const ze_thread_info *zetp = ze_thread (tp);
+		gdb_assert (zetp != nullptr);
+
+		if ((zetp->exec_state == ze_thread_state_stopped)
+		    && (zetp->stop_reason == TARGET_STOPPED_BY_SW_BREAKPOINT)
+		    && !is_at_breakpoint (tp))
+		  {
+		    /* The BP is gone.  Clear the waitstatus, too.  */
+		    target_waitstatus waitstatus = ze_move_waitstatus (tp);
+		    if (waitstatus.kind != TARGET_WAITKIND_STOPPED)
+		      warning (_("thread %d.%ld has waitstatus %d, "
+				 "expected %d."),
+			       tp->id.pid (), tp->id.lwp (), waitstatus.kind,
+			       TARGET_WAITKIND_STOPPED);
+
+		    return false;
+		  }
+
+		return true;
 	      });
 
 	/* If we have nothing to report, we can simply resume everything

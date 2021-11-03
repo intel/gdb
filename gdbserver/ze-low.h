@@ -405,6 +405,9 @@ protected:
   /* Prepare TP for resuming with RKIND.  */
   virtual void prepare_thread_resume (thread_info *tp,
 				      enum resume_kind rkind) = 0;
+
+  /* Return whether TP is at a breakpoint.  */
+  virtual bool is_at_breakpoint (thread_info *tp) = 0;
 };
 
 #endif /* GDBSERVER_LEVEL_ZERO_LOW_H */

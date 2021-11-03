@@ -239,7 +239,7 @@ protected:
   void prepare_thread_resume (thread_info *tp,
 			      enum resume_kind rkind) override;
 
-  bool is_at_breakpoint (thread_info *tp);
+  bool is_at_breakpoint (thread_info *tp) override;
 
 private:
   /* Add a register set for REGPROP on DEVICE to REGSETS and increment REGNUM

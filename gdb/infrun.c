@@ -5102,8 +5102,18 @@ handle_one (const wait_one_event &event)
 	 event is received from an all-stop target.  */
       mark_non_executing_threads (event.target, event.ptid, event.ws);
 
-      if (event.ws.kind == TARGET_WAITKIND_STOPPED
-	  && event.ws.value.sig == GDB_SIGNAL_0)
+      /* If a TARGET_WAITKIND_UNAVAILABLE is received as the result of
+	 a stop request, consider it the same as a stopped event with
+	 the 0 signal, and do not save it as a pending event.  We
+	 would expect the target to send us a TARGET_WAITKIND_STOPPED
+	 status if there were a stopped event.  We must have received
+	 TARGET_WAITKIND_UNAVAILABLE because all the threads were
+	 unavailable for our interrupt.  Hence, it must be OK to treat
+	 the TARGET_WAITKIND_UNAVAILABLE status as an internal stop
+	 and report to the user.  */
+      if ((event.ws.kind == TARGET_WAITKIND_STOPPED
+	   && event.ws.value.sig == GDB_SIGNAL_0)
+	  || (event.ws.kind == TARGET_WAITKIND_UNAVAILABLE))
 	{
 	  /* We caught the event that we intended to catch, so
 	     there's no event pending.  */

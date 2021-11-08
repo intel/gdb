@@ -1886,6 +1886,15 @@ namespace eval Dwarf {
 		    _emit_locdesc $locdesc
 		}
 
+                # Emit a DW_LLE_base_address entry.
+                proc base_address {addr} {
+		    variable _debug_loclists_addr_size
+		    variable _debug_loclists_locdesc_count
+		    _op .byte 0x06 "DW_LLE_base_address"
+		    _op .${_debug_loclists_addr_size}byte $addr "base_address"
+		    incr _debug_loclists_locdesc_count
+		}
+
 		uplevel $body
 
 		# Emit end of list.
@@ -1954,6 +1963,15 @@ namespace eval Dwarf {
 	}
 
 	uplevel $body
+    }
+
+    # Emit a DW_LLE_base_address entry.
+    proc _loclists_base_address {addr} {
+	variable _debug_loclists_addr_size
+	variable _debug_loclists_locdesc_count
+	_op .byte 0x06 "DW_LLE_base_address"
+	_op .${_debug_loclists_addr_size}byte $addr "base_address"
+	incr _debug_loclists_locdesc_count
     }
 
     # Emit a DWARF .debug_line unit.

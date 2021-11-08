@@ -51,6 +51,7 @@ foreach_with_prefix is_64 {false true} {
 
 	    DW_TAG_compile_unit {
 		{DW_AT_loclists_base cu_table DW_FORM_sec_offset}
+		{DW_AT_low_pc $func1_addr}
 	    } {
 		int_type: DW_TAG_base_type {
 		    {DW_AT_byte_size 4 DW_FORM_data1}
@@ -96,6 +97,9 @@ foreach_with_prefix is_64 {false true} {
 
 		# For variable foo.
 		list_ {
+		    # This should not affect the following addresses.
+		    base_address 0xffff
+
 		    # When in func1.
 		    start_end $func1_addr "$func1_addr + $func1_len" {
 			DW_OP_constu 0x123456
@@ -124,6 +128,8 @@ foreach_with_prefix is_64 {false true} {
 
     gdb_breakpoint "func1"
     gdb_breakpoint "func2"
+
+    gdb_test "info address foo" ".*"
 
     gdb_continue_to_breakpoint "func1"
     with_test_prefix "at func1" {

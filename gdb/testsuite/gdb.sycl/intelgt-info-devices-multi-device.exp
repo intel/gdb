@@ -1,0 +1,120 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests info devices command on multi device machines.
+
+load_lib sycl.exp
+
+standard_testfile multi-device-single-task.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {![require_sycl_device "gpu" "Intel*"]} {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Helper joining all ARGS with WS inbetween and at the end.
+proc wrap_regex_with_spaces_and_tabs { args } {
+    set ws "\[ \\t\]+"
+    return "[join ${args} ${ws}]${ws}"
+}
+
+# Execute TEST with name TEST_NAME and expect a table with 1
+# TABLE_HEADER row at the top and N_BODY rows TABLE_BODY.
+proc test_table_n_entries { test test_name table_header table_body n_body } {
+    gdb_test "${test}" \
+	[multi_line \
+	    "${table_header}" \
+	    "(${table_body}(\r\n)?){$n_body}" \
+	    ] "${test_name}"
+}
+
+set num_devices_check [gdb_get_line_number "num-devices-check"]
+set devices_driver_check [gdb_get_line_number "devices-driver-check"]
+gdb_breakpoint $num_devices_check {temporary}
+gdb_breakpoint $devices_driver_check {temporary}
+gdb_continue_to_breakpoint "num devices check" \
+    ".*$srcfile:$num_devices_check.*"
+
+set num_devices [get_integer_valueof "num_devices" 0]
+if {$num_devices < 2} {
+    unsupported "test is aimed at multi-device machines"
+    return 0
+}
+
+gdb_continue_to_breakpoint "devices driver check" \
+    ".*$srcfile:$devices_driver_check.*"
+set devices_same_driver [get_integer_valueof "devices_same_driver" 0]
+if {$devices_same_driver == 0} {
+    unsupported "test needs to be run using devices via one driver only"
+    return 0
+}
+
+set bp [gdb_get_line_number "kernel-line-1"]
+gdb_breakpoint $bp
+set end_bp [gdb_get_line_number "end-marker"]
+gdb_breakpoint $end_bp
+
+gdb_test "info devices" "No devices\." "info devices pre-kernel"
+
+# For each device one bp should be hit and each call to continue should lead
+# to one more inferior and one more device being displayed.
+# Check the info devices command output - there should be one now if on GPU.
+#   Location   Sub-device   Vendor Id   Target Id   Cores   Device Name
+# * [00:02.0]  0            0x8086      0x4c8a      32      Intel(R) UHD Graphics 750
+# * [00:09.0]  0            0x8086      0x4c8a      32      Intel(R) UHD Graphics 750
+
+set any_location "\\\[\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
+set any_name "\[^\r\n\]+"
+set table_header [wrap_regex_with_spaces_and_tabs " " "Location" "Sub-device" \
+    "Vendor Id" "Target Id" "Cores" "Device Name"]
+set table_body [wrap_regex_with_spaces_and_tabs "." "${any_location}" \
+    "(${decimal}|-)" "${hex}" "${hex}" "${decimal}" "${any_name}"]
+
+for {set trip 1} {$trip <= $num_devices} {incr trip} {
+    with_test_prefix "trip $trip" {
+	gdb_test_multiple "continue" "resume" {
+	    -re -wrap ".*$srcfile:$bp.*" {
+
+		# The nth run should display n devices (TRIP).
+		test_table_n_entries "info devices" \
+		    "info devices in kernel for ${trip} devices" \
+		    "${table_header}" "${table_body}" "${trip}"
+	    }
+	}
+    }
+}
+
+# Here all device inferiors should have been detected.
+gdb_continue_to_breakpoint "post-kernel bp" ".*$srcfile:$end_bp.*"
+
+test_table_n_entries "info devices" \
+    "info devices post kernel for all ${num_devices} devices" \
+    "${table_header}" "${table_body}" "${num_devices}"
+
+continue_sycl_program_to_termination
+gdb_test "info devices" "No devices\." "info devices post-sycl"

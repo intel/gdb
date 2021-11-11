@@ -112,10 +112,12 @@ proc test_bp_2 { {lane 0} } {
 
     if {[require_sycl_device "host" ""]} {
 	setup_kfail "JIRA CMPLRTST/13761" "*-*-*"
+    } elseif {[require_sycl_device "gpu" "Intel*"]} {
+	setup_kfail "JIRA DOQG/2081" "*-*-*"
     }
     set v1 [get_valueof "" "atmp\[gid\].a" "NONE"]
     set v2 [get_valueof "" "in" "NONE"]
-    if {[require_sycl_device "gpu" "Intel*"] && $lane == 4 || [is_gen12]} {
+    if {[require_sycl_device "gpu" "Intel*"]} {
 	setup_kfail "JIRA DOQG/2107" "*-*-*"
     } elseif {[require_sycl_device "host" ""]} {
 	setup_kfail "JIRA CMPLRTST/13761" "*-*-*"

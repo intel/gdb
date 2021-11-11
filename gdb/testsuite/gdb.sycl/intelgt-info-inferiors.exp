@@ -1,0 +1,138 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests whether info inferiors command displays intelgt devices.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-1D.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {![require_sycl_device "gpu" "Intel*"]} {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Helper joining all ARGS with WS inbetween and at the end.
+proc wrap_regex_with_spaces_and_tabs { args } {
+    set ws "\[ \\t\]+"
+    return "[join ${args} ${ws}]${ws}"
+}
+
+# Set breakpoint inside the kernel.
+set last_kernel_line [gdb_get_line_number "kernel-last-line"]
+
+gdb_breakpoint $last_kernel_line
+
+set any_name "\[^\r\n\]+"
+set any_path "\(?:\/${any_name}\)+"
+set any_location "\\\[\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
+
+set table_header_line [wrap_regex_with_spaces_and_tabs " " "Num" \
+    "Description" "Connection" "Executable"]
+set table_empty_inferior_line [wrap_regex_with_spaces_and_tabs "." "1" \
+    "<null>" "${any_path}"]
+set table_inferior_line [wrap_regex_with_spaces_and_tabs "." "1" \
+    "process ${decimal}" "1 \\(native\\)" "${any_path}"]
+set table_device_line [wrap_regex_with_spaces_and_tabs "." "2" \
+    "device ${any_location}(\.${decimal})?" \
+    "2 \\(\[^\r\n\]*remote gdbserver\[^\r\n\]*\\)"]
+set table_info_devices_hint_line \
+    "Type \"info devices\" to see details of the devices\."
+
+# (gdb) info inferiors
+#   Num  Description            Connection                  Executable
+#   1    process 40678          1 (native)                  /XXX/XXX/XXX/XXX
+# * 2    device [03:00.0].0     2 (...remote gdbserver...)
+# Type \"info devices\" to see details of the devices.
+
+gdb_test "info inferiors" \
+    [multi_line \
+        "${table_header_line}" \
+	"${table_inferior_line}" \
+    ] "info inferiors before start"
+
+# Hit the kernel breakpoint.
+gdb_continue_to_breakpoint "kernel" ".*$srcfile:$last_kernel_line.*"
+
+gdb_test "info inferiors" \
+    [multi_line \
+	"${table_header_line}" \
+	"${table_inferior_line}" \
+	"${table_device_line}" \
+	"${table_info_devices_hint_line}"
+	] "info inferiors in kernel"
+
+gdb_test "info inferiors 1-2" \
+    [multi_line \
+	"${table_header_line}" \
+	"${table_inferior_line}" \
+	"${table_device_line}" \
+	"${table_info_devices_hint_line}"
+	] "info inferiors 1-2 in kernel"
+
+gdb_test "info inferiors 2" \
+    [multi_line \
+	"${table_header_line}" \
+	"${table_device_line}" \
+	"${table_info_devices_hint_line}"
+	] "info inferiors 2 in kernel"
+
+gdb_test "info inferiors 1" \
+    [multi_line \
+	"${table_header_line}" \
+	"${table_inferior_line}"
+	] "info inferiors 1 in kernel"
+
+# Check for invalid input for the info inferiors command.
+gdb_test "info inferiors 0" "Zero is not a valid index\."
+gdb_test "info inferiors asdf" "Arguments must be numbers or \'.\' variables\."
+gdb_test "info inferiors -1" "negative value"
+
+# Disable breakpoints and continue.
+gdb_test_no_output "disable breakpoints" "disable breakpoints"
+continue_sycl_program_to_termination
+
+# Receiving inferior 1's exit event before inferior 2's:
+# (gdb) info inferiors
+#   Num  Description            Connection                  Executable
+# * 1    <null>                                             XXXXXXXX
+#
+# Or, receiving inferior 2's exit event first:
+#
+#   Num  Description            Connection                  Executable
+#   1    process 40678          1 (native)                  /XXX/XXX/XXX/XXX
+
+set test "info inferiors after program exit"
+gdb_test_multiple "info inferiors" $test {
+    -re -wrap "${table_header_line}\r\n${table_empty_inferior_line}" {
+	pass $test
+    }
+    -re -wrap "${table_header_line}\r\n${table_inferior_line}" {
+	pass $test
+    }
+}

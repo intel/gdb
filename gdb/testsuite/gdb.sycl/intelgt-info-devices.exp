@@ -1,0 +1,87 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests info devices command.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-1D.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Helper joining all ARGS with WS inbetween and at the end.
+proc wrap_regex_with_spaces_and_tabs { args } {
+    set ws "\[ \\t\]+"
+    return "[join ${args} ${ws}]${ws}"
+}
+
+# Execute TEST with name TEST_NAME and expect a table with 1
+# TABLE_HEADER row at the top and N_BODY rows TABLE_BODY.
+proc test_table_n_entries { test test_name table_header table_body n_body } {
+    gdb_test "${test}" \
+	[multi_line \
+	    "${table_header}" \
+	    "(${table_body}(\r\n)?){$n_body}" \
+	    ] "${test_name}"
+}
+
+# Set breakpoint inside the kernel.
+set last_kernel_line [gdb_get_line_number "kernel-last-line"]
+
+gdb_breakpoint $last_kernel_line
+
+gdb_test "info devices" "No devices\." "info devices before start"
+
+# Hit the kernel breakpoint.
+gdb_continue_to_breakpoint "kernel" ".*$srcfile:$last_kernel_line.*"
+
+# Check the info devices command output - there should be one now if on GPU.
+#   Location   Sub-device   Vendor Id   Target Id   Cores   Device Name
+# * [00:02.0]  0            0x8086      0x4c8a      32      Intel(R) UHD Graphics 750
+
+set any_location "\\\[\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
+set any_name "\[^\r\n\]+"
+set table_header [wrap_regex_with_spaces_and_tabs " " "Location" "Sub-device" \
+    "Vendor Id" "Target Id" "Cores" "Device Name"]
+set table_body [wrap_regex_with_spaces_and_tabs "\\*" "${any_location}" \
+    "(${decimal}|-)" "${hex}" "${hex}" "${decimal}" "${any_name}"]
+
+if {[require_sycl_device "gpu" "Intel*"]} {
+    # On GPU.
+    test_table_n_entries "info devices" "info devices in kernel" \
+	"${table_header}" "${table_body}" "1"
+} else {
+    # On CPU.
+    gdb_test "info devices" "No devices\." "info devices in kernel"
+}
+
+gdb_test "info devices 1 adsf" "The \"info devices\" command does not take any arguments\." \
+    "test info devices refuses arguments"
+
+delete_breakpoints
+continue_sycl_program_to_termination
+
+gdb_test "info devices" "No devices\." "info devices after termination"

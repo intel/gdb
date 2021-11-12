@@ -30,7 +30,7 @@ main (int argc, char *argv[])
 
   /* Spawn kernels that are independent of each other.  */
   for (unsigned int i = 0; i < length; i++)
-    #pragma omp target teams num_teams(1) thread_limit(1) map(to: in_arr) nowait
+    #pragma omp target teams num_teams(1) thread_limit(1) map(to: in_arr)
       {
 	int item = in_arr[i] + 100; /* kernel-line */
       }

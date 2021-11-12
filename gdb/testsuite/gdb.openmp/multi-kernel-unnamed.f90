@@ -24,7 +24,7 @@ program multi_kernel_unnamed
 
   do i = 0, length
     !$omp target teams num_teams(1) thread_limit(1) map(from: in_elem) &
-    !$omp  private(item) nowait
+    !$omp  private(item)
       item = in_arr(i) ! kernel-line
     !$omp end target teams
   end do

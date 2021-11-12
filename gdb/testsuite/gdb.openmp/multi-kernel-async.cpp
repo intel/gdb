@@ -24,12 +24,12 @@ main (int argc, char *argv[])
   int data1 = 11;
   int data2 = 22;
 
-#pragma omp target teams num_teams(1) thread_limit(1) map(to: data1) nowait
+#pragma omp target teams num_teams(1) thread_limit(1) map(to: data1)
   {
     int item = data1 + 100; /* kernel-1-line */
   }
 
-#pragma omp target teams num_teams(1) thread_limit(1) map(to: data2) nowait
+#pragma omp target teams num_teams(1) thread_limit(1) map(to: data2)
   {
     int item = data2 + 200; /* kernel-2-line */
   }

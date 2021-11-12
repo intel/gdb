@@ -18,13 +18,13 @@ program multi_kernel_async
   integer :: data2 = 22
   integer :: item, total
 
-  !$omp target map(to: data1) nowait
+  !$omp target map(to: data1)
   !$omp teams num_teams(1) thread_limit(1) private(item)
     item = data1 + 100 ! kernel-1-line
   !$omp end teams
   !$omp end target
 
-  !$omp target map(to: data2) nowait
+  !$omp target map(to: data2)
   !$omp teams num_teams(1) thread_limit(1) private(item)
     item = data2 + 200 ! kernel-2-line
   !$omp end teams

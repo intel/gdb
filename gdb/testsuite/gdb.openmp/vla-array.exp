@@ -35,26 +35,58 @@ if {[start_openmp_program]} {
 
 # Try to access vla string / vla string array / string array values
 gdb_breakpoint [gdb_get_line_number "breakpt"]
+if {[require_openmp_device "CPU"]} {
+    # The actual bug has been fixed - remove this fail once ifx compiler
+    # version >= intel-2022-x-0-20220208
+    setup_kfail "JIRA CMPLRLLVM/32387" "*-*-*"
+}
 gdb_continue_to_breakpoint "breakpt" ".*breakpt.*"
 
+if {[require_openmp_device "GPU"]} {
+    set kfail_ticket "JIRA CMPLRLLVM/35716"
+}
+if {[require_openmp_device "CPU"]} {
+    set kfail_ticket "JIRA CMPLRLLVM/35712"
+}
+
+if {[require_openmp_device "GPU"] || [require_openmp_device "CPU"]} {
+    setup_kfail "$kfail_ticket" "*-*-*"
+}
 if [test_compiler_info "gcc*"] { setup_xfail *-*-* gcc/101826 }
 gdb_test "print arr_vla1"  \
     " = \\\('vlaaryvlaary', 'vlaaryvlaary', 'vlaaryvlaary', 'vlaaryvlaary', 'vlaaryvlaary'\\\)"  \
     "print vla string array"
 
+if {[require_openmp_device "GPU"] || [require_openmp_device "CPU"]} {
+    setup_kfail "$kfail_ticket" "*-*-*"
+}
 if [test_compiler_info "gcc*"] { setup_xfail *-*-* gcc/101826 }
 gdb_test "ptype arr_vla1"  \
     "type = character\\*12 \\(5\\)"  \
     "print variable length string array type"
+if {[require_openmp_device "GPU"] || [require_openmp_device "CPU"]} {
+    setup_kfail "$kfail_ticket" "*-*-*"
+} else {
+    setup_kfail "JIRA DOQG/2614" "*-*-*"
+}
 gdb_test "print arr_vla2"  \
     " = 'vlaary'"  \
     "print variable length string"
+if {[require_openmp_device "GPU"] || [require_openmp_device "CPU"]} {
+    setup_kfail "$kfail_ticket" "*-*-*"
+}
 gdb_test "ptype arr_vla2"  \
     "type = character\\*6"  \
     "print variable length string type"
+if {[require_openmp_device "GPU"] || [require_openmp_device "CPU"]} {
+    setup_kfail "$kfail_ticket" "*-*-*"
+}
 gdb_test "print arr2"  \
     " = \\\('vlaaryvla', 'vlaaryvla', 'vlaaryvla'\\\)"  \
     "print string array"
+if {[require_openmp_device "GPU"] || [require_openmp_device "CPU"]} {
+    setup_kfail "$kfail_ticket" "*-*-*"
+}
 gdb_test "ptype arr2"  \
     "type = character\\*9 \\(3\\)"  \
     "print string array type"

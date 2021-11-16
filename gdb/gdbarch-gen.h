@@ -1683,3 +1683,9 @@ extern void set_gdbarch_get_pc_address_flags (struct gdbarch *gdbarch, gdbarch_g
 typedef void (gdbarch_read_core_file_mappings_ftype) (struct gdbarch *gdbarch, struct bfd *cbfd, read_core_file_mappings_pre_loop_ftype pre_loop_cb, read_core_file_mappings_loop_ftype loop_cb);
 extern void gdbarch_read_core_file_mappings (struct gdbarch *gdbarch, struct bfd *cbfd, read_core_file_mappings_pre_loop_ftype pre_loop_cb, read_core_file_mappings_loop_ftype loop_cb);
 extern void set_gdbarch_read_core_file_mappings (struct gdbarch *gdbarch, gdbarch_read_core_file_mappings_ftype *read_core_file_mappings);
+
+/* If true, an inferior is additionally marked as a device and additional
+   information about it is available via the 'info devices' command. */
+
+extern bool gdbarch_is_inferior_device (struct gdbarch *gdbarch);
+extern void set_gdbarch_is_inferior_device (struct gdbarch *gdbarch, bool is_inferior_device);

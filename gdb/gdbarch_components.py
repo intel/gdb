@@ -2880,6 +2880,17 @@ The corefile's bfd is passed through COREFILE_BFD.
     invalid=False,
 )
 
+Value(
+    comment="""
+If true, an inferior is additionally marked as a device and additional
+information about it is available via the 'info devices' command.
+""",
+    type="bool",
+    name="is_inferior_device",
+    predefault="false",
+    invalid=False,
+)
+
 Method(
     comment="""
 Examine the core file bfd object CBFD and try to extract the name of

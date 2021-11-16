@@ -2872,6 +2872,17 @@ The corefile's bfd is passed through COREFILE_BFD.
     invalid=False,
 )
 
+Value(
+    comment="""
+If true, an inferior is additionally marked as a device and additional
+information about it is available via the 'info devices' command.
+""",
+    type="bool",
+    name="is_inferior_device",
+    predefault="false",
+    invalid=False,
+)
+
 Method(
     comment="Reserve space on the stack for a value of the given type.",
     type="CORE_ADDR",

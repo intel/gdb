@@ -264,6 +264,7 @@ struct gdbarch
   gdbarch_get_pc_address_flags_ftype *get_pc_address_flags = default_get_pc_address_flags;
   gdbarch_read_core_file_mappings_ftype *read_core_file_mappings = default_read_core_file_mappings;
   gdbarch_use_target_description_from_corefile_notes_ftype *use_target_description_from_corefile_notes = default_use_target_description_from_corefile_notes;
+  bool is_inferior_device = false;
   gdbarch_reserve_stack_space_ftype *reserve_stack_space = default_reserve_stack_space;
   gdbarch_get_inferior_call_return_value_ftype *get_inferior_call_return_value = default_get_inferior_call_return_value;
 };
@@ -541,6 +542,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of get_pc_address_flags, invalid_p == 0 */
   /* Skip verify of read_core_file_mappings, invalid_p == 0 */
   /* Skip verify of use_target_description_from_corefile_notes, invalid_p == 0 */
+  /* Skip verify of is_inferior_device, invalid_p == 0 */
   /* Skip verify of reserve_stack_space, invalid_p == 0 */
   /* Skip verify of get_inferior_call_return_value, invalid_p == 0 */
   if (!log.empty ())
@@ -1426,6 +1428,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: use_target_description_from_corefile_notes = <%s>\n",
 	      host_address_to_string (gdbarch->use_target_description_from_corefile_notes));
+  gdb_printf (file,
+	      "gdbarch_dump: is_inferior_device = %s\n",
+	      plongest (gdbarch->is_inferior_device));
   gdb_printf (file,
 	      "gdbarch_dump: reserve_stack_space = <%s>\n",
 	      host_address_to_string (gdbarch->reserve_stack_space));
@@ -5624,6 +5629,23 @@ set_gdbarch_use_target_description_from_corefile_notes (struct gdbarch *gdbarch,
 							gdbarch_use_target_description_from_corefile_notes_ftype use_target_description_from_corefile_notes)
 {
   gdbarch->use_target_description_from_corefile_notes = use_target_description_from_corefile_notes;
+}
+
+bool
+gdbarch_is_inferior_device (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of is_inferior_device, invalid_p == 0 */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_is_inferior_device called\n");
+  return gdbarch->is_inferior_device;
+}
+
+void
+set_gdbarch_is_inferior_device (struct gdbarch *gdbarch,
+				bool is_inferior_device)
+{
+  gdbarch->is_inferior_device = is_inferior_device;
 }
 
 CORE_ADDR

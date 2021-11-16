@@ -1812,6 +1812,12 @@ typedef bool (gdbarch_use_target_description_from_corefile_notes_ftype) (struct 
 extern bool gdbarch_use_target_description_from_corefile_notes (struct gdbarch *gdbarch, struct bfd *corefile_bfd);
 extern void set_gdbarch_use_target_description_from_corefile_notes (struct gdbarch *gdbarch, gdbarch_use_target_description_from_corefile_notes_ftype *use_target_description_from_corefile_notes);
 
+/* If true, an inferior is additionally marked as a device and additional
+   information about it is available via the 'info devices' command. */
+
+extern bool gdbarch_is_inferior_device (struct gdbarch *gdbarch);
+extern void set_gdbarch_is_inferior_device (struct gdbarch *gdbarch, bool is_inferior_device);
+
 /* Reserve space on the stack for a value of the given type. */
 
 typedef CORE_ADDR (gdbarch_reserve_stack_space_ftype) (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp);

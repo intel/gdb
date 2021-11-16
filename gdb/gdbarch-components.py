@@ -2748,3 +2748,14 @@ Read core file mappings
     predefault="default_read_core_file_mappings",
     invalid=False,
 )
+
+Value(
+    comment="""
+If true, an inferior is additionally marked as a device and additional
+information about it is available via the 'info devices' command.
+""",
+    type="bool",
+    name="is_inferior_device",
+    predefault="false",
+    invalid=False,
+)

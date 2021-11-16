@@ -641,9 +641,9 @@ add_new_gt_process (process_info_private *proc_priv)
   proc->priv = proc_priv;
   proc->tdesc = tdesc;
 
-  fprintf (stderr, "intelgt: attached to device %d of %d;"
-	   " id 0x%x (Gen%d)\n", device_index, igfxdbg_NumDevices (),
-	   info.device_id, info.gen_major);
+  fprintf (stderr, "intelgt: attached to device [%s].%d; %s [0x%x]\n",
+	   convert_pci_slot_to_string (info.bus_dev_fn).c_str (), info.tile_id,
+	   intelgt_device_name_from_id (info.device_id), info.device_id);
 
   return proc;
 }

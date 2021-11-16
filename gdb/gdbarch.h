@@ -1782,6 +1782,12 @@ extern void set_gdbarch_shstk_push (struct gdbarch *gdbarch, gdbarch_shstk_push_
 extern int gdbarch_shstk_addr_byte_align (struct gdbarch *gdbarch);
 extern void set_gdbarch_shstk_addr_byte_align (struct gdbarch *gdbarch, int shstk_addr_byte_align);
 
+/* If true, an inferior is additionally marked as a device and additional
+   information about it is available via the 'info devices' command. */
+
+extern bool gdbarch_is_inferior_device (struct gdbarch *gdbarch);
+extern void set_gdbarch_is_inferior_device (struct gdbarch *gdbarch, bool is_inferior_device);
+
 extern struct gdbarch_tdep *gdbarch_tdep (struct gdbarch *gdbarch);
 
 

@@ -1244,6 +1244,10 @@ M;void;shstk_push;CORE_ADDR *new_addr;new_addr
 # shstk_addr_byte_align is the shadow stack address alignment in bytes.
 v;int;shstk_addr_byte_align;;;sizeof (void*);gdbarch->ptr_bit / TARGET_CHAR_BIT;;0
 
+# If true, an inferior is additionally marked as a device and additional
+# information about it is available via the 'info devices' command.
+v;bool;is_inferior_device;;;false;false;;false
+
 EOF
 }
 

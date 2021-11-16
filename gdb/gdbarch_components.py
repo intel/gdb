@@ -2827,3 +2827,14 @@ The corefile's bfd is passed through COREFILE_BFD.
     predefault="default_use_target_description_from_corefile_notes",
     invalid=False,
 )
+
+Value(
+    comment="""
+If true, an inferior is additionally marked as a device and additional
+information about it is available via the 'info devices' command.
+""",
+    type="bool",
+    name="is_inferior_device",
+    predefault="false",
+    invalid=False,
+)

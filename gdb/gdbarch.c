@@ -252,6 +252,7 @@ struct gdbarch
   gdbarch_type_align_ftype *type_align;
   gdbarch_get_pc_address_flags_ftype *get_pc_address_flags;
   gdbarch_read_core_file_mappings_ftype *read_core_file_mappings;
+  bool is_inferior_device;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -376,6 +377,7 @@ gdbarch_alloc (const struct gdbarch_info *info,
   gdbarch->type_align = default_type_align;
   gdbarch->get_pc_address_flags = default_get_pc_address_flags;
   gdbarch->read_core_file_mappings = default_read_core_file_mappings;
+  gdbarch->is_inferior_device = false;
   /* gdbarch_alloc() */
 
   return gdbarch;
@@ -614,6 +616,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of type_align, invalid_p == 0 */
   /* Skip verify of get_pc_address_flags, invalid_p == 0 */
   /* Skip verify of read_core_file_mappings, invalid_p == 0 */
+  /* Skip verify of is_inferior_device, invalid_p == 0 */
   if (!log.empty ())
     internal_error (__FILE__, __LINE__,
 		    _("verify_gdbarch: the following are invalid ...%s"),
@@ -1447,6 +1450,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   fprintf_filtered (file,
                       "gdbarch_dump: read_core_file_mappings = <%s>\n",
                       host_address_to_string (gdbarch->read_core_file_mappings));
+  fprintf_filtered (file,
+                      "gdbarch_dump: is_inferior_device = %s\n",
+                      plongest (gdbarch->is_inferior_device));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -5381,4 +5387,21 @@ set_gdbarch_read_core_file_mappings (struct gdbarch *gdbarch,
                                      gdbarch_read_core_file_mappings_ftype read_core_file_mappings)
 {
   gdbarch->read_core_file_mappings = read_core_file_mappings;
+}
+
+bool
+gdbarch_is_inferior_device (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of is_inferior_device, invalid_p == 0 */
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_is_inferior_device called\n");
+  return gdbarch->is_inferior_device;
+}
+
+void
+set_gdbarch_is_inferior_device (struct gdbarch *gdbarch,
+                                bool is_inferior_device)
+{
+  gdbarch->is_inferior_device = is_inferior_device;
 }

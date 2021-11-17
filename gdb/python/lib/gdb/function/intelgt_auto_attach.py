@@ -110,6 +110,14 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
         env_value = self.get_env_variable("INTELGT_AUTO_ATTACH_DISABLE")
         return not(env_value is None or env_value == "0")
 
+    @staticmethod
+    def ze_context_is_initialized():
+        """Helper function to check if context is initialized already before
+        GDB attaches to the process."""
+
+        # TODO: Implement the logic to check if L0 is initialized.
+        return False
+
     def handle_new_objfile_event(self, event):
         """Handler for a new object file load event.  If auto-attach has
         not been disabled, set a breakpoint at location 'BP_FCT'."""
@@ -117,10 +125,21 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
             return
 
         if not ('libigfxdbgxchg64.so' in event.new_objfile.filename or
-                'libze_loader.so' in event.new_objfile.filename):
+                'libze_loader.so' in event.new_objfile.filename or
+                'libze_intel_gpu.so' in event.new_objfile.filename):
             return
 
         if self.is_auto_attach_disabled():
+            return
+
+        if ('libze_intel_gpu.so' in event.new_objfile.filename
+            and not self.use_dcd):
+            if self.ze_context_is_initialized():
+                # We just learnt about the library event, but the
+                # context is already created.  This must be because we
+                # were attached to an already-running process.
+                # Initialize the gt inferiors immediately.
+                self.init_gt_inferiors()
             return
 
         if ('libigfxdbgxchg64.so' in event.new_objfile.filename

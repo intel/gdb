@@ -310,36 +310,35 @@ post_create_inferior (int from_tty)
 	throw;
     }
 
-  if (current_program_space->exec_bfd ())
-    {
-      const unsigned solib_add_generation
-	= current_program_space->solib_add_generation;
+  {
+    const unsigned solib_add_generation
+      = current_program_space->solib_add_generation;
 
-      scoped_restore restore_in_initial_library_scan
-	= make_scoped_restore (&current_inferior ()->in_initial_library_scan,
-			       true);
+    scoped_restore restore_in_initial_library_scan
+      = make_scoped_restore (&current_inferior ()->in_initial_library_scan,
+			     true);
 
-      /* Create the hooks to handle shared library load and unload
-	 events.  */
-      solib_create_inferior_hook (from_tty);
+    /* Create the hooks to handle shared library load and unload
+       events.  */
+    solib_create_inferior_hook (from_tty);
 
-      if (current_program_space->solib_add_generation == solib_add_generation)
-	{
-	  /* The platform-specific hook should load initial shared libraries,
-	     but didn't.  FROM_TTY will be incorrectly 0 but such solib
-	     targets should be fixed anyway.  Call it only after the solib
-	     target has been initialized by solib_create_inferior_hook.  */
+    if (current_program_space->solib_add_generation == solib_add_generation)
+      {
+	/* The platform-specific hook should load initial shared libraries,
+	   but didn't.  FROM_TTY will be incorrectly 0 but such solib
+	   targets should be fixed anyway.  Call it only after the solib
+	   target has been initialized by solib_create_inferior_hook.  */
 
-	  if (info_verbose)
-	    warning (_("platform-specific solib_create_inferior_hook did "
-		       "not load initial shared libraries."));
+	if (info_verbose)
+	  warning (_("platform-specific solib_create_inferior_hook did "
+		     "not load initial shared libraries."));
 
-	  /* If the solist is global across processes, there's no need to
-	     refetch it here.  */
-	  if (!gdbarch_has_global_solist (target_gdbarch ()))
-	    solib_add (NULL, 0, auto_solib_add);
-	}
-    }
+	/* If the solist is global across processes, there's no need to
+	   refetch it here.  */
+	if (!gdbarch_has_global_solist (target_gdbarch ()))
+	  solib_add (NULL, 0, auto_solib_add);
+      }
+  }
 
   /* If the user sets watchpoints before execution having started,
      then she gets software watchpoints, because GDB can't know which

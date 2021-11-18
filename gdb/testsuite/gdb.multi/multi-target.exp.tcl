@@ -104,7 +104,7 @@ proc cleanup_gdbservers { } {
 
 # Return true on success, false otherwise.
 
-proc setup {non-stop} {
+proc setup {non-stop {multi_process ""}} {
     global gcorefile gcore_created
     global binfile
 
@@ -122,6 +122,11 @@ proc setup {non-stop} {
     gdb_test_no_output "maint set target-non-stop on"
 
     gdb_test_no_output "set non-stop ${non-stop}"
+
+    if {${multi_process} ne ""} then {
+	gdb_test_no_output \
+	    "set remote multiprocess-feature-packet $multi_process"
+    }
 
     if ![runto all_started] then {
 	return 0

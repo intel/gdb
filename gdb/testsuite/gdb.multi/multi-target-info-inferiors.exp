@@ -25,10 +25,8 @@ if {![multi_target_prepare]} {
 # indicates whether the multi-process feature of remote targets is
 # turned off or on.
 proc test_info_inferiors {multi_process} {
-    setup "off"
 
-    gdb_test_no_output \
-	"set remote multiprocess-feature-packet $multi_process"
+    setup "off" $multi_process
 
     # Get the description for inferior INF for when the current
     # inferior id is CURRENT.

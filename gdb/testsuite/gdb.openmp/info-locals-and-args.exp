@@ -29,6 +29,10 @@ if {[start_openmp_program]} {
     return -1
 }
 
+set ten_d1 [gdb_get_line_number "ten-d1" ${srcfile}]
+set five_d1 [gdb_get_line_number "five-d1" ${srcfile}]
+set fifteen_d1 [gdb_get_line_number "fifteen-d1" ${srcfile}]
+
 set outer_loc [gdb_get_line_number "ordinary-outer-loc"]
 set inner_loc [gdb_get_line_number "kernel-function-return"]
 gdb_breakpoint "$outer_loc"
@@ -40,7 +44,7 @@ if {$openmp_program_extension eq "f90" && [require_openmp_device "CPU"]} {
     setup_kfail "JIRA DOQG/2356" "*-*-*"
 }
 gdb_test_multiple "info locals ten" "info locals ten" {
-    -re -wrap "ten = 10\r\nten = (-)?$decimal\t<shadowed>" {
+    -re -wrap "ten = 10\r\nten = (-)?$decimal\t<shadowed: decl at line $ten_d1>" {
 	pass $gdb_test_name
     }
     -re -wrap "ten = 10" {
@@ -52,7 +56,7 @@ if {$openmp_program_extension eq "f90" && [require_openmp_device "CPU"]} {
     setup_kfail "JIRA DOQG/2356" "*-*-*"
 }
 gdb_test_multiple "info locals five" "info locals five" {
-    -re -wrap "five = 5\r\nfive = (-)?$decimal\t<shadowed>" {
+    -re -wrap "five = 5\r\nfive = (-)?$decimal\t<shadowed: decl at line $five_d1>" {
 	pass $gdb_test_name
     }
     -re -wrap "five = 5" {
@@ -64,7 +68,7 @@ if {$openmp_program_extension eq "f90" && [require_openmp_device "CPU"]} {
     setup_kfail "JIRA DOQG/2356" "*-*-*"
 }
 gdb_test_multiple "info locals fifteen" "info locals fifteen" {
-    -re -wrap "fifteen = 15\r\nfifteen = (-)?$decimal\t<shadowed>" {
+    -re -wrap "fifteen = 15\r\nfifteen = (-)?$decimal\t<shadowed: decl at line $fifteen_d1>" {
 	pass $gdb_test_name
     }
     -re -wrap "fifteen = 15" {

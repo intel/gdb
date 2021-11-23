@@ -137,6 +137,8 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
         if gt_connection is None:
             return
 
+        cli_suppressed = self.set_suppress_notifications("on")
+
         # Find all the gt infs whose connection is the same as 'gt_connection'.
         gt_infs = []
         for an_inf in gdb.inferiors():
@@ -168,6 +170,8 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
             self.protected_gdb_execute(f"remove-inferiors {gt_inf_num}")
             print(f"intelgt: inferior {gt_inf_num} "
                   f"({self.gdbserver_gt_binary}) has been removed.")
+
+        self.set_suppress_notifications("on" if cli_suppressed else "off")
 
         # Remove the internal track.
         self.inf_dict[host_inf] = None
@@ -422,13 +426,17 @@ intelgt: the igfxdcd module (i.e. the debug driver) is not loaded.""")
                 gdb.execute("set schedule-multiple off")
             gdb.execute("add-inferior -hidden -no-connection", False, True)
 
+            cli_suppressed = self.set_suppress_notifications("on")
             # Attach gdbserver to gt inferior.
             # This represents the first device.
             try:
                 self.handle_attach_gdbserver_gt(connection, host_inf)
+                # Switch to the host inferior.
+                gdb.execute(f"inferior {host_inf.num}", False, True)
+                if not self.is_nonstop:
+                    gdb.execute("set schedule-multiple on")
             except gdb.error:
                 self.handle_error(host_inf)
-                return
 
             self.inf_dict[host_inf] = gdb.inferiors()[-1].connection_num
 
@@ -436,5 +444,19 @@ intelgt: the igfxdcd module (i.e. the debug driver) is not loaded.""")
             gdb.execute(f"inferior {host_inf.num}", False, True)
             if not self.is_nonstop:
                 gdb.execute("set schedule-multiple on")
+
+            self.set_suppress_notifications("on" if cli_suppressed else "off")
+            return
+
+    @staticmethod
+    def set_suppress_notifications(new_value):
+        """Set the suppress_notification state for CLI.
+        Return the previous value."""
+
+        info = gdb.execute("show suppress-cli-notifications", False, True)
+        was_cli_suppressed = info.endswith("on.\n")
+        gdb.execute("set suppress-cli-notifications " + new_value)
+
+        return was_cli_suppressed
 
 INTELGT_AUTO_ATTACH = IntelgtAutoAttach()

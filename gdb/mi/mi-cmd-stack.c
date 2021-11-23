@@ -543,7 +543,12 @@ list_arg_or_local (const struct frame_arg *arg, enum what_to_list what,
        || current_language->la_language == language_fortran)
        && !(values == PRINT_NO_VALUES && what == locals)
        && already_collected)
-    uiout->field_string ("shadowed", "true");
+    {
+      if (arg->sym->line > 0)
+	uiout->field_unsigned ("shadowed_loc", arg->sym->line);
+      else
+	uiout->field_string ("shadowed_loc", "NA");
+    }
   else
     collected_vars.insert (arg->sym->print_name ());
 

@@ -62,7 +62,7 @@ gdb_test "show remote memory-write-packet-size" \
 
 set test "set remote memory-write-packet-size fixed"
 gdb_test_multiple $test $test {
-    -re "Change the packet size. .y or n. " {
+    -re "Change the packet size for future remote targets. .y or n. " {
 	gdb_test_multiple "y" $test {
 	    -re "$gdb_prompt $" {
 		pass $test
@@ -129,8 +129,6 @@ proc gdb_load_timed {executable class writesize} {
     pass $test
 }
 
-clean_restart $binfile
-
 # These download tests won't actually download anything on !is_remote
 # target boards, but we run them anyway because it's simpler, and
 # harmless.
@@ -154,6 +152,8 @@ gdb_load_timed $binfile "limit" 0
 
 # Get the size of random_data table (defaults to 48K).
 set sizeof_random_data [get_sizeof "random_data" 48*1024]
+
+clean_restart $binfile
 
 #
 # Part THREE: Check the upload behavour

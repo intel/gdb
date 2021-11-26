@@ -569,9 +569,33 @@ struct packet_config
     enum packet_support support;
   };
 
-/* This global array contains the default configuration for every new
-   per-remote target array.  */
+/* User configurable variables for the number of characters in a
+   memory read/write packet.  MIN (rsa->remote_packet_size,
+   rsa->sizeof_g_packet) is the default.  Some targets need smaller
+   values (fifo overruns, et.al.) and some users need larger values
+   (speed up transfers).  The variables ``preferred_*'' (the user
+   request), ``current_*'' (what was actually set) and ``forced_*''
+   (Positive - a soft limit, negative - a hard limit).  */
+
+struct memory_packet_config
+{
+  const char *name;
+  long size;
+  int fixed_p;
+};
+
+/* These global variables contain the default configuration for every new
+   remote_feature object.  */
+static memory_packet_config memory_read_packet_config =
+{
+  "memory-read-packet-size",
+};
+static memory_packet_config memory_write_packet_config =
+{
+  "memory-write-packet-size",
+};
 static packet_config remote_protocol_packets[PACKET_MAX];
+
 
 class remote_features
 {
@@ -579,6 +603,9 @@ public:
 
   remote_features ()
   {
+    m_memory_read_packet_config = memory_read_packet_config;
+    m_memory_write_packet_config = memory_write_packet_config;
+
     std::copy (std::begin (remote_protocol_packets),
 	       std::end (remote_protocol_packets),
 	       std::begin (m_protocol_packets));
@@ -597,6 +624,9 @@ public:
   bool remote_memory_tagging_p () const;
 
   void reset_all_packet_configs_support (void);
+
+  memory_packet_config m_memory_read_packet_config;
+  memory_packet_config m_memory_write_packet_config;
 
   packet_config m_protocol_packets[PACKET_MAX];
 };
@@ -1819,21 +1849,6 @@ show_remotebreak (struct ui_file *file, int from_tty,
 static unsigned int remote_address_size;
 
 
-/* User configurable variables for the number of characters in a
-   memory read/write packet.  MIN (rsa->remote_packet_size,
-   rsa->sizeof_g_packet) is the default.  Some targets need smaller
-   values (fifo overruns, et.al.) and some users need larger values
-   (speed up transfers).  The variables ``preferred_*'' (the user
-   request), ``current_*'' (what was actually set) and ``forced_*''
-   (Positive - a soft limit, negative - a hard limit).  */
-
-struct memory_packet_config
-{
-  const char *name;
-  long size;
-  int fixed_p;
-};
-
 /* The default max memory-write-packet-size, when the setting is
    "fixed".  The 16k is historical.  (It came from older GDB's using
    alloca for buffers and the knowledge (folklore?) that some hosts
@@ -1899,7 +1914,8 @@ remote_target::get_memory_packet_size (struct memory_packet_config *config)
    something really big then do a sanity check.  */
 
 static void
-set_memory_packet_size (const char *args, struct memory_packet_config *config)
+set_memory_packet_size (const char *args, struct memory_packet_config *config,
+			bool target_connected)
 {
   int fixed_p = config->fixed_p;
   long size = config->size;
@@ -1933,9 +1949,16 @@ set_memory_packet_size (const char *args, struct memory_packet_config *config)
 			 ? DEFAULT_MAX_MEMORY_PACKET_SIZE_FIXED
 			 : size);
 
-      if (! query (_("The target may not be able to correctly handle a %s\n"
-		   "of %ld bytes. Change the packet size? "),
-		   config->name, query_size))
+      if (target_connected
+	  && ! query (_("The target may not be able to correctly handle a %s\n"
+		      "of %ld bytes.  Change the packet size? "),
+		      config->name, query_size))
+	error (_("Packet size not changed."));
+      else if (! target_connected
+	       && ! query (_("Future targets may not be able to correctly "
+			   "handle a %s\nof %ld bytes.  Change the packet size "
+			   "for future remote targets? "),
+			   config->name, query_size))
 	error (_("Packet size not changed."));
     }
   /* Update the config.  */
@@ -1966,16 +1989,15 @@ show_memory_packet_size (struct memory_packet_config *config)
     }
 }
 
-/* FIXME: needs to be per-remote-target.  */
-static struct memory_packet_config memory_write_packet_config =
-{
-  "memory-write-packet-size",
-};
-
 static void
 set_memory_write_packet_size (const char *args, int from_tty)
 {
-  set_memory_packet_size (args, &memory_write_packet_config);
+  remote_target *remote = get_current_remote_target ();
+  if (remote != nullptr)
+    set_memory_packet_size
+      (args, &remote->m_features.m_memory_write_packet_config, true);
+
+  set_memory_packet_size (args, &memory_write_packet_config, false);
 }
 
 static void
@@ -2037,19 +2059,18 @@ show_remote_packet_max_chars (struct ui_file *file, int from_tty,
 long
 remote_target::get_memory_write_packet_size ()
 {
-  return get_memory_packet_size (&memory_write_packet_config);
+  return get_memory_packet_size (&m_features.m_memory_write_packet_config);
 }
-
-/* FIXME: needs to be per-remote-target.  */
-static struct memory_packet_config memory_read_packet_config =
-{
-  "memory-read-packet-size",
-};
 
 static void
 set_memory_read_packet_size (const char *args, int from_tty)
 {
-  set_memory_packet_size (args, &memory_read_packet_config);
+  remote_target *remote = get_current_remote_target ();
+  if (remote != nullptr)
+    set_memory_packet_size
+      (args, &remote->m_features.m_memory_read_packet_config, true);
+
+  set_memory_packet_size (args, &memory_read_packet_config, false);
 }
 
 static void
@@ -2061,7 +2082,7 @@ show_memory_read_packet_size (const char *args, int from_tty)
 long
 remote_target::get_memory_read_packet_size ()
 {
-  long size = get_memory_packet_size (&memory_read_packet_config);
+  long size = get_memory_packet_size (&m_features.m_memory_read_packet_config);
 
   /* FIXME: cagney/1999-11-07: Functions like getpkt() need to get an
      extra buffer size argument before the memory read size can be

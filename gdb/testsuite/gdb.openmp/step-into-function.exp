@@ -32,8 +32,8 @@ set inside [gdb_get_line_number "ordinary-outer-loc"]
 gdb_breakpoint $inside
 gdb_continue_to_breakpoint "inside" ".*$srcfile:$inside.*"
 
-if {[require_openmp_device "CPU"]} {
-    setup_kfail "JIRA DOQG/2346" "*-*-*"
+if {$openmp_program_extension eq "f90" && [require_openmp_device "CPU"]} {
+    setup_kfail "JIRA CMPLRLLVM/29442" "*-*-*"
 }
 gdb_test "step" "first .* at .*" "step into function"
 

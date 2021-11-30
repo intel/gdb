@@ -64,14 +64,22 @@ for {set i 1} {$i <= 5} {incr i} {
 	    pass $gdb_test_name
 	}
 	-re -wrap "[get_omp_language_bp_dummy ${openmp_program_extension}]" {
-	    # The breakpoint defined for kernel-1 may propagate to kernel-2 and cause
-	    # a BP hit at the kernel entry.  Ignore that hit.
+	    # For GPU the breakpoint defined for kernel-1 will propagate to
+	    # kernel-2 and cause a BP hit at the kernel entry.  Ignore that hit
+	    # and report a kfail.
+	    if {[require_openmp_device "GPU"]} {
+		setup_kfail "JIRA DOQG/314" "*-*-*"
+	    }
+	    gdb_assert {false} "should not be hit"
 	    incr prop_bp_hit
 	}
 	-re -wrap "$inferior_exited_re normally].*" {
 	    gdb_assert {$kernel1_hit == 1} "hit first kernel"
 	    gdb_assert {$kernel2_hit == 1} "hit second kernel"
-	    setup_kfail "JIRA DOQG/2675" "*-*-*"
+
+	    if {[require_openmp_device "GPU"]} {
+		setup_kfail "JIRA DOQG/314" "*-*-*"
+	    }
 	    gdb_assert {$prop_bp_hit == 0} "propagated breakpoint is not hit"
 	    return
         }

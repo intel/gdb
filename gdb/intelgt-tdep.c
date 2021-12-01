@@ -33,6 +33,7 @@
 #endif /* defined (HAVE_LIBIGA64)  */
 #include "gdbthread.h"
 #include "inferior.h"
+#include "user-regs.h"
 #include <algorithm>
 
 /* Address space flags.
@@ -128,12 +129,30 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
   constexpr int ip = 0;
   constexpr int emask = 1;
   constexpr regnum_range dwarf_nums[intelgt::regset_count] = {
-    [intelgt::regset_sba] = { 5, 10 },
+    [intelgt::regset_sba] = { 5, 13 },
     [intelgt::regset_grf] = { 16, 271 },
     [intelgt::regset_addr] = { 272, 287 },
     [intelgt::regset_flag] = { 288, 303 },
     [intelgt::regset_acc] = { 304, 319 },
     [intelgt::regset_mme] = { 320, 335 },
+  };
+
+  /* Number of SBA registers.  */
+  constexpr size_t sba_dwarf_len = dwarf_nums[intelgt::regset_sba].end
+    - dwarf_nums[intelgt::regset_sba].start + 1;
+
+  /* Map the DWARF register numbers of SBA registers to their names.
+     Base number is dwarf_nums[intelgt::regset_sba].start.  */
+  constexpr const char* sba_dwarf_reg_order[sba_dwarf_len] {
+    "btbase",
+    "scrbase",
+    "genstbase",
+    "sustbase",
+    "blsustbase",
+    "blsastbase",
+    "isabase",
+    "iobase",
+    "dynbase"
   };
 
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
@@ -146,10 +165,24 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
   for (int regset = 0; regset < intelgt::regset_count; ++regset)
     if (num >= dwarf_nums[regset].start && num <= dwarf_nums[regset].end)
       {
-	int candidate = data->regset_ranges[regset].start + num
-			- dwarf_nums[regset].start;
-	if (candidate <= data->regset_ranges[regset].end)
-	  return candidate;
+	if (regset == intelgt::regset_sba)
+	  {
+	    /* For SBA registers we first find out the name of the register
+	       out of DWARF register number and then find the register number
+	       corresponding to the name.  */
+	    int sba_num = num - dwarf_nums[intelgt::regset_sba].start;
+	    const char* name = sba_dwarf_reg_order [sba_num];
+
+	    return user_reg_map_name_to_regnum (gdbarch, name, -1);
+	  }
+	else
+	  {
+	    int candidate = data->regset_ranges[regset].start + num
+	      - dwarf_nums[regset].start;
+
+	    if (candidate <= data->regset_ranges[regset].end)
+	      return candidate;
+	  }
       }
 
   return -1;

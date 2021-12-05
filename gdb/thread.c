@@ -83,6 +83,9 @@ struct tp_emask
   unsigned int emask;
 };
 
+static std::string
+print_thread_id_string (thread_info *, std::vector<int> *);
+
 /* Returns true if THR is the current thread.  */
 
 static bool
@@ -1452,7 +1455,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	/* The width of the "Target Id" column.  Grown below to
 	   accommodate the largest entry.  */
 	size_t target_id_col_width = 17;
-	bool any_thread_with_lanes = false;
+	unsigned int th_col_width = 4;
 
 	for (thread_info *tp : all_threads ())
 	  {
@@ -1468,8 +1471,21 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	      = std::max (target_id_col_width,
 			  thread_target_id_str (tp).size ());
 
-	    if (!any_thread_with_lanes)
-	      any_thread_with_lanes = tp->has_simd_lanes ();
+	    unsigned int curr_th_col_width = 0;
+	    if (tp->has_simd_lanes ())
+	      {
+		std::vector<int> lanes;
+		unsigned int active_mask = tp->active_simd_lanes_mask ();
+		for_active_lanes (active_mask, [&] (int lane)
+		  {
+		    lanes.push_back (lane);
+		    return true;
+		  });
+		if (!lanes.empty ())
+		  curr_th_col_width
+		    = print_thread_id_string (tp, &lanes).size ();
+	      }
+	    th_col_width = std::max (th_col_width, curr_th_col_width);
 
 	    ++n_threads;
 	  }
@@ -1488,8 +1504,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 			       n_threads, "threads");
 
 	uiout->table_header (1, ui_left, "current", "");
-	uiout->table_header (any_thread_with_lanes ? 12 : 4, ui_left,
-			     "id-in-tg", "Id");
+	uiout->table_header (th_col_width, ui_left, "id-in-tg", "Id");
 	if (show_global_ids)
 	  uiout->table_header (4, ui_left, "id", "GId");
 	uiout->table_header (target_id_col_width, ui_left,
@@ -1854,23 +1869,39 @@ show_inferior_qualified_tids (void)
   return inf != inferior_list.end ();
 }
 
+static std::string
+print_thread_id_string (thread_info *thr, std::vector<int> *lanes)
+{
+  std::string lanes_str;
+
+  if (lanes != nullptr && !lanes->empty ())
+    lanes_str = ":" + make_ranges_from_sorted_vector (*lanes);
+
+  return std::to_string (thr->per_inf_num) + lanes_str;
+}
+
+static std::string
+print_full_thread_id_string (thread_info *thr, std::vector<int> *lanes)
+{
+  std::string lanes_str;
+
+  if (lanes != nullptr && !lanes->empty ())
+    lanes_str = ":" + make_ranges_from_sorted_vector (*lanes);
+
+
+  return std::to_string (thr->inf->num) + std::string (".")
+    + std::to_string (thr->per_inf_num) + lanes_str;
+}
+
 /* See gdbthread.h.  */
 
 const char *
 print_thread_id (thread_info *thr, std::vector<int> *lanes)
 {
-  if (show_inferior_qualified_tids ())
-    return print_full_thread_id (thr, lanes);
-
   char *s = get_print_cell ();
-  std::string lanes_range;
+  xsnprintf (s, PRINT_CELL_SIZE, "%s",
+	     print_thread_id_string (thr, lanes).c_str ());
 
-  if (lanes != nullptr && !lanes->empty ())
-    lanes_range = ":" + make_ranges_from_sorted_vector (*lanes);
-
-  gdb_assert (thr != nullptr);
-  xsnprintf (s, PRINT_CELL_SIZE, "%d%s",
-	     thr->per_inf_num, lanes_range.c_str ());
   return s;
 }
 
@@ -1880,14 +1911,9 @@ const char *
 print_full_thread_id (struct thread_info *thr, std::vector<int> *lanes)
 {
   char *s = get_print_cell ();
-  std::string lanes_range;
+  xsnprintf (s, PRINT_CELL_SIZE, "%s",
+	     print_full_thread_id_string (thr, lanes).c_str ());
 
-  if (lanes != nullptr && !lanes->empty ())
-    lanes_range = ":" + make_ranges_from_sorted_vector (*lanes);
-
-  gdb_assert (thr != nullptr);
-  xsnprintf (s, PRINT_CELL_SIZE, "%d.%d%s", thr->inf->num,
-	     thr->per_inf_num, lanes_range.c_str ());
   return s;
 }
 

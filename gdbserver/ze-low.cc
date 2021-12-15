@@ -1658,6 +1658,26 @@ ze_target::resume (const ze_device_info &device, enum resume_kind rkind)
 		    return false;
 		  }
 
+		/* Similarly, if the thread had stopped due to GDB's
+		   request (e.g.  because of a Ctrl-C), do not
+		   consider TP as an eventing thread.  We must have
+		   already reported one of the threads.  */
+		if ((tp->last_resume_kind == resume_stop)
+		    && (zetp->exec_state == ze_thread_state_stopped)
+		    && (zetp->stop_reason == TARGET_STOPPED_BY_NO_REASON)
+		    && (zetp->waitstatus.value.sig == GDB_SIGNAL_INT))
+		  {
+		    /* Clear the waitstatus.  */
+		    target_waitstatus waitstatus = ze_move_waitstatus (tp);
+		    if (waitstatus.kind != TARGET_WAITKIND_STOPPED)
+		      warning (_("thread %d.%ld has waitstatus %d, "
+				 "expected %d."),
+			       tp->id.pid (), tp->id.lwp (), waitstatus.kind,
+			       TARGET_WAITKIND_STOPPED);
+
+		    return false;
+		  }
+
 		return true;
 	      });
 

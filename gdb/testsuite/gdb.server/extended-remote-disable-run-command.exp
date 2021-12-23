@@ -1,0 +1,66 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Run and exteded remote gdbserver with vRun and R packets disabled.  This
+# should disable the restart of the inferior associated with the remote.
+
+load_lib gdbserver-support.exp
+
+standard_testfile normal.c
+
+if { [skip_gdbserver_tests] } {
+    verbose "skipping gdbserver tests"
+    return -1
+}
+
+# This test is only for extended remote targets.
+if { [target_info gdb_protocol] != "extended-remote" } {
+    continue
+}
+
+# And we need to be able to reconnect to gdbserver.
+set gdbserver_reconnect_p 1
+if { [info proc gdb_reconnect] == "" } {
+    return 0
+}
+
+standard_testfile normal.c
+
+if { [prepare_for_testing "failed to prepare" $testfile $srcfile debug] } {
+    return -1
+}
+
+gdb_test "disconnect" ".*"
+
+set packet_arg "--disable-packet=R --disable-packet=vRun"
+
+set res [gdbserver_start $packet_arg $binfile]
+set gdbserver_protocol [lindex $res 0]
+set gdbserver_gdbport [lindex $res 1]
+
+set res [gdb_target_cmd $gdbserver_protocol $gdbserver_gdbport]
+if { ![gdb_assert {$res == 0} "connect"] } {
+    return
+}
+
+gdb_breakpoint "main"
+gdb_continue_to_breakpoint "continue to main breakpoint"
+
+# Now try to "run" the extended-remote.
+gdb_test "run" \
+    "The \"extended-remote\" target does not support \"run\"\.  Try \"help target\" or \"continue\"\."
+
+# We should still be able to run to the end.
+gdb_continue_to_end "" continue 1

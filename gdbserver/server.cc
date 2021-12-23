@@ -139,6 +139,12 @@ static std::string wrapper_argv;
 
 unsigned long signal_pid;
 
+/* Set if the support for the "run" command is disabled.  */
+bool disable_packet_vRun;
+
+/* Set if the support for the "run" command is disabled.  */
+bool disable_packet_R;
+
 /* Set if you want to disable optional thread related packets support
    in gdbserver, for the sake of testing GDB against stubs that don't
    support them.  */
@@ -2872,6 +2878,10 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 		   phex_nz (supported_options));
 	}
 
+      strcat (own_buf, disable_packet_vRun ? ";vRun-" : ";vRun+");
+
+      strcat (own_buf, disable_packet_R ? ";R-" : ";R+");
+
       strcat (own_buf, ";multi-address-space+");
 
       strcat (own_buf, ";QThreadEvents+");
@@ -3597,14 +3607,23 @@ handle_v_requests (char *own_buf, int packet_len, int *new_packet_len)
 
   if (startswith (own_buf, "vRun;"))
     {
-      if ((!extended_protocol || !cs.multi_process) && target_running ())
+      if (!disable_packet_vRun)
 	{
-	  fprintf (stderr, "Already debugging a process\n");
+	  if ((!extended_protocol || !cs.multi_process) && target_running ())
+	    {
+	      fprintf (stderr, "Already debugging a process\n");
+	      write_enn (own_buf);
+	      return;
+	    }
+	  handle_v_run (own_buf);
+	  return;
+	}
+      else
+	{
+	  fprintf (stderr, "Run command not supported\n");
 	  write_enn (own_buf);
 	  return;
 	}
-      handle_v_run (own_buf);
-      return;
     }
 
   if (startswith (own_buf, "vKill;"))
@@ -3892,8 +3911,9 @@ gdbserver_usage (FILE *stream)
 	   "  --disable-packet=OPT1[,OPT2,...]\n"
 	   "                        Disable support for RSP packets or features.\n"
 	   "                          Options:\n"
-	   "                            vCont, vConts, T, Tthread, qC, qfThreadInfo and\n"
-	   "                            threads (disable all threading packets).\n"
+	   "                            vCont, vConts, T, Tthread, qC, qfThreadInfo,\n"
+	   "                            threads (disable all threading packets),\n"
+	   "                            R, and vRun (last two disable run command).\n"
 	   "\n"
 	   "For more information, consult the GDB manual (available as on-line \n"
 	   "info or a printed manual).\n");
@@ -3911,7 +3931,9 @@ gdbserver_show_disableable (FILE *stream)
 	   "  Tthread     \tPassing the thread specifier in the "
 	   "T stop reply packet\n"
 	   "  threads     \tAll of the above\n"
-	   "  T           \tAll 'T' packets\n");
+	   "  T           \tAll 'T' packets\n"
+	   "  R           \tRestart via R packet\n"
+	   "  vRun        \tRestart via vRun packet\n");
 }
 
 /* Start up the event loop.  This is the entry point to the event
@@ -4314,6 +4336,10 @@ captured_main (int argc, char *argv[])
 		  disable_packet_vCont = true;
 		else if (strcmp ("vConts", tok) == 0)
 		  disable_packet_vCont_step = true;
+		else if (strcmp ("vRun", tok) == 0)
+		  disable_packet_vRun = true;
+		else if (strcmp ("R", tok) == 0)
+		  disable_packet_R = true;
 		else if (strcmp ("Tthread", tok) == 0)
 		  disable_packet_Tthread = true;
 		else if (strcmp ("qC", tok) == 0)
@@ -5041,7 +5067,7 @@ process_serial_event (void)
 
       /* Restarting the inferior is only supported in the extended
 	 protocol.  */
-      if (extended_protocol)
+      if (extended_protocol && !disable_packet_R)
 	{
 	  if (target_running ())
 	    for_each_process (kill_inferior_callback);

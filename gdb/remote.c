@@ -235,6 +235,7 @@ enum {
   PACKET_vCont = 0,
   PACKET_X,
   PACKET_x,
+  PACKET_R,
   PACKET_qSymbol,
   PACKET_P,
   PACKET_p,
@@ -1459,7 +1460,8 @@ public:
   /* Open an extended-remote connection.  */
   static void open (const char *, int);
 
-  bool can_create_inferior () override { return true; }
+  bool can_create_inferior () override;
+
   void create_inferior (const char *, const std::string &,
 			char **, int) override;
 
@@ -4584,14 +4586,19 @@ remote_target::get_ada_task_ptid (long lwp, ULONGEST thread)
 void
 remote_target::extended_remote_restart ()
 {
-  struct remote_state *rs = get_remote_state ();
+  if (m_features.packet_support (PACKET_R) != PACKET_DISABLE)
+    {
+      struct remote_state *rs = get_remote_state ();
 
-  /* Send the restart command; for reasons I don't understand the
-     remote side really expects a number after the "R".  */
-  xsnprintf (rs->buf.data (), get_remote_packet_size (), "R%x", 0);
-  putpkt (rs->buf);
+      /* Send the restart command; for reasons I don't understand the
+	 remote side really expects a number after the "R".  */
+      xsnprintf (rs->buf.data (), get_remote_packet_size (), "R%x", 0);
+      putpkt (rs->buf);
 
-  remote_fileio_reset ();
+      remote_fileio_reset ();
+    }
+    else
+      error (_("Remote target does not support R packet"));
 }
 
 /* Clean up connection to a remote debugger.  */
@@ -5897,6 +5904,8 @@ static const struct protocol_feature remote_protocol_features[] = {
   { "error-message", PACKET_ENABLE, remote_supported_packet,
     PACKET_accept_error_message },
   { "binary-upload", PACKET_DISABLE, remote_supported_packet, PACKET_x },
+  { "vRun", PACKET_ENABLE, remote_supported_packet, PACKET_vRun },
+  { "R", PACKET_ENABLE, remote_supported_packet, PACKET_R },
 };
 
 static char *remote_support_xml;
@@ -6011,6 +6020,14 @@ remote_target::remote_query_supported ()
       if (m_features.packet_set_cmd_state (PACKET_multi_address_space_feature)
 	  != AUTO_BOOLEAN_FALSE)
 	remote_query_supported_append (&q, "multi-address-space+");
+
+      if (m_features.packet_set_cmd_state (PACKET_vRun)
+	  != AUTO_BOOLEAN_FALSE)
+	remote_query_supported_append (&q, "vRun+");
+
+      if (m_features.packet_set_cmd_state (PACKET_R)
+	  != AUTO_BOOLEAN_FALSE)
+	remote_query_supported_append (&q, "R+");
 
       /* Keep this one last to work around a gdbserver <= 7.10 bug in
 	 the qSupported:xmlRegisters=i386 handling.  */
@@ -11097,6 +11114,16 @@ directory: %s"),
 	error (_("Remote target failed to process setting the inferior's working directory"));
 
     }
+}
+
+/* If either the vRun or the R package have not been disabled we always try
+   in extended remote mode.  */
+
+bool
+extended_remote_target::can_create_inferior ()
+{
+  return (m_features.packet_support (PACKET_vRun) != PACKET_DISABLE
+	  || m_features.packet_support (PACKET_R) != PACKET_DISABLE);
 }
 
 /* In the extended protocol we want to be able to do things like
@@ -16545,6 +16572,9 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
   add_packet_config_cmd (PACKET_vFile_lstat, "vFile:lstat", "hostio-lstat", 0);
 
   add_packet_config_cmd (PACKET_vAttach, "vAttach", "attach", 0);
+
+  add_packet_config_cmd (PACKET_R, "R", "restart",
+			 0);
 
   add_packet_config_cmd (PACKET_vRun, "vRun", "run", 0);
 

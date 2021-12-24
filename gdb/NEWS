@@ -4,6 +4,9 @@
 
 *** Changes since GDB 12
 
+* Remove support for building against Python 2, it is now only possible to
+  build GDB against Python 3.
+
 * New commands
 
 maint jit dump

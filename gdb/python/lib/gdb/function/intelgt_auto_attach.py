@@ -196,6 +196,16 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
             # pending exit event.
             self.protected_gdb_execute("continue")
 
+    def remove_gt_inf_if_stored_for_removal(self):
+        """If an inferior was marked for removal, detach and then remove all
+        the gt inferiors that were created for the marked HOST_INF."""
+        if self.host_inf_for_auto_remove is None:
+            return
+
+        host_inf = self.host_inf_for_auto_remove
+        self.remove_gt_inf_for(host_inf)
+        self.host_inf_for_auto_remove = None
+
     @staticmethod
     def protected_gdb_execute(cmd, suppress_output=False):
         """Execute the GDB command CMD.  Return True if a 'Couldn't get
@@ -217,12 +227,7 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
     def handle_before_prompt_event(self):
         """Handler for GDB's 'before prompt' event.  Remove a gt inferior
         if such an inferior was stored for removal."""
-        if self.host_inf_for_auto_remove is None:
-            return
-
-        host_inf = self.host_inf_for_auto_remove
-        self.remove_gt_inf_for(host_inf)
-        self.host_inf_for_auto_remove = None
+        self.remove_gt_inf_if_stored_for_removal()
 
     def handle_exited_event(self, event):
         """Indication that an inferior's process has exited.
@@ -254,7 +259,7 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
 
         for host_inf in self.inf_dict:
             self.host_inf_for_auto_remove = host_inf
-            self.handle_before_prompt_event()
+            self.remove_gt_inf_if_stored_for_removal()
 
     def handle_error(self, inf):
         """Remove the inferior and clean-up dict in case of error."""
@@ -417,6 +422,13 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
 
     def init_gt_inferiors(self):
         """Create/initialize inferiors with gdbserver connection"""
+
+        # If we somehow got here after an inferior was deleted but without a
+        # prompt event in-between (e.g. after a 'run' command with an already
+        # running process), delete the old gt inferior first.  Otherwise we
+        # cannot create a new one further down.
+        self.remove_gt_inf_if_stored_for_removal()
+
         # Get the host inferior.
         host_inf = gdb.selected_inferior()
 

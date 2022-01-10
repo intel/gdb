@@ -1,0 +1,66 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests disabling breakpoint on debugging kernels running
+# asynchronously on two different devices.
+
+load_lib sycl.exp
+
+standard_testfile multi-device-parallel-for-1D.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set num_devices_check [gdb_get_line_number "num-devices-check"]
+gdb_breakpoint $num_devices_check {temporary}
+gdb_continue_to_breakpoint "num devices check" \
+    ".*$srcfile:$num_devices_check.*"
+
+set num_devices [get_integer_valueof "num_devices" 0]
+
+if {$num_devices < 2} {
+    unsupported "test is aimed at multi-device machines"
+    return 0
+}
+
+set bp1 [gdb_get_line_number "kernel-first-line"]
+gdb_breakpoint $bp1
+set first_line_bp_num [get_integer_valueof "\$bpnum" 0 "get bpnum 1"]
+
+set bp2 [gdb_get_line_number "kernel-last-line"]
+gdb_breakpoint $bp2
+set last_line_bp_num [get_integer_valueof "\$bpnum" 0 "get bpnum 2"]
+
+set end_bp [gdb_get_line_number "end-marker"]
+gdb_breakpoint $end_bp
+
+gdb_continue_to_breakpoint "$srcfile:$bp1.*"
+gdb_test_no_output "disable $first_line_bp_num"
+gdb_continue_to_breakpoint "$srcfile:$bp2.*"
+gdb_test_no_output "disable $last_line_bp_num"
+
+gdb_continue_to_breakpoint "$srcfile:$end_bp.*"
+
+continue_sycl_program_to_termination

@@ -200,6 +200,18 @@ thread_info::is_simd_lane_active (int lane)
   return ::is_simd_lane_active (mask, lane);
 }
 
+/*  See gdbthread.h.  */
+
+unsigned int
+thread_info::get_simd_width ()
+{
+  const block *const blk = thread_get_current_block (this);
+  if (blk != nullptr)
+    return BLOCK_SIMD_WIDTH (blk);
+
+  return 1;
+}
+
 /* See gdbthread.h.  */
 
 int

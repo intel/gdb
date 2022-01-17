@@ -472,6 +472,9 @@ public:
 
   /* Return true if LANE is active in this thread.  */
   bool is_simd_lane_active (int lane);
+
+  /* Return the SIMD width.  */
+  unsigned int get_simd_width ();
 };
 
 /* A gdb::ref_ptr pointer to a thread_info.  */

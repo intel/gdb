@@ -643,6 +643,9 @@ public:
 
   /* Return true if LANE is active in this thread.  */
   bool is_simd_lane_active (int lane);
+
+  /* Return the SIMD width.  */
+  unsigned int get_simd_width ();
 };
 
 using thread_info_resumed_with_pending_wait_status_node

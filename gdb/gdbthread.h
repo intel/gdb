@@ -477,6 +477,9 @@ public:
      SIMD lanes, the result also includes the current SIMD lane number after
      ':' sign, e.g. thread_id:lane_id.  */
   std::string get_global_id_mi_str ();
+
+  /* Return the SIMD width.  */
+  unsigned int get_simd_width ();
 };
 
 /* A gdb::ref_ptr pointer to a thread_info.  */

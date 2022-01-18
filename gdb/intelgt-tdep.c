@@ -43,6 +43,19 @@
 #define INTELGT_TYPE_INSTANCE_FLAG_SLM TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1
 #define INTELGT_SLM_ADDRESS_QUALIFIER "slm"
 
+/* The maximum number of GRF registers to be used when passing function
+   arguments.  */
+constexpr int INTELGT_MAX_GRF_REGS_FOR_ARGS = 12;
+
+/* The maximum size in bytes of a promotable struct return value.  */
+constexpr int PROMOTABLE_STRUCT_MAX_SIZE_RET = 8;
+
+/* The maximum size in bytes of a promotable struct argument.  */
+constexpr int PROMOTABLE_STRUCT_MAX_SIZE_ARG = 16;
+
+/* Intelgt FE stack alignment size in bytes.  */
+constexpr int OWORD_SIZE = 16;
+
 /* Global debug flag.  */
 static bool intelgt_debug = false;
 
@@ -965,6 +978,459 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
   return possible_regnum;
 }
 
+/* Check if a small struct can be promoted.  Struct arguments less than or
+   equal to 128-bits and only containing primitive element types are passed by
+   value as a vector of bytes, and are stored in the SoA (structure of arrays)
+   format on GRFs.  Similarly for struct return values less than or equal
+   to 64-bits and containing only primitive element types.  */
+
+static bool
+is_a_promotable_small_struct (type *arg_type, int max_size)
+{
+  if (!class_or_union_p (arg_type))
+    return false;
+
+  /* The struct is not promoted if it is larger than MAX_SIZE.  */
+  if (TYPE_LENGTH (arg_type) > max_size)
+    return false;
+
+  int n_fields = arg_type->num_fields ();
+  for (int field_idx = 0; field_idx < n_fields; ++field_idx)
+    {
+      type *field_type = check_typedef (arg_type->field (field_idx).type ());
+
+      if (field_type->code () != TYPE_CODE_INT
+	  && field_type->code () != TYPE_CODE_BOOL
+	  && field_type->code () != TYPE_CODE_ENUM
+	  && field_type->code () != TYPE_CODE_FLT
+	  && field_type->code () != TYPE_CODE_PTR)
+	return false;
+    }
+
+  return true;
+}
+
+/* Return the total memory, in bytes, used to store a field within a struct,
+   which is the sum of the actual size of the field and the added padding.
+   The padding could be between fields (intra-padding) or at the end of the
+   struct (inter-padding).  */
+
+static unsigned int
+get_field_total_memory (type *struct_type, int field_index)
+{
+  field *fields = struct_type->fields ();
+  type *field_type = check_typedef (struct_type->field (field_index).type ());
+  int field_len = TYPE_LENGTH (field_type);
+  int current_pos = fields[field_index].loc.bitpos / 8;
+
+  /* Determine the memory occupation of the field (field size + padding).  */
+  unsigned int total_memory = field_len;
+  if (field_index < struct_type->num_fields () - 1)
+    {
+      int next_pos = fields[field_index + 1].loc.bitpos / 8;
+      total_memory = next_pos - current_pos;
+    }
+  else
+    total_memory = (TYPE_LENGTH (struct_type) - current_pos);
+
+  return total_memory;
+}
+
+/* Return the number of registers required to store an argument.  ARG_TYPE is
+   the type of the argument.  */
+
+static unsigned int
+get_argument_required_registers (gdbarch *gdbarch, type *arg_type)
+{
+  const int len = TYPE_LENGTH (arg_type);
+  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
+  const int address_size_byte = gdbarch_addr_bit (gdbarch) / 8;
+  /* We need to know the size of a GRF register.  The retval register is a GRF,
+     so just use its size.  */
+  const int intelgt_register_size = register_size (
+    gdbarch, get_intelgt_gdbarch_data (gdbarch)->retval_regnum);
+  unsigned int required_registers = 1;
+
+  /* Compute the total required memory.  */
+  unsigned int required_memory = 0;
+  if (class_or_union_p (arg_type)
+      && !(is_a_promotable_small_struct (arg_type,
+					 PROMOTABLE_STRUCT_MAX_SIZE_ARG)))
+    required_memory = simd_width * address_size_byte;
+  else
+    required_memory = simd_width * len;
+
+  /* Compute the number of the required registers to store the variable.  */
+  required_registers = required_memory / intelgt_register_size;
+  if (required_memory % intelgt_register_size != 0)
+    required_registers++;
+
+  return required_registers;
+}
+
+/* Intelgt implementation of the "dummy_id" method.  */
+
+static struct frame_id
+intelgt_dummy_id (struct gdbarch *gdbarch, frame_info *this_frame)
+{
+  /* Extract the front-end frame pointer from the "framedesc" register.
+     The size of the framedesc.fe_fp is 8 bytes with an offset of 16.  */
+  int framedesc_regnum = intelgt_pseudo_register_num (gdbarch, "framedesc");
+  bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+
+  gdb_assert (register_size (gdbarch, framedesc_regnum) <= 64);
+  gdb_byte buf[64];
+  get_frame_register (this_frame, framedesc_regnum, buf);
+  CORE_ADDR fe_fp = extract_unsigned_integer (buf + 16, 8, byte_order);
+
+  return frame_id_build (fe_fp, get_frame_pc (this_frame));
+}
+
+/* Intelgt implementation of the "return_in_first_hidden_param_p" method.  */
+
+static int
+intelgt_return_in_first_hidden_param_p (gdbarch *gdbarch, type *type)
+{
+  /* Vector return values greater than 64-bits and non-promotable structure
+     return values are converted to be passed by reference as the first
+     argument in the arguments list of the function.  */
+  return (
+    (class_or_union_p (type)
+     && !is_a_promotable_small_struct (type, PROMOTABLE_STRUCT_MAX_SIZE_RET))
+    || (type->is_vector () && TYPE_LENGTH (type) > 8));
+}
+
+/* Adjust the address upwards (direction of stack growth) so that the stack is
+   always aligned.  According to the spec, the FE stack should be
+   OWORD aligned.  */
+
+static CORE_ADDR
+intelgt_frame_align (struct gdbarch *gdbarch, CORE_ADDR addr)
+{
+  return align_up (addr, OWORD_SIZE);
+}
+
+/* Intelgt implementation of the "unwind_sp" method.  The FE_SP
+   is being considered.  */
+
+static CORE_ADDR
+intelgt_unwind_sp (gdbarch *gdbarch, frame_info *next_frame)
+{
+  /* Extract the front-end stack pointer from the "framedesc" register.
+     The size of the framedesc.fe_sp is 8 bytes with an offset of 24.  */
+  int framedesc_regnum = intelgt_pseudo_register_num (gdbarch, "framedesc");
+  value *unwound_framedesc
+    = frame_unwind_register_value (next_frame, framedesc_regnum);
+  gdb_byte *raw_bytes = value_contents_raw (unwound_framedesc);
+  bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  CORE_ADDR fe_sp = extract_unsigned_integer (raw_bytes + 24, 8, byte_order);
+
+  return fe_sp;
+}
+
+/* Intelgt implementation of the "push_dummy_call" method.  */
+
+static CORE_ADDR
+intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
+			 CORE_ADDR bp_addr, int nargs, value **args,
+			 CORE_ADDR sp,
+			 function_call_return_method return_method,
+			 CORE_ADDR struct_addr)
+{
+  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
+  const int current_lane = inferior_thread ()->current_simd_lane ();
+  /* The retval register (r26) is the first GRF register to be used
+     for passing arguments.  */
+  const int retval_regnum = get_intelgt_gdbarch_data (gdbarch)->retval_regnum;
+  const unsigned int retval_regsize = register_size (gdbarch, retval_regnum);
+  const int framedesc_regnum = intelgt_pseudo_register_num (gdbarch,
+							    "framedesc");
+  /* ADDRESS_SIZE is the size of an address in bytes.  */
+  const int address_size = gdbarch_addr_bit (gdbarch) / 8;
+  CORE_ADDR fe_sp = sp;
+
+  /* Set the return address register to point to the entry point of
+     the program, where a breakpoint lies in wait.  The return address
+     register is the framedesc.return_ip which is located at the first four
+     bytes of "framedesc".  */
+  regcache->cooked_write_part (framedesc_regnum, 0, 4, (gdb_byte *) &bp_addr);
+
+  /* Push all struct objects (except for promoted structs) to the stack
+     and save the corresponding addresses.  */
+  std::vector<CORE_ADDR> obj_addrs;
+  for (int index = 0; index < nargs; ++index)
+    {
+      type *arg_type = check_typedef (value_type (args[index]));
+      /* TYPE_LENGTH returns the size of the argument in bytes.  */
+      int len = TYPE_LENGTH (arg_type);
+
+      /* For argument structs, a maximum size of 128-bits (16-bytes)
+	 is used for the promotion check.  */
+      if (class_or_union_p (arg_type)
+	  && !is_a_promotable_small_struct (arg_type,
+					    PROMOTABLE_STRUCT_MAX_SIZE_ARG))
+	{
+	  const gdb_byte *val = value_contents (args[index]);
+
+	  obj_addrs.push_back (fe_sp + current_lane * len);
+	  int err = target_write_memory (fe_sp + current_lane * len,
+					 val, len);
+	  if (err != 0)
+	    error ("Target failed to write on the stack: "
+		   "arg %d of type %s", index, arg_type->name ());
+
+	  fe_sp += align_up (len * simd_width, OWORD_SIZE);
+	}
+    }
+
+  /* Copying arguments into registers.  The current IGC implementation
+     uses a maximum of 12 GRF registers to pass arguments, which are r26 and
+     onwards.  The rest of the arguments are pushed to the FE stack.  */
+  int obj_index = 0;
+  int regnum = retval_regnum;
+
+  for (int argnum = 0; argnum < nargs; ++argnum)
+    {
+      type *arg_type = check_typedef (value_type (args[argnum]));
+      /* Compute the required number of registers to store the argument.  */
+      int required_registers
+	= get_argument_required_registers (gdbarch, arg_type);
+      /* LEN is the size of the argument in bytes.  */
+      int len = TYPE_LENGTH (arg_type);
+      const gdb_byte *val = value_contents (args[argnum]);
+
+      /* If the argument can fit into the remaining GRFs then it needs to be
+	 copied there.  */
+      if (required_registers + regnum
+	  <= retval_regnum + INTELGT_MAX_GRF_REGS_FOR_ARGS)
+	{
+	  /* First available GRF register to write data into.  */
+	  int target_regnum = regnum;
+
+	  if (is_a_promotable_small_struct (arg_type,
+					    PROMOTABLE_STRUCT_MAX_SIZE_ARG))
+	    {
+	      /* The stucture will be stored in the GRF registers with SoA
+		 layout.  Example:
+		 s.a s.a... s.a  s.b s.b... s.b  s.c s.c... s.c.  */
+
+	      int reg_offset = 0;
+	      int n_fields = arg_type->num_fields ();
+	      field *fields = arg_type->fields ();
+
+	      /* Loop over all structure fields.  */
+	      for (int field_idx = 0; field_idx < n_fields; ++field_idx)
+		{
+		  /* FIELD_REG_OFFSET and FIELD_REGNUM are the local register
+		     offset and the register number for writing the current
+		     field.  */
+		  int field_reg_offset = reg_offset;
+		  int field_regnum = target_regnum;
+
+		  type *field_type = check_typedef (
+		    arg_type->field (field_idx).type ());
+		  int field_len = TYPE_LENGTH (field_type);
+
+		  /* Total field size after SIMD vectorization.  */
+		  int mem_occupation = simd_width * get_field_total_memory (
+		    arg_type, field_idx);
+
+		  int lane_offset = current_lane * field_len;
+
+		  field_regnum += (reg_offset + lane_offset) / retval_regsize;
+		  field_reg_offset = ((reg_offset + lane_offset)
+				      % retval_regsize);
+
+		  /* Prepare the TARGET_REGNUM and the REG_OFFSET for
+		     the next field.  */
+		  target_regnum += ((reg_offset + mem_occupation)
+				    / retval_regsize);
+		  reg_offset = (reg_offset + mem_occupation) % retval_regsize;
+
+		  /* Determine the offset of the field within the struct
+		     in bytes.  */
+		  int current_pos = fields[field_idx].loc.bitpos / 8;
+
+		  /* Write to the corresponding part of register.  */
+		  regcache->cooked_write_part (
+		    field_regnum, field_reg_offset, field_len,
+		    (val + current_pos));
+		}
+	    }
+	  else if (class_or_union_p (arg_type))
+	    {
+	    /* The argument has been pushed to the FE stack, and its
+	       reference needs to be passed to the register.  */
+
+	      int lane_offset = current_lane * address_size;
+	      int reg_offset = lane_offset % retval_regsize;
+
+	      /* Move to write on the right register.  */
+	      target_regnum += lane_offset / retval_regsize;
+
+	      /* Write to the corresponding part of register.  */
+	      regcache->cooked_write_part (
+		target_regnum, reg_offset, address_size,
+		(gdb_byte *) &obj_addrs[obj_index++]);
+	    }
+	  else if (arg_type->is_vector ())
+	    {
+	      /* Vectors are copied to GRFs with the Structure of Arrays (SoA)
+		 layout.  */
+
+	      /* Length in bytes of an element in the vector.  */
+	      int target_type_len = TYPE_LENGTH (TYPE_TARGET_TYPE (arg_type));
+	      /* Number of elements in the vector.  */
+	      int n_elements_to_write = len / target_type_len;
+
+	      for (int element_idx = 0; element_idx < n_elements_to_write;
+		   ++element_idx)
+		{
+		  int lane_offset = current_lane * target_type_len;
+
+		  int total_offset = (
+		    lane_offset + element_idx * target_type_len * simd_width);
+		  int reg_offset = total_offset % retval_regsize;
+
+		  /* Move to write on the right register.  */
+		  target_regnum = regnum + total_offset / retval_regsize;
+
+		  /* Write to the corresponding part of register.  */
+		  regcache->cooked_write_part (
+		    target_regnum, reg_offset, target_type_len,
+		    (val + element_idx * target_type_len));
+		}
+	    }
+	  else if (len <= 8)
+	    {
+	      int lane_offset = current_lane * len;
+	      int reg_offset = lane_offset % retval_regsize;
+
+	      /* Move to write on the right register.  */
+	      target_regnum = regnum + lane_offset / retval_regsize;
+
+	      regcache->cooked_write_part (target_regnum, reg_offset, len,
+					   val);
+	    }
+	  else
+	    error ("unexpected type %s of arg %d", arg_type->name (), argnum);
+
+	  /* Move to the next available register.  */
+	  regnum += required_registers;
+	}
+      else
+	{
+	  /* Push the argument to the FE stack when it does not fit
+	     in the space left within GRFs.  */
+
+	  if (is_a_promotable_small_struct (arg_type,
+					    PROMOTABLE_STRUCT_MAX_SIZE_ARG))
+	    {
+	      /* Promotable structures are stored in the stack with SoA layout.
+		 Example:
+		 s.a s.a... s.a  s.b s.b... s.b  s.c s.c... s.c.  */
+
+	      int n_fields = arg_type->num_fields ();
+	      field *fields = arg_type->fields ();
+
+	      /* Loop over all structure fields.  */
+	      for (int field_idx = 0; field_idx < n_fields; ++field_idx)
+		{
+		  type *field_type = check_typedef (
+		    arg_type->field (field_idx).type ());
+		  int field_len = TYPE_LENGTH (field_type);
+
+		  /* Determine the offset of the field within the struct
+		     in bytes.  */
+		  int current_pos = fields[field_idx].loc.bitpos / 8;
+
+		  int err
+		    = target_write_memory (fe_sp + current_lane * field_len,
+					   val + current_pos, field_len);
+		  if (err != 0)
+		    error ("Target failed to write on the stack: "
+			   "arg %d of type %s", argnum, arg_type->name ());
+
+		  /* Update the stack pointer for the next field while
+		     considering the structure intra/inter-padding.  */
+		  int mem_occupation = simd_width * get_field_total_memory (
+		    arg_type, field_idx);
+		  fe_sp += mem_occupation;
+		}
+
+	      /* Align the entire stack.  */
+	      fe_sp = align_up (fe_sp, OWORD_SIZE);
+	    }
+	  else if (class_or_union_p (arg_type))
+	    {
+	      /* The object has been previously pushed to the stack, now push
+		 its saved address to be aligned with the rest of the
+		 arguments in the stack.  */
+	      gdb_byte *obj_addr = (gdb_byte *) &obj_addrs[obj_index++];
+	      int err
+		= target_write_memory (fe_sp + current_lane * address_size,
+				       obj_addr, address_size);
+	      if (err != 0)
+		error ("Target failed to write on the stack: "
+		       "arg %d of type %s", argnum, arg_type->name ());
+
+	      fe_sp += align_up (address_size * simd_width, OWORD_SIZE);
+	    }
+	  else if (arg_type->is_vector ())
+	    {
+	      /* Vectors are copied to stack with the SoA layout.  */
+
+	      /* Length in bytes of an element in the vector.  */
+	      int target_type_len = TYPE_LENGTH (TYPE_TARGET_TYPE (arg_type));
+	      /* Number of elements in the vector.  */
+	      int n_elements = len / target_type_len;
+
+	      for (int element_idx = 0; element_idx < n_elements;
+		   ++element_idx)
+		{
+		  int lane_offset = current_lane * target_type_len;
+
+		  int total_offset
+		    = lane_offset + element_idx * target_type_len * simd_width;
+
+		  /* Location of the element in the vector.  */
+		  const gdb_byte *element_addr
+		    = val + element_idx * target_type_len;
+
+		  int err = target_write_memory (fe_sp + total_offset,
+						 element_addr,
+						 target_type_len);
+
+		  if (err != 0)
+		    error ("Target failed to write on the stack: "
+			   "arg %d of type %s", argnum, arg_type->name ());
+		}
+
+	      /* Align the entire stack.  */
+	      fe_sp = align_up (fe_sp + len * simd_width, OWORD_SIZE);
+	    }
+	  else if (len <= 8)
+	    {
+	      int err = target_write_memory (fe_sp + current_lane * len,
+					     val, len);
+	      if (err != 0)
+		error ("Target failed to write on the stack: "
+		       "arg %d of type %s", argnum, arg_type->name ());
+
+	      fe_sp += align_up (len * simd_width, OWORD_SIZE);
+	    }
+	  else
+	    error ("unexpected type %s of arg %d", arg_type->name (), argnum);
+	}
+    }
+
+  /* Update the FE frame pointer (framedesc.fe_fp).  */
+  regcache->cooked_write_part (framedesc_regnum, 16, 8, (gdb_byte *) &fe_sp);
+  /* Update the FE stack pointer (framedesc.fe_sp).  */
+  regcache->cooked_write_part (framedesc_regnum, 24, 8, (gdb_byte *) &fe_sp);
+  return fe_sp;
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -1094,6 +1560,15 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
     (gdbarch, intelgt_address_class_type_flags_to_name);
   set_gdbarch_address_space_from_type_flags
     (gdbarch, intelgt_address_space_from_type_flags);
+
+
+  /* Enable inferior call support.  */
+  set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);
+  set_gdbarch_unwind_sp (gdbarch, intelgt_unwind_sp);
+  set_gdbarch_frame_align (gdbarch, intelgt_frame_align);
+  set_gdbarch_return_in_first_hidden_param_p (
+    gdbarch, intelgt_return_in_first_hidden_param_p);
+  set_gdbarch_dummy_id (gdbarch, intelgt_dummy_id);
 
   return gdbarch;
 }

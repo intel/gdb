@@ -1,0 +1,157 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+#(at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Check that inferior calls works correctly when perfomed from a GPU kernel.
+
+load_lib sycl.exp
+
+standard_testfile infcall-more.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {![require_sycl_device "gpu" "Intel*"]} {
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+# The main test sequence for GPU inferior calls.
+proc test_inferior_calls {simd_lane} {
+    global srcfile inside_kernel
+    gdb_test "thread :$simd_lane" "Switching to thread .*:$simd_lane .*"
+
+    gdb_test "print no_args()" "= 20" \
+	"Inferior call of a function without arguments"
+
+    gdb_test "print integer_grf_args(3, 4, 5)" "= 60" \
+	"Arguments are passed on GRFs: 1"
+    gdb_test "print integer_grf_args(6, 7, 8)" "= 336" \
+	"Arguments are passed on GRFs: 2"
+
+    gdb_test "print bool_i8_i16_grf(true, 2, 3)" "= 16" \
+	"Arguments less than 4 bytes: 1"
+    gdb_test "print bool_i8_i16_grf(false, 11, 21)" "= 231" \
+	"Arguments less than 4 bytes: 2"
+
+    gdb_test "print vector_grf_args(arr1_uchar10, arr1_uint2)" "= 265" \
+	"The two vectors are being passed on GRFs: 1"
+    gdb_test "print vector_grf_args(arr2_uchar10, arr2_uint2)" "= 405" \
+	"The two vectors are being passed on GRFs: 2"
+
+    gdb_test "print struct_stack_grf_args(c_s1, 5)" "= 765" \
+	"The struct is pushed to the stack, its reference is passed on GRF: 1 "
+    gdb_test "print struct_stack_grf_args(c_s2, 8)" "= 1296" \
+	"The struct is pushed to the stack, its reference is passed on GRF: 2 "
+
+    gdb_test "print struct_int_stack_args(1, 2, 3, 4, 5, 6, c_s1, 5)" "= 16065" \
+	"The first 6 long integers are passed on GRFs, the rest is pushed to the stack: 1"
+    gdb_test "print struct_int_stack_args(7, 8, 9, 10, 11, 12, c_s2, 8)" "= 73872" \
+	"The first 6 long integers are passed on GRFs, the rest is pushed to the stack: 2"
+
+    gdb_test "print promote_struct_grf(7, s_s1, 8)" "= 84" \
+	"Small struct promotion on GRFs: 1"
+    gdb_test "print promote_struct_grf(5, s_s2, 6)" "= 180" \
+	"Small struct promotion on GRFs: 2"
+
+    setup_kfail "JIRA XDEPS/3644" "*-*-*"
+    gdb_test "print promote_struct128_grf(s_128)" "= 154" \
+	"128-bit struct promotion on GRFs"
+
+    gdb_test "print promote_struct_stack(1, 2, 3, 4, 5, 6, s_s1, 77)" "= 36" \
+	"Small struct promotion on the stack: 1"
+    gdb_test "print promote_struct_stack(1, 2, 3, 4, 5, 6, s_s2, 88)" "= 183" \
+	"Small struct promotion on the stack: 2"
+
+    setup_kfail "JIRA XDEPS/3644" "*-*-*"
+    gdb_test "print promote_struct128_stack(1, 2, 3, 4, 5, 6, s_128)" "= 175" \
+	"128-bit struct promotion on the stack"
+
+    gdb_test "print vector_on_stack (1, 2, 3, 4, 5, 6, arr1_uchar10)" "= 76" \
+	"Vector is passed on the stack with the SoA layout: 1"
+    gdb_test "print vector_on_stack (1, 2, 3, 4, 5, 6, arr2_uchar10)" "= 176" \
+	"Vector is passed on the stack with the SoA layout: 2"
+
+    gdb_test "print small_vector_return()" "= \\{1, 2, 3, 4, 5\\}" \
+	"Vectors with size less than 64-bits are returned on GRFs"
+
+    gdb_test "print long_vector_return()" "= \\{1, 2, 3, 4, 5, 6, 7, 8, 9, 10\\}" \
+	"Vectors with size more than 64-bits are returned on the stack"
+
+    gdb_test "print complex_struct_return(1, 2, 3, 4)" "= \\{x = 1, y = 2, vec = \\{3, 4\\}\\}" \
+	"The struct value is returned on the stack: 1"
+    gdb_test "print complex_struct_return(5, 6, 7, 8)" "= \\{x = 5, y = 6, vec = \\{7, 8\\}\\}" \
+	"The struct value is returned on the stack: 2"
+
+    gdb_test "print mixed_types(s_s1, 12, c_s1, c_s2, 13, arr1_uchar10, arr2_uchar10, s_s2)" "= 4656" \
+	"Mixed types to be passed on GRFs: 1"
+    gdb_test "print mixed_types(s_s2, 22, c_s2, c_s1, 23, arr2_uchar10, arr1_uchar10, s_s1)" "= 8259" \
+	"Mixed types to be passed on GRFs: 2"
+
+    set inside_function [gdb_get_line_number "bp-inside-function"]
+    set callee_function  "integer_grf_args \\(a1=6, a2=7, a3=8\\) at $srcfile:$inside_function"
+    set caller_function  "make_all_calls \\(\\) at $srcfile:$inside_kernel"
+
+    gdb_breakpoint "$srcfile:$inside_function" {temporary}
+    gdb_test "print integer_grf_args(6, 7, 8)" ".*$callee_function.*" \
+	"Break point inside the callee function"
+
+    # Limit the backtrace to 3 frames to get only caller/callee frames.
+    gdb_test "backtrace 3" [multi_line \
+				"#0  $callee_function" \
+				"#1  <function called from gdb>" \
+				"#2  $caller_function.*"] \
+	"Backtrace with a dummy frame"
+
+    gdb_test "finish" [multi_line \
+			   "Run till exit from #0  $callee_function" \
+			   "$caller_function" \
+			   "$inside_kernel.*" \
+			   "Value returned is \\$\[0-9\]+ = 336"] \
+	"Finish the inferior call and get the returned result"
+}
+
+# To run the tests with different SIMD_WIDTH (e.g. 16), please change
+# the DATARANGE accordingly in the file "infcall-more.cpp" so that all lanes
+# are active and there is no threads switching.
+set simd_width 8
+gdb_test "set env IGC_ForceOCLSIMDWidth=$simd_width"
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set inside_kernel [gdb_get_line_number "bp-after-variables-declaration"]
+
+gdb_breakpoint "$srcfile:$inside_kernel"
+gdb_continue_to_breakpoint "kernel after variable declaration" \
+    ".*$srcfile:$inside_kernel.*"
+
+set lanes [list \
+	    0 \
+	    1 \
+	    [expr $simd_width / 2 - 2] \
+	    [expr $simd_width / 2 - 1] \
+	    [expr $simd_width / 2] \
+	    [expr $simd_width - 1]]
+
+# Loop over the lanes to be tested and performe all the inferior calls tests.
+foreach_with_prefix lane $lanes {
+    test_inferior_calls $lane
+}

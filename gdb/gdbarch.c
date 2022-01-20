@@ -333,6 +333,7 @@ struct gdbarch
   gdbarch_dtrace_disable_probe_ftype *dtrace_disable_probe;
   int has_global_solist;
   int has_global_breakpoints;
+  bool can_leave_breakpoints;
   gdbarch_has_shared_address_space_ftype *has_shared_address_space;
   gdbarch_fast_tracepoint_valid_at_ftype *fast_tracepoint_valid_at;
   gdbarch_guess_tracepoint_registers_ftype *guess_tracepoint_registers;
@@ -464,6 +465,7 @@ gdbarch_alloc (const struct gdbarch_info *info,
   gdbarch->displaced_step_fixup = NULL;
   gdbarch->displaced_step_finish = NULL;
   gdbarch->relocate_instruction = NULL;
+  gdbarch->can_leave_breakpoints = false;
   gdbarch->has_shared_address_space = default_has_shared_address_space;
   gdbarch->fast_tracepoint_valid_at = default_fast_tracepoint_valid_at;
   gdbarch->guess_tracepoint_registers = default_guess_tracepoint_registers;
@@ -720,6 +722,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of dtrace_disable_probe, has predicate.  */
   /* Skip verify of has_global_solist, invalid_p == 0 */
   /* Skip verify of has_global_breakpoints, invalid_p == 0 */
+  /* Skip verify of can_leave_breakpoints, invalid_p == 0 */
   /* Skip verify of has_shared_address_space, invalid_p == 0 */
   /* Skip verify of fast_tracepoint_valid_at, invalid_p == 0 */
   /* Skip verify of guess_tracepoint_registers, invalid_p == 0 */
@@ -877,6 +880,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   fprintf_unfiltered (file,
                       "gdbarch_dump: call_dummy_location = %s\n",
                       plongest (gdbarch->call_dummy_location));
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: can_leave_breakpoints = %s\n",
+                      plongest (gdbarch->can_leave_breakpoints));
   fprintf_unfiltered (file,
                       "gdbarch_dump: can_step_over_breakpoint = %s\n",
                       plongest (gdbarch->can_step_over_breakpoint));
@@ -4981,6 +4987,23 @@ set_gdbarch_has_global_breakpoints (struct gdbarch *gdbarch,
                                     int has_global_breakpoints)
 {
   gdbarch->has_global_breakpoints = has_global_breakpoints;
+}
+
+bool
+gdbarch_can_leave_breakpoints (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of can_leave_breakpoints, invalid_p == 0 */
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_can_leave_breakpoints called\n");
+  return gdbarch->can_leave_breakpoints;
+}
+
+void
+set_gdbarch_can_leave_breakpoints (struct gdbarch *gdbarch,
+                                   bool can_leave_breakpoints)
+{
+  gdbarch->can_leave_breakpoints = can_leave_breakpoints;
 }
 
 int

@@ -398,7 +398,7 @@ show_automatic_hardware_breakpoints (struct ui_file *file, int from_tty,
    breakpoints until the next resume, and removes them again when the
    target fully stops.  This is a bit safer in case GDB crashes while
    processing user input.  */
-static bool always_inserted_mode = false;
+static enum auto_boolean always_inserted_mode = AUTO_BOOLEAN_AUTO;
 
 static void
 show_always_inserted_mode (struct ui_file *file, int from_tty,
@@ -417,6 +417,14 @@ show_debug_breakpoints (struct ui_file *file, int from_tty,
   fprintf_filtered (file, _("Breakpoint location debugging is %s.\n"), value);
 }
 
+static bool
+may_leave_breakpoints_inserted (gdbarch *gdbarch)
+{
+  if (always_inserted_mode == AUTO_BOOLEAN_AUTO)
+    return gdbarch_can_leave_breakpoints (gdbarch);
+  return always_inserted_mode == AUTO_BOOLEAN_TRUE;
+}
+
 /* See breakpoint.h.  */
 
 int
@@ -431,7 +439,7 @@ breakpoints_should_be_inserted_now (void)
     }
   else
     {
-      if (always_inserted_mode)
+      if (may_leave_breakpoints_inserted (target_gdbarch ()))
 	{
 	  /* The user wants breakpoints inserted even if all threads
 	     are stopped.  */
@@ -16371,8 +16379,8 @@ a warning will be emitted for such breakpoints."),
 			   &breakpoint_set_cmdlist,
 			   &breakpoint_show_cmdlist);
 
-  add_setshow_boolean_cmd ("always-inserted", class_support,
-			   &always_inserted_mode, _("\
+  add_setshow_auto_boolean_cmd ("always-inserted", class_support,
+				&always_inserted_mode, _("\
 Set mode for inserting breakpoints."), _("\
 Show mode for inserting breakpoints."), _("\
 When this mode is on, breakpoints are inserted immediately as soon as\n\

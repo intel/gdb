@@ -1507,6 +1507,13 @@ extern void set_gdbarch_has_global_solist (struct gdbarch *gdbarch, int has_glob
 extern int gdbarch_has_global_breakpoints (struct gdbarch *gdbarch);
 extern void set_gdbarch_has_global_breakpoints (struct gdbarch *gdbarch, int has_global_breakpoints);
 
+/* Some targets are able to step-over breakpoint instructions without having to
+   remove the breakpoint.  For such cases it's reasonable to set this property
+   to true. */
+
+extern bool gdbarch_can_leave_breakpoints (struct gdbarch *gdbarch);
+extern void set_gdbarch_can_leave_breakpoints (struct gdbarch *gdbarch, bool can_leave_breakpoints);
+
 /* True if inferiors share an address space (e.g., uClinux). */
 
 typedef int (gdbarch_has_shared_address_space_ftype) (struct gdbarch *gdbarch);

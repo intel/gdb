@@ -1084,6 +1084,11 @@ v;int;has_global_solist;;;0;0;;0
 # this property should be set to true.
 v;int;has_global_breakpoints;;;0;0;;0
 
+# Some targets are able to step-over breakpoint instructions without having to
+# remove the breakpoint.  For such cases it's reasonable to set this property
+# to true.
+v;bool;can_leave_breakpoints;;;false;false;;0
+
 # True if inferiors share an address space (e.g., uClinux).
 m;int;has_shared_address_space;void;;;default_has_shared_address_space;;0
 

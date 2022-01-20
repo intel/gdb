@@ -2353,6 +2353,18 @@ this property should be set to true.
     invalid=False,
 )
 
+Value(
+    comment="""
+Some targets are able to step-over breakpoint instructions without
+having to remove the breakpoint.  For such cases it is reasonable to
+set this property to true.
+""",
+    type="bool",
+    name="can_leave_breakpoints",
+    predefault="false",
+    invalid=False,
+)
+
 Method(
     comment="""
 True if inferiors share an address space (e.g., uClinux).

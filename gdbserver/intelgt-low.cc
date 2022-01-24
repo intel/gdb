@@ -27,6 +27,7 @@
 #include "nonstop-low.h"
 #include "gdbsupport/common-debug.h"
 #include <unordered_map>
+#include <sstream>
 
 int using_threads = 1;
 
@@ -487,7 +488,9 @@ create_target_description (GTDeviceInfo &info)
 
   set_tdesc_architecture (tdesc.get (), "intelgt");
   set_tdesc_osabi (tdesc.get (), "GNU/Linux");
-  set_tdesc_device (tdesc.get (), std::to_string (info.gen_major).c_str ());
+  std::ostringstream oss;
+  oss << info.gen_major << "." << info.gen_minor;
+  set_tdesc_device (tdesc.get (), oss.str ().c_str ());
 
   struct tdesc_feature *feature;
   long regnum = 0;

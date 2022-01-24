@@ -989,12 +989,20 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
       const std::string &device = tdesc_device_name (tdesc);
       dprintf (_("device: Gen%s"), device.c_str ());
 
-      if (device.compare ("9") == 0)
+      if (device.compare ("9.0") == 0)
 	iga_version = IGA_GEN9;
-      if (device.compare ("11") == 0)
+      else if (device.compare ("11.0") == 0)
 	iga_version = IGA_GEN11;
-      if (device.compare ("12") == 0)
-	iga_version = IGA_GEN12p1;
+      else if (device.compare ("12.0") == 0)
+	iga_version = IGA_XE;
+      else if (device.compare ("12.1") == 0)
+	iga_version = IGA_XE;
+      else if (device.compare ("12.5") == 0)
+	iga_version = IGA_XE_HP;
+      else if (device.compare ("12.71") == 0)
+	iga_version = IGA_XE_HPG;
+      else if (device.compare ("12.72") == 0)
+	iga_version = IGA_XE_HPC;
     }
 
   const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);

@@ -340,6 +340,9 @@ public:
   void pause_all (bool freeze) override;
   void unpause_all (bool unfreeze) override;
 
+  bool supports_pid_to_exec_file () override { return true; }
+  const char *pid_to_exec_file (int pid) override { return ""; }
+
 private:
   typedef std::list<ze_device_info *> devices_t;
 

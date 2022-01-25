@@ -4790,12 +4790,14 @@ handle_target_event (int err, gdb_client_data client_data)
     }
   else if (cs.last_status.kind () == TARGET_WAITKIND_UNAVAILABLE)
     {
-      /* Update the thread state but otherwise silently ignore this.
-
-	 We do need to report thread unavailability on resume or stop
-	 requests, but not as async target events.  */
+      /* Update the thread state and report the event.  GDB must have
+	 sent a stop request for the thread, which turned out to be
+	 unavailable.  To not make GDB wait indefinitely, we report
+	 the event.  */
       if (current_thread != nullptr)
 	current_thread->last_status = cs.last_status;
+
+      push_stop_notification (cs.last_ptid, cs.last_status);
     }
   else if (cs.last_status.kind () != TARGET_WAITKIND_IGNORE)
     {

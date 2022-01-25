@@ -497,7 +497,7 @@ intelgt_ze_target::prepare_thread_resume (thread_info *tp,
       break;
 
     default:
-      internal_error (__FILE__, __LINE__, _("bad resume kind: %d."), rkind);
+      internal_error (_("bad resume kind: %d."), rkind);
     }
 
   /* When stepping over a breakpoint, we need to suppress the breakpoint

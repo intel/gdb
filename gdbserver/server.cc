@@ -4901,12 +4901,21 @@ handle_target_event (int err, gdb_client_data client_data)
     }
   else if (cs.last_status.kind == TARGET_WAITKIND_UNAVAILABLE)
     {
-      /* Update the thread state but otherwise silently ignore this.
+      /* Update the thread state but otherwise silently ignore this,
+	 unless this event is for a library load and an ack is needed,
+	 so that GDB can insert the breakpoints into the library and
+	 the target can be ack'ed for its library load event.
 
 	 We do need to report thread unavailability on resume or stop
 	 requests, but not as async target events.  */
       if (current_thread != nullptr)
 	current_thread->last_status = cs.last_status;
+
+      int pid = cs.last_ptid.pid ();
+      process_info *process = find_process_pid (pid);
+      gdb_assert (process != nullptr);
+      if (process->dlls_changed)
+	push_stop_notification (cs.last_ptid, &cs.last_status);
     }
   else if (cs.last_status.kind != TARGET_WAITKIND_IGNORE)
     {

@@ -1078,6 +1078,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 				       intelgt_sw_breakpoint_from_kind);
   set_gdbarch_can_step_over_breakpoint (gdbarch, 1);
   set_gdbarch_pointer_to_address (gdbarch, intelgt_pointer_to_address);
+  set_gdbarch_can_leave_breakpoints (gdbarch, true);
   dwarf2_frame_set_init_reg (gdbarch, intelgt_init_reg);
 
   /* Disassembly */

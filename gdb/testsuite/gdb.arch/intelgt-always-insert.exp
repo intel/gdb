@@ -1,0 +1,92 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests if gdb uses always-inserted mode to make/omit reinserting breakpoint
+# Intel(R) Graphics Technology platform.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {![require_sycl_device "gpu" "Intel*"]} {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+proc check_mode {mode} {
+    global request decimal gdb_prompt srcfile bp2
+    gdb_test "set breakpoint always-inserted $mode"
+    set write_count 0
+
+    # Skip first breakpoint hit because depending on previous always-inserted
+    # mode write request might be already sent or not needed to be sent.
+    gdb_continue_to_breakpoint "$srcfile:$bp2"
+
+    gdb_test_no_output "set debug remote on"
+    gdb_test_multiple "continue" "continue for mode $mode" -lbl {
+	-re "Sending packet.*($request),($decimal).*\r\n" {
+	    incr write_count
+	    exp_continue
+	}
+	-re "$gdb_prompt $" {
+	    pass $gdb_test_name
+	}
+	default {
+	    exp_continue
+	}
+    }
+    gdb_test_no_output "set debug remote off"
+
+    if {$mode eq "on" || $mode eq "auto"} {
+	gdb_assert {$write_count == 0}
+    } else {
+	gdb_assert {$write_count > 0}
+    }
+}
+
+set bp1 [gdb_get_line_number "kernel-first-line"]
+gdb_breakpoint $bp1 {temporary}
+gdb_continue_to_breakpoint "$srcfile:$bp1"
+
+# Set a new main breakpoint.
+set bp2 [gdb_get_line_number "kernel-last-line"]
+
+set addr "invalid"
+gdb_test_multiple "break $bp2 inferior 2" "break $bp2 inferior 2" {
+    -re -wrap "Breakpoint ($decimal) at ($hex): \[^\r\n\]*$srcfile\[^\r\n\]*" {
+	set addr $expect_out(2,string)
+	pass $gdb_test_name
+    }
+}
+
+set request [string map {"0x" "\\\$X"} $addr]
+verbose -log "packet request to look for: $request"
+
+foreach_with_prefix mode {"off" "on" "auto"} {
+    check_mode $mode
+}

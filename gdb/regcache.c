@@ -2124,7 +2124,8 @@ _initialize_regcache ()
 			    selftests::registers_changed_ptid_target_ptid_test);
 
   selftests::register_test_foreach_arch ("regcache::cooked_read_test",
-					 selftests::cooked_read_test);
+					 selftests::cooked_read_test,
+					 std::set<std::string> ({"intelgt"}));
   selftests::register_test_foreach_arch ("regcache::cooked_write_test",
 					 selftests::cooked_write_test);
   selftests::register_test ("regcache_thread_ptid_changed",

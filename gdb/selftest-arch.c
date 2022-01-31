@@ -22,6 +22,7 @@
 #include "gdbsupport/selftest.h"
 #include "selftest-arch.h"
 #include "arch-utils.h"
+#include <set>
 
 namespace selftests {
 
@@ -32,6 +33,11 @@ struct gdbarch_selftest : public selftest
 {
   gdbarch_selftest (self_test_foreach_arch_function *function_)
   : function (function_)
+  {}
+
+  gdbarch_selftest (self_test_foreach_arch_function *function_,
+		    const std::set<std::string> &disabled_arch_)
+  : function (function_), disabled_arch (disabled_arch_)
   {}
 
   void operator() () const override
@@ -57,6 +63,8 @@ struct gdbarch_selftest : public selftest
 	    /* PR 19797 */
 	    continue;
 	  }
+	else if (disabled_arch.count (arches[i]) > 0)
+	  continue;
 
 	QUIT;
 
@@ -85,6 +93,10 @@ struct gdbarch_selftest : public selftest
   }
 
   self_test_foreach_arch_function *function;
+
+  /* Contains a list of architectures for which this specific test
+     shall be disabled.  */
+  std::set<std::string> disabled_arch;
 };
 
 void
@@ -92,6 +104,14 @@ register_test_foreach_arch (const std::string &name,
 			    self_test_foreach_arch_function *function)
 {
   register_test (name, new gdbarch_selftest (function));
+}
+
+void
+register_test_foreach_arch (const std::string &name,
+			    self_test_foreach_arch_function *function,
+			    const std::set<std::string> &disabled_arch_)
+{
+  register_test (name, new gdbarch_selftest (function, disabled_arch_));
 }
 
 void

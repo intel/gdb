@@ -232,7 +232,8 @@ void
 _initialize_disasm_selftests ()
 {
   selftests::register_test_foreach_arch ("print_one_insn",
-					 selftests::print_one_insn_test);
+					 selftests::print_one_insn_test,
+					 std::set<std::string> ({"intelgt"}));
   selftests::register_test_foreach_arch ("memory_error",
 					 selftests::memory_error_test);
 }

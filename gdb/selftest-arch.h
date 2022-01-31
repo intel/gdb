@@ -19,13 +19,16 @@
 #ifndef SELFTEST_ARCH_H
 #define SELFTEST_ARCH_H
 
+#include <set>
+
 typedef void self_test_foreach_arch_function (struct gdbarch *);
 
 namespace selftests
 {
 extern void
   register_test_foreach_arch (const std::string &name,
-			      self_test_foreach_arch_function *function);
+			      self_test_foreach_arch_function *function,
+			      const std::set<std::string> &disabled_arch = {});
 }
 
 #endif /* SELFTEST_ARCH_H */

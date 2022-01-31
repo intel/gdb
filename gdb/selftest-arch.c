@@ -54,7 +54,8 @@ static bool skip_arch (const char *arch)
 
 void
 register_test_foreach_arch (const std::string &name,
-			    self_test_foreach_arch_function *function)
+			    self_test_foreach_arch_function *function,
+			    const std::set<std::string> &disabled_arch)
 {
   std::vector<const char *> arches = gdbarch_printable_names ();
   for (const char *arch : arches)
@@ -65,6 +66,9 @@ register_test_foreach_arch (const std::string &name,
       auto test_fn
 	= ([=] ()
 	   {
+	     if (disabled_arch.count (arch) > 0)
+	       return;
+
 	     struct gdbarch_info info;
 	     info.bfd_arch_info = bfd_scan_arch (arch);
 	     struct gdbarch *gdbarch = gdbarch_find_by_info (info);

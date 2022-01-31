@@ -76,6 +76,7 @@ class IntelgtAutoAttach(gdb.Breakpoint):
         self.is_nonstop = False
         self.hook_bp = None
         self.gdbserver_gt_binary = "gdbserver-gt"
+        self.enable_schedule_multiple_at_gt_removal = False
         # Env variable to pass custom flags to gdbserver such as
         # "--debug" and "--remote-debug" for debugging purposes.
         self.gdbserver_args = self.get_env_variable(
@@ -206,6 +207,10 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
         self.remove_gt_inf_for(host_inf)
         self.host_inf_for_auto_remove = None
 
+        if self.enable_schedule_multiple_at_gt_removal:
+            gdb.execute("set schedule-multiple on")
+            self.enable_schedule_multiple_at_gt_removal = False
+
     @staticmethod
     def protected_gdb_execute(cmd, suppress_output=False):
         """Execute the GDB command CMD.  Return True if a 'Couldn't get
@@ -245,6 +250,21 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
                 # exit event will also arrive.  Events are async.
                 if not self.inf_dict[event.inferior] is None:
                     self.host_inf_for_auto_remove = event.inferior
+                    # Turn off schedule-multiple if it was enabled before the
+                    # exit of this host inferior.  From now on, sending
+                    # commands like vCont to gt inferiors associated with this
+                    # host inferior is invalid (since likely the kernel has
+                    # exited as well).  This happens for example when we
+                    # ended up here after GDB issued a run command for the host
+                    # inferior killing the programm + kernel - it will start a
+                    # new host inferior and issue a continue command for
+                    # possibly all inferiors (if we leave schedule-multiple
+                    # set).  We reset the schedule-multiple the next time we
+                    # remove the gt inferiors stored for removal.
+                    info = gdb.execute("show schedule-multiple", False, True)
+                    if info.endswith("on.\n"):
+                        gdb.execute("set schedule-multiple off")
+                        self.enable_schedule_multiple_at_gt_removal = True
         else:
             for key, gt_connection in self.inf_dict.items():
                 if gt_connection is None:

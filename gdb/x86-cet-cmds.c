@@ -29,6 +29,7 @@
 #include "utils.h"
 #include "valprint.h"
 
+#undef getline
 #include <string>
 #include <vector>
 

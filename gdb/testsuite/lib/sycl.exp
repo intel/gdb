@@ -204,6 +204,23 @@ proc is_opencl {} {
     return [regexp {.*(OpenCL)} $sycl_driver_platform]
 }
 
+# Return non-zero, if the Level-Zero Debug API is being used.
+
+proc is_level_zero_debug_api {} {
+    global env
+
+    if {![info exists env(ZET_ENABLE_PROGRAM_DEBUGGING)]} {
+	return 0
+    }
+
+    set env_var $env(ZET_ENABLE_PROGRAM_DEBUGGING)
+    if {[string is integer $env_var]} {
+	return [expr $env_var ne "0"]
+    } else {
+	return 0
+    }
+}
+
 # Return non-zero if the device is Gen9.
 
 gdb_caching_proc is_gen9 {

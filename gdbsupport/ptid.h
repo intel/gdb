@@ -32,6 +32,7 @@
    thread_stratum target that might want to sit on top.
 */
 
+#undef getline
 #include <functional>
 #include <string>
 #include "gdbsupport/common-types.h"

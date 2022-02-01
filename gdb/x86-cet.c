@@ -30,6 +30,7 @@
 #include "inf-ptrace.h"
 #include "valprint.h"
 
+#undef getline
 #include <sstream>
 #include <vector>
 

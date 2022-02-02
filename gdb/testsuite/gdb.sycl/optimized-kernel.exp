@@ -1,0 +1,53 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test that we can define and hit a breakpoint inside a kernel
+# that was compiled with -O2.
+
+load_lib sycl.exp
+
+standard_testfile single-task.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+# Set the -O2 flag explicitly.
+set options [concat {c++ debug} {optimize=-O2}]
+set message "failed to compile $srcfile"
+if {[prepare_for_testing $message $binfile $srcfile $options]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Set a breakpoint inside the kernel.  Expect to hit a kernel line.
+# Since the kernel is optimized, we may not hit the exact line for
+# which we defined the BP, and that's ok.
+gdb_breakpoint "$srcfile:[gdb_get_line_number kernel-line-2]" {message}
+gdb_continue_to_breakpoint "kernel line" \
+    ".* kernel-line-$decimal .*"
+
+# For local variables, if the compiler was able to maintain their
+# location information, we would get actual values.  Otherwise we
+# should see "<optimized out>".  In either case, the variables should
+# exist.
+gdb_test "info locals ten" "ten = (10|<optimized out>)"
+# FOURTEEN may not be initialized yet because of the BP location.
+set uninitialized "-?$decimal"
+gdb_test "info locals fourteen" "fourteen = ($uninitialized|<optimized out>)"

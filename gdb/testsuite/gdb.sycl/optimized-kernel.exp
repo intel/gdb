@@ -47,7 +47,13 @@ gdb_continue_to_breakpoint "kernel line" \
 # location information, we would get actual values.  Otherwise we
 # should see "<optimized out>".  In either case, the variables should
 # exist.
+if {[require_sycl_device "gpu" "Intel*"]} {
+    setup_kfail "JIRA IGC/5002" "*-*-*"
+}
 gdb_test "info locals ten" "ten = (10|<optimized out>)"
 # FOURTEEN may not be initialized yet because of the BP location.
 set uninitialized "-?$decimal"
+if {[require_sycl_device "gpu" "Intel*"]} {
+    setup_kfail "JIRA IGC/5002" "*-*-*"
+}
 gdb_test "info locals fourteen" "fourteen = ($uninitialized|<optimized out>)"

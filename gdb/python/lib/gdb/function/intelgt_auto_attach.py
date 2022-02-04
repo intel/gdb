@@ -151,10 +151,14 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
                 gdb.execute(f"detach inferiors {gt_inf.num}", False, True)
 
         # Terminate the gdbserver session.  We should do this from a gt inf.
-        if gdb.selected_inferior() not in gt_infs:
+        if gt_infs and gdb.selected_inferior() not in gt_infs:
             cmd = f"inferior {gt_infs[0].num}"
             self.protected_gdb_execute(cmd, True)
-        gdb.execute("monitor exit")
+
+        # Check if switching to gt inf was successful.
+        # Otherwise, we cannot send 'monitor exit' command.
+        if gdb.selected_inferior() in gt_infs:
+            gdb.execute("monitor exit")
 
         # Switch to host to be able to remove gt infs.
         # Catch exceptions, since the switch will likely raise
@@ -295,12 +299,18 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
             ld_lib_path_str = \
                 f"LD_LIBRARY_PATH={igfxdbg_lib_path_env_var}:$LD_LIBRARY_PATH"
 
-        if connection == 'native':
-            self.make_native_gdbserver(inf, ld_lib_path_str,
-                                       gdbserver_gt_attach_str)
-        elif connection == 'remote':
-            self.make_remote_gdbserver(inf, ld_lib_path_str,
-                                       gdbserver_gt_attach_str)
+        try:
+            if connection == 'native':
+                self.make_native_gdbserver(inf, ld_lib_path_str,
+                                           gdbserver_gt_attach_str)
+            elif connection == 'remote':
+                self.make_remote_gdbserver(inf, ld_lib_path_str,
+                                           gdbserver_gt_attach_str)
+        except gdb.error as ex:
+            """Explicitly raise exception to 'init_gt_inferior'.  This
+            otherwise results in undhandled exception in 'init_gt_inferior'
+            if ctrl-c is used whilst attaching to inferior.  """
+            raise ex
 
     def make_native_gdbserver(self, inf, ld_lib_path, gdbserver_cmd):
         """Spawn and connect to a native instance of gdbserver."""
@@ -435,7 +445,8 @@ intelgt: the igfxdcd module (i.e. the debug driver) is not loaded.""")
                 gdb.execute(f"inferior {host_inf.num}", False, True)
                 if not self.is_nonstop:
                     gdb.execute("set schedule-multiple on")
-            except gdb.error:
+            # Fix ctrl-c while attaching to gt inferior.
+            except (KeyboardInterrupt, gdb.error):
                 self.handle_error(host_inf)
 
             self.inf_dict[host_inf] = gdb.inferiors()[-1].connection_num

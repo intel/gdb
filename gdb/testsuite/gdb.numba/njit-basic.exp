@@ -1,0 +1,73 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for the vanilla NUMBA: basic commands like
+# backtrace, stepping, frames and info locals.
+
+load_lib numba.exp
+
+standard_testfile njit-func.py
+
+if {[skip_numba_njit_tests]} {
+    unsupported "target does not support vanilla NUMBA"
+    return 0
+}
+
+if {![start_numba_script]} {
+    return -1
+}
+
+
+set kernel_entry_line [gdb_get_line_number "numba-kernel-breakpoint"]
+set kernel_line_2 [gdb_get_line_number "kernel_line_2"]
+set func_line_1 [gdb_get_line_number "func_line_1"]
+set func_line_2 [gdb_get_line_number "func_line_2"]
+set func_line_3 [gdb_get_line_number "func_line_3"]
+
+# Ignore all but the first frame.
+gdb_test "backtrace 1" \
+    "0.*kernel_sum.* \\\(\\\) at ${srcfile}:${kernel_entry_line}.*" \
+    "backtrace at kernel entry"
+
+gdb_test "info line" "Line ${kernel_entry_line} of \"${srcfile}.*" \
+    "info line kernel_entry_line (${kernel_entry_line})"
+
+gdb_test "next" "${kernel_line_2}.*kernel_line_2"
+
+gdb_breakpoint "${func_line_3}"
+gdb_continue_to_breakpoint "line ${func_line_3}" \
+    ".*${srcfile}:${func_line_3}.*"
+
+# Jump to the first line, execution continues until we hit a breakpoint.
+delete_breakpoints
+gdb_breakpoint "$srcfile:${func_line_2}"
+gdb_test "jump ${func_line_1}" \
+    "Breakpoint ${decimal}, .*${srcfile}:${func_line_2}.*" \
+    "jump func_line_1 (${func_line_1})"
+
+gdb_test "list" [multi_line \
+    "${func_line_1}.*func_line_1" \
+    "${func_line_2}.*func_line_2" \
+    "${func_line_3}.*func_line_3.*"]
+
+# 'info locals' shall show all local variables but no other variables.
+global gdb_prompt
+setup_kfail "JIRA SAT/4968" "*-*-*"
+gdb_test "info locals" [multi_line \
+    "a_in_func = 1234.5" \
+    "b_in_func = 9876.5" \
+    "result = 0"]
+
+gdb_test "frame 1" "func_sum.*kernel_line_3"

@@ -1,0 +1,45 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for the vanilla NUMBA: variable lifetime.
+
+load_lib numba.exp
+
+standard_testfile njit-func.py
+
+if {[skip_numba_njit_tests]} {
+    unsupported "target does not support vanilla NUMBA"
+    return 0
+}
+
+if {![start_numba_script]} {
+    return -1
+}
+
+
+set func_line_2 [gdb_get_line_number "func_line_2"]
+
+# See how a variable keeps its value until the end of the function.
+# Numba incorrectly changes the value of a variable to zero, after its last use.
+gdb_breakpoint "${func_line_2}"
+gdb_continue_to_breakpoint "line ${func_line_2}" \
+    ".*${srcfile}:${func_line_2}.*"
+gdb_test "print a_in_func" " = 1234.5" \
+    "At the middle of the function"
+
+gdb_test "next"
+setup_kfail "NUMBA PR/7177" "*-*-*"
+gdb_test "print a_in_func" " = 1234.5" \
+    "At the end of the function"

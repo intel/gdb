@@ -1,0 +1,39 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for the vanilla NUMBA: Conditional breakpoints.
+
+load_lib numba.exp
+
+standard_testfile njit-cond-bp.py
+
+if {[skip_numba_njit_tests]} {
+    unsupported "target does not support vanilla NUMBA"
+    return 0
+}
+
+if {![start_numba_script]} {
+    return -1
+}
+
+set func_call_line [gdb_get_line_number "kernel_line_4"]
+set func_line_1 [gdb_get_line_number "func_line_1"]
+
+gdb_test "break $func_call_line if a == 5" \
+    ".*${srcfile}.*line ${func_call_line}.*" \
+    "Conditional bp on local"
+gdb_continue_to_breakpoint "line ${func_call_line}" \
+    ".*${srcfile}:${func_call_line}.*"
+gdb_test "print a" " = 5"

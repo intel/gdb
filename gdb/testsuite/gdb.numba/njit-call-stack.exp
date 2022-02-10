@@ -1,0 +1,58 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for the vanilla NUMBA: backtrace in kernel and
+# in called function(s).
+
+load_lib numba.exp
+
+standard_testfile njit-func.py
+
+if {[skip_numba_njit_tests]} {
+    unsupported "target does not support vanilla NUMBA"
+    return 0
+}
+
+if {![start_numba_script]} {
+    return -1
+}
+
+
+proc test_call_stack {} {
+    global srcfile inferior_exited_re gdb_prompt
+
+    set kernel_line [gdb_get_line_number "numba-kernel-breakpoint"]
+    set func_line [gdb_get_line_number "func_line_1"]
+    set kernel_calling_func_sum [gdb_get_line_number "kernel_line_3"]
+
+    # Ignore all but the first frame.
+    gdb_test "backtrace 1" \
+	"0.*kernel_sum.* \\\(.*\\\) at ${srcfile}:${kernel_line}.*" \
+	"backtrace at kernel entry"
+
+    # Set and hit a breakpoint at the entry of the function 'func_sum'.
+    gdb_breakpoint "${func_line}"
+    gdb_continue_to_breakpoint "line ${func_line}" \
+	".*${srcfile}:${func_line}.*"
+
+    # Ignore all but the first two frames.
+    gdb_test "backtrace 2" [multi_line \
+	     "\#0 .*func_sum.* \\\(.*\\\) at ${srcfile}:${func_line}" \
+	     "\#1 .*kernel_sum.* \\\(.*\\\) at ${srcfile}:${kernel_calling_func_sum}.*"] \
+	     "backtrace at function entry"
+}
+
+
+test_call_stack

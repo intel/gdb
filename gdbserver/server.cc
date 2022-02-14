@@ -2550,9 +2550,13 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 
       strcat (own_buf, ";vContSupported+");
 
-      strcat (own_buf, disable_packet_vRun ? ";vRun-" : ";vRun+");
+      strcat (own_buf,
+	      disable_packet_vRun
+	      || (!the_target->supports_run_command ()) ? ";vRun-" : ";vRun+");
 
-      strcat (own_buf, disable_packet_R ? ";R-" : ";R+");
+      strcat (own_buf,
+	      disable_packet_R
+	      || (!the_target->supports_run_command ()) ? ";R-" : ";R+");
 
       strcat (own_buf, ";multi-address-space+");
 
@@ -3266,7 +3270,7 @@ handle_v_requests (char *own_buf, int packet_len, int *new_packet_len)
 
   if (startswith (own_buf, "vRun;"))
     {
-      if (!disable_packet_vRun)
+      if (!disable_packet_vRun && the_target->supports_run_command ())
 	{
 	  if ((!extended_protocol || !cs.multi_process) && target_running ())
 	    {
@@ -4573,7 +4577,8 @@ process_serial_event (void)
 
       /* Restarting the inferior is only supported in the extended
 	 protocol.  */
-      if (extended_protocol && !disable_packet_R)
+      if (extended_protocol && !disable_packet_R
+	  && the_target->supports_run_command ())
 	{
 	  if (target_running ())
 	    for_each_process (kill_inferior_callback);

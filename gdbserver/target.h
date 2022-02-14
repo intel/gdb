@@ -494,6 +494,9 @@ public:
   /* Return true if the target supports catch syscall.  */
   virtual bool supports_catch_syscall ();
 
+  /* Return true if the target supports running by itself.  */
+  virtual bool supports_run_command ();
+
   /* Return tdesc index for IPA.  */
   virtual int get_ipa_tdesc_idx ();
 

@@ -114,6 +114,35 @@ proc run_to_bp {which_bp scenario iter device} {
     }
 }
 
+
+
+# Test the unavailability of the "run" command for intelgt inferiors.
+# Run to a kernel BP and try run - this should be disabled.  Afterwards
+# continue to the end.
+
+proc run_restart_scenario {device} {
+    global srcfile
+
+    if {![runto_main [sycl_get_device_args $device]]} {
+	fail "run the program"
+    } else {
+	pass "run the program"
+    }
+
+    # Set a breakpoint inside the kernel and hit it.
+    set inside_kernel [gdb_get_line_number "kernel-line-1"]
+    gdb_breakpoint "$srcfile:$inside_kernel"
+    gdb_continue_to_breakpoint "kernel line" \
+	".*$srcfile:$inside_kernel.*"
+
+    # Now try to "run".
+    gdb_test "run" \
+	"The \"extended-remote\" target does not support \"run\"\.  Try \"help target\" or \"continue\"\."
+
+    # We should still be able to run to the end.
+    continue_sycl_program_to_termination
+}
+
 foreach device $sycl_device_list {
     clean_restart "${binfile}"
     with_test_prefix [sycl_get_device_prefix $device] {
@@ -147,6 +176,10 @@ foreach device $sycl_device_list {
 		    run_to_bp $which_bp $scenario $iter $device
 		}
 	    }
+	}
+
+	with_test_prefix "restart_scenario" {
+	    run_restart_scenario $device
 	}
     }
 }

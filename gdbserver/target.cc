@@ -827,6 +827,12 @@ process_stratum_target::supports_catch_syscall ()
   return false;
 }
 
+bool
+process_stratum_target::supports_run_command ()
+{
+  return true;
+}
+
 int
 process_stratum_target::get_ipa_tdesc_idx ()
 {

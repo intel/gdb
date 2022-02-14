@@ -401,6 +401,8 @@ public:
 
   bool supports_pid_to_exec_file () override;
 
+  bool supports_run_command () override;
+
   const char *pid_to_exec_file (int pid) override;
 
   void initialize_device (unsigned int dcd_device_index);
@@ -1644,6 +1646,12 @@ bool
 intelgt_process_target::supports_pid_to_exec_file ()
 {
   return true;
+}
+
+bool
+intelgt_process_target::supports_run_command ()
+{
+  return false;
 }
 
 const char *

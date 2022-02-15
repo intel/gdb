@@ -18,6 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "exec.h"
+#include "gdbarch.h"
 #include "inferior.h"
 #include "target.h"
 #include "command.h"
@@ -501,15 +502,31 @@ number_of_inferiors (void)
   return std::distance (rng.begin (), rng.end ());
 }
 
-/* Converts an inferior process id to a string.  Like
-   target_pid_to_str, but special cases the null process.  */
+/* Converts an inferior process id to a string.  Like target_pid_to_str, but
+   special cases the null process and devices.  */
 
 static std::string
 inferior_pid_to_str (inferior *inf)
 {
   const int pid = inf->pid;
   if (pid != 0)
-    return target_pid_to_str (ptid_t (pid));
+    {
+      gdbarch *target_gdbarch = inf->arch ();
+      if (gdbarch_is_inferior_device (target_gdbarch))
+	{
+	  const target_desc *tdesc = gdbarch_target_desc (target_gdbarch);
+	  const tdesc_device *device_info = tdesc_device_info (tdesc);
+	  const std::string pci_slot = device_info->pci_slot;
+
+	  if (device_info->subdevice_id.has_value ())
+	    return string_printf ("device [%s].%d", pci_slot.c_str (),
+				  *(device_info->subdevice_id));
+	  else
+	    return string_printf ("device [%s]", pci_slot.c_str ());
+	}
+      else
+	return target_pid_to_str (ptid_t (pid));
+    }
   else
     return _("<null>");
 }
@@ -580,7 +597,7 @@ print_inferior (struct ui_out *uiout, const char *requested_inferiors)
   ui_out_emit_table table_emitter (uiout, 5, inf_count, "inferiors");
   uiout->table_header (1, ui_left, "current", "");
   uiout->table_header (4, ui_left, "number", "Num");
-  uiout->table_header (17, ui_left, "target-id", "Description");
+  uiout->table_header (24, ui_left, "target-id", "Description");
   uiout->table_header (connection_id_len, ui_left,
 		       "connection-id", "Connection");
   uiout->table_header (17, ui_left, "exec", "Executable");

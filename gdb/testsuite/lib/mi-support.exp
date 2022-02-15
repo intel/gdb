@@ -1802,7 +1802,7 @@ proc mi_send_resuming_command_raw {command test} {
 
     send_gdb "$command\n"
     gdb_expect {
-	-re "\\^running\r\n\\*running,thread-id=\"\[^\"\]+\"\r\n($library_loaded_re)*($thread_selected_re)?${mi_gdb_prompt}" {
+	-re "\\^running\r\n(\\*running,thread-id=\"\[^\"\]+\"\r\n)+($library_loaded_re)*($thread_selected_re)?${mi_gdb_prompt}" {
 	    # Note that lack of 'pass' call here -- this works around limitation
 	    # in DejaGNU xfail mechanism. mi-until.exp has this:
 	    #

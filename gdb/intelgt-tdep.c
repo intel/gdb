@@ -2545,6 +2545,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_address_class_type_flags
     (gdbarch, intelgt_address_class_type_flags);
 
+  set_gdbarch_is_inferior_device (gdbarch, true);
+
   /* Enable inferior call support.  */
   set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);
   set_gdbarch_unwind_sp (gdbarch, intelgt_unwind_sp);

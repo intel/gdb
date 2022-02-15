@@ -1,0 +1,52 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests basic MI flow for a SYCL program: hit a temporary BP inside
+# kernel and continue till termination.
+
+load_lib sycl.exp
+load_lib mi-support.exp
+
+standard_testfile parallel-for-1D.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+set MIFLAGS "-i=mi"
+
+# Run a simple flow for both sync and async MI modes:
+# we hit a breakpoint inside the kernel and continue to end.
+foreach_with_prefix async {"off" "on"} {
+    mi_clean_restart $binfile
+
+    mi_gdb_test "-gdb-set mi-async $async" ".*done.*" "set async $async"
+
+    if {[mi_start_sycl_program] < 0} {
+	return -1
+    }
+
+    # Run till a temporary BP inside a kernel.
+    mi_runto_helper "get_dim" "continue"
+    # Send resuming command.
+    mi_send_resuming_command "exec-continue" "continuing to inferior exit"
+    # Expect normal exit.
+    mi_expect_stop "exited-normally" "" "" "" "" "" "exit normally"
+}

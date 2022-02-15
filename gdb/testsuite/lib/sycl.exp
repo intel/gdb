@@ -27,6 +27,8 @@
 
 # Define global variables for the driver version and platform.
 
+load_lib mi-support.exp
+
 if {![info exists sycl_driver_version]} {
     set sycl_driver_version ""
 }
@@ -73,6 +75,33 @@ proc start_sycl_program {} {
     }
 
     if {![runto_main]} {
+	untested "failed to run to main"
+	return -1
+    }
+
+    return 0
+}
+
+# Start SYCL program using MI commands.
+
+proc mi_start_sycl_program {} {
+    global device_type
+    global device_name
+    global mi_gdb_prompt
+
+    if {![info exists device_type] || ![info exists device_name]} {
+	verbose "SYCL: test parameters not set; use a SYCL board file" 0
+	return -1
+    }
+
+    # Because we're doing an internal setup, use send_gdb and gdb_expect
+    # instead of mi_gdb_test to not include this as a pass.
+    send_gdb "-gdb-set args '$device_type' '$device_name'\n"
+    gdb_expect 10 {
+	-re "\\^done.*$mi_gdb_prompt$" { }
+    }
+
+    if {[mi_runto_main] == -1} {
 	untested "failed to run to main"
 	return -1
     }

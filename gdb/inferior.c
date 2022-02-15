@@ -494,8 +494,9 @@ number_of_inferiors (void)
    target_pid_to_str, but special cases the null process.  */
 
 static std::string
-inferior_pid_to_str (int pid)
+inferior_pid_to_str (const inferior *inf)
 {
+  const int pid = inf->pid;
   if (pid != 0)
     return target_pid_to_str (ptid_t (pid));
   else
@@ -514,7 +515,7 @@ print_selected_inferior (struct ui_out *uiout)
     filename = _("<noexec>");
 
   uiout->message (_("[Switching to inferior %d [%s] (%s)]\n"),
-		  inf->num, inferior_pid_to_str (inf->pid).c_str (), filename);
+		  inf->num, inferior_pid_to_str (inf).c_str (), filename);
 }
 
 /* Helper for print_inferior.  Returns the 'connection-id' string for
@@ -578,7 +579,7 @@ print_inferior (struct ui_out *uiout, const char *requested_inferiors)
   /* Restore the current thread after the loop because we switch the
      inferior in the loop.  */
   scoped_restore_current_pspace_and_thread restore_pspace_thread;
-  inferior *current_inf = current_inferior ();
+  const inferior *current_inf = current_inferior ();
   for (inferior *inf : all_inferiors ())
     {
       if (!number_is_in_list (requested_inferiors, inf->num))
@@ -597,7 +598,7 @@ print_inferior (struct ui_out *uiout, const char *requested_inferiors)
 	 switch the inferior.  */
       switch_to_inferior_no_thread (inf);
 
-      uiout->field_string ("target-id", inferior_pid_to_str (inf->pid));
+      uiout->field_string ("target-id", inferior_pid_to_str (inf));
 
       std::string conn = uiout_field_connection (inf->process_target ());
       uiout->field_string ("connection-id", conn);
@@ -754,7 +755,7 @@ inferior_command (const char *args, int from_tty)
 	filename = _("<noexec>");
 
       gdb_printf (_("[Current inferior is %d [%s] (%s)]\n"),
-		  inf->num, inferior_pid_to_str (inf->pid).c_str (),
+		  inf->num, inferior_pid_to_str (inf).c_str (),
 		  filename);
     }
   else

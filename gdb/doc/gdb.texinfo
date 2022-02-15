@@ -3291,6 +3291,56 @@ slot via different connections.  The above example is a sample output and the
 actual executables, PCI slots, sub-devices, and process IDs vary depending on
 the concrete scenario and system setup.
 
+The description of some inferiors might contain the specifier device plus
+a PCI location in brackets, possibly suffixed by a number, the sub-device ID.
+To query more information about the available devices, use the
+@w{@code{info devices}} command:
+
+@table @code
+@kindex info devices
+@item info devices
+Print an extended list of all devices that are exposed to @value{GDBN}.
+
+For example,
+@end table
+
+@smallexample
+(@value{GDBP}) info devices
+  Location    Sub-device   Vendor Id   Target Id   Cores   Device Name
+* [00:02.0]   0            0x8086      0x9a40      96      @dots{}
+  [00:09.0]   0            0x8086      0x9a40      96      @dots{}
+@end smallexample
+
+@value{GDBN} displays for each device (in this order):
+
+@enumerate
+@item
+the device location as a PCI address.
+
+@item
+the sub-device ID.  Some devices might be composites of multiple sub-devices
+@value{GDBN} can connect to.  If no information about sub-devices was given by
+the target, this column displays a @samp{-} instead of an ID.  This may be the
+case if the target has no notion for sub-devices.
+
+@item
+the device's PCI vendor ID.
+
+@item
+the device's PCI target ID identifying the device type.
+
+@item
+the amount of available compute cores on the device.
+
+@item
+the name of the device.
+
+@end enumerate
+
+@noindent
+An asterisk @samp{*} preceding the device location indicates the current
+device.  No asterisk might be printed if the current inferior is not a device.
+
 To find out what open target connections exist at any moment, use
 @w{@code{info connections}}:
 

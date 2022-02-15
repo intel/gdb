@@ -5,6 +5,14 @@
 
 * New commands
 
+info devices
+  Show additional information about inferiors which are considered
+  devices by GDB.  For devices, the description displayed by 'info
+  inferiors' has been changed.  The new description displays them as a
+  'device' together with their PCI slot and sub-device ID.  This allows
+  one to uniquely identify devices in 'info inferiors' with devices
+  displayed in 'info devices'.
+
 set suppress-cli-notifications (on|off)
 show suppress-cli-notifications
   This controls whether printing the notifications is suppressed for CLI.

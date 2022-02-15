@@ -36,6 +36,8 @@
 #include "target-descriptions.h"
 #include "readline/tilde.h"
 #include "progspace-and-thread.h"
+#include <map>
+#include <tuple>
 #include <vector>
 
 /* Keep a registry of per-inferior data-pointers required by other GDB
@@ -1086,6 +1088,112 @@ static const struct internalvar_funcs inferior_funcs =
 };
 
 
+/* Helper for info devices command.  Prints all currently active devices,
+   meaning all devices currently associated with an inferior.  */
+
+static void
+print_devices (ui_out *uiout)
+{
+  /* Collect all known device inferiors (including hidden inferiors).  The
+     devices are displayed lexigraphically ordered by PCI slot, subdevice_id,
+     vendor_id and target_id.  */
+  std::map<std::tuple<std::string, std::string, std::string, std::string>,
+	   const inferior *> devices_to_print;
+  for (const inferior *inf : all_inferiors ())
+    {
+      /* Only display devices connected to an inferior.  */
+      if (!gdbarch_is_inferior_device (inf->gdbarch))
+	continue;
+
+      const target_desc *tdesc = gdbarch_target_desc (inf->gdbarch);
+      const std::string pci_slot
+	= tdesc_find_device_info_attribute (tdesc, "pci_slot");
+      const std::string subdevice_id
+	= tdesc_find_device_info_attribute (tdesc, "subdevice_id");
+      const std::string vendor_id
+	= tdesc_find_device_info_attribute (tdesc, "vendor_id");
+      const std::string target_id
+	= tdesc_find_device_info_attribute (tdesc, "target_id");
+
+      /* Should a device be associated with two inferiors, we just overwrite
+	 the tdesc here - it should be the same anyway.  */
+      devices_to_print[std::make_tuple (pci_slot, subdevice_id, vendor_id,
+					target_id)] = inf;
+    }
+
+  if (devices_to_print.empty ())
+    {
+      uiout->message ("No devices.\n");
+      return;
+    }
+
+  ui_out_emit_table table_emitter (uiout, 7, devices_to_print.size (),
+				   "InfoDevicesTable");
+  uiout->table_header (1, ui_left, "current", "");
+  uiout->table_header (10, ui_left, "location", "Location");
+  uiout->table_header (12, ui_left, "sub-device", "Sub-device");
+  uiout->table_header (11, ui_left, "vendor_id", "Vendor Id");
+  uiout->table_header (11, ui_left, "target_id", "Target Id");
+  uiout->table_header (7, ui_left, "cores", "Cores");
+  uiout->table_header (12, ui_left, "device_name", "Device Name");
+
+  uiout->table_body ();
+
+  for (const auto& device_id_desc_pair : devices_to_print)
+    {
+      const inferior *inf = device_id_desc_pair.second;
+      const target_desc *tdesc = gdbarch_target_desc (inf->gdbarch);
+
+      ui_out_emit_tuple tuple_emitter (uiout, nullptr);
+
+      if (inf == current_inferior ())
+	uiout->field_string ("current", "*");
+      else
+	uiout->field_skip ("current");
+
+      const std::string pci_slot
+	= tdesc_find_device_info_attribute (tdesc, "pci_slot");
+      uiout->field_string ("location",
+			   string_printf ("[%s]", pci_slot.c_str ()));
+
+      const std::string subdevice_id
+	= tdesc_find_device_info_attribute (tdesc, "subdevice_id");
+      if (subdevice_id == "")
+	uiout->field_string ("sub-device", "-");
+      else
+	uiout->field_string ("sub-device", subdevice_id.c_str ());
+
+      const std::string vendor_id
+	= tdesc_find_device_info_attribute (tdesc, "vendor_id");
+      uiout->field_string ("vendor_id", vendor_id.c_str ());
+
+      const std::string target_id
+	= tdesc_find_device_info_attribute (tdesc, "target_id");
+      uiout->field_string ("target_id", target_id.c_str ());
+
+      const std::string total_cores
+	= tdesc_find_device_info_attribute (tdesc, "total_cores");
+      uiout->field_string ("cores", total_cores.c_str ());
+
+      const std::string device_name
+	= tdesc_find_device_info_attribute (tdesc, "device_name");
+      uiout->field_string ("device_name", device_name.c_str ());
+
+      uiout->text ("\n");
+    }
+}
+
+/* Print information about currently active devices.  */
+
+static void
+info_devices_command (const char *args, int from_tty)
+{
+  /* Don't accept arguments for the 'info devices' command.  */
+  if (args != nullptr && *args != 0)
+    error (_("The \"info devices\" command does not take any arguments."));
+
+  print_devices (current_uiout);
+}
 
 void
 initialize_inferiors (void)
@@ -1168,6 +1276,10 @@ Show printing of inferior events (such as inferior start and exit)."), NULL,
 	 NULL,
 	 show_print_inferior_events,
 	 &setprintlist, &showprintlist);
+
+  add_info ("devices", info_devices_command, _("\
+Print an extended list of all devices that are exposed to GDB.\n\
+Usage: info devices"));
 
   create_internalvar_type_lazy ("_inferior", &inferior_funcs, NULL);
 }

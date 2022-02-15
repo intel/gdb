@@ -224,6 +224,12 @@ struct type *tdesc_register_type (struct gdbarch *gdbarch, int regno);
 
 struct type *tdesc_find_type (struct gdbarch *gdbarch, const char *id);
 
+/* Find a device attribute from the target description by name or return
+   "" if none was found.  */
+
+const std::string tdesc_find_device_info_attribute
+  (const target_desc *target_desc, const std::string &name);
+
 /* Check whether REGNUM is a member of REGGROUP using the target
    description.  Return -1 if the target description does not
    specify a group.  */

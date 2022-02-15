@@ -124,15 +124,21 @@ tdesc_end_osabi (struct gdb_xml_parser *parser,
     set_tdesc_osabi (data->tdesc, osabi);
 }
 
-/* Handle the end of a <device> element and its value.  */
+/* Handle the start of a <device_attr> element and its value.  */
 
 static void
-tdesc_end_device (struct gdb_xml_parser *parser,
-		 const struct gdb_xml_element *element,
-		 void *user_data, const char *body_text)
+tdesc_start_device_attr (gdb_xml_parser *parser,
+			 const gdb_xml_element *element, void *user_data,
+			 std::vector<gdb_xml_value> &attributes)
 {
-  struct tdesc_parsing_data *data = (struct tdesc_parsing_data *) user_data;
-  set_tdesc_device (data->tdesc, body_text);
+  tdesc_parsing_data *data = (tdesc_parsing_data *) user_data;
+
+  const char *name
+    = (char *) xml_find_attribute (attributes, "name")->value.get ();
+  const char *value
+    = (char *) xml_find_attribute (attributes, "value")->value.get ();
+
+  tdesc_add_device_attribute (data->tdesc, name, value);
 }
 
 /* Handle the end of a <compatible> element and its value.  */
@@ -578,6 +584,19 @@ static const struct gdb_xml_attribute feature_attributes[] = {
   { NULL, GDB_XML_AF_NONE, NULL, NULL }
 };
 
+static const gdb_xml_attribute device_attr_attributes[] = {
+  { "name", GDB_XML_AF_NONE, nullptr, nullptr },
+  { "value", GDB_XML_AF_NONE, nullptr, nullptr },
+  { nullptr, GDB_XML_AF_NONE, nullptr, nullptr }
+};
+
+static const gdb_xml_element device_info_children[] = {
+  { "device_attr", device_attr_attributes, nullptr,
+    GDB_XML_EF_OPTIONAL | GDB_XML_EF_REPEATABLE,
+    tdesc_start_device_attr, nullptr },
+  { nullptr, nullptr, nullptr, GDB_XML_EF_NONE, nullptr, nullptr }
+};
+
 static const struct gdb_xml_element feature_children[] = {
   { "reg", reg_attributes, NULL,
     GDB_XML_EF_OPTIONAL | GDB_XML_EF_REPEATABLE,
@@ -610,8 +629,8 @@ static const struct gdb_xml_element target_children[] = {
     NULL, tdesc_end_arch },
   { "osabi", NULL, NULL, GDB_XML_EF_OPTIONAL,
     NULL, tdesc_end_osabi },
-  { "device", NULL, NULL, GDB_XML_EF_OPTIONAL,
-    NULL, tdesc_end_device },
+  { "device_info", nullptr, device_info_children, GDB_XML_EF_OPTIONAL,
+    nullptr, nullptr },
   { "compatible", NULL, NULL, GDB_XML_EF_OPTIONAL | GDB_XML_EF_REPEATABLE,
     NULL, tdesc_end_compatible },
   { "feature", feature_attributes, feature_children,

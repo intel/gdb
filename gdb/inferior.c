@@ -564,7 +564,7 @@ print_inferior (struct ui_out *uiout, const char *requested_inferiors,
   const inferior *current_inf = current_inferior ();
   for (inferior *inf : inferiors_to_print)
     {
-      ui_out_emit_tuple tuple_emitter (uiout, NULL);
+      ui_out_emit_tuple tuple_emitter (uiout, nullptr);
 
       if (inf == current_inf)
 	uiout->field_string ("current", "*");

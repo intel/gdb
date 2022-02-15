@@ -1,0 +1,130 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+#
+# Test the info inferior(s) command.
+
+standard_testfile start.c
+
+if { [prepare_for_testing "failed to prepare" $testfile $srcfile] } {
+    return -1
+}
+
+# Helper joining all ARGS with WS inbetween and at the end.
+proc wrap_regex_with_spaces_and_tabs { args } {
+    set ws "\[ \\t\]+"
+    return "[join ${args} ${ws}]${ws}"
+}
+
+# Execute TEST with name TEST_NAME and expect a table with 1
+# TABLE_HEADER row at the top and N_BODY rows TABLE_BODY.
+proc test_table_n_entries { test test_name table_header table_body n_body } {
+    gdb_test "${test}" \
+	[multi_line \
+	    "${table_header}" \
+	    "(${table_body}(\r\n)?){$n_body}" \
+	    ] "${test_name}"
+}
+
+# In this basic test the info inferior(s) will look something like since we do
+# not specify an executable or a description.
+# (gdb) info inferior
+#  Num  Description          Connection           Executable
+# * 1    <null>                                   /path
+#   2    <null>
+#   3    <null>
+#   4    <null>
+#   5    <null>
+set description "\<null\>"
+set table_header [wrap_regex_with_spaces_and_tabs " " "Num" "Description" \
+    "Connection" "Executable"]
+set table_body [wrap_regex_with_spaces_and_tabs "." "${decimal}" \
+    "${description}" ".*"]
+
+# First add some inferiors.
+set n_inferiors 10
+for { set inf_nr 2 } { $inf_nr <= $n_inferiors } { incr inf_nr } {
+    gdb_test add-inferior "Added inferior $inf_nr" "Add ${inf_nr}-th inferior"
+
+    test_table_n_entries "info inferiors" \
+	"info inferiors after adding inferior ${inf_nr}" \
+	"${table_header}" "${table_body}" "${inf_nr}"
+}
+
+# Test for the full inferior list.
+test_table_n_entries "info inferiors" \
+    "info inferiors after adding all inferiors" \
+    "${table_header}" "${table_body}" "${n_inferiors}"
+
+# Use the ranged subexpressions.
+test_table_n_entries "info inferiors 2-6" \
+    "info inferiors 2-6" \
+    "${table_header}" "${table_body}" "5"
+
+test_table_n_entries "info inferiors 1-3" \
+    "info inferiors 1-3" \
+    "${table_header}" "${table_body}" "3"
+
+test_table_n_entries "info inferiors 4-6000" \
+    "info inferiors 4-6000" \
+    "${table_header}" "${table_body}" "7"
+
+# Use the space separated list.
+test_table_n_entries "info inferiors 3 4 6" \
+    "info inferiors 3 4 6" \
+    "${table_header}" "${table_body}" "3"
+
+test_table_n_entries "info inferiors 3 4 6 101010 0000111" \
+    "info inferiors 3 4 6 101010 0000111" \
+    "${table_header}" "${table_body}" "3"
+
+test_table_n_entries "info inferiors 3 4 6 3" \
+    "info inferiors 3 4 6 3" \
+    "${table_header}" "${table_body}" "3"
+
+# Use a combination of ranged subexpressions and space separated lists.
+test_table_n_entries "info inferiors 2 4-5 7" \
+    "info inferiors 2 4-5 7" \
+    "${table_header}" "${table_body}" "4"
+
+test_table_n_entries "info inferiors 2 1-5 7" \
+    "info inferiors 2 1-5 7" \
+    "${table_header}" "${table_body}" "6"
+
+test_table_n_entries "info inferiors 1-4 7 8 9-9" \
+    "info inferiors 1-4 7 8 9-9" \
+    "${table_header}" "${table_body}" "7"
+
+# Test for invalid inputs to info inferiors.
+gdb_test "info inferiors -1" "negative value" \
+    "info inferiors with negative input"
+gdb_test "info inferiors 0" "Zero is not a valid index\." \
+    "info inferiors with index 0"
+gdb_test "info inferiors asdf" \
+    "Arguments must be numbers or \'.\' variables\." \
+    "info inferiors with random characters as input"
+gdb_test "info inferiors 100" "No inferiors\." \
+    "info inferiors with out of bounds index"
+
+gdb_test "info inferiors -1-3" "negative value" \
+    "info inferiors negative range list -1-3"
+gdb_test "info inferiors 0-3" "Zero is not a valid index\." \
+    "info inferiors range list 0-3"
+
+gdb_test "info inferiors 3 4 0 6" "Zero is not a valid index\." \
+    "info inferiors space list 3 4 0 6"
+
+# We did not add any hidden inferiors so this is invalid.
+gdb_test "info inferiors -3 4 6 3" "negative value" \
+    "info inferiors -3 4 6 3"

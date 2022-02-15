@@ -412,8 +412,10 @@ number_is_in_list (const char *list, int number)
     {
       int gotnum = 0;
 
-      if (!parser.get_number (&gotnum) || gotnum == 0)
+      if (!parser.get_number (&gotnum))
 	error (_("Arguments must be numbers or '$' variables."));
+      else if (gotnum == 0)
+	error (_("Zero is not a valid index."));
       if (gotnum == number)
 	return 1;
     }

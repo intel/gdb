@@ -12,6 +12,14 @@ set|show scheduler-locking-eval (on|off)
   The new setting allows a user to lock scheduler during inferior calls.
   It can be set in parallel to scheduler-locking step or replay mode.
 
+info devices
+  Show additional information about inferiors which are considered
+  devices by GDB.  For devices, the description displayed by 'info
+  inferiors' has been changed.  The new description displays them as a
+  'device' together with their PCI slot and sub-device ID.  This allows
+  one to uniquely identify devices in 'info inferiors' with devices
+  displayed in 'info devices'.
+
 * Add convenience variable `$_simd_lane`.
 
 * MI changes

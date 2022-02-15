@@ -1100,6 +1100,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_address_space_from_type_flags
     (gdbarch, intelgt_address_space_from_type_flags);
 
+  set_gdbarch_is_inferior_device (gdbarch, true);
   return gdbarch;
 }
 

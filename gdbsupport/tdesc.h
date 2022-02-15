@@ -18,6 +18,8 @@
 #ifndef COMMON_TDESC_H
 #define COMMON_TDESC_H
 
+#include <unordered_map>
+
 struct tdesc_feature;
 struct tdesc_type;
 struct tdesc_type_builtin;
@@ -349,12 +351,23 @@ void set_tdesc_osabi (target_desc *target_desc, const char *name);
    or NULL if no osabi was specified.  */
 const char *tdesc_osabi_name (const struct target_desc *target_desc);
 
-/* Set TARGET_DESC's device by NAME.  */
-void set_tdesc_device (target_desc *target_desc, const char *name);
+/* Additional information about the device can be supplied as name value pairs
+   in device_info.  */
 
-/* Return the device associated with this target description as a string,
-   or an empty string if no device was specified.  */
-const std::string &tdesc_device_name (const struct target_desc *target_desc);
+typedef std::unordered_map<std::string, std::string> device_info;
+
+/* Set TARGET_DESC's product device_info.  */
+void set_tdesc_device_info (target_desc *target_desc,
+			    const device_info &dev_info);
+
+/* Return the device_info associated with this target description; empty if
+   no device_info was specified.  */
+const device_info &tdesc_device_info (const target_desc *target_desc);
+
+/* Add a device_attribute to the device_info member of target_desc.  */
+void tdesc_add_device_attribute (target_desc *target_desc,
+				 const std::string &name,
+				 const std::string &value);
 
 /* Return the type associated with ID in the context of FEATURE, or
    NULL if none.  */

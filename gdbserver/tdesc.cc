@@ -188,18 +188,33 @@ set_tdesc_osabi (struct target_desc *target_desc, const char *name)
 
 /* See gdbsupport/tdesc.h.  */
 
-const std::string &
-tdesc_device_name (const struct target_desc *target_desc)
+const device_info &
+tdesc_device_info (const target_desc *target_desc)
 {
-  return target_desc->device;
+  return target_desc->dev_info;
 }
 
 /* See gdbsupport/tdesc.h.  */
 
 void
-set_tdesc_device (struct target_desc *target_desc, const char *name)
+set_tdesc_device_info (target_desc *target_desc,
+		       const device_info &dev_info)
 {
-  target_desc->device = name;
+  target_desc->dev_info = dev_info;
+}
+
+/* See gdbsupport/tdesc.h.  */
+
+void
+tdesc_add_device_attribute (target_desc *target_desc,
+			    const std::string &name,
+			    const std::string &value)
+{
+  device_info &info = target_desc->dev_info;
+
+  /* Attributes can only be added once.  */
+  gdb_assert (info.find (name) == info.end ());
+  info[name] = value;
 }
 
 /* See gdbsupport/tdesc.h.  */

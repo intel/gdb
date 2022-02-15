@@ -3256,6 +3256,31 @@ For example,
 [Current inferior is 1 [process 3401] (helloworld)]
 @end smallexample
 
+Sometimes additional information might be available about inferiors
+which are considered devices by @value{GDBN}.  In such a case
+@w{@code{info inferiors}} might look as follows:
+
+@smallexample
+(@value{GDBP}) info inferiors
+  Num  Description          Connection                      Executable
+* 1    process 3401         1 (native)                      goodbye
+  2    device [00:02.0].1   2 (extended-remote host:10000)  hello
+  3    device [00:09.0]     2 (extended-remote host:10000)  hello2
+@end smallexample
+
+displaying the device with its PCI location.  As some devices can be further
+devided into sub-devices @value{GDBN} can connect to, the optional suffix to
+the PCI location indicates the sub-device ID.  Here, @value{GDBN} is connected
+to 2 different device inferiors.  Inferiors 2 and 3 are identified with the
+devices sitting at the PCI slots @samp{[00:02.0]} and
+@samp{[00:09.0]} respectively and connected via the same target
+connection.  For inferior 2, @value{GDBN} is connected to the sub-device 1,
+while for inferior 3 no sub-devices were identified.  It is important to note,
+that one could be connected to two different devices sitting at the same PCI
+slot via different connections.  The above example is a sample output and the
+actual executables, PCI slots, sub-devices, and process IDs vary depending on
+the concrete scenario and system setup.
+
 To find out what open target connections exist at any moment, use
 @w{@code{info connections}}:
 

@@ -381,6 +381,11 @@ public:
   struct process_stratum_target *process_target ()
   { return (process_stratum_target *) m_target_stack.at (process_stratum); }
 
+  /* Return the const target at process_stratum level in this inferior's
+     target stack.  */
+  const process_stratum_target *process_target () const
+  { return (process_stratum_target *) m_target_stack.at (process_stratum); }
+
   /* Return the target at STRATUM in this inferior's target stack.  */
   target_ops *target_at (enum strata stratum)
   { return m_target_stack.at (stratum); }

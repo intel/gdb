@@ -1689,6 +1689,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_dummy_id (gdbarch, intelgt_dummy_id);
 #endif /* not USE_WIN32API */
 
+  set_gdbarch_is_inferior_device (gdbarch, true);
   return gdbarch;
 }
 

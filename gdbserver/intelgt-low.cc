@@ -26,6 +26,7 @@
 #include "tdesc.h"
 #include "nonstop-low.h"
 #include "gdbsupport/common-debug.h"
+#include "intelgt-device-names.h"
 #include <unordered_map>
 #include <sstream>
 
@@ -479,6 +480,18 @@ intelgt_process_target::create_inferior (const char *program,
   return -1; /* Failure */
 }
 
+/* Convert an uint16_t bus dev function encoded PCI slot to a string of the
+   the form XX:XX.XX.  */
+
+static std::string
+convert_pci_slot_to_string (uint16_t pci_slot)
+{
+  return string_printf ("%02x:%02x.%d",
+		       (pci_slot >> 8) & 0xFF,
+		       (pci_slot >> 3) & 0x1F,
+		       (pci_slot & 0x7));
+}
+
 /* Create a GT target description.  Important requirement is
    for each individual feature/regset to list registers in the same
    order as the intended DWARF numbering order for that regset.  */
@@ -495,6 +508,35 @@ create_target_description (GTDeviceInfo &info)
 			      std::to_string (info.gen_major));
   tdesc_add_device_attribute (tdesc.get (), "gen_minor",
 			      std::to_string (info.gen_minor));
+  tdesc_add_device_attribute (tdesc.get (), "vendor_id", "0x8086");
+  /* Within GDB the the device_id is called target_id.  Device ID is used in
+     GDB to identify devices internally.  */
+  tdesc_add_device_attribute (tdesc.get (), "target_id",
+			      string_printf ("0x%x", info.device_id));
+  tdesc_add_device_attribute (tdesc.get (), "subdevice_id",
+			      std::to_string (info.tile_id));
+  tdesc_add_device_attribute (tdesc.get (), "pci_slot",
+			      convert_pci_slot_to_string (info.bus_dev_fn));
+  tdesc_add_device_attribute (tdesc.get (), "num_tiles",
+			      std::to_string (info.num_tiles));
+  tdesc_add_device_attribute (tdesc.get (), "slice_count",
+			      std::to_string (info.slice_count));
+  tdesc_add_device_attribute (tdesc.get (), "sub_slices_per_slice",
+			      std::to_string (info.sub_slices_per_slice));
+  tdesc_add_device_attribute (tdesc.get (), "eus_per_sub_slice",
+			      std::to_string (info.eus_per_sub_slice));
+  tdesc_add_device_attribute (tdesc.get (), "threads_per_eu",
+			      std::to_string (info.threads_per_eu));
+
+  const unsigned total_cores = (info.slice_count * info.sub_slices_per_slice
+				* info.eus_per_sub_slice);
+  const unsigned total_threads = (total_cores * info.threads_per_eu);
+  tdesc_add_device_attribute (tdesc.get (), "total_cores",
+			      std::to_string (total_cores));
+  tdesc_add_device_attribute (tdesc.get (), "total_threads",
+			      std::to_string (total_threads));
+  tdesc_add_device_attribute (tdesc.get (), "device_name",
+			      intelgt_device_name_from_id (info.device_id));
 
   struct tdesc_feature *feature;
   long regnum = 0;

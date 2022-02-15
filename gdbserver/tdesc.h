@@ -59,8 +59,8 @@ struct target_desc final : tdesc_element
   /* The value of <osabi> element in the XML, replying GDB.  */
   const char *osabi = NULL;
 
-  /* The value of <device> element in the XML, replying GDB.  */
-  std::string device;
+  /* The value of the <device_info> element in the XML, replying GDB.  */
+  device_info dev_info;
 
 public:
   target_desc ()

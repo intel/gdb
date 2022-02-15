@@ -490,9 +490,11 @@ create_target_description (GTDeviceInfo &info)
 
   set_tdesc_architecture (tdesc.get (), "intelgt");
   set_tdesc_osabi (tdesc.get (), "GNU/Linux");
-  std::ostringstream oss;
-  oss << info.gen_major << "." << info.gen_minor;
-  set_tdesc_device (tdesc.get (), oss.str ().c_str ());
+
+  tdesc_add_device_attribute (tdesc.get (), "gen_major",
+			      std::to_string (info.gen_major));
+  tdesc_add_device_attribute (tdesc.get (), "gen_minor",
+			      std::to_string (info.gen_minor));
 
   struct tdesc_feature *feature;
   long regnum = 0;

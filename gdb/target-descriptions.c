@@ -369,7 +369,7 @@ struct target_desc : tdesc_element
   enum gdb_osabi osabi = GDB_OSABI_UNKNOWN;
 
   /* The device reported by the target, if any.  */
-  std::string device;
+  device_info dev_info;
 
   /* The list of compatible architectures reported by the target.  */
   std::vector<tdesc_compatible_info_up> compatible;
@@ -717,10 +717,37 @@ tdesc_osabi_name (const struct target_desc *target_desc)
 
 /* See gdbsupport/tdesc.h.  */
 
-const std::string &
-tdesc_device_name (const struct target_desc *target_desc)
+const device_info &
+tdesc_device_info (const target_desc *target_desc)
 {
-  return target_desc->device;
+  return target_desc->dev_info;
+}
+
+/* See gdbsupport/tdesc.h.  */
+
+void
+tdesc_add_device_attribute (target_desc *target_desc,
+			    const std::string &name,
+			    const std::string &value)
+{
+  device_info &info = target_desc->dev_info;
+
+  /* Attributes can only be added once.  */
+  gdb_assert (info.find (name) == info.end ());
+  info[name] = value;
+}
+
+/* See target-descriptions.h.  */
+
+const std::string
+tdesc_find_device_info_attribute (const target_desc *tdesc,
+				  const std::string &name)
+{
+  const auto element_it = tdesc->dev_info.find (name);
+  if (element_it != tdesc->dev_info.end ())
+    return element_it->second;
+  else
+    return "";
 }
 
 /* Return 1 if this target description includes any registers.  */
@@ -1299,14 +1326,13 @@ set_tdesc_osabi (struct target_desc *target_desc, enum gdb_osabi osabi)
 {
   target_desc->osabi = osabi;
 }
-
 
 /* See gdbsupport/tdesc.h.  */
 
 void
-set_tdesc_device (struct target_desc *target_desc, const char *name)
+set_tdesc_device_info (target_desc *target_desc, const device_info &dev_info)
 {
-  target_desc->device = name;
+  target_desc->dev_info = dev_info;
 }
 
 static struct cmd_list_element *tdesc_set_cmdlist, *tdesc_show_cmdlist;
@@ -1416,6 +1442,15 @@ public:
 	printf_unfiltered
 	  ("  set_tdesc_osabi (result.get (), osabi_from_tdesc_string (\"%s\"));\n",
 	   gdbarch_osabi_name (tdesc_osabi (e)));
+	printf_unfiltered ("\n");
+      }
+    const device_info &dev_info = tdesc_device_info (e);
+    if (!dev_info.empty ())
+      {
+	for (const auto& entry : dev_info)
+	  printf_unfiltered
+	    ("  tdesc_add_device_attribute (tdesc.get (), \"%s\", \"%s\");\n",
+	     entry.first.c_str (), entry.second.c_str ());
 	printf_unfiltered ("\n");
       }
 

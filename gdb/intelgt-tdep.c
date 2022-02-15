@@ -1545,26 +1545,45 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 #if defined (HAVE_LIBIGA64)
   iga_gen_t iga_version = IGA_GEN_INVALID;
 
-  if (tdesc != nullptr)
-    {
-      const std::string &device = tdesc_device_name (tdesc);
-      dprintf (_("device: Gen%s"), device.c_str ());
+  const std::string &tdesc_gen_major
+    = tdesc_find_device_info_attribute (tdesc, "gen_major");
+  const std::string &tdesc_gen_minor
+    = tdesc_find_device_info_attribute (tdesc, "gen_minor");
 
-      if (device.compare ("9.0") == 0)
+  if (!tdesc_gen_major.empty ())
+    {
+      dprintf (_("device: Gen%s.%s"), tdesc_gen_major.c_str (),
+	       tdesc_gen_minor.c_str ());
+
+      if (tdesc_gen_major == "9")
 	iga_version = IGA_GEN9;
-      else if (device.compare ("11.0") == 0)
+      else if (tdesc_gen_major == "11")
 	iga_version = IGA_GEN11;
-      else if (device.compare ("12.0") == 0)
-	iga_version = IGA_XE;
-      else if (device.compare ("12.1") == 0)
-	iga_version = IGA_XE;
-      else if (device.compare ("12.5") == 0)
-	iga_version = IGA_XE_HP;
-      else if (device.compare ("12.71") == 0)
-	iga_version = IGA_XE_HPG;
-      else if (device.compare ("12.72") == 0)
-	iga_version = IGA_XE_HPC;
+      else if (tdesc_gen_major == "12")
+	{
+	  if (!tdesc_gen_minor.empty ())
+	    {
+	      if (tdesc_gen_minor == "0")
+		iga_version = IGA_XE;
+	      else if (tdesc_gen_minor == "1")
+		iga_version = IGA_XE;
+	      else if (tdesc_gen_minor == "5")
+		iga_version = IGA_XE_HP;
+	      else if (tdesc_gen_minor == "71")
+		iga_version = IGA_XE_HPG;
+	      else if (tdesc_gen_minor == "72")
+		iga_version = IGA_XE_HPC;
+	    }
+	  else
+	    dprintf (_("Failed to read minor version from Gen12 device."));
+	}
+      else
+	dprintf (_("Unknown major version %s from device."),
+		 tdesc_gen_major.c_str ());
     }
+  else
+    dprintf (_("Failed to read major version from device."));
+
 
   const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);
   iga_context_create (&options, &data->iga_ctx);

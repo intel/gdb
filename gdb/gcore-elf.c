@@ -145,6 +145,17 @@ gcore_elf_make_tdesc_note (bfd *obfd,
 {
   /* Append the target description to the core file.  */
   const struct target_desc *tdesc = gdbarch_target_desc (target_gdbarch ());
+
+  /* HACK: don't do this for x86 targets.  This is needed as the patch
+     that introduced this functionality doesn't cope well with AMX.
+     This will no longer be necessary with our new AMX patches.  */
+  if (tdesc != nullptr)
+    {
+      const char *name = tdesc_architecture_name (tdesc);
+      if (name != nullptr && strcmp (name, "i386:x86-64") == 0)
+	return;
+    }
+
   const char *tdesc_xml
     = tdesc == nullptr ? nullptr : tdesc_get_features_xml (tdesc);
   if (tdesc_xml != nullptr && *tdesc_xml != '\0')

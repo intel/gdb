@@ -98,6 +98,7 @@ display_mi_prompt (struct mi_interp *mi)
 {
   struct ui *ui = current_ui;
 
+  gdb::observers::before_prompt.notify ("(gdb) \n");
   fputs_unfiltered ("(gdb) \n", mi->raw_stdout);
   gdb_flush (mi->raw_stdout);
   ui->prompt_state = PROMPTED;
@@ -1012,7 +1013,10 @@ mi_on_resume_1 (struct mi_interp *mi,
 	 even if it cannot actually accept any input.  This will be
 	 surely removed for MI3, and may be removed even earlier.  */
       if (current_ui->prompt_state == PROMPT_BLOCKED)
-	fputs_unfiltered ("(gdb) \n", mi->raw_stdout);
+	{
+	  gdb::observers::before_prompt.notify ("(gdb) \n");
+	  fputs_unfiltered ("(gdb) \n", mi->raw_stdout);
+	}
     }
   gdb_flush (mi->raw_stdout);
 }

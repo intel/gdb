@@ -6767,10 +6767,6 @@ remote_target::resume (ptid_t scope_ptid, int step, enum gdb_signal siggnal)
       remote_thread_info *remote_thr
 	= get_remote_thread_info (inferior_thread ());
 
-      /* We don't expect the core to ask to resume an already resumed (from
-	 its point of view) thread.  */
-      gdb_assert (remote_thr->get_resume_state () == resume_state::NOT_RESUMED);
-
       remote_thr->set_resumed_pending_vcont (step, siggnal);
 
       /* There's actually nothing that says that the core can't

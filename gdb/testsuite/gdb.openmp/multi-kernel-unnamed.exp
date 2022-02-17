@@ -44,8 +44,12 @@ for {set i 1} {$i <= 4} {incr i} {
 }
 
 # For OpenMP nowait clause breakpoint does not hit post kernel randomly.
+# DOQG-314: On GPU we hit the kernel entry, so we need to continue twice.
 for {set i 1} {$i <= 2} {incr i} {
     with_test_prefix "iter $i" {
+	if {( $i == 1 ) && ( [require_openmp_device "GPU"] )} {
+	    setup_kfail "JIRA DOQG/314" "*-*-*"
+	}
 	gdb_test_multiple "continue" "hit the BP post-kernel" {
 	    -re -wrap ".*$srcfile.*$post_kernel.*" {
 		pass "$gdb_test_name"

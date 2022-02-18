@@ -40,6 +40,7 @@
 #include "top.h"
 #include "interps.h"
 #include "thread-fsm.h"
+#include "bfd-in2.h"
 #include <algorithm>
 #include "gdbsupport/scope-exit.h"
 #include <list>
@@ -142,15 +143,11 @@ show_unwind_on_terminating_exception_p (struct ui_file *file, int from_tty,
 		    value);
 }
 
-/* Perform the standard coercions that are specified
-   for arguments to be passed to C, Ada or Fortran functions.
+/* See infcall.h.  */
 
-   If PARAM_TYPE is non-NULL, it is the expected parameter type.
-   IS_PROTOTYPED is non-zero if the function declaration is prototyped.  */
-
-static struct value *
-value_arg_coerce (struct gdbarch *gdbarch, struct value *arg,
-		  struct type *param_type, int is_prototyped)
+value *
+default_value_arg_coerce (gdbarch *gdbarch, value *arg,
+			  type *param_type, int is_prototyped)
 {
   const struct builtin_type *builtin = builtin_type (gdbarch);
   struct type *arg_type = check_typedef (value_type (arg));
@@ -197,9 +194,8 @@ value_arg_coerce (struct gdbarch *gdbarch, struct value *arg,
 	  if (TYPE_LENGTH (type) < TYPE_LENGTH (builtin->builtin_int))
 	    type = builtin->builtin_int;
 	}
-      /* Currently all target ABIs require at least the width of an integer
-	 type for an argument.  We may have to conditionalize the following
-	 type coercion for future targets.  */
+      /* Most of target ABIs require at least the width of an integer
+	 type for an argument.  */
       if (TYPE_LENGTH (type) < TYPE_LENGTH (builtin->builtin_int))
 	type = builtin->builtin_int;
       break;
@@ -1055,8 +1051,8 @@ call_function_by_hand_dummy (struct value *function,
 	param_type = NULL;
 
       value *original_arg = args[i];
-      args[i] = value_arg_coerce (gdbarch, args[i],
-				  param_type, prototyped);
+      args[i] = gdbarch_value_arg_coerce (gdbarch, args[i],
+					  param_type, prototyped);
 
       if (param_type == NULL)
 	continue;

@@ -455,6 +455,10 @@ M;struct type *;register_type;int reg_nr;reg_nr
 # frame.
 m;struct frame_id;dummy_id;struct frame_info *this_frame;this_frame;;default_dummy_id;;0
 
+# Perform the standard coercions that are specified
+# for arguments to be passed to C, Ada or Fortran functions.
+m;value *;value_arg_coerce;value *arg, type *param_type, int is_prototyped;arg, param_type, is_prototyped;;default_value_arg_coerce;;0
+
 # Return the active SIMD lanes mask for a thread TP.
 M;unsigned int;active_lanes_mask;thread_info *tp;tp
 
@@ -1766,6 +1770,7 @@ cat <<EOF
 #include "auxv.h"
 #include "frame-unwind.h"
 #include "dummy-frame.h"
+#include "infcall.h"
 
 /* Static function declarations */
 

@@ -71,4 +71,12 @@ extern struct value *
 
 extern void error_call_unknown_return_type (const char *func_name);
 
+/* Perform the standard coercions that are specified
+   for arguments to be passed to C, Ada or Fortran functions.
+
+   If PARAM_TYPE is non-NULL, it is the expected parameter type.
+   IS_PROTOTYPED is non-zero if the function declaration is prototyped.  */
+
+extern value *default_value_arg_coerce (gdbarch *gdbarch, value *arg,
+					type *param_type, int is_prototyped);
 #endif

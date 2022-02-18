@@ -420,6 +420,13 @@ typedef struct frame_id (gdbarch_dummy_id_ftype) (struct gdbarch *gdbarch, struc
 extern struct frame_id gdbarch_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame);
 extern void set_gdbarch_dummy_id (struct gdbarch *gdbarch, gdbarch_dummy_id_ftype *dummy_id);
 
+/* Perform the standard coercions that are specified
+   for arguments to be passed to C, Ada or Fortran functions. */
+
+typedef value * (gdbarch_value_arg_coerce_ftype) (struct gdbarch *gdbarch, value *arg, type *param_type, int is_prototyped);
+extern value * gdbarch_value_arg_coerce (struct gdbarch *gdbarch, value *arg, type *param_type, int is_prototyped);
+extern void set_gdbarch_value_arg_coerce (struct gdbarch *gdbarch, gdbarch_value_arg_coerce_ftype *value_arg_coerce);
+
 /* Return the active SIMD lanes mask for a thread TP. */
 
 extern bool gdbarch_active_lanes_mask_p (struct gdbarch *gdbarch);

@@ -999,6 +999,18 @@ i386_displaced_step_fixup (struct gdbarch *gdbarch,
       displaced_debug_printf ("relocated return addr at %s to %s",
 			      paddress (gdbarch, esp),
 			      paddress (gdbarch, retaddr));
+
+      /* If shadow stack is enabled, we need to correct the return address
+	 on the shadow stack too.  */
+      CORE_ADDR ssp;
+      if (gdbarch_get_shadow_stack_pointer_p (gdbarch)
+	  && gdbarch_get_shadow_stack_pointer (gdbarch, &ssp))
+	{
+	  write_memory_unsigned_integer (ssp, retaddr_len, byte_order, retaddr);
+	  displaced_debug_printf ("relocated shadow stack return addr at %s "
+				  "to %s", paddress (gdbarch, ssp),
+				  paddress (gdbarch, retaddr));
+	}
     }
 }
 

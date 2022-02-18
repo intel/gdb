@@ -1,0 +1,81 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test continue from call instructions with shadow stack and displaced
+# stepping being enabled.
+
+require allow_ssp_tests
+
+standard_testfile amd64-shadow-stack.c
+
+require support_displaced_stepping
+
+if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
+      additional_flags="-fcf-protection=return"] } {
+    return -1
+}
+
+# Enable displaced stepping.
+gdb_test_no_output "set displaced-stepping on"
+gdb_test "show displaced-stepping" ".* displaced stepping .* is on.*"
+
+# Get the address of the call1 instruction.
+set call1_addr -1
+gdb_test_multiple "disassemble main" "" {
+    -re -wrap "($hex) <\\+($decimal)>:\\s*call\\s*0x.*<call1>.*" {
+	set call1_addr $expect_out(1,string)
+	pass $gdb_test_name
+    }
+}
+
+if { $call1_addr == -1 } {
+    return -1
+}
+
+# Get the address of the call2 instruction.
+set call2_addr -1
+gdb_test_multiple "disassemble call1" "" {
+    -re -wrap "($hex) <\\+($decimal)>:\\s*call\\s*0x.*<call2>.*" {
+	set call2_addr $expect_out(1,string)
+	pass $gdb_test_name
+    }
+}
+
+if { $call2_addr == -1 } {
+    return -1
+}
+
+if { ![runto_main] } {
+    return -1
+}
+
+gdb_test "break *$call1_addr" \
+    "Breakpoint $decimal at $hex.*" \
+    "break at the address of the call1 instruction"
+
+gdb_test "break *$call2_addr" \
+    "Breakpoint $decimal at $hex.*" \
+    "break at the address of the call2 instruction"
+
+gdb_test "continue" \
+    "Breakpoint $decimal, $call1_addr in main ().*" \
+    "continue until call1 instruction"
+
+# Test continue from breakpoint at call1 and call2 instructions.
+gdb_test "continue" \
+    "Breakpoint $decimal, $call2_addr in call1 ().*" \
+    "continue from call1 instruction"
+
+gdb_continue_to_end "continue from call2 instruction"

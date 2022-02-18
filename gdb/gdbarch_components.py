@@ -608,6 +608,22 @@ frame.
 
 Method(
     comment="""
+Perform the standard coercions that are specified for arguments to
+be passed to C, Ada or Fortran functions.
+""",
+    type="value *",
+    name="value_arg_coerce",
+    params=[
+        ("value *", "arg"),
+        ("type *", "param_type"),
+        ("int", "is_prototyped")
+    ],
+    predefault="default_value_arg_coerce",
+    invalid=False,
+)
+
+Method(
+    comment="""
 Return the active SIMD lanes mask for a thread TP.
 """,
     type="unsigned int",

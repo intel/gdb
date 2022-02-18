@@ -25,6 +25,7 @@
 #include "frame.h"
 #include "dis-asm.h"
 #include "gdbsupport/gdb_obstack.h"
+#include "infcall.h"
 #include "infrun.h"
 #include "osabi.h"
 #include "displaced-stepping.h"

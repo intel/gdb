@@ -41,6 +41,7 @@
 #include "interps.h"
 #include "thread-fsm.h"
 #include "x86-cet.h"
+#include "bfd-in2.h"
 
 #include <algorithm>
 #include "gdbsupport/scope-exit.h"
@@ -158,6 +159,11 @@ value_arg_coerce (struct gdbarch *gdbarch, struct value *arg,
   struct type *arg_type = check_typedef (value_type (arg));
   struct type *type
     = param_type ? check_typedef (param_type) : arg_type;
+
+  /* intelgt target accepts arguments less than the width of an
+     integer (32-bits).  No need to do anything.  */
+  if (gdbarch_bfd_arch_info (gdbarch)->arch == bfd_arch_intelgt)
+    return value_cast (type, arg);
 
   /* Perform any Ada- and Fortran-specific coercion first.  */
   if (current_language->la_language == language_ada)

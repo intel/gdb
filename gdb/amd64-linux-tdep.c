@@ -2143,6 +2143,8 @@ amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch,
   set_gdbarch_remove_non_addr_bits_wpt (gdbarch,
 					amd64_linux_remove_non_addr_bits_wpt);
   set_gdbarch_shadow_stack_push (gdbarch, amd64_linux_shadow_stack_push);
+  set_gdbarch_get_shadow_stack_pointer (gdbarch,
+					amd64_linux_get_shadow_stack_pointer);
   dwarf2_frame_set_init_reg (gdbarch, amd64_init_reg);
 }
 

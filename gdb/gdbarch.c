@@ -91,6 +91,7 @@ struct gdbarch
   gdbarch_register_name_ftype *register_name = nullptr;
   gdbarch_register_type_ftype *register_type = nullptr;
   gdbarch_dummy_id_ftype *dummy_id = default_dummy_id;
+  gdbarch_value_arg_coerce_ftype *value_arg_coerce = default_value_arg_coerce;
   gdbarch_active_lanes_mask_ftype *active_lanes_mask = nullptr;
   int deprecated_fp_regnum = -1;
   gdbarch_push_dummy_call_ftype *push_dummy_call = nullptr;
@@ -357,6 +358,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   if (gdbarch->register_type == 0)
     log.puts ("\n\tregister_type");
   /* Skip verify of dummy_id, invalid_p == 0 */
+  /* Skip verify of value_arg_coerce, invalid_p == 0 */
   /* Skip verify of active_lanes_mask, has predicate.  */
   /* Skip verify of deprecated_fp_regnum, invalid_p == 0 */
   /* Skip verify of push_dummy_call, has predicate.  */
@@ -726,6 +728,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: dummy_id = <%s>\n",
 	      host_address_to_string (gdbarch->dummy_id));
+  gdb_printf (file,
+	      "gdbarch_dump: value_arg_coerce = <%s>\n",
+	      host_address_to_string (gdbarch->value_arg_coerce));
   gdb_printf (file,
 	      "gdbarch_dump: gdbarch_active_lanes_mask_p() = %d\n",
 	      gdbarch_active_lanes_mask_p (gdbarch));
@@ -2263,6 +2268,23 @@ set_gdbarch_dummy_id (struct gdbarch *gdbarch,
 		      gdbarch_dummy_id_ftype dummy_id)
 {
   gdbarch->dummy_id = dummy_id;
+}
+
+value *
+gdbarch_value_arg_coerce (struct gdbarch *gdbarch, value *arg, type *param_type, int is_prototyped)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->value_arg_coerce != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_value_arg_coerce called\n");
+  return gdbarch->value_arg_coerce (gdbarch, arg, param_type, is_prototyped);
+}
+
+void
+set_gdbarch_value_arg_coerce (struct gdbarch *gdbarch,
+			      gdbarch_value_arg_coerce_ftype value_arg_coerce)
+{
+  gdbarch->value_arg_coerce = value_arg_coerce;
 }
 
 bool

@@ -26009,6 +26009,11 @@ function that is called.  No call instruction is executed, but the RET
 instruction actually is.  To avoid a control protection exception due to the
 missing return address on the shadow stack, @value{GDBN} pushes the new return
 address to the shadow stack and increments the shadow stack pointer.
+@item Step:
+With displaced stepping, @value{GDBN} may run an out of line copy of a call
+instruction.  In this case, the wrong RET address is pushed on the shadow stack.
+@value{GDBN} corrects this value to avoid a control protection exception.
+For more details on displaced stepping, see @ref{displaced-stepping}.
 @end itemize
 
 @subsubsection Intel @dfn{Advanced Matrix Extensions} (AMX).
@@ -40062,6 +40067,7 @@ Print information about JIT code objects loaded in the current inferior.
 @cindex out-of-line single-stepping
 @item set displaced-stepping
 @itemx show displaced-stepping
+@anchor{displaced-stepping}
 Control whether or not @value{GDBN} will do @dfn{displaced stepping}
 if the target supports it.  Displaced stepping is a way to single-step
 over breakpoints without removing them from the inferior, by executing

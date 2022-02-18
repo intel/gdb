@@ -30,6 +30,7 @@ call1 ()
 int
 main ()
 {
-  call1 ();
+  int i = 0;
+  i = call1 ();
   return 0;
 }

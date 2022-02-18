@@ -1937,7 +1937,8 @@ amd64_linux_shadow_stack_element_size_aligned (gdbarch *gdbarch)
    possible.  */
 
 static std::optional<CORE_ADDR>
-amd64_linux_get_shadow_stack_pointer (gdbarch *gdbarch, regcache *regcache)
+amd64_linux_get_shadow_stack_pointer (gdbarch *gdbarch, regcache *regcache,
+				      bool &shadow_stack_enabled)
 {
   const i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
 
@@ -1956,6 +1957,9 @@ amd64_linux_get_shadow_stack_pointer (gdbarch *gdbarch, regcache *regcache)
   if (ssp == 0x0)
     return {};
 
+  /* In case there is a shadow stack pointer available which is non-null,
+     the shadow stack feature is enabled.  */
+  shadow_stack_enabled = true;
   return ssp;
 }
 
@@ -1966,8 +1970,13 @@ static void
 amd64_linux_shadow_stack_push (gdbarch *gdbarch, CORE_ADDR new_addr,
 			       regcache *regcache)
 {
+  bool shadow_stack_enabled = false;
   std::optional<CORE_ADDR> ssp
-    = amd64_linux_get_shadow_stack_pointer (gdbarch, regcache);
+    = amd64_linux_get_shadow_stack_pointer (gdbarch, regcache,
+					    shadow_stack_enabled);
+
+  /* It's enough to check if SSP is valid as for amd64 linux shadow stack
+     is always enabled if SSP has a value.  */
   if (!ssp.has_value ())
     return;
 
@@ -2120,6 +2129,8 @@ amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch,
     (gdbarch, amd64_linux_remove_non_address_bits_watchpoint);
 
   set_gdbarch_shadow_stack_push (gdbarch, amd64_linux_shadow_stack_push);
+  set_gdbarch_get_shadow_stack_pointer (gdbarch,
+					amd64_linux_get_shadow_stack_pointer);
   dwarf2_frame_set_init_reg (gdbarch, amd64_init_reg);
 }
 

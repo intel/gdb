@@ -1,0 +1,92 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Please email any bugs, comments, and/or additions to this file to:
+# bug-gdb@gnu.org
+
+# Test break at and continue from a call instruction with CET and displaced
+# stepping being enabled.
+
+if {[skip_cet_tests]} {
+	unsupported "target does not support CET"
+	return 0
+}
+
+standard_testfile i386-cet.c
+
+if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
+     additional_flags="-fcf-protection=full"] } {
+     return -1
+}
+
+if { ![support_displaced_stepping] } {
+      unsupported "displaced stepping"
+      return -1
+}
+
+# Enable displaced stepping
+gdb_test_no_output "set displaced-stepping on"
+gdb_test "show displaced-stepping" ".* displaced stepping .* is on.*"
+
+# Get the address of the call1 instruction.
+set call1_addr -1
+set test1 "disassemble main"
+gdb_test_multiple $test1 "" {
+    -re -wrap "($hex) <\\+($decimal)>:\\s*call\\s*0x.*<call1>.*" {
+	set call1_addr $expect_out(1,string)
+	pass $test1
+    }
+}
+
+if { $call1_addr == -1 } {
+     return -1
+}
+
+# Get the address of the call2 instruction.
+set call2_addr -1
+set test2 "disassemble call1"
+gdb_test_multiple $test2 "" {
+    -re -wrap "($hex) <\\+($decimal)>:\\s*call\\s*0x.*<call2>.*" {
+	set call2_addr $expect_out(1,string)
+	pass $test2
+    }
+}
+
+if { $call2_addr == -1 } {
+    return -1
+}
+
+if ![runto_main] {
+    untested "could not run to main"
+    return -1
+}
+
+gdb_test "break *$call1_addr" \
+	"Breakpoint $decimal at $hex.*" \
+	"Test break at the address of the call1 instruction"
+
+gdb_test "break *$call2_addr" \
+	"Breakpoint $decimal at $hex.*" \
+	"Test break at the address of the call2 instruction"
+
+gdb_test "continue" \
+	"Breakpoint $decimal, $call1_addr in main ().*" \
+	"Test continue until call1 instruction"
+
+gdb_test "continue" \
+	"Breakpoint $decimal, $call2_addr in call1 ().*" \
+	"Test continue until call2 instruction"
+
+gdb_continue_to_end "i386-cet-disp-step"

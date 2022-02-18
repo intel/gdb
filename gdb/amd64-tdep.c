@@ -48,6 +48,7 @@
 #include "ax-gdb.h"
 #include "gdbsupport/byte-vector.h"
 #include "osabi.h"
+#include "x86-cet.h"
 #include "x86-tdep.h"
 #include "amd64-ravenscar-thread.h"
 
@@ -1781,6 +1782,18 @@ amd64_displaced_step_fixup (struct gdbarch *gdbarch,
       displaced_debug_printf ("relocated return addr at %s to %s",
 			      paddress (gdbarch, rsp),
 			      paddress (gdbarch, retaddr));
+
+      /* If CET is enabled, we need to correct the return address on the shadow
+	 stack, too.  */
+      if (shstk_is_enabled ())
+ 	{
+ 	  CORE_ADDR ssp;
+ 	  i386_cet_get_shstk_pointer (gdbarch, &ssp);
+ 	  write_memory_unsigned_integer (ssp, retaddr_len, byte_order, retaddr);
+	  displaced_debug_printf ("relocated shadow stack return addr at %s "
+				  "to %s", paddress (gdbarch, ssp),
+				  paddress (gdbarch, retaddr));
+ 	}
     }
 }
 

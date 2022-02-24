@@ -1112,6 +1112,9 @@ get_field_total_memory (type *struct_type, int field_index)
   return total_memory;
 }
 
+/* Inferior calls is still not fully supported on Windows.  */
+#ifndef USE_WIN32API
+
 /* Return the number of registers required to store an argument.  ARG_TYPE is
    the type of the argument.  */
 
@@ -1435,6 +1438,7 @@ intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
   regcache->cooked_write_part (framedesc_regnum, 24, 8, (gdb_byte *) &fe_sp);
   return fe_sp;
 }
+#endif /* not USE_WIN32API */
 
 /* See GRF_HANDLER declaration.  */
 
@@ -1738,7 +1742,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_address_space_from_type_flags
     (gdbarch, intelgt_address_space_from_type_flags);
 
-
+/* Inferior calls is still not fully supported on Windows.  */
+#ifndef USE_WIN32API
   /* Enable inferior call support.  */
   set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);
   set_gdbarch_unwind_sp (gdbarch, intelgt_unwind_sp);
@@ -1747,6 +1752,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
     gdbarch, intelgt_return_in_first_hidden_param_p);
   set_gdbarch_value_arg_coerce (gdbarch, intelgt_value_arg_coerce);
   set_gdbarch_dummy_id (gdbarch, intelgt_dummy_id);
+#endif /* not USE_WIN32API */
 
   return gdbarch;
 }

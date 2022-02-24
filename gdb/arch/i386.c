@@ -27,9 +27,9 @@
 #include "../features/i386/32bit-avx.c"
 #include "../features/i386/32bit-avx512.c"
 #include "../features/i386/32bit-mpx.c"
-#include "../features/i386/32bit-pkeys.c"
 #include "../features/i386/32bit-segments.c"
 #include "../features/i386/32bit-ssp.c"
+#include "../features/i386/pkeys.c"
 #include "../features/i386/cet.c"
 
 /* Create i386 target descriptions according to XCR0.  */
@@ -70,7 +70,7 @@ i386_create_target_description (uint64_t xcr0, bool is_linux, bool segments,
     regnum = create_feature_i386_32bit_avx512 (tdesc.get (), regnum);
 
   if (xcr0 & X86_XSTATE_PKRU)
-    regnum = create_feature_i386_32bit_pkeys (tdesc.get (), regnum);
+    regnum = create_feature_i386_pkeys (tdesc.get (), regnum);
 
   if (cet_enabled)
     {

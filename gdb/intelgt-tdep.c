@@ -117,6 +117,9 @@ fe_stack_read_vector (CORE_ADDR addr, type *valtype, gdb_byte *buff)
   return fe_stack_handle_vector (addr, valtype, nullptr, buff);
 }
 
+/* Inferior calls is still not fully supported on Windows.  */
+#ifndef USE_WIN32API
+
 /* Write vector from BUFF into the stack.  */
 
 static CORE_ADDR
@@ -124,6 +127,7 @@ fe_stack_write_vector (CORE_ADDR addr, type *valtype, const gdb_byte *buff)
 {
   return fe_stack_handle_vector (addr, valtype, buff, nullptr);
 }
+#endif /* not USE_WIN32API */
 
 /* Read and write small structures on the stack while considering
    the SIMD vectorization.
@@ -150,6 +154,9 @@ fe_stack_read_small_struct (CORE_ADDR addr, type *valtype, gdb_byte *buff)
   return fe_stack_handle_small_struct (addr, valtype, nullptr, buff);
 }
 
+/* Inferior calls is still not fully supported on Windows.  */
+#ifndef USE_WIN32API
+
 /* Write small structure from BUFF into the stack.  */
 
 static CORE_ADDR
@@ -158,6 +165,7 @@ fe_stack_write_small_struct (CORE_ADDR addr, type *valtype,
 {
   return fe_stack_handle_small_struct (addr, valtype, buff, nullptr);
 }
+#endif /* not USE_WIN32API */
 
 /* Read and write up to 8 bytes on the stack while considering the SIMD
    vectorization.
@@ -184,6 +192,9 @@ fe_stack_read_primitive (CORE_ADDR addr, int len, gdb_byte *buff)
   return fe_stack_handle_primitive (addr, len, nullptr, buff);
 }
 
+/* Inferior calls is still not fully supported on Windows.  */
+#ifndef USE_WIN32API
+
 /* Write up to 8 bytes from BUFF into the stack.  */
 
 static CORE_ADDR
@@ -191,6 +202,8 @@ fe_stack_write_primitive (CORE_ADDR addr, int len, const gdb_byte *buff)
 {
   return fe_stack_handle_primitive (addr, len, buff, nullptr);
 }
+#endif /* not USE_WIN32API */
+
 
 /* Structure for GRF read / write handling.  */
 
@@ -1276,6 +1289,9 @@ get_field_total_memory (type *struct_type, int field_index)
   return total_memory;
 }
 
+/* Inferior calls is still not fully supported on Windows.  */
+#ifndef USE_WIN32API
+
 /* Return the number of registers required to store an argument.  ARG_TYPE is
    the type of the argument.  */
 
@@ -1567,6 +1583,7 @@ intelgt_get_inferior_call_return_value (gdbarch *gdbarch,
   gdb_assert (retval != nullptr);
   return retval;
 }
+#endif /* not USE_WIN32API */
 
 /* See GRF_HANDLER declaration.  */
 
@@ -2046,6 +2063,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
   set_gdbarch_is_inferior_device (gdbarch, true);
 
+/* Inferior calls is still not fully supported on Windows.  */
+#ifndef USE_WIN32API
   /* Enable inferior call support.  */
   set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);
   set_gdbarch_unwind_sp (gdbarch, intelgt_unwind_sp);
@@ -2057,6 +2076,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_reserve_stack_space (gdbarch, intelgt_reserve_stack_space);
   set_gdbarch_get_inferior_call_return_value (
     gdbarch, intelgt_get_inferior_call_return_value);
+#endif /* not USE_WIN32API */
 
   return gdbarch;
 }

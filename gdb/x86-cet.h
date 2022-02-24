@@ -20,6 +20,8 @@
 #ifndef X86_CET_H
 #define X86_CET_H
 
+#include "memrange.h"
+
 /* Check if the shadow stack is enabled.  */
 extern bool shstk_is_enabled ();
 
@@ -30,5 +32,11 @@ extern bool cet_get_registers (const ptid_t tid, CORE_ADDR *ssp,
 /* Set the CET specific registers.  Returns true on success.  */
 extern bool cet_set_registers (const ptid_t tid, const CORE_ADDR *ssp,
 			       const uint64_t *cet_msr);
+
+/* Retrieve the mapped memory regions[ADDR_LOW, ADDR_HIGH) for a given
+   address ADDR in memory space of process TID by reading the process
+   information from its pseudo-file systema.  Return true if addr is in that
+   range.  */
+extern bool cet_get_shstk_mem_range (const CORE_ADDR addr, mem_range *range);
 
 #endif /* X86_CET_H */

@@ -3280,6 +3280,7 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
   /* Shadow stack.  */
   set_gdbarch_set_shstk_pointer (gdbarch, i386_cet_set_shstk_pointer);
   set_gdbarch_get_shstk_pointer (gdbarch, i386_cet_get_shstk_pointer);
+  set_gdbarch_shstk_push (gdbarch, i386_cet_shstk_push);
   /* For 64 bit and x32 shadow stack adresses are 8-byte aligned.  */
   set_gdbarch_shstk_addr_byte_align (gdbarch, 8);
 }

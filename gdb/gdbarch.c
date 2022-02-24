@@ -368,6 +368,7 @@ struct gdbarch
   gdbarch_read_core_file_mappings_ftype *read_core_file_mappings;
   gdbarch_get_shstk_pointer_ftype *get_shstk_pointer;
   gdbarch_set_shstk_pointer_ftype *set_shstk_pointer;
+  gdbarch_shstk_push_ftype *shstk_push;
   int shstk_addr_byte_align;
 };
 
@@ -762,6 +763,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of read_core_file_mappings, invalid_p == 0 */
   /* Skip verify of get_shstk_pointer, has predicate.  */
   /* Skip verify of set_shstk_pointer, has predicate.  */
+  /* Skip verify of shstk_push, has predicate.  */
   /* Skip verify of shstk_addr_byte_align, invalid_p == 0 */
   if (!log.empty ())
     internal_error (__FILE__, __LINE__,
@@ -1458,6 +1460,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   fprintf_unfiltered (file,
                       "gdbarch_dump: shstk_addr_byte_align = %s\n",
                       plongest (gdbarch->shstk_addr_byte_align));
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: gdbarch_shstk_push_p() = %d\n",
+                      gdbarch_shstk_push_p (gdbarch));
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: shstk_push = <%s>\n",
+                      host_address_to_string (gdbarch->shstk_push));
   fprintf_unfiltered (file,
                       "gdbarch_dump: significant_addr_bit = %s\n",
                       plongest (gdbarch->significant_addr_bit));
@@ -5628,6 +5636,30 @@ set_gdbarch_set_shstk_pointer (struct gdbarch *gdbarch,
                                gdbarch_set_shstk_pointer_ftype set_shstk_pointer)
 {
   gdbarch->set_shstk_pointer = set_shstk_pointer;
+}
+
+bool
+gdbarch_shstk_push_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->shstk_push != NULL;
+}
+
+void
+gdbarch_shstk_push (struct gdbarch *gdbarch, CORE_ADDR *new_addr)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->shstk_push != NULL);
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_shstk_push called\n");
+  gdbarch->shstk_push (gdbarch, new_addr);
+}
+
+void
+set_gdbarch_shstk_push (struct gdbarch *gdbarch,
+                        gdbarch_shstk_push_ftype shstk_push)
+{
+  gdbarch->shstk_push = shstk_push;
 }
 
 int

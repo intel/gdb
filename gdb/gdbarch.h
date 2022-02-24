@@ -1749,9 +1749,9 @@ extern void gdbarch_read_core_file_mappings (struct gdbarch *gdbarch, struct bfd
 extern void set_gdbarch_read_core_file_mappings (struct gdbarch *gdbarch, gdbarch_read_core_file_mappings_ftype *read_core_file_mappings);
 
 /* Functions for shadow stack manipulation. If a target implements a shadow
-   stack, both functions have to be provided to correctly handle the return
-   command. If one or all of them are not available, GDB assumes that no fixup
-   is needed for the shadow stack.
+   stack, all 3 functions have to be provided to correctly handle the return
+   command and inferior calls. If one or all of them are not available, GDB
+   assumes that no fixup is needed for the shadow stack.
   
    Get shadow stack pointer */
 
@@ -1768,6 +1768,14 @@ extern bool gdbarch_set_shstk_pointer_p (struct gdbarch *gdbarch);
 typedef void (gdbarch_set_shstk_pointer_ftype) (struct gdbarch *gdbarch, const CORE_ADDR *ssp);
 extern void gdbarch_set_shstk_pointer (struct gdbarch *gdbarch, const CORE_ADDR *ssp);
 extern void set_gdbarch_set_shstk_pointer (struct gdbarch *gdbarch, gdbarch_set_shstk_pointer_ftype *set_shstk_pointer);
+
+/* Push an address on the shadow stack */
+
+extern bool gdbarch_shstk_push_p (struct gdbarch *gdbarch);
+
+typedef void (gdbarch_shstk_push_ftype) (struct gdbarch *gdbarch, CORE_ADDR *new_addr);
+extern void gdbarch_shstk_push (struct gdbarch *gdbarch, CORE_ADDR *new_addr);
+extern void set_gdbarch_shstk_push (struct gdbarch *gdbarch, gdbarch_shstk_push_ftype *shstk_push);
 
 /* shstk_addr_byte_align is the shadow stack address alignment in bytes. */
 

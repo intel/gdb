@@ -26,6 +26,7 @@
 #include "inferior.h"
 #include "infrun.h"
 #include "block.h"
+#include "gdbarch.h"
 #include "gdbcore.h"
 #include "language.h"
 #include "objfiles.h"
@@ -1219,6 +1220,23 @@ call_function_by_hand_dummy (struct value *function,
       }
   }
 
+  /* Check if shadow stack modification is supported by the current target.  */
+  const bool gdbarch_shstk_mod_support
+    = gdbarch_get_shstk_pointer_p (gdbarch)
+      && gdbarch_set_shstk_pointer_p (gdbarch)
+      && gdbarch_shstk_push_p (gdbarch);
+
+  CORE_ADDR ssp;
+  if (gdbarch_shstk_mod_support)
+    {
+      /* Save the current shadow stack pointer for later restore.  */
+      gdbarch_get_shstk_pointer (gdbarch, &ssp);
+      /* Pushes the return address of the inferior (bp_addr) on the shadow stack
+	 and increments the shadow stack pointer.  As we don't execute a call
+	 instruction to start the inferior we need to handle this manually.  */
+      gdbarch_shstk_push (gdbarch, &bp_addr);
+    }
+
   /* Create a breakpoint in std::terminate.
      If a C++ exception is raised in the dummy-frame, and the
      exception handler is (normally, and expected to be) out-of-frame,
@@ -1292,6 +1310,10 @@ call_function_by_hand_dummy (struct value *function,
 	       state.  */
 	    dummy_frame_pop (dummy_id, call_thread.get ());
 	    restore_infcall_control_state (inf_status.release ());
+
+	    /* Restore shadow-stack.  */
+	    if (gdbarch_shstk_mod_support)
+	      gdbarch_set_shstk_pointer (gdbarch, &ssp);
 
 	    /* Get the return value.  */
 	    retval = sm->return_value;
@@ -1423,6 +1445,10 @@ When the function is done executing, GDB will silently stop."),
 		 dummy call.  */
 	      restore_infcall_control_state (inf_status.release ());
 
+	      /* Restore shadow-stack.  */
+	      if (gdbarch_shstk_mod_support)
+		gdbarch_set_shstk_pointer (gdbarch, &ssp);
+
 	      /* FIXME: Insert a bunch of wrap_here; name can be very
 		 long if it's a C++ name with arguments and stuff.  */
 	      error (_("\
@@ -1463,6 +1489,10 @@ When the function is done executing, GDB will silently stop."),
 	  /* We also need to restore inferior status to that before
 	     the dummy call.  */
 	  restore_infcall_control_state (inf_status.release ());
+
+	  /* Restore shadow-stack.  */
+	  if (gdbarch_shstk_mod_support)
+	    gdbarch_set_shstk_pointer (gdbarch, &ssp);
 
 	  error (_("\
 The program being debugged entered a std::terminate call, most likely\n\

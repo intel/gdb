@@ -1607,8 +1607,8 @@ amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32,
   static target_desc *amd64_linux_tdescs \
     [2/*AVX*/][2/*MPX*/][2/*AVX512*/][2/*PKRU*/][2/*CET_U*/][2/*PL3_SSP*/]\
     [2/*AMX*/] = {};
-  static target_desc *x32_linux_tdescs[2/*AVX*/][2/*AVX512*/][2/*CET_U*/]\
-    [2/*PL3_SSP*/][2/*AMX*/] = {};
+  static target_desc *x32_linux_tdescs[2/*AVX*/][2/*AVX512*/][2/*PKRU*/]\
+    [2/*CET_U*/][2/*PL3_SSP*/][2/*AMX*/] = {};
 
   target_desc **tdesc;
 
@@ -1616,6 +1616,7 @@ amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32,
     {
       tdesc = &x32_linux_tdescs[(xcr0_features_bit & X86_XSTATE_AVX) ? 1 : 0 ]
 	[(xcr0_features_bit & X86_XSTATE_AVX512) ? 1 : 0]
+	[(xcr0_features_bit & X86_XSTATE_PKRU) ? 1 : 0]
 	[(shstk_enabled || ibt_enabled) ? 1 : 0]
 	[shstk_enabled ? 1 : 0]
 	[(xcr0_features_bit & X86_XSTATE_AMX) ? 1 : 0];

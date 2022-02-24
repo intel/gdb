@@ -226,9 +226,9 @@ FEATURE_XMLFILES = aarch64-core.xml \
 	i386/64bit-avx.xml \
 	i386/64bit-amx.xml \
 	i386/64bit-linux.xml \
-	i386/64bit-pkeys.xml \
 	i386/64bit-sse.xml \
 	i386/64bit-ssp.xml \
+	i386/pkeys.xml \
 	i386/cet.xml \
 	i386/x32-core.xml \
 	loongarch/base32.xml \

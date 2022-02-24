@@ -72,7 +72,7 @@ class IntelgtAutoAttach(gdb.Breakpoint):
     def __init__(self):
         """Registration of new loaded object file handler event."""
         gdb.events.new_objfile.connect(self.handle_new_objfile_event)
-        gdb.events.quit.connect(self.handle_quit_event)
+        gdb.events.gdb_exiting.connect(self.handle_gdb_exiting_event)
         gdb.events.exited.connect(self.handle_exited_event)
         gdb.events.before_prompt.connect(self.handle_before_prompt_event)
         self.inf_dict = {}
@@ -237,8 +237,8 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
                 if event.inferior.connection_num == gt_connection:
                     self.host_inf_for_auto_remove = key
 
-    def handle_quit_event(self, event):
-        """Handler for GDB's quit event."""
+    def handle_gdb_exiting_event(self, event):
+        """Handler for GDB's exiting event."""
         if event is None:
             return
 
@@ -406,7 +406,7 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
         # get the host inferior.
         host_inf = gdb.selected_inferior()
 
-        connection = host_inf.connection_shortname
+        connection = host_inf.connection.type
         if connection not in ('remote', 'native'):
             print(f"intelgt: connection name '{connection}' not recognized.")
             self.handle_error(host_inf)

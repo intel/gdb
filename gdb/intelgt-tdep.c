@@ -978,6 +978,9 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
   return possible_regnum;
 }
 
+/* Inferior calls is still not fully supported on Windows.  */
+#ifndef USE_WIN32API
+
 /* Check if a small struct can be promoted.  Struct arguments less than or
    equal to 128-bits and only containing primitive element types are passed by
    value as a vector of bytes, and are stored in the SoA (structure of arrays)
@@ -1430,6 +1433,7 @@ intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
   regcache->cooked_write_part (framedesc_regnum, 24, 8, (gdb_byte *) &fe_sp);
   return fe_sp;
 }
+#endif /* not USE_WIN32API */
 
 /* Architecture initialization.  */
 
@@ -1561,7 +1565,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_address_space_from_type_flags
     (gdbarch, intelgt_address_space_from_type_flags);
 
-
+/* Inferior calls is still not fully supported on Windows.  */
+#ifndef USE_WIN32API
   /* Enable inferior call support.  */
   set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);
   set_gdbarch_unwind_sp (gdbarch, intelgt_unwind_sp);
@@ -1569,6 +1574,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_return_in_first_hidden_param_p (
     gdbarch, intelgt_return_in_first_hidden_param_p);
   set_gdbarch_dummy_id (gdbarch, intelgt_dummy_id);
+#endif /* not USE_WIN32API */
 
   return gdbarch;
 }

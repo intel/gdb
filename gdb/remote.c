@@ -6992,7 +6992,10 @@ remote_target::commit_resumed ()
 bool
 remote_target::has_pending_events ()
 {
-  if (target_can_async_p ())
+  /* Temporary hack to send false for non_stop targets so that commit_resume
+     is done for each resume call individually instead of doing it once to
+     avoid SIGTRAP issue.  */
+  if (target_can_async_p () && !target_is_non_stop_p ())
     {
       remote_state *rs = get_remote_state ();
 

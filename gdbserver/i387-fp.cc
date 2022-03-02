@@ -265,7 +265,6 @@ i387_cache_to_xsave (struct regcache *regcache, void *buf)
   unsigned long val, val2;
   unsigned long long xstate_bv = 0;
   unsigned long long clear_bv = 0;
-  char raw[8192];
   char *p;
 
   /* Amd64 has 16 xmm regs; I386 has 8 xmm regs.  */
@@ -347,6 +346,13 @@ i387_cache_to_xsave (struct regcache *regcache, void *buf)
 	  memset (((char *) &fp->tiledata_space[0]), 0, 8192);
 	}
     }
+
+  /* This used to blindly allocate 64 bytes of space.
+     With AMX that became a bit much to do unconditionally.  For now
+     this seems to be the best trade-off between saving space and
+     the performance penalty for adding individual allocations.  */
+  const uint32_t buf_size = (x86_xcr0 & X86_XSTATE_TILEDATA) ? 8192 : 64;
+  char raw[buf_size];
 
   /* Check if any x87 registers are changed.  */
   if ((x86_xcr0 & X86_XSTATE_X87))

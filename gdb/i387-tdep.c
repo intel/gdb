@@ -350,7 +350,7 @@ i387_register_to_value (frame_info_ptr frame, int regnum,
 			int *optimizedp, int *unavailablep)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
-  gdb_byte from[I386_MAX_REGISTER_SIZE];
+  gdb_byte from[register_size (gdbarch, regnum)];
 
   gdb_assert (i386_fp_regnum_p (gdbarch, regnum));
 
@@ -384,7 +384,7 @@ i387_value_to_register (frame_info_ptr frame, int regnum,
 			struct type *type, const gdb_byte *from)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
-  gdb_byte to[I386_MAX_REGISTER_SIZE];
+  gdb_byte to[register_size (gdbarch, regnum)];
 
   gdb_assert (i386_fp_regnum_p (gdbarch, regnum));
 
@@ -1419,7 +1419,6 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
   gdb_byte *p, *regs = (gdb_byte *) xsave;
-  gdb_byte raw[I386_MAX_REGISTER_SIZE];
   ULONGEST initial_xstate_bv, clear_bv, xstate_bv = 0;
   unsigned int i;
   /* See the comment in i387_supply_xsave().  */
@@ -1604,6 +1603,14 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
 
   if (regclass == all)
     {
+      /* This used to blindly allocate I386_MAX_REGISTER_SIZE of space.
+	 With AMX that became a bit much to do unconditionally.  For now
+	 this seems to be the best trade-off between saving space and
+	 the performance penalty for adding individual allocations.  */
+      const uint32_t buf_size
+	  = (tdep->xcr0 & X86_XSTATE_TILEDATA) ? I386_MAX_REGISTER_SIZE : 64;
+      gdb_byte raw[buf_size];
+
       /* Check if the tilecfg register is changed.  */
       if ((tdep->xcr0 & X86_XSTATE_TILECFG))
 	{
@@ -1791,6 +1798,7 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
   else
     {
       /* Check if REGNUM is changed.  */
+      gdb_byte raw[register_size (gdbarch, regnum)];
       regcache->raw_collect (regnum, raw);
 
       switch (regclass)
@@ -1987,10 +1995,11 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
 	  }
 	else
 	  {
-	    int regsize;
+	    int regsize = register_size (gdbarch, i);
 
+	    gdb_byte raw[regsize];
 	    regcache->raw_collect (i, raw);
-	    regsize = regcache_register_size (regcache, i);
+
 	    p = FXSAVE_ADDR (tdep, regs, i);
 	    if (memcmp (raw, p, regsize))
 	      {

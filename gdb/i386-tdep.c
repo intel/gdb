@@ -2911,7 +2911,7 @@ i386_extract_return_value (struct gdbarch *gdbarch, struct type *type,
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int len = TYPE_LENGTH (type);
-  gdb_byte buf[I386_MAX_REGISTER_SIZE];
+  gdb_byte buf[register_size (gdbarch, I386_ST0_REGNUM)];
 
   /* _FLoat16 and _Float16 _Complex values are returned via xmm0.  */
   if (((type->code () == TYPE_CODE_FLT) && len == 2)
@@ -2973,7 +2973,7 @@ i386_store_return_value (struct gdbarch *gdbarch, struct type *type,
   if (type->code () == TYPE_CODE_FLT)
     {
       ULONGEST fstat;
-      gdb_byte buf[I386_MAX_REGISTER_SIZE];
+      gdb_byte buf[register_size (gdbarch, I386_ST0_REGNUM)];
 
       if (tdep->st0_regnum < 0)
 	{
@@ -3557,13 +3557,13 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
 				      int regnum,
 				      struct value *result_value)
 {
-  gdb_byte raw_buf[I386_MAX_REGISTER_SIZE];
   enum register_status status;
   gdb_byte *buf = value_contents_raw (result_value);
 
   if (i386_mmx_regnum_p (gdbarch, regnum))
     {
       int fpnum = i386_mmx_regnum_to_fp_regnum (regcache, regnum);
+      gdb_byte raw_buf[register_size (gdbarch, regnum)];
 
       /* Extract (always little endian).  */
       status = regcache->raw_read (fpnum, raw_buf);
@@ -3579,6 +3579,7 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
       if (i386_bnd_regnum_p (gdbarch, regnum))
 	{
 	  regnum -= tdep->bnd0_regnum;
+	  gdb_byte raw_buf[register_size (gdbarch, I387_BND0R_REGNUM (tdep))];
 
 	  /* Extract (always little endian).  Read lower 128bits.  */
 	  status = regcache->raw_read (I387_BND0R_REGNUM (tdep) + regnum,
@@ -3602,6 +3603,7 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
       else if (i386_k_regnum_p (gdbarch, regnum))
 	{
 	  regnum -= tdep->k0_regnum;
+	  gdb_byte raw_buf[register_size (gdbarch, tdep->k0_regnum)];
 
 	  /* Extract (always little endian).  */
 	  status = regcache->raw_read (tdep->k0_regnum + regnum, raw_buf);
@@ -3613,6 +3615,7 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
       else if (i386_zmm_regnum_p (gdbarch, regnum))
 	{
 	  regnum -= tdep->zmm0_regnum;
+	  gdb_byte raw_buf[register_size (gdbarch, tdep->zmm0_regnum)];
 
 	  if (regnum < num_lower_zmm_regs)
 	    {
@@ -3664,6 +3667,7 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
       else if (i386_ymm_regnum_p (gdbarch, regnum))
 	{
 	  regnum -= tdep->ymm0_regnum;
+	  gdb_byte raw_buf[register_size (gdbarch, tdep->ymm0_regnum)];
 
 	  /* Extract (always little endian).  Read lower 128bits.  */
 	  status = regcache->raw_read (I387_XMM0_REGNUM (tdep) + regnum,
@@ -3683,6 +3687,8 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
       else if (i386_ymm_avx512_regnum_p (gdbarch, regnum))
 	{
 	  regnum -= tdep->ymm16_regnum;
+	  gdb_byte raw_buf[register_size (gdbarch, tdep->ymm0_regnum)];
+
 	  /* Extract (always little endian).  Read lower 128bits.  */
 	  status = regcache->raw_read (I387_XMM16_REGNUM (tdep) + regnum,
 				       raw_buf);
@@ -3701,6 +3707,7 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
       else if (i386_word_regnum_p (gdbarch, regnum))
 	{
 	  int gpnum = regnum - tdep->ax_regnum;
+	  gdb_byte raw_buf[register_size (gdbarch, gpnum)];
 
 	  /* Extract (always little endian).  */
 	  status = regcache->raw_read (gpnum, raw_buf);
@@ -3713,6 +3720,7 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
       else if (i386_byte_regnum_p (gdbarch, regnum))
 	{
 	  int gpnum = regnum - tdep->al_regnum;
+	  gdb_byte raw_buf[register_size (gdbarch, gpnum % 4)];
 
 	  /* Extract (always little endian).  We read both lower and
 	     upper registers.  */
@@ -3750,11 +3758,10 @@ void
 i386_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 			    int regnum, const gdb_byte *buf)
 {
-  gdb_byte raw_buf[I386_MAX_REGISTER_SIZE];
-
   if (i386_mmx_regnum_p (gdbarch, regnum))
     {
       int fpnum = i386_mmx_regnum_to_fp_regnum (regcache, regnum);
+      gdb_byte raw_buf[register_size (gdbarch, regnum)];
 
       /* Read ...  */
       regcache->raw_read (fpnum, raw_buf);
@@ -3779,6 +3786,8 @@ i386_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 	  upper = extract_unsigned_integer (buf + size, size, byte_order);
 
 	  /* Fetching register buffer.  */
+	  gdb_byte raw_buf[register_size (gdbarch,
+					  I387_BND0R_REGNUM (tdep) + regnum)];
 	  regcache->raw_read (I387_BND0R_REGNUM (tdep) + regnum,
 			      raw_buf);
 
@@ -3840,6 +3849,7 @@ i386_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
       else if (i386_word_regnum_p (gdbarch, regnum))
 	{
 	  int gpnum = regnum - tdep->ax_regnum;
+	  gdb_byte raw_buf[register_size (gdbarch, gpnum)];
 
 	  /* Read ...  */
 	  regcache->raw_read (gpnum, raw_buf);
@@ -3851,6 +3861,7 @@ i386_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
       else if (i386_byte_regnum_p (gdbarch, regnum))
 	{
 	  int gpnum = regnum - tdep->al_regnum;
+	  gdb_byte raw_buf[register_size (gdbarch, gpnum)];
 
 	  /* Read ...  We read both lower and upper registers.  */
 	  regcache->raw_read (gpnum % 4, raw_buf);

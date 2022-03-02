@@ -3007,7 +3007,7 @@ i386_extract_return_value (struct gdbarch *gdbarch, struct type *type,
 {
   i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
   int len = type->length ();
-  gdb_byte buf[I386_MAX_REGISTER_SIZE];
+  gdb_byte buf[register_size (gdbarch, I386_ST0_REGNUM)];
 
   /* _Float16 and _Float16 _Complex values are returned via xmm0.  */
   if (((type->code () == TYPE_CODE_FLT) && len == 2)
@@ -3068,7 +3068,7 @@ i386_store_return_value (struct gdbarch *gdbarch, struct type *type,
   if (type->code () == TYPE_CODE_FLT)
     {
       ULONGEST fstat;
-      gdb_byte buf[I386_MAX_REGISTER_SIZE];
+      gdb_byte buf[register_size (gdbarch, I386_ST0_REGNUM)];
 
       if (tdep->st0_regnum < 0)
 	{

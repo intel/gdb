@@ -38,9 +38,15 @@ gdb_breakpoint $last_line
 # number of trips here should be safe.
 
 for {set i 1} {$i <= 5} {incr i} {
+    if {$i == 1 && [require_openmp_device "GPU"]} {
+	setup_kfail "JIRA DOQG/2846" "*-*-*"
+    }
     gdb_continue_to_breakpoint "hit the last line; occurrence $i" \
 	".*$srcfile:$last_line.*"
 
+    if {$i == 1 && [require_openmp_device "GPU"]} {
+	setup_kfail "JIRA DOQG/2846" "*-*-*"
+    }
     gdb_test "print \(in_elem - i\)" "223"\
 	"thread invariant $i"
 }

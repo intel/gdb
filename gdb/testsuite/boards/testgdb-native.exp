@@ -54,6 +54,27 @@ switch $env(appdbg_compiler) {
 		set_board_info f77compiler "ifx"
 		set_board_info f90compiler "ifx"
 	}
+	intel_next_gen_aot_gen9 {
+		puts "Info: Selecting compilers intel_next_gen_aot_gen9."
+		set_board_info compiler    "icx-aot-gen9"
+		set_board_info c++compiler "icpx-aot-gen9"
+		set_board_info f77compiler "ifx-aot-gen9"
+		set_board_info f90compiler "ifx-aot-gen9"
+	}
+	intel_next_gen_aot_tgl {
+		puts "Info: Selecting compilers intel_next_gen_aot_tgl."
+		set_board_info compiler    "icx-aot-tgl"
+		set_board_info c++compiler "icpx-aot-tgl"
+		set_board_info f77compiler "ifx-aot-tgl"
+		set_board_info f90compiler "ifx-aot-tgl"
+	}
+	intel_next_gen_aot_cpu {
+		puts "Info: Selecting compilers intel_next_gen_aot_cpu."
+		set_board_info compiler    "icx-aot-cpu"
+		set_board_info c++compiler "icpx-aot-cpu"
+		set_board_info f77compiler "ifx-aot-cpu"
+		set_board_info f90compiler "ifx-aot-cpu"
+	}
 	gnu {
 		puts "Info: Selecting compilers gcc / g++ / gfortran."
 		set_board_info compiler    "gcc"

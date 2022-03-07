@@ -62,7 +62,7 @@ proc check_mode {mode} {
     }
     gdb_test_no_output "set debug remote off"
 
-    if {$mode eq "on" || $mode eq "auto"} {
+    if {$mode eq "on"} {
 	gdb_assert {$write_count == 0}
     } else {
 	gdb_assert {$write_count > 0}

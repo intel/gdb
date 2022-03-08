@@ -4671,7 +4671,9 @@ proc gdb_compile {source dest type options} {
     # cannot be preprocessed completely (since the device compilation fails but
     # instead dpcpp currently throws a compiler error.  See CMPLRLLVM-31782.
     global CXX_FOR_TARGET
-    if { $getting_compiler_info && [lsearch -exact $options c++] != -1 } {
+    if { $getting_compiler_info
+	 && ([lsearch -exact $options c++] != -1
+	     || [lsearch -exact $options f90] != -1) } {
 	set cpp_compiler "none"
 	if {[info exists CXX_FOR_TARGET]} {
 	    set cpp_compiler $CXX_FOR_TARGET

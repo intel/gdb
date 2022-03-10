@@ -122,9 +122,16 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
             self.is_nonstop = nonstop_info.endswith("on.\n")
 
             if self.is_nonstop:
-                self.hook_bp.commands = commands + "\ncontinue -a"
+                command_suffix = "\ncontinue -a"
             else:
-                self.hook_bp.commands = commands + "\ncontinue"
+                command_suffix = "\ncontinue"
+
+            eclipse = self.get_env_variable("ECLIPSE")
+            if eclipse is not None and eclipse.endswith("1"):
+                self.hook_bp.silent = False
+                command_suffix = ""
+
+            self.hook_bp.commands = commands + command_suffix
 
     def remove_gt_inf_for(self, host_inf):
         """First detach from, then remove the gt inferiors that were created

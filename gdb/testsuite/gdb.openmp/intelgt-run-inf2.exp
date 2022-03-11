@@ -38,4 +38,8 @@ if {[start_openmp_program]} {
 continue_openmp_program_to_termination "1"
 
 # Test that the auto-attach has removed inferior 2.
+# On ADL, following tests may fail on missing gdb-prompt.
+if {[is_gen12adl]} {
+    setup_kfail "JIRA DOQG/2854" "*-*-*"
+}
 gdb_test "inferior 2" "Inferior ID 2 not known."

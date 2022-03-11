@@ -21,6 +21,9 @@ load_lib fortran.exp
 if {![info exists openmp_device_generation]} {
     set openmp_device_generation ""
 }
+if {![info exists openmp_device_id]} {
+    set openmp_device_id ""
+}
 
 proc openmp_compilation_options {extension} {
     set flags "additional_flags=-fiopenmp \
@@ -55,6 +58,8 @@ gdb_caching_proc skip_openmp_tests {
     global env
     global decimal
     global openmp_device_generation
+    global openmp_device_id
+    global hex
 
     if {![info exists openmp_program_extension]} {
 	verbose "openmp_program_extension board info is not configured"
@@ -77,8 +82,9 @@ gdb_caching_proc skip_openmp_tests {
     set test "Test OpenMP support"
     set result 1
     gdb_test_multiple "run" $test {
-	-re "\\\((Gen$decimal)\\\)" {
-	    set openmp_device_generation $expect_out(1,string)
+	-re "id ($hex) \\\((Gen$decimal)\\\)" {
+	    set openmp_device_id $expect_out(1,string)
+	    set openmp_device_generation $expect_out(2,string)
 	    exp_continue
 	}
 	-re "$inferior_exited_re normally].*$gdb_prompt $" {
@@ -111,6 +117,21 @@ gdb_caching_proc is_gen12 {
     global openmp_device_generation
 
     if {[string match "Gen12" $openmp_device_generation]} {
+	return 1;
+    }
+
+    return 0;
+}
+
+# Return non-zero if the device is ADL.
+
+gdb_caching_proc is_gen12adl {
+    global openmp_device_id
+
+    # Device ids for ADL begins with 0x468 or 0x469.
+    if {[is_gen12]
+	&& ([string match "0x468*" $openmp_device_id]
+	    || [string match "0x469*" $openmp_device_id])} {
 	return 1;
     }
 

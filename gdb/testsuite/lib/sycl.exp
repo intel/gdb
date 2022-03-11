@@ -233,6 +233,10 @@ proc continue_sycl_program_to_termination {{msg_suffix ""}} {
 	}
     }
 
+    # On ADL, following tests may fail with missing gdb-prompt.
+    if {[is_gen12adl]} {
+	setup_kfail "JIRA DOQG/2854" "*-*-*"
+    }
     if {!$is_non_stop} {
 	gdb_test "continue" "$inferior_exited_re normally].*" \
 	    "continue to end $msg_suffix"

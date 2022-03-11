@@ -119,6 +119,11 @@ foreach_with_prefix has_kernel_bp {0 1} {
     foreach_with_prefix has_outside_bp {0 1} {
         clean_restart $binfile
         foreach_with_prefix iter {1 2 3} {
+	    # On ADL, further iterations may fail.
+	    if { [omp_is_gen12adl] != 0 && $iter > 1 } {
+		kfail "JIRA DOQG/2854" "Further iterations";
+		break;
+	    }
             run_end_to_end $has_kernel_bp $has_outside_bp
         }
     }

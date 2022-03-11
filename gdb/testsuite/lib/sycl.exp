@@ -195,7 +195,23 @@ gdb_caching_proc is_gen12 {
 
     if {[string match "Intel*Gen12*" $sycl_selected_device]
 	|| [string match "Intel*Xe MAX Graphics*" $sycl_selected_device]
-	|| [string match "Intel*Xe Graphics*" $sycl_selected_device]} {
+	|| [string match "Intel*Xe Graphics*" $sycl_selected_device]
+	|| [string match "Intel*UHD Graphics 770*" $sycl_selected_device]} {
+	return 1;
+    }
+
+    return 0;
+}
+
+# Return non-zero if the device is ADL.
+
+gdb_caching_proc is_gen12adl {
+    global sycl_selected_device
+
+    # Device ids for ADL begins with 0x468 or 0x469.
+    if {[is_gen12]
+	&& ([string match "*0x468*" $sycl_selected_device]
+	    || [string match "*0x469*" $sycl_selected_device])} {
 	return 1;
     }
 

@@ -1225,7 +1225,7 @@ proc mi_expect_stop { reason func args file line extra test } {
     if { $reason == "exited-normally" } {
 
 	gdb_expect {
-	    -re "\\*stopped,reason=\"exited-normally\"\r\n$prompt_re" {
+	    -re "\\*stopped,reason=\"exited-normally\"\r\n.*$prompt_re" {
 		pass "$test"
 	    }
 	    -re ".*$mi_gdb_prompt$" {fail "continue to end (2)"}

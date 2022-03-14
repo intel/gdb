@@ -542,6 +542,7 @@ print_inferior (struct ui_out *uiout, const char *requested_inferiors,
 
   /* Collect the inferiors we will print.  */
   std::vector<inferior *> inferiors_to_print;
+  bool device_in_inferiors = false;
   for (inferior *inf : all_inferiors ())
     {
       if (!show_hidden
@@ -558,6 +559,11 @@ print_inferior (struct ui_out *uiout, const char *requested_inferiors,
       std::string conn = uiout_field_connection (inf->process_target ());
       if (connection_id_len < conn.size ())
 	connection_id_len = conn.size ();
+
+      /* Check if the inferior is a device to display the additional help
+	 later.  */
+      device_in_inferiors = (device_in_inferiors
+			     || gdbarch_is_inferior_device (inf->gdbarch));
 
       inferiors_to_print.push_back (inf);
     }
@@ -624,6 +630,9 @@ print_inferior (struct ui_out *uiout, const char *requested_inferiors,
 
       uiout->text ("\n");
     }
+
+    if (device_in_inferiors)
+      uiout->text ("Type \"info devices\" to see details of the devices.\n");
 }
 
 static void

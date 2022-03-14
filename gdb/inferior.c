@@ -577,6 +577,7 @@ print_inferior (struct ui_out *uiout, const char *requested_inferiors)
   int inf_count = 0;
   size_t connection_id_len = 20;
 
+  bool device_in_inferiors = false;
   /* Compute number of inferiors we will print.  */
   for (inferior *inf : all_inferiors ())
     {
@@ -586,6 +587,11 @@ print_inferior (struct ui_out *uiout, const char *requested_inferiors)
       std::string conn = uiout_field_connection (inf->process_target ());
       if (connection_id_len < conn.size ())
 	connection_id_len = conn.size ();
+
+      /* Check if the inferior is a device to display the additional help
+	 later.  */
+      device_in_inferiors = (device_in_inferiors
+			     || gdbarch_is_inferior_device (inf->arch ()));
 
       ++inf_count;
     }
@@ -655,6 +661,9 @@ print_inferior (struct ui_out *uiout, const char *requested_inferiors)
 
       uiout->text ("\n");
     }
+
+    if (device_in_inferiors)
+      uiout->text ("Type \"info devices\" to see details of the devices.\n");
 }
 
 static void

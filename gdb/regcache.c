@@ -856,8 +856,11 @@ regcache::raw_write (int regnum, const gdb_byte *buf)
 
   /* Invalidate the register after it is written, in case of a
      failure.  */
-  auto invalidator
-    = make_scope_exit ([&] { this->invalidate (regnum); });
+  auto invalidator = make_scope_exit ([&]
+    {
+      if (this->m_register_status != nullptr)
+	this->invalidate (regnum);
+    });
 
   target_store_registers (this, regnum);
 

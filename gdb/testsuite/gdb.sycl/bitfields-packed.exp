@@ -1,0 +1,83 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test GDBs support for displaying packed structures and structures
+# with bitfields inside a GPU kernel.
+
+load_lib sycl.exp
+
+standard_testfile bitfields-packed.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+proc test_print_packed_struct {struct_name struct_value} {
+    if {[require_sycl_device "gpu" "Intel*"]} {
+	setup_kfail "JIRA DOQG/2843 and JIRA XDEPS/3802" "*-*-*"
+    }
+    gdb_test "print/d $struct_name" "$struct_value"
+}
+
+proc test_print_struct_bitfields {struct_name struct_value} {
+    gdb_test "print/d $struct_name" "$struct_value"
+}
+
+proc test_print_array_element {struct_name struct_value} {
+    gdb_test "print/d $struct_name" "$struct_value"
+}
+
+# Define a breakpoint inside the kernel.
+set inside [gdb_get_line_number "line-after-var-declaration"]
+gdb_breakpoint $inside
+
+gdb_continue_to_breakpoint "inside" ".*$srcfile:$inside.*"
+
+test_print_packed_struct "p_s1" "\\{x = 1, y = 2, z = 3, a = 4\\}"
+if {[require_sycl_device "gpu" "Intel*"]} {
+    setup_kfail "JIRA DOQG/2843 and JIRA XDEPS/3802" "*-*-*"
+}
+test_print_array_element "arr_p1\[0\]" "\\{x = 1, y = 2, z = 3, a = 4\\}"
+if {[require_sycl_device "gpu" "Intel*"]} {
+    setup_kfail "JIRA DOQG/2843 and JIRA XDEPS/3802" "*-*-*"
+}
+test_print_array_element "arr_p1\[1\]" "\\{x = 11, y = 12, z = 13, a = 14\\}"
+
+test_print_packed_struct "p_s3" "\\{x = 1, y = 2, z = 3, a = 4\\}"
+if {[require_sycl_device "gpu" "Intel*"]} {
+    setup_kfail "JIRA DOQG/2843 and JIRA XDEPS/3802" "*-*-*"
+}
+test_print_array_element "arr_p2\[0\]" "\\{x = 1, y = 2, z = 3, a = 4\\}"
+if {[require_sycl_device "gpu" "Intel*"]} {
+    setup_kfail "JIRA DOQG/2843 and JIRA XDEPS/3802" "*-*-*"
+}
+test_print_array_element "arr_p2\[1\]" "\\{x = 11, y = 12, z = 13, a = 14\\}"
+
+test_print_struct_bitfields "bf_s1" "\\{a = 1, b = 2, c = 3, d = 4, e = 5, f = 1\\}"
+test_print_array_element "arr_bf1\[0\]" "\\{a = 1, b = 2, c = 3, d = 4, e = 5, f = 1\\}"
+test_print_array_element "arr_bf1\[1\]" "\\{a = 6, b = 7, c = 0, d = 1, e = 2, f = 0\\}"
+
+test_print_struct_bitfields "bf_s3" "\\{a = 1, b = 0, c = 3, d = 4\\}"
+test_print_array_element "arr_bf2\[0\]" "\\{a = 1, b = 0, c = 3, d = 4\\}"
+test_print_array_element "arr_bf2\[1\]" "\\{a = 11, b = 1, c = 13, d = 7\\}"

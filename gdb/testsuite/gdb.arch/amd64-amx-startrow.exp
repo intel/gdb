@@ -1,0 +1,91 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This file tests clearing of tilecfg.startrow in case it isn't empty.
+# If there is a fault, tileload and store instructions can be interrupted.
+# In that case startrow will point to the row on which they should be
+# continued.  In that case, inferior calls and jump commands should clear it.
+# This is tested by placing a tile over two memory pages, creating a page
+# fault.  Watchpoints that have hit will be delivered before the page fault.
+
+if { [skip_amx_tests] } {
+    unsupported "Target does not support AMX."
+    return -1
+}
+
+standard_testfile
+
+if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} debug] } {
+    return -1
+}
+
+proc test_startrow {test} {
+    global gdb_prompt hex decimal srcfile
+
+    if { ![runto_main] } {
+	untested "could not run to main"
+	return -1
+    }
+
+    set line1 [gdb_get_line_number "BP1"]
+    set line2 [gdb_get_line_number "BP2"]
+    set line_jump [gdb_get_line_number "Jump"]
+    gdb_breakpoint $line1
+    gdb_breakpoint $line2
+
+    gdb_continue_to_breakpoint "line1" ".*$srcfile:$line1.*"
+
+    # Set a watchpoint on the first page, which is un-protected.
+    set watch_addr 0
+    gdb_test_multiple "p/x p2 - 8" "get watch_addr" {
+	-re -wrap "= ($hex)" {
+	    set watch_addr $expect_out(1,string)
+	    pass $gdb_test_name
+	}
+    }
+
+    # If we didn't get a watch_addr, it makes no sense to continue.
+    if { $watch_addr == 0 } {
+	return -1
+    }
+
+    gdb_test "rwatch *(int*) $watch_addr" \
+	"atchpoint $decimal: \\*\\(int\\*\\) $watch_addr"
+
+    gdb_test "continue" \
+	"Continuing.*atchpoint $decimal: \\*\\(int\\*\\) $watch_addr.*"
+
+    gdb_test "p \$tilecfg.start_row" "= \[1-9\]+" "print non-zero start_row"
+
+    if { $test == "jump" } {
+	# Test jump.
+	gdb_test "jump $line_jump" "Breakpoint $decimal, .*$srcfile:$line2.*"
+	gdb_test "p \$tilecfg.start_row" "= 0"
+    } else {
+	# Test infcall.
+	gdb_test "p square (2, 2)" "Breakpoint $decimal, .*$srcfile:$line2.*"
+	gdb_test "p \$tilecfg.start_row" "= 0"
+    }
+}
+
+with_test_prefix "infcall" {
+    test_startrow ""
+}
+
+clean_restart $binfile
+
+with_test_prefix "jump" {
+    test_startrow "jump"
+}

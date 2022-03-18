@@ -315,6 +315,29 @@ amd64_linux_write_pc (struct regcache *regcache, CORE_ADDR pc)
      within GDB.  In all other cases the system call will not be
      restarted.  */
   regcache_cooked_write_unsigned (regcache, AMD64_LINUX_ORIG_RAX_REGNUM, -1);
+
+  /* If we have interrupted a restart-able AMX instruction we should clear
+     start_row.  Any instructions we will now run should start at row 0.  */
+  struct gdbarch_tdep *tdep = gdbarch_tdep (regcache->arch ());
+  if (tdep != nullptr && tdep->tilecfg_raw_regnum != -1)
+    {
+      gdb_byte tilecfg_buf[register_size (regcache->arch (),
+					  tdep->tilecfg_raw_regnum)];
+
+      if (regcache->raw_read (tdep->tilecfg_raw_regnum, tilecfg_buf)
+	  != REG_VALID)
+	{
+	  warning (_ ("Could not reset $tilecfg.start_row."));
+	  return;
+	}
+
+      /* start_row is the second byte.  */
+      if (tilecfg_buf[1] != 0)
+	{
+	  tilecfg_buf[1] = 0;
+	  regcache->raw_write (AMD64_AMX_TILECFG_RAW_REGNUM, tilecfg_buf);
+	}
+    }
 }
 
 /* Record all registers but IP register for process-record.  */

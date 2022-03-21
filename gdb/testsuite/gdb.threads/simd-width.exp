@@ -1,0 +1,57 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests for SIMD width.
+
+# This is a generic test, however, SIMD lanes are not supported by all
+# targets.  For convenience, to test this functionality, a SYCL
+# program is used here.
+
+load_lib sycl.exp
+
+standard_testfile simd.cpp
+
+if { [skip_sycl_tests] } {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if { [prepare_sycl_for_testing $binfile $srcfile] } {
+    return -1
+}
+
+gdb_test "print \$_simd_width" "= -1" "SIMD width before program start"
+
+if { [start_sycl_program] < 0 } {
+    return -1
+}
+
+gdb_test "print \$_simd_width" "= 0" "SIMD width at host part"
+
+set first_line [gdb_get_line_number "kernel-first-line"]
+
+gdb_breakpoint "$first_line" {temporary}
+gdb_continue_to_breakpoint "continue to BP inside kernel" \
+    ".*$srcfile:$first_line.*"
+
+set width [get_integer_valueof "\$_simd_width" -999]
+if {[require_sycl_device "gpu" "Intel*"]} {
+    gdb_assert {$width >= 8}
+} else {
+    gdb_assert {$width == 0}
+}
+
+continue_sycl_program_to_termination
+gdb_test "print \$_simd_width" "= -?1" "SIMD width after termination"

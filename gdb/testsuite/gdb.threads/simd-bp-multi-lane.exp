@@ -66,11 +66,7 @@ gdb_test_multiple "continue" "condition that hits all lanes" {
 
 set first_thread [get_current_thread "get first thread"]
 
-if { $first_thread eq "2.2" } {
-    set second_thread "2.3"
-} else {
-    set second_thread "2.2"
-}
+set second_thread [get_another_stopped_thread $srcfile $first_line $first_thread]
 
 # Set 2 BP in the same location.  Both breakpoints are hit by the same thread,
 # however, the lane sets are different.

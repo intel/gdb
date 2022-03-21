@@ -53,18 +53,15 @@ gdb_test "continue" ".*\\\[1 3 5 7.*\\\].*$srcfile:$odd_branch.*" \
     "hit the BP in odd branch"
 
 set first_thread [get_current_thread "odd branch"]
+set second_thread [get_another_stopped_thread $srcfile $odd_branch $first_thread]
 set first_thread [lindex [split $first_thread "."] 1]
+set second_thread [lindex [split $second_thread "."] 1]
 
 gdb_test "thread" "Current thread is 2.$first_thread:1 (.*lane 1).*"\
     "current thread displays lanes"
 gdb_test "print \$_simd_lane" "= 1"
 
 set first_thread_lane 3
-if {$first_thread != "3"} {
-    set second_thread 3
-} else {
-    set second_thread 4
-}
 
 # thread :3, change lane within a thread
 gdb_test "thread :$first_thread_lane"\

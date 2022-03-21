@@ -345,3 +345,34 @@ proc current_thread_has_simd_lanes {} {
     fail $gdb_test_name
     return 0
 }
+
+# Returns the ID of the first stopped thread at $srcfile:$line that is not
+# among ids_to_ignore. The returned thread ID is in the format of
+# (<inferior number>.<thread number>) and SIMD lane information is omitted.
+# For thread 2.3:0 returns "2.3".
+# Returns "invalid" if no thread ID is found with given parameters.
+proc get_another_stopped_thread {srcfile line ids_to_ignore {msg ""}} {
+    global gdb_prompt decimal
+
+    if [string match "" $msg] {
+	set msg "get another stopped thread"
+    }
+
+    set another_stopped_thread "invalid"
+    gdb_test_multiple "info threads" $msg -lbl {
+	-re "\r\n. ($decimal\(\.$decimal\)?)\[^\r\n\]* at $srcfile:$line" {
+	    if {$another_stopped_thread eq "invalid"} {
+		set next_thread $expect_out(1,string)
+		if {[lsearch $ids_to_ignore $next_thread] == -1} {
+		    set another_stopped_thread $next_thread
+		}
+	    }
+	    exp_continue
+	}
+	-re "$gdb_prompt $" {
+	    gdb_assert { { $another_stopped_thread ne "invalid" } } $gdb_test_name
+	}
+    }
+
+    return $another_stopped_thread
+}

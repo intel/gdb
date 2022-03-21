@@ -70,11 +70,7 @@ foreach device $sycl_device_list {
 	gdb_test "info thread \$_thread" "$cur_thread_out" \
 	    "info about current thread (using \$_thread)"
 
-	if { $cur_thread eq "2.2" } {
-	    set second_thread "2.3"
-	} else {
-	    set second_thread "2.2"
-	}
+	set second_thread [get_another_stopped_thread $srcfile $first_line $cur_thread]
 
 	# Other thread should be presented via 1 line.
 	gdb_test "info thread $second_thread" \

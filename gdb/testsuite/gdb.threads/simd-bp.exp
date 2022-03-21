@@ -55,17 +55,8 @@ gdb_breakpoint "$line_dim0_defined" {temporary}
 gdb_continue_to_breakpoint "hit the BP after dim0 defined"
 
 set first_thread [get_current_thread "$line_dim0_defined"]
-if { $first_thread eq "2.2" } {
-    set second_thread "2.3"
-    set third_thread "2.4"
-} else {
-    set second_thread "2.2"
-    if { $first_thread eq "2.5" } {
-	set third_thread "2.6"
-    } else {
-	set third_thread "2.5"
-    }
-}
+set second_thread [get_another_stopped_thread $srcfile $line_dim0_defined $first_thread "get second thread"]
+set third_thread [get_another_stopped_thread $srcfile $line_dim0_defined [list $first_thread $second_thread] "get third thread"]
 
 set dim0_first_thread_5 [get_var_for_lane "dim0" 5]
 set dim0_first_thread_7 [get_var_for_lane "dim0" 7]

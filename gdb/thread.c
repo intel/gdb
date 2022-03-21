@@ -2867,6 +2867,20 @@ simd_lane_num_make_value (gdbarch *gdbarch, internalvar *var, void *ignore)
   return value_from_longest (builtin_type (gdbarch)->builtin_int, lane_num);
 }
 
+/* Return a new value for the current SIMD width of the selected thread.
+   Return a value of -1 if no thread is selected, or no threads exist.  */
+
+static value *
+simd_width_make_value (gdbarch *gdbarch, internalvar *var, void *ignore)
+{
+  int simd_width = (inferior_ptid != null_ptid)
+    ? inferior_thread ()->get_simd_width ()
+    : -1;
+
+  return value_from_longest (builtin_type (gdbarch)->builtin_int,
+			     simd_width);
+}
+
 /* Commands with a prefix of `thread'.  */
 struct cmd_list_element *thread_cmd_list = NULL;
 
@@ -2899,6 +2913,14 @@ static const struct internalvar_funcs inferior_thread_count_funcs =
 static const internalvar_funcs simd_lane_funcs =
 {
   simd_lane_num_make_value,
+  nullptr,
+};
+
+/* Implementation of `simd_width' variable.  */
+
+static const internalvar_funcs simd_width_funcs =
+{
+  simd_width_make_value,
   nullptr,
 };
 
@@ -3038,4 +3060,5 @@ When on messages about thread creation and deletion are printed."),
   create_internalvar_type_lazy ("_inferior_thread_count",
 				&inferior_thread_count_funcs, NULL);
   create_internalvar_type_lazy ("_simd_lane", &simd_lane_funcs, nullptr);
+  create_internalvar_type_lazy ("_simd_width", &simd_width_funcs, nullptr);
 }

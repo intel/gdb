@@ -318,6 +318,8 @@ intelgt_skip_prologue (gdbarch *gdbarch, CORE_ADDR start_pc)
   return start_pc;
 }
 
+static bool is_a_promotable_small_struct (type *arg_type, int max_size);
+
 /* Implementation of gdbarch's return_value method.  */
 
 static enum return_value_convention
@@ -335,6 +337,7 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
   unsigned int retval_size = register_size (gdbarch, retval_regnum);
   int type_length = valtype->length ();
   int simd_lane = inferior_thread ()->current_simd_lane ();
+  auto grf = grf_handler (retval_size, regcache);
 
   if (type_length > 8 || class_or_union_p (valtype))
     {
@@ -343,30 +346,10 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
 	 vectorized sequence of memory addresses.  */
       if (readbuf != nullptr)
 	{
-	  CORE_ADDR offset = address_size_byte * simd_lane;
-	  /* One retval register contains that many addresses.  */
-	  int n_addresses_in_retval_reg = retval_size / address_size_byte;
-
-	  /* Find at which register the return value address is stored
-	     for the current SIMD lane.  */
-	  while (offset > retval_size)
-	    {
-	      /* The register RETVAL_REGNUM does not contain the return value
-		 for the current SIMD lane.  Decrease the offset by the size of
-		 addresses stored in this register and move to the next
-		 register.  */
-	      offset -= n_addresses_in_retval_reg* address_size_byte;
-	      retval_regnum++;
-	    }
-
-	  /* Read the address to a temporary buffer.  The address is stored
-	     in RETVAL_REGNUM with OFFSET.  */
-	  gdb_byte buf[address_size_byte];
-	  regcache->cooked_read_part (retval_regnum, offset,
-				      address_size_byte, buf);
-	  bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-	  CORE_ADDR addr = extract_unsigned_integer (buf, address_size_byte,
-						     byte_order);
+	  /* Read the address to a temporary buffer.  */
+	  CORE_ADDR addr = 0;
+	  grf.read_primitive (retval_regnum, address_size_byte,
+			      (gdb_byte *) &addr);
 	  /* Read the value to the resulting buffer.  */
 	  int err = target_read_memory (addr, readbuf, type_length);
 	  if (err != 0)

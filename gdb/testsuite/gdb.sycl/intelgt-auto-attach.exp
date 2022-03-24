@@ -115,39 +115,15 @@ proc run_to_bp {which_bp scenario iter device} {
 }
 
 
+# Test restarting the host and gt inferior while debugging a kernel.
+# Run up to a BP and try to restart the gt inferior, which should fail.  Then,
+# switch to the host inferior and restart execution.  Do this with non-stop
+# mode set to either "on" or "off".
 
-# Test the unavailability of the "run" command for intelgt inferiors.
-# Run to a kernel BP and try run - this should be disabled.  Afterwards
-# continue to the end.
+proc run_restart_scenario {non_stop_mode device} {
+    global srcfile inferior_exited_re gdb_prompt
 
-proc run_restart_device_scenario {device} {
-    global srcfile
-
-    if {![runto_main [sycl_get_device_args $device]]} {
-	fail "run the program"
-    } else {
-	pass "run the program"
-    }
-
-    # Set a breakpoint inside the kernel and hit it.
-    set inside_kernel [gdb_get_line_number "kernel-line-1"]
-    gdb_breakpoint "$srcfile:$inside_kernel"
-    gdb_continue_to_breakpoint "kernel line" \
-	".*$srcfile:$inside_kernel.*"
-
-    # Now try to "run".
-    gdb_test "run" \
-	"The \"extended-remote\" target does not support \"run\"\.  Try \"help target\" or \"continue\"\."
-
-    # We should still be able to run to the end.
-    continue_sycl_program_to_termination
-}
-
-# Test restarting the host inferior while debugging a kernel.
-# Run up to a BP, then switch to the host inferior and restart execution.
-
-proc run_restart_host_inferior {device} {
-    global srcfile
+    gdb_test_no_output "set non-stop $non_stop_mode"
 
     if {![runto_main [sycl_get_device_args $device]]} {
 	fail "run the program"
@@ -164,16 +140,34 @@ proc run_restart_host_inferior {device} {
     gdb_continue_to_breakpoint "kernel line" \
 	".*$srcfile:$inside_kernel.*"
 
-    # Switch to the host inferior.
-    gdb_test "inferior 1" "Switching to inferior 1.*" "switch host inferior"
+    if {$non_stop_mode eq "on"} {
+	# In non-stop mode we should still sit at the host inferior.
+	gdb_test "inferior 2" "Switching to inferior 2.*" "switch to gt inferior"
+    }
 
-    # Now try to "run".
+    # Restarting the gt inferior is disabled.
+    gdb_test "run" \
+	"The \"(?:extended-)?remote\" target does not support \"run\"\.  Try \"help target\" or \"continue\"\." \
+	"run for gt inferior is disabled"
+
+    gdb_test "inferior 1" "Switching to inferior 1.*" "switch to host inferior"
+
+    # Now try to "run".  We should restart and hit the breakpoint inserted
+    # earlier again.
     gdb_test "run" "Starting program:.*$srcfile:$inside_kernel.*" \
 	"restart host inferior and hit kernel bp" \
 	{Start it from the beginning\? \(y or n\) } "y"
 
-    # We should now be able to run to the end.
-    continue_sycl_program_to_termination
+    if {$non_stop_mode eq "on"} {
+	gdb_test_multiple "continue -a" "continue to end" {
+	    -re "$inferior_exited_re normally].*$gdb_prompt.*" {
+		pass $gdb_test_name
+	    }
+	}
+    } else {
+	# We should now be able to run to the end.
+	continue_sycl_program_to_termination
+    }
 }
 
 foreach device $sycl_device_list {
@@ -211,12 +205,12 @@ foreach device $sycl_device_list {
 	    }
 	}
 
-	with_test_prefix "restart device inferior" {
-	    run_restart_device_scenario $device
-	}
-
-	with_test_prefix "run restart host inferior" {
-	    run_restart_host_inferior $device
+	# Run the restart scenario for non-stop mode enabled and disabled.
+	foreach_with_prefix non_stop_mode {"off" "on"} {
+	    clean_restart $binfile
+	    with_test_prefix "restart_scenario" {
+		run_restart_scenario $non_stop_mode $device
+	    }
 	}
     }
 }

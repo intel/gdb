@@ -113,6 +113,54 @@ proc run_to_bp {which_bp scenario iter} {
     }
 }
 
+# Test restarting the host and gt inferior while debugging a kernel.
+# Run up to a BP and try to restart the gt inferior, which should fail.  Then,
+# switch to the host inferior and restart execution.  Do this with non-stop
+# mode set to either "on" or "off".
+
+proc run_restart_scenario {non_stop_mode} {
+    global srcfile
+    global openmp_program_extension
+
+    gdb_test_no_output "set non-stop $non_stop_mode"
+
+    if {[openmp_run_to_main  $openmp_program_extension] < 0} {
+	fail "run the program"
+	return -1
+    } else {
+	pass "run the program"
+    }
+
+    # Remove the breakpoint set for main, since we want to restart.
+    delete_breakpoints
+
+    # Set a breakpoint inside the kernel and hit it.
+    set inside_kernel [gdb_get_line_number "kernel-line-1"]
+    gdb_breakpoint "$srcfile:$inside_kernel"
+    gdb_continue_to_breakpoint "kernel line" \
+	".*$srcfile:$inside_kernel.*"
+
+    if {$non_stop_mode eq "on"} {
+	# In non-stop mode we should still sit at the host inferior.
+	gdb_test "inferior 2" "Switching to inferior 2.*" "switch to gt inferior"
+    }
+
+    # Restarting the gt inferior is disabled.
+    gdb_test "run" \
+	"The \"extended-remote\" target does not support \"run\"\.  Try \"help target\" or \"continue\"\." "run for gt inferior is disabled"
+
+    gdb_test "inferior 1" "Switching to inferior 1.*" "switch to host inferior"
+
+    # Now try to "run".  We should restart and hit the breakpoint inserted
+    # earlier again.
+    gdb_test "run" "Starting program:.*$srcfile:$inside_kernel.*" \
+	"restart host inferior and hit kernel bp" \
+	{Start it from the beginning\? \(y or n\) } "y"
+
+    # We should now be able to run to the end.
+    continue_openmp_program_to_termination
+}
+
 # Re-run multiple times until termination, with and without
 # inside/outside BPs.
 foreach_with_prefix has_kernel_bp {0 1} {
@@ -141,60 +189,9 @@ foreach_with_prefix which_bp {inside outside} {
     }
 }
 
-# Test the unavailability of the "run" command for intelgt inferiors.
-# Run to a kernel BP and try run - this should be disabled.  Afterwards
-# continue to the end.
-with_test_prefix "restart device inferior" {
+# Run the restart scenario for non-stop mode enabled and disabled.
+
+foreach_with_prefix non_stop_mode {"off" "on"} {
     clean_restart $binfile
-    if {![openmp_run_to_main  $openmp_program_extension] < 0} {
-	fail "run the program"
-	return -1
-    } else {
-	pass "run the program"
-    }
-
-    # Set a breakpoint inside the kernel and hit it.
-    set inside_kernel [gdb_get_line_number "kernel-line-1"]
-    gdb_breakpoint "$srcfile:$inside_kernel"
-    gdb_continue_to_breakpoint "kernel line" \
-	".*$srcfile:$inside_kernel.*"
-
-    # Now try to "run".
-    gdb_test "run" \
-	"The \"extended-remote\" target does not support \"run\"\.  Try \"help target\" or \"continue\"\."
-
-    # We should still be able to run to the end.
-    continue_openmp_program_to_termination
-}
-
-# Test restarting the host inferior while debugging a kernel.
-# Run up to a BP, then switch to the host inferior and restart execution.
-with_test_prefix "restart host inferior" {
-    clean_restart $binfile
-    if {![openmp_run_to_main  $openmp_program_extension] < 0} {
-	fail "run the program"
-	return -1
-    } else {
-	pass "run the program"
-    }
-
-    # Remove the breakpoint set for main, since we want to restart.
-    delete_breakpoints
-
-    # Set a breakpoint inside the kernel and hit it.
-    set inside_kernel [gdb_get_line_number "kernel-line-1"]
-    gdb_breakpoint "$srcfile:$inside_kernel"
-    gdb_continue_to_breakpoint "kernel line" \
-	".*$srcfile:$inside_kernel.*"
-
-    # Switch to the host inferior.
-    gdb_test "inferior 1" "Switching to inferior 1.*" "switch host inferior"
-
-    # Now try to "run".
-    gdb_test "run" "Starting program:.*$srcfile:$inside_kernel.*" \
-	"restart host inferior and hit kernel bp" \
-	{Start it from the beginning\? \(y or n\) } "y"
-
-    # We should now be able to run to the end.
-    continue_openmp_program_to_termination
+    run_restart_scenario $non_stop_mode
 }

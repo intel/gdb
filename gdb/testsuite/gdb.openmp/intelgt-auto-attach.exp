@@ -153,11 +153,17 @@ proc run_restart_scenario {non_stop_mode} {
 
     # Now try to "run".  We should restart and hit the breakpoint inserted
     # earlier again.
+    if {$non_stop_mode eq "on"} {
+	setup_kfail "JIRA DOQG/2896" "*-*-*"
+    }
     gdb_test "run" "Starting program:.*$srcfile:$inside_kernel.*" \
 	"restart host inferior and hit kernel bp" \
 	{Start it from the beginning\? \(y or n\) } "y"
 
     # We should now be able to run to the end.
+    if {$non_stop_mode eq "on"} {
+	setup_kfail "JIRA DOQG/2896" "*-*-*"
+    }
     continue_openmp_program_to_termination
 }
 

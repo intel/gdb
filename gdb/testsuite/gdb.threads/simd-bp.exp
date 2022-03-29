@@ -113,6 +113,15 @@ set i 0
 
 while {$should_continue && $i < 10} {
     incr i
+
+    # DOQG-2903: AOT build on SLES machine may fail at iteration 4.
+    if {$i == 4
+	&& [info exists env(TESTNAME)]
+	&& [string first "sles" $::env(TESTNAME)] > 0
+	&& [info exists env(appdbg_compiler)]
+	&& [string first "aot" $::env(appdbg_compiler)] > 0} {
+	setup_kfail "JIRA DOQG/2903" "*-*-*"
+    }
     with_test_prefix "iteration $i" { gdb_test_multiple "continue" "continue" {
 	-re "$srcfile:$third_line.*$gdb_prompt" {
 	    # Thread should be $second_thread, SIMD lane 3.

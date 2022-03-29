@@ -1,0 +1,99 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests --lane argument in MI commands.
+#
+
+load_lib sycl.exp
+
+standard_testfile simd.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if { ![require_sycl_device "gpu" "Intel*"] } {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+mi_clean_restart $binfile
+
+if {[mi_start_sycl_program] < 0} {
+    return -1
+}
+
+set condition_line [gdb_get_line_number "kernel-condition-line"]
+set odd_branch_line [gdb_get_line_number "kernel-odd-branch"]
+
+mi_continue_to_line $condition_line "Continue to 'kernel-condition-line' and stop at breakpoint"
+
+mi_gdb_test "-data-evaluate-expression \$_simd_lane" \
+    "\\^done,value=\"0\"" \
+    "Default thread, default simd lane"
+
+mi_gdb_test "-data-evaluate-expression --lane 1 \$_simd_lane" \
+    "\\^done,value=\"1\"" \
+    "Default thread, simd lane 1"
+
+mi_gdb_test "-data-evaluate-expression \$_simd_lane" \
+    "\\^done,value=\"1\"" \
+    "Default thread, default simd lane (which is previously used lane)"
+
+# Here next thread should have odd lanes active (1, 3, 5, 7).
+mi_continue_to_line $odd_branch_line "Continue to 'kernel-odd-branch' and stop at breakpoint"
+
+set stopped_threads [mi_stopped_thread_ids $srcfile $odd_branch_line]
+set second_thread_id [lindex $stopped_threads 1]
+
+mi_gdb_test "-data-evaluate-expression --thread $second_thread_id \$_simd_lane" \
+    "\\^done,value=\"1\"" \
+    "Thread $second_thread_id, default simd lane"
+
+mi_gdb_test "-data-evaluate-expression --lane 3 \$_simd_lane" \
+    "\\^done,value=\"3\"" \
+    "Default thread ($second_thread_id), simd lane 3"
+
+mi_gdb_test "-data-evaluate-expression --thread $second_thread_id \$_simd_lane" \
+    "\\^done,value=\"3\"" \
+    "Thread $second_thread_id, default simd lane (which is previously used lane)"
+
+mi_gdb_test "-data-evaluate-expression \$_simd_lane" \
+    "\\^done,value=\"3\"" \
+    "Default thread ($second_thread_id), default simd lane (still 3)"
+
+# Error cases.
+mi_gdb_test "-data-evaluate-expression --lane 0 \$_simd_lane" \
+    "\\^error,msg=\"SIMD lane 0 is inactive in thread $second_thread_id.\"" \
+    "Current thread ($second_thread_id), error, inactive lane 0"
+
+mi_gdb_test "-data-evaluate-expression --thread 1 --lane 1 \$_simd_lane" \
+    "\\^error,msg=\"Thread 1 has no SIMD lanes.\".*" \
+    "Thread 1, error, no simd lanes"
+
+mi_gdb_test "-data-evaluate-expression --thread $second_thread_id --lane 9999 \$_simd_lane" \
+    "\\^error,msg=\"Incorrect SIMD lane number: 9999.\".*" \
+    "Thread $second_thread_id, error, incorrect simd lane 9999"
+
+
+# Send resuming command.
+mi_send_resuming_command "exec-continue" "continuing to inferior exit"
+# Expect normal exit.
+mi_expect_stop "exited-normally" "" "" "" "" "" "exit normally"

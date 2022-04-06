@@ -3044,7 +3044,7 @@ scoped_disable_commit_resumed::reset ()
   if (m_prev_enable_commit_resumed)
     {
       /* This is the outermost instance, re-enable
-         COMMIT_RESUMED_STATE on the targets where it's possible.  */
+	 COMMIT_RESUMED_STATE on the targets where it's possible.  */
       maybe_set_commit_resumed_all_targets ();
     }
   else

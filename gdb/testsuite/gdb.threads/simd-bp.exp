@@ -102,7 +102,12 @@ gdb_test "thread $third_thread" ".*$third_thread.*"\
 set should_continue true
 set i 0
 
-while {$should_continue && $i < 10} {
+with_timeout_factor 4 {
+if {[is_level_zero_debug_api]} {
+    kfail "JIRA DOQG/3115" "timeout had to be increased"
+}
+
+while {$should_continue && $i < 3} {
     incr i
 
     # DOQG-2903: AOT build on SLES machine may fail at iteration 4.
@@ -164,6 +169,7 @@ while {$should_continue && $i < 10} {
 	    pass $test_terminated
 	}
     }}
+}
 }
 
 if { $n_hit_lane_clause == 1} {

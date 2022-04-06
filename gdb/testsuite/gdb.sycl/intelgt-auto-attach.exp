@@ -199,6 +199,11 @@ foreach_with_prefix which_bp {inside outside} {
     }
 }
 
+if {[is_level_zero_debug_api]} {
+    kfail "JIRA DOQG/3110" "tests below put the machine in bad state"
+    return
+}
+
 # Run the restart scenario for non-stop mode enabled and disabled.
 
 foreach_with_prefix non_stop_mode {"off" "on"} {

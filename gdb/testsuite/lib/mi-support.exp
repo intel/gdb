@@ -1223,12 +1223,22 @@ proc mi_expect_stop { reason func args file line extra test } {
     }
 
     if { $reason == "exited-normally" } {
-
+	set exited_normally 0
 	gdb_expect {
-	    -re "\\*stopped,reason=\"exited-normally\"\r\n.*$prompt_re" {
-		pass "$test"
+	    -re "\\*stopped,reason=\"exited-normally\"\r\n" {
+		set exited_normally 1
+		if {$async} {
+		    pass "$test"
+		} else {
+		    exp_continue
+		}
 	    }
-	    -re ".*$mi_gdb_prompt$" {fail "continue to end (2)"}
+	    -re "=thread-exited\[^\r\n\]+\r\n" {
+		exp_continue
+	    }
+	    -re ".*$mi_gdb_prompt$" {
+		gdb_assert {$exited_normally} "$test"
+	    }
 	    timeout {
 		fail "$test (timeout)"
 	    }

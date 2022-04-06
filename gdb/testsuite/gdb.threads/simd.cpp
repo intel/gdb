@@ -34,7 +34,7 @@ add_one (int to_number)
 int
 main (int argc, char *argv[])
 {
-  constexpr size_t DIM0 = 1024;
+  constexpr size_t DIM0 = 128;
 
   int in[DIM0];
   int out[DIM0];

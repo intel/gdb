@@ -2977,7 +2977,7 @@ scoped_disable_commit_resumed::reset ()
   if (m_prev_enable_commit_resumed)
     {
       /* This is the outermost instance, re-enable
-         COMMIT_RESUMED_STATE on the targets where it's possible.  */
+	 COMMIT_RESUMED_STATE on the targets where it's possible.  */
       maybe_set_commit_resumed_all_targets ();
     }
   else
@@ -9818,7 +9818,7 @@ infrun_thread_ptid_changed ()
 
 static void
 show_schedlock_eval (struct ui_file *file, int from_tty,
-                     struct cmd_list_element *c, const char *value)
+		     struct cmd_list_element *c, const char *value)
 {
   fprintf_filtered (file, _("Scheduler locking during expression "
 			    "evaluations is %s.\n"), value);

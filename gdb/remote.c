@@ -6621,7 +6621,7 @@ remote_target::resume (ptid_t ptid, int step, enum gdb_signal siggnal)
 	remote_thr = get_remote_thread_info (this, ptid);
 
       /* We don't expect the core to ask to resume an already resumed (from
-         its point of view) thread.  */
+	 its point of view) thread.  */
       gdb_assert (remote_thr->get_resume_state () == resume_state::NOT_RESUMED);
 
       remote_thr->set_resumed_pending_vcont (step, siggnal);
@@ -6949,7 +6949,7 @@ remote_target::commit_resumed ()
       gdb_assert (!thread_is_in_step_over_chain (tp));
 
       /* We should never be commit-resuming a thread that has a stop reply.
-         Otherwise, we would end up reporting a stop event for a thread while
+	 Otherwise, we would end up reporting a stop event for a thread while
 	 it is running on the remote target.  */
       remote_state *rs = get_remote_state ();
       for (const auto &stop_reply : rs->stop_reply_queue)
@@ -6959,7 +6959,7 @@ remote_target::commit_resumed ()
 	= remote_thr->resumed_pending_vcont_info ();
 
       /* Check if we need to send a specific action for this thread.  If not,
-         it will be included in a wildcard resume instead.  */
+	 it will be included in a wildcard resume instead.  */
       if (info.step || info.sig != GDB_SIGNAL_0
 	  || !get_remote_inferior (tp->inf)->may_wildcard_vcont)
 	vcont_builder.push_action (tp->ptid, info.step, info.sig);

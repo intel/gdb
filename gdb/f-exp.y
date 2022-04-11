@@ -1135,7 +1135,7 @@ static const struct f77_boolean_val boolean_values[]  =
   { ".false.", 0 }
 };
 
-static const struct token f77_keywords[] =
+static const token f_keywords[] =
 {
   /* Historically these have always been lowercase only in GDB.  */
   { "character", CHARACTER, OP_NULL, true },
@@ -1470,15 +1470,15 @@ yylex (void)
   
   /* Catch specific keywords.  */
 
-  for (int i = 0; i < ARRAY_SIZE (f77_keywords); i++)
-    if (strlen (f77_keywords[i].oper) == namelen
-	&& ((!f77_keywords[i].case_sensitive
-	     && strncasecmp (tokstart, f77_keywords[i].oper, namelen) == 0)
-	    || (f77_keywords[i].case_sensitive
-		&& strncmp (tokstart, f77_keywords[i].oper, namelen) == 0)))
+  for (const auto &keyword : f_keywords)
+    if (strlen (keyword.oper) == namelen
+	&& ((!keyword.case_sensitive
+	     && strncasecmp (tokstart, keyword.oper, namelen) == 0)
+	    || (keyword.case_sensitive
+		&& strncmp (tokstart, keyword.oper, namelen) == 0)))
       {
-	yylval.opcode = f77_keywords[i].opcode;
-	return f77_keywords[i].token;
+	yylval.opcode = keyword.opcode;
+	return keyword.token;
       }
 
   yylval.sval.ptr = tokstart;

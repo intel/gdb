@@ -1027,13 +1027,19 @@ mi_on_resume (ptid_t ptid)
   struct thread_info *tp = NULL;
 
   process_stratum_target *target = current_inferior ()->process_target ();
-  if (ptid == minus_one_ptid || ptid.is_pid ())
-    tp = inferior_thread ();
-  else
-    tp = find_thread_ptid (target, ptid);
+
+  /* A pending attach target does not have threads yet.  Thus, we skip finding
+     thread info here.  */
+  if (!target->pending_attach)
+    {
+      if (ptid == minus_one_ptid || ptid.is_pid ())
+	tp = inferior_thread ();
+      else
+	tp = find_thread_ptid (target, ptid);
+    }
 
   /* Suppress output while calling an inferior function.  */
-  if (tp->control.in_infcall)
+  if (tp != nullptr && tp->control.in_infcall)
     return;
 
   SWITCH_THRU_ALL_UIS ()

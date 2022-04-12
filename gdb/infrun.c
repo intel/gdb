@@ -2096,7 +2096,10 @@ ptid_t
 user_visible_resume_ptid (int step)
 {
   ptid_t resume_ptid;
-  thread_info *tp = inferior_thread ();
+
+  /* Here, tp may be nullptr if the current inferior does not have any threads
+     yet.  E.g., in the case of a pending_attach target.  */
+  thread_info *tp = has_inferior_thread () ? inferior_thread () : nullptr;
 
   if (non_stop)
     {
@@ -2106,7 +2109,8 @@ user_visible_resume_ptid (int step)
     }
   else if ((scheduler_mode == schedlock_on)
 	   || (scheduler_mode == schedlock_step && step)
-	   || (scheduler_locking.eval && tp->control.in_infcall))
+	   || (scheduler_locking.eval && tp != nullptr
+	       && tp->control.in_infcall))
     {
       /* User-settable 'scheduler' mode requires solo thread
 	 resume.  */
@@ -2120,7 +2124,7 @@ user_visible_resume_ptid (int step)
       resume_ptid = inferior_ptid;
     }
   else if (inferior_ptid != null_ptid
-	   && inferior_thread ()->control.in_cond_eval)
+	   && tp != nullptr && tp->control.in_cond_eval)
     {
       /* The inferior thread is evaluating a BP condition.  Other threads
 	 might be stopped or running and we do not want to change their
@@ -2731,7 +2735,16 @@ clear_proceed_status (int step)
 				     execution_direction))
     target_record_stop_replaying ();
 
-  if (!non_stop && inferior_ptid != null_ptid)
+  /* A current pending attach target will have null_ptid here as set in
+     switch_to_inferior_no_thread when switching to the inferior.  Since we
+     still want to be able to resume the target and all other targets if we
+     are in schedule-multiple, we have to check for pending attach targets
+     here.  */
+  const bool pending_attach
+    = (current_inferior ()->process_target () != nullptr
+       && current_inferior ()->process_target ()->pending_attach);
+
+  if (!non_stop && (inferior_ptid != null_ptid || pending_attach))
     {
       ptid_t resume_ptid = user_visible_resume_ptid (step);
       process_stratum_target *resume_target
@@ -2811,12 +2824,13 @@ static bool
 schedlock_applies (struct thread_info *tp)
 {
   return (scheduler_mode == schedlock_on
-	  || (scheduler_mode == schedlock_step
+	  || (tp != nullptr && scheduler_mode == schedlock_step
 	      && tp->control.stepping_command)
 	  || (scheduler_mode == schedlock_replay
 	      && target_record_will_replay (minus_one_ptid,
-		                            execution_direction))
-	   || (scheduler_locking.eval && tp->control.in_infcall));
+					    execution_direction))
+	   || (tp != nullptr && scheduler_locking.eval
+	       && tp->control.in_infcall));
 }
 
 /* Set process_stratum_target::COMMIT_RESUMED_STATE in all target
@@ -3109,10 +3123,13 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
   struct execution_control_state ecss;
   struct execution_control_state *ecs = &ecss;
 
+  const bool pending_attach
+    = current_inferior ()->process_target ()->pending_attach;
+
   /* If we're stopped at a fork/vfork, follow the branch set by the
      "set follow-fork-mode" command; otherwise, we'll just proceed
      resuming the current thread.  */
-  if (!follow_fork ())
+  if (!pending_attach && !follow_fork ())
     {
       /* The target for some reason decided not to resume.  */
       normal_stop ();
@@ -3125,52 +3142,56 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
   gdbarch *gdbarch = target_gdbarch ();
   int stepping = 0;
 
-  cur_thr = inferior_thread ();
-  /* We'll update this if & when we switch to a new thread.  */
-  previous_thread_focus.ptid = cur_thr->ptid;
-  previous_thread_focus.simd_lane = cur_thr->current_simd_lane ();
-  previous_thread_focus.emask = cur_thr->active_simd_lanes_mask ();
-
-  regcache = get_current_regcache ();
-  gdbarch = regcache->arch ();
-  stepping = cur_thr->control.stepping_command;
-  const address_space *aspace = regcache->aspace ();
-
-  pc = regcache_read_pc_protected (regcache);
-
-  /* Fill in with reasonable starting values.  */
-  init_thread_stepping_state (cur_thr);
-
-  gdb_assert (!thread_is_in_step_over_chain (cur_thr));
-
-  if (addr == (CORE_ADDR) -1)
+  /* There is no current thread if the target is pending attach.  */
+  if (!pending_attach)
     {
-      if (pc == cur_thr->suspend.stop_pc
-	  && breakpoint_here_p (aspace, pc) == ordinary_breakpoint_here
-	  && execution_direction != EXEC_REVERSE)
-	/* There is a breakpoint at the address we will resume at,
-	   step one instruction before inserting breakpoints so that
-	   we do not stop right away (and report a second hit at this
-	   breakpoint).
+      cur_thr = inferior_thread ();
+      /* We'll update this if & when we switch to a new thread.  */
+      previous_thread_focus.ptid = cur_thr->ptid;
+      previous_thread_focus.simd_lane = cur_thr->current_simd_lane ();
+      previous_thread_focus.emask = cur_thr->active_simd_lanes_mask ();
 
-	   Note, we don't do this in reverse, because we won't
-	   actually be executing the breakpoint insn anyway.
-	   We'll be (un-)executing the previous instruction.  */
-	cur_thr->stepping_over_breakpoint = 1;
-      else if (gdbarch_single_step_through_delay_p (gdbarch)
-	       && gdbarch_single_step_through_delay (gdbarch,
-						     get_current_frame ()))
-	/* We stepped onto an instruction that needs to be stepped
-	   again before re-inserting the breakpoint, do so.  */
-	cur_thr->stepping_over_breakpoint = 1;
-    }
-  else
-    {
-      regcache_write_pc (regcache, addr);
-    }
+      regcache = get_current_regcache ();
+      gdbarch = regcache->arch ();
+      stepping = cur_thr->control.stepping_command;
+      const address_space *aspace = regcache->aspace ();
 
-  if (siggnal != GDB_SIGNAL_DEFAULT)
-    cur_thr->suspend.stop_signal = siggnal;
+      pc = regcache_read_pc_protected (regcache);
+
+      /* Fill in with reasonable starting values.  */
+      init_thread_stepping_state (cur_thr);
+
+      gdb_assert (!thread_is_in_step_over_chain (cur_thr));
+
+      if (addr == (CORE_ADDR) -1)
+	{
+	  if (pc == cur_thr->suspend.stop_pc
+	      && breakpoint_here_p (aspace, pc) == ordinary_breakpoint_here
+	      && execution_direction != EXEC_REVERSE)
+	    /* There is a breakpoint at the address we will resume at,
+	       step one instruction before inserting breakpoints so that
+	       we do not stop right away (and report a second hit at this
+	       breakpoint).
+
+	       Note, we don't do this in reverse, because we won't
+	       actually be executing the breakpoint insn anyway.
+	       We'll be (un-)executing the previous instruction.  */
+	    cur_thr->stepping_over_breakpoint = 1;
+	  else if (gdbarch_single_step_through_delay_p (gdbarch)
+		   && gdbarch_single_step_through_delay (gdbarch,
+							 get_current_frame ()))
+	    /* We stepped onto an instruction that needs to be stepped
+	       again before re-inserting the breakpoint, do so.  */
+	    cur_thr->stepping_over_breakpoint = 1;
+	}
+      else
+	{
+	  regcache_write_pc (regcache, addr);
+	}
+
+      if (siggnal != GDB_SIGNAL_DEFAULT)
+	cur_thr->suspend.stop_signal = siggnal;
+    }
 
   ptid_t resume_ptid = user_visible_resume_ptid (stepping);
   process_stratum_target *resume_target
@@ -3189,8 +3210,9 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
      breakpoints first), from the user/frontend's point of view, all
      threads in RESUME_PTID are now running.  Unless we're calling an
      inferior function, as in that case we pretend the inferior
-     doesn't run at all.  */
-  if (!cur_thr->control.in_infcall)
+     doesn't run at all.  In pending attach we have no cur_thr so skip
+     the check.  */
+  if (pending_attach || !cur_thr->control.in_infcall)
     set_running (resume_target, resume_ptid, true);
 
   infrun_debug_printf ("addr=%s, signal=%s", paddress (gdbarch, addr),
@@ -3248,8 +3270,9 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
     }
 
   /* Enqueue the current thread last, so that we move all other
-     threads over their breakpoints first.  */
-  if (cur_thr->stepping_over_breakpoint)
+     threads over their breakpoints first.  In pending attach the target has
+     no threads so no need for it to be stepped.  */
+  if (!pending_attach && cur_thr->stepping_over_breakpoint)
     global_thread_step_over_chain_enqueue (cur_thr);
 
   /* If the thread isn't started, we'll still need to set its prev_pc,
@@ -3257,7 +3280,8 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
      advanced.  Must do this before resuming any thread, as in
      all-stop/remote, once we resume we can't send any other packet
      until the target stops again.  */
-  cur_thr->prev_pc = regcache_read_pc_protected (regcache);
+  if (!pending_attach)
+    cur_thr->prev_pc = regcache_read_pc_protected (regcache);
 
   {
     scoped_restore_current_thread restore_thread;
@@ -3282,6 +3306,9 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 	    {
 	      if (resume_target != nullptr && resume_target != target)
 		continue;
+	      /* Pending attach targets have no threads yet.  */
+	      if (target->pending_attach)
+		continue;
 
 	      switch_to_target_no_thread (target);
 
@@ -3303,7 +3330,8 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 		     thread, if it belongs to this target.  Otherwise
 		     just pick the first one.  */
 		  thread_info *tp;
-		  if (target == cur_thr->inf->process_target ())
+		  if (cur_thr != nullptr
+		      && target == cur_thr->inf->process_target ())
 		    tp = cur_thr;
 		  else
 		    {
@@ -3325,13 +3353,15 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 		}
 	    }
 	}
-      else
+      else if (!pending_attach)
 	proceed_resume_thread_checked (cur_thr, ecs);
 
       disable_commit_resumed.reset_and_commit ();
     }
 
-    /* The targets that are pending attach are treated separately.  */
+    /* The targets that are pending attach are treated separately.  Also
+       handle the current target which has not yet been resumed in step_over
+       as it has no threads.  */
     for (process_stratum_target *target : all_process_targets ())
       {
 	if (resume_target != nullptr && resume_target != target)

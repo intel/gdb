@@ -644,7 +644,12 @@ ensure_not_running (void)
 void
 continue_1 (int all_threads)
 {
-  ERROR_NO_INFERIOR;
+  const bool pending_attach
+    = (current_inferior ()->process_target () != nullptr
+       && current_inferior ()->process_target ()->pending_attach);
+
+  if (!pending_attach)
+    ERROR_NO_INFERIOR;
   ensure_not_tfind_mode ();
 
   if (non_stop && all_threads)
@@ -689,8 +694,12 @@ continue_1 (int all_threads)
     }
   else
     {
-      ensure_valid_thread ();
-      ensure_not_running ();
+      /* A pending attach target has no threads.  */
+      if (!pending_attach)
+	{
+	  ensure_valid_thread ();
+	  ensure_not_running ();
+	}
       clear_proceed_status (0);
       proceed ((CORE_ADDR) -1, GDB_SIGNAL_DEFAULT);
     }
@@ -703,8 +712,12 @@ continue_command (const char *args, int from_tty)
 {
   int async_exec;
   bool all_threads_p = false;
+  const bool pending_attach
+    = (current_inferior ()->process_target () != nullptr
+       && current_inferior ()->process_target ()->pending_attach);
 
-  ERROR_NO_INFERIOR;
+  if (!pending_attach)
+    ERROR_NO_INFERIOR;
 
   /* Find out whether we must run in the background.  */
   gdb::unique_xmalloc_ptr<char> stripped = strip_bg_char (args, &async_exec);
@@ -772,7 +785,8 @@ continue_command (const char *args, int from_tty)
 
   ensure_not_tfind_mode ();
 
-  if (!non_stop || !all_threads_p)
+  /* A pending attach target has no threads.  */
+  if (!pending_attach && (!non_stop || !all_threads_p))
     {
       ensure_valid_thread ();
       ensure_not_running ();

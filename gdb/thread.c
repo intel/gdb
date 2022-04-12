@@ -1066,6 +1066,18 @@ set_running (process_stratum_target *targ, ptid_t ptid, bool running)
     if (set_running_thread (tp, running))
       any_started = true;
 
+  /* Pending attach targets are resumed even without threads present.
+     We check them here separately and set any_started in case we find a
+     pending attach target that we're going to resume.  */
+  for (process_stratum_target *target : all_process_targets ())
+    {
+      if (targ != nullptr && targ != target)
+	continue;
+      if (!target->pending_attach)
+	continue;
+      any_started = true;
+    }
+
   if (any_started)
     gdb::observers::target_resumed.notify (ptid);
 }

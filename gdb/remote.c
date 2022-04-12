@@ -6607,9 +6607,12 @@ remote_target::resume (ptid_t ptid, int step, enum gdb_signal siggnal)
      minimize roundtrip latency, here we just store the resume
      request (put the thread in RESUMED_PENDING_VCONT state); the actual remote
      resumption will be done in remote_target::commit_resume, where we'll be
-     able to do vCont action coalescing.  */
+     able to do vCont action coalescing.  If we are in pending attach state,
+     the target has no threads yet and we do not need to resume anything.  */
   if (target_is_non_stop_p () && ::execution_direction != EXEC_REVERSE)
     {
+      if (this->pending_attach)
+	return;
       remote_thread_info *remote_thr;
 
       if (minus_one_ptid == ptid || ptid.is_pid ())

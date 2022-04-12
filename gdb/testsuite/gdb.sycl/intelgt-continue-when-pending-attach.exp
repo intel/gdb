@@ -1,0 +1,65 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test the ability to resume a pending attach inferior.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-1D.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {![require_sycl_device "gpu" "Intel*"]} {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Break before the kernel was submitted and when the hidden intelgt inferior
+# was already created.  Switch to the hidden inferior and try to 'continue'.
+# This should resume both, host and intelgt inferior and continue to the
+# in-kernel breakpoint.
+
+set before_kernel_line [gdb_get_line_number "line-before-kernel"]
+set kernel_line [gdb_get_line_number "kernel-first-line"]
+gdb_breakpoint "$before_kernel_line" {temporary}
+gdb_breakpoint "$kernel_line"
+
+gdb_continue_to_breakpoint "before kernel bp" \
+    ".*$srcfile:$before_kernel_line.*"
+
+# Switch to the hidden inferior - it should not have any threads yet.
+# Schedule-multiple should have been set by the auto-attach-script.
+gdb_test "inferior -1" \
+    "\\\[Switching to inferior -1 \\\[<null>\\\] \\(<noexec>\\)\\\]"
+gdb_test "show schedule-multiple" \
+    "Resuming the execution of threads of all processes is on\."
+
+# Continue from the hidden inferior.  We should hit the second BP we set inside
+# the kernel.
+gdb_continue_to_breakpoint "kernel bp" ".*$srcfile:$kernel_line.*"
+delete_breakpoints
+
+continue_sycl_program_to_termination

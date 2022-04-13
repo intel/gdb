@@ -3461,18 +3461,9 @@ init_wait_for_inferior (void)
   nullify_last_target_wait_ptid ();
 
   previous_thread_focus.ptid = inferior_ptid;
-  if (inferior_ptid == null_ptid)
-    {
-      previous_thread_focus.simd_lane = -1;
-      previous_thread_focus.emask = 0x0;
-    }
-  else
-    {
-      thread_info *current_thread = inferior_thread ();
+  previous_thread_focus.simd_lane = -1;
+  previous_thread_focus.emask = 0x0;
 
-      previous_thread_focus.simd_lane = current_thread->current_simd_lane ();
-      previous_thread_focus.emask = current_thread->active_simd_lanes_mask ();
-    }
 }
 
 

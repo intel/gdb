@@ -451,13 +451,24 @@ private:
   int simd_lane_num = 0;
 
 public:
-  /* Return true if this thread has SIMD lanes.  */
+
+  /* Return true if the current target has registers, this is a thread which is
+     not executing and has SIMD lanes.  False otherwise.  */
+  bool not_executing_has_registers_has_simd_lanes ();
+
+  /* Return true if this thread has SIMD lanes.
+     Note: this function must not be called for executing threads and requires
+     reading registers.  */
   bool has_simd_lanes ();
 
-  /* Return active lanes mask for this thread.  */
+  /* Return active lanes mask for this thread.
+     Note: this function must not be called for executing threads and requires
+     reading registers.  */
   unsigned int active_simd_lanes_mask ();
 
-  /* Return true if thread has active SIMD lanes.  */
+  /* Return true if thread has active SIMD lanes.
+     Note: this function must not be called for executing threads and requires
+     reading registers.  */
   bool is_active ();
 
   /* Return the current simd lane.  */
@@ -467,13 +478,19 @@ public:
   void set_current_simd_lane (int lane);
 
   /* Set the current SIMD lane as default: leave the lane unchanged if it
-     is active, otherwise switch to the first active SIMD lane.  */
+     is active, otherwise switch to the first active SIMD lane.  If this
+     function is called for an executing thread or the current target does not
+     have registers we set simd_lane_num to 0.  */
   void set_default_simd_lane ();
 
-  /* Return true if LANE is active in this thread.  */
+  /* Return true if LANE is active in this thread.
+     Note: this function must not be called for executing threads and requires
+     reading registers.  */
   bool is_simd_lane_active (int lane);
 
-  /* Return the SIMD width.  */
+  /* Return the SIMD width.
+     Note: this function must not be called for executing threads and requires
+     reading registers.  */
   unsigned int get_simd_width ();
 };
 
@@ -909,10 +926,11 @@ extern void print_selected_thread_frame (struct ui_out *uiout,
    alive anymore.
 
    If SIMD_LANE_NUM specifies an active lane in THR, set current SIMD lane
-   of THR to SIMD_LANE_NUM.  If SIMD_LANE_NUM is -1 and the current lane
-   of THR is inactive, try to switch THR to the first active lane.  If all
-   lanes are inactive, switches to the first lane.  Do not change the current
-   lane of THR if it is active.  */
+   of THR to SIMD_LANE_NUM.  In case SIMD_LANE_NUM > 0, the target requires
+   registers, the specified THR must be not executing and have simd lanes.
+   If SIMD_LANE_NUM is -1, switch to the default lane.  If all lanes are
+   inactive, switch to the first lane.  Do not change the current lane of THR
+   if it is active.  */
 extern void thread_select (const char *tidstr, class thread_info *thr,
 			   int simd_lane_num = -1);
 

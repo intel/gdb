@@ -12921,7 +12921,7 @@ bkpt_print_it (bpstat bs)
 		    signed_field ("bkptno", b->number));
   if (show_thread_that_caused_stop () && bs->simd_lane_mask != 0x0)
     {
-      if (inferior_thread ()->has_simd_lanes ()
+      if (inferior_thread ()->not_executing_has_registers_has_simd_lanes ()
 	  && inferior_thread ()->is_active ())
 	{
 	  std::vector<int> hit_lanes;

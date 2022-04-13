@@ -93,5 +93,5 @@ gdb_test "thread $second_thread:2"\
 gdb_test "thread $second_thread:999"\
     "Incorrect SIMD lane number: 999."\
     "incorrect SIMD lane not set"
-gdb_test "thread 1.1:1" "Thread 1.1 does not have SIMD lanes."\
+gdb_test "thread 1.1:1" "Thread 1.1 does not have SIMD lanes: Cannot specify SIMD lane"\
     "Cannot set SIMD lane in thread without lanes"

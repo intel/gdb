@@ -129,8 +129,17 @@ parse_thread_id (const char *tidstr, const char **end, int *simd_lane_num)
 
   if (lane_specified)
     {
+      if (tp->executing)
+	error (_("Thread %s is executing, cannot check SIMD lane status:"
+		 " Cannot specify SIMD lane"), print_thread_id (tp));
+
+      if (!target_has_registers ())
+	error (_("Target of thread %s has no registers, cannot check SIMD lane"
+		 " status: Cannot specify SIMD lane"), print_thread_id (tp));
+
       if (!tp->has_simd_lanes ())
-	error (_("Thread %s does not have SIMD lanes."), print_thread_id (tp));
+	error (_("Thread %s does not have SIMD lanes: Cannot specify SIMD"
+		 " lane"), print_thread_id (tp));
 
       p1 = dot + 1;
 

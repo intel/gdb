@@ -2075,13 +2075,22 @@ mi_cmd_execute (struct mi_parse *parse)
       if (parse->simd_lane >= (sizeof (unsigned int)) * 8)
 	error (_("Incorrect SIMD lane number: %d."), parse->simd_lane);
 
+      if (!target_has_registers ())
+	error (_("Target of thread %d has no registers: Cannot set the SIMD"
+		 " lane"), parse->thread);
+
+      if (tp->executing)
+	error (_("Thread %d is executing: Cannot set the SIMD lane"),
+	       parse->thread);
+
       /* Check, that the thread has SIMD lanes.  */
       if (!tp->has_simd_lanes ())
 	error (_("Thread %d has no SIMD lanes."), tp->global_num);
 
       /* Check that thread is stopped.  */
       if (tp->state != THREAD_STOPPED)
-	error (_("Thread %d is not stopped."), tp->global_num);
+	error (_("Thread %d is not stopped: Cannot set the SIMD lane"),
+	       tp->global_num);
 
       /* Check, that the lane is active.  */
       if (!tp->is_simd_lane_active (parse->simd_lane))

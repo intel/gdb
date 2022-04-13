@@ -909,6 +909,14 @@ public:
       error (_("No inferior."));
 
     thread_info * const tp = inferior_thread ();
+    if (tp->executing)
+      error (_("Thread %s is executing, cannot extract SIMD lane."),
+	     print_thread_id (tp));
+
+    if (!target_has_registers ())
+      error (_("Target of thread %s has no registers, cannot extract SIMD"
+	       " lane."), print_thread_id (tp));
+
     if (!tp->has_simd_lanes ())
       error (_("Thread has no SIMD lanes."));
 

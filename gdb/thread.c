@@ -2335,41 +2335,58 @@ thread_apply_command (const char *tidlist, int from_tty)
       /* If SIMD lane was specified.  */
       if (simd_lane_num >= 0)
 	{
-	  if (tp->has_simd_lanes ())
+	  if (tp->executing ())
 	    {
-	      /* If this is the last meaningful lane of this thread, skip
-		 the rest of the SIMD range.  */
-	      if ((simd_lane_num >= (tp->get_simd_width () - 1))
-	      	  && parser.in_simd_lane_state ())
-		parser.skip_simd_lane_range ();
-
-	      /* If thread has SIMD lanes, check that the specified one is
-		 currently active.  */
-	      if (tp->is_simd_lane_active (simd_lane_num))
-		tp->set_current_simd_lane (simd_lane_num);
-	      else
-		{
-		  if (!is_simd_from_star)
-		    {
-		      /* Print warning only for explicitly specified SIMD
-			 lanes.  */
-		      warning (_("SIMD lane %d is inactive in thread %s"),
-			       simd_lane_num, print_thread_id (tp));
-		    }
-		  continue;
-		}
-	    }
-	  else
-	    {
-	      warning (_("Thread %s does not have SIMD lanes."),
+	      warning (_("Thread %s is executing, cannot check SIMD lane"
+			 " status: Cannot apply command on SIMD lane"),
 		       print_thread_id (tp));
 	      if (parser.in_simd_lane_state ())
 		parser.skip_simd_lane_range ();
+	      continue;
+	   }
 
+	  if (!target_has_registers ())
+	    {
+	      warning (_("Target of thread %s has no registers, cannot check"
+			 " SIMD lane status: Cannot apply command on"
+			 " SIMD lane"), print_thread_id (tp));
+	      if (parser.in_simd_lane_state ())
+		parser.skip_simd_lane_range ();
+	      continue;
+	    }
+
+	  if (!tp->has_simd_lanes ())
+	    {
+	      warning (_("Target of thread %s has no SIMD lanes: Cannot apply"
+			 " command on SIMD lane"), print_thread_id (tp));
+	      if (parser.in_simd_lane_state ())
+		parser.skip_simd_lane_range ();
+	      continue;
+	    }
+
+	  /* If this is the last meaningful lane of this thread, skip
+	     the rest of the SIMD range.  */
+	  if ((simd_lane_num >= (tp->get_simd_width () - 1))
+	      && parser.in_simd_lane_state ())
+	    parser.skip_simd_lane_range ();
+
+	  /* If thread has SIMD lanes, check that the specified one is
+	       currently active.  */
+	  if (tp->is_simd_lane_active (simd_lane_num))
+	    tp->set_current_simd_lane (simd_lane_num);
+	  else
+	    {
+	      if (!is_simd_from_star)
+		{
+		  /* Print warning only for explicitly specified SIMD
+		     lanes.  */
+		  warning (_("SIMD lane %d is inactive in thread %s"),
+			   simd_lane_num, print_thread_id (tp));
+		}
 	      continue;
 	    }
 	}
-      else if (tp->has_simd_lanes ())
+      else
 	{
 	  /* If the lane was not specified, switch to the default lane.  */
 	  tp->set_default_simd_lane ();

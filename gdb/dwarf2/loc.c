@@ -1767,10 +1767,8 @@ rw_pieced_value (struct value *v, struct value *from)
     }
   else
     {
-      if (value_type (v) != value_enclosing_type (v))
-	internal_error (__FILE__, __LINE__,
-			_("Should not be able to create a lazy value with "
-			  "an enclosing type"));
+      gdb_assert ((TYPE_LENGTH (value_type (v)) + value_embedded_offset (v))
+		  <= TYPE_LENGTH (value_enclosing_type (v)));
       v_contents = value_contents_raw (v);
       from_contents = NULL;
     }

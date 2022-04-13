@@ -98,3 +98,15 @@ if { [prepare_for_testing "failed to prepare" ${testfile} \
 gdb_test "p s1" " = {a = 1, b = 0}"
 gdb_test "p s2" \
     "access outside bounds of object referenced via synthetic pointer"
+
+# When fetching a lazy value, GDB typically tries to fetch the 'full'
+# object based on the enclosing type.  GDB does not support the reading
+# of a pieced value with a (possibly larger) enclosing type.  However,
+# the user may want to print a value casted to a different type,
+# e.g. print (<type> []) <variable>.  This cast causes an update of the
+# value's type.  In case of a pieced value, GDB failed to fetch the
+# value's content.
+# This test verifies that GDB can print a pieced value casted to a
+# different type.
+gdb_test "p (int \[\]) s1" " = \\{1\\, 0\\}"
+gdb_test "p (short \[\]) s1" " = \\{1\\, 0\\, 0\\, <synthetic pointer>\\}"

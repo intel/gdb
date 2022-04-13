@@ -245,6 +245,14 @@ inferior_thread (void)
   return current_thread_;
 }
 
+/* See gdbthread.h.  */
+
+bool
+has_inferior_thread ()
+{
+  return current_thread_ != nullptr;
+}
+
 /* Delete the breakpoint pointed at by BP_P, if there's one.  */
 
 static void

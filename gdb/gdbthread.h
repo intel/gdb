@@ -879,6 +879,9 @@ private:
    INFERIOR_PTID.  INFERIOR_PTID *must* be in the thread list.  */
 extern struct thread_info* inferior_thread (void);
 
+/* Returns whether the current thread is non-null.  */
+extern bool has_inferior_thread ();
+
 extern void update_thread_list (void);
 
 /* Delete any thread the target says is no longer alive.  */

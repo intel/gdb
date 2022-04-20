@@ -710,6 +710,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 	      "blsastbase",
 	      "btbase",
 	      "scrbase",
+	      "scrbase2",
 	      nullptr
 	    };
 	    int reg = 0;

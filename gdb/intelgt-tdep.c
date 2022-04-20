@@ -222,7 +222,7 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
   /* Register sets follow this format: [BEGIN, END), where BEGIN is inclusive
      and END is exclusive.  */
   constexpr regnum_range dwarf_nums[intelgt::regset_count] = {
-    [intelgt::regset_sba] = { 5, 14 },
+    [intelgt::regset_sba] = { 5, 12 },
     [intelgt::regset_grf] = { 16, 272 },
     [intelgt::regset_addr] = { 272, 288 },
     [intelgt::regset_flag] = { 288, 304 },
@@ -243,9 +243,7 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
     "sustbase",
     "blsustbase",
     "blsastbase",
-    "isabase",
-    "iobase",
-    "dynbase"
+    "scrbase2"
   };
 
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);

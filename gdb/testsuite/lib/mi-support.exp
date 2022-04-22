@@ -2760,3 +2760,38 @@ proc mi_is_target_remote {} {
 
     return [gdb_is_target_remote_prompt "$mi_gdb_prompt"]
 }
+
+# Return all stopped thread ids which are stopped at $srcfile:$line.
+
+proc mi_stopped_thread_ids {srcfile line} {
+    global expect_out mi_gdb_prompt
+
+    set stopped_pattern "\{id=.*?,state=\"stopped\".*?\}"
+    set file_pattern "\{id=.*?,file=\"$srcfile\".*?\}"
+    set line_pattern "\{id=.*?,line=\"$line\".*?\}"
+
+    set thread_ids_list {}
+
+    send_gdb "101-thread-info\n"
+
+    gdb_expect {
+	-re "$stopped_pattern" {
+	    set x $expect_out(buffer)
+	    if {[regexp -all $file_pattern $x]} {
+		if {[regexp -all $line_pattern $x]} {
+		    regexp {(\d+)} $x a
+		    lappend thread_ids_list "$a"
+		}
+	    }
+	    exp_continue
+	}
+
+	-re ".*$mi_gdb_prompt" {
+	    return $thread_ids_list
+	}
+
+	timeout {
+	    return {}
+	}
+    }
+}

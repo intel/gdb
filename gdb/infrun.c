@@ -3105,7 +3105,6 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
   INFRUN_SCOPED_DEBUG_ENTER_EXIT;
 
   struct regcache *regcache;
-  struct gdbarch *gdbarch;
   CORE_ADDR pc;
   struct execution_control_state ecss;
   struct execution_control_state *ecs = &ecss;
@@ -3122,7 +3121,11 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
       return;
     }
 
-  thread_info *cur_thr = inferior_thread ();
+  thread_info *cur_thr = nullptr;
+  gdbarch *gdbarch = target_gdbarch ();
+  int stepping = 0;
+
+  cur_thr = inferior_thread ();
   /* We'll update this if & when we switch to a new thread.  */
   previous_thread_focus.ptid = cur_thr->ptid;
   previous_thread_focus.simd_lane = cur_thr->current_simd_lane ();
@@ -3130,6 +3133,7 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 
   regcache = get_current_regcache ();
   gdbarch = regcache->arch ();
+  stepping = cur_thr->control.stepping_command;
   const address_space *aspace = regcache->aspace ();
 
   pc = regcache_read_pc_protected (regcache);
@@ -3138,14 +3142,6 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
   init_thread_stepping_state (cur_thr);
 
   gdb_assert (!thread_is_in_step_over_chain (cur_thr));
-
-  ptid_t resume_ptid
-    = user_visible_resume_ptid (cur_thr->control.stepping_command);
-  process_stratum_target *resume_target
-    = user_visible_resume_target (resume_ptid);
-
-  /* FIXME: Disable the check until the intelgt target can do non-stop.  */
-  /* check_multi_target_resumption (resume_target);  */
 
   if (addr == (CORE_ADDR) -1)
     {
@@ -3175,6 +3171,13 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 
   if (siggnal != GDB_SIGNAL_DEFAULT)
     cur_thr->suspend.stop_signal = siggnal;
+
+  ptid_t resume_ptid = user_visible_resume_ptid (stepping);
+  process_stratum_target *resume_target
+    = user_visible_resume_target (resume_ptid);
+
+  /* FIXME: Disable the check until the intelgt target can do non-stop.  */
+  /* check_multi_target_resumption (resume_target);  */
 
   /* If an exception is thrown from this point on, make sure to
      propagate GDB's knowledge of the executing state to the

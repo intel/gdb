@@ -1,0 +1,60 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test GDB support for kernel calling operator[] with 3D range.
+
+load_lib sycl.exp
+
+standard_testfile nd_item.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+set last_line [gdb_get_line_number "kernel-last-line"]
+gdb_breakpoint $last_line
+
+# Check that we hit the BP for a number of elements.  Then print
+# the corresponding element of the current work item index (accessorIn[gid]),
+# as well as, the inner elements of the gid (gid[i]).
+
+for {set i 1} {$i <= 5} {incr i} { with_test_prefix "trip $i" {
+    gdb_continue_to_breakpoint "hit the last line" \
+	".*$srcfile:$last_line.*"
+
+    gdb_test "print in_elem != 0" "true" \
+	"non-null in_elem"
+
+    gdb_test "print gid\[0\] == gid0" "true" \
+	"access element 0 of the work item index"
+
+    gdb_test "print gid\[1\] == gid1" "true" \
+	"access element 1 of the work item index"
+
+    gdb_test "print gid\[2\] == gid2" "true" \
+	"access element 2 of the work item index"
+
+    gdb_test "print accessorIn\[gid\] == in_elem" "true" \
+	"access input element for the current work item index"
+}}

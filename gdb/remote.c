@@ -3039,6 +3039,11 @@ remote_target::remote_notice_new_inferior (ptid_t currthread, bool executing)
 	  target_find_description ();
 	}
 
+      /* We may have received the event for a process in general.
+	 There is nothing to check further in this case.  */
+      if (currthread.is_pid ())
+	return;
+
       if (inferior_ptid.is_pid ()
 	  && pid == inferior_ptid.pid ())
 	{

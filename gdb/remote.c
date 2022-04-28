@@ -2823,6 +2823,17 @@ remote_target::remote_notice_new_inferior (ptid_t currthread, bool executing)
       struct inferior *inf = NULL;
       int pid = currthread.pid ();
 
+      /* When connecting to a target remote, or to a target
+	 extended-remote which already was debugging an inferior, we
+	 may not know about it yet.  Add it before adding its child
+	 thread, so notifications are emitted in a sensible order.  */
+      if (find_inferior_pid (this, pid) == nullptr)
+	{
+	  bool fake_pid_p = !m_features.remote_multi_process_p ();
+
+	  inf = remote_add_inferior (fake_pid_p, pid, -1, 1);
+	}
+
       if (inferior_ptid.is_pid ()
 	  && pid == inferior_ptid.pid ())
 	{
@@ -2851,18 +2862,6 @@ remote_target::remote_notice_new_inferior (ptid_t currthread, bool executing)
 	     ptid in the thread list.  */
 	  thread_change_ptid (this, inferior_ptid, currthread);
 	  return;
-	}
-
-      /* When connecting to a target remote, or to a target
-	 extended-remote which already was debugging an inferior, we
-	 may not know about it yet.  Add it before adding its child
-	 thread, so notifications are emitted in a sensible order.  */
-      if (find_inferior_pid (this, currthread.pid ()) == NULL)
-	{
-	  bool fake_pid_p = !m_features.remote_multi_process_p ();
-
-	  inf = remote_add_inferior (fake_pid_p,
-				     currthread.pid (), -1, 1);
 	}
 
       /* This is really a new thread.  Add it.  */

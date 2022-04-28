@@ -2718,6 +2718,11 @@ remote_target::remote_notice_new_inferior (ptid_t currthread, bool executing)
 	  inf = remote_add_inferior (fake_pid_p, pid, -1, 1);
 	}
 
+      /* We may have received the event for a process in general.
+	 There is nothing to check further in this case.  */
+      if (currthread.is_pid ())
+	return;
+
       if (inferior_ptid.is_pid ()
 	  && pid == inferior_ptid.pid ())
 	{

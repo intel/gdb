@@ -616,7 +616,7 @@ tdesc_find_register (const target_desc *tdesc, int index)
 static process_info *
 add_new_gt_process (process_info_private *proc_priv)
 {
-  static const char *expedite_regs[] = {"cr0", "emask", nullptr};
+  static const char *expedite_regs[] = {"cr0", "emask", "sr0", nullptr};
 
   GTDeviceInfo &info = proc_priv->device_info;
   switch (info.gen_major)

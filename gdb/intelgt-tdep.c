@@ -168,6 +168,8 @@ struct intelgt_gdbarch_data
   int retval_regnum = -1;
   /* Register number for the control register.  */
   int cr0_regnum = -1;
+  /* Register number for the state register.  */
+  int sr0_regnum = -1;
   /* Register number for the instruction base virtual register.  */
   int isabase_regnum = -1;
   /* Assigned regnum ranges for DWARF regsets.  */
@@ -287,7 +289,22 @@ intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
   regcache *thread_regcache = get_thread_regcache (tp);
 
-  return regcache_raw_get_unsigned (thread_regcache, data->emask_regnum);
+  ULONGEST emask
+    = regcache_raw_get_unsigned (thread_regcache, data->emask_regnum);
+
+  /* The higher bits of emask are undefined if they are outside the
+     dispatch mask range.  Clear them explicitly using the dispatch
+     mask, which is at SR0.2.  SR0 elements are 4 byte wide.  */
+  uint32_t sr0_2 = 0;
+  if (thread_regcache->raw_read_part (data->sr0_regnum, sizeof (uint32_t) * 2,
+				      sizeof (sr0_2), (gdb_byte *) &sr0_2)
+      != REG_VALID)
+    throw_error (NOT_AVAILABLE_ERROR, _("Register %d (sr0) is not available"),
+		 data->sr0_regnum);
+
+  dprintf ("emask: %lx, dmask: %x", emask, sr0_2);
+
+  return emask & sr0_2;
 }
 
 /* Return the PC of the first real instruction.  */
@@ -962,6 +979,8 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
     data->retval_regnum = possible_regnum;
   else if (strcmp ("cr0", reg_name) == 0)
     data->cr0_regnum = possible_regnum;
+  else if (strcmp ("sr0", reg_name) == 0)
+    data->sr0_regnum = possible_regnum;
   else if (strcmp ("isabase", reg_name) == 0)
     data->isabase_regnum = possible_regnum;
   else if (strcmp ("emask", reg_name) == 0)
@@ -1615,6 +1634,9 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 	       "the target");
       if (data->cr0_regnum == -1)
 	error ("Debugging requires control register to be provided by "
+	       "the target");
+      if (data->sr0_regnum == -1)
+	error ("Debugging requires state register to be provided by "
 	       "the target");
 
       /* Unconditionally enabled pseudo-registers:  */

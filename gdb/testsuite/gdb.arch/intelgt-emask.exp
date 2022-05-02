@@ -65,8 +65,24 @@ for {set i 1} {$i <= 4} {incr i} {
 # Convenience procedures to check register values.
 
 proc test_regs {emask ret_emask dmask} {
+    global decimal
+    set current_frame 999
+    gdb_test_multiple "frame" "find the current frame" {
+	-re -wrap "\#(${decimal}) .*" {
+	    set current_frame $expect_out(1,string)
+	    pass $gdb_test_name
+	}
+    }
+
+    if {$current_frame != 2} {
+	setup_kfail "JIRA DOQG/2974" "*-*-*"
+    }
     gdb_test "print/x \$emask" "$emask"
+    if {$current_frame == 0} {
+	setup_kfail "JIRA DOQG/2974" "*-*-*"
+    }
     gdb_test "print/x \$framedesc.return_emask" "$ret_emask"
+    setup_kfail "JIRA DOQG/2974" "*-*-*"
     gdb_test "print/x ((int\[4\])\$sr0)\[2\]" "$dmask"
 }
 

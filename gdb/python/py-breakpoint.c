@@ -1030,7 +1030,8 @@ bppy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 	      = breakpoint_ops_for_location_spec (locspec.get (), false);
 
 	    create_breakpoint (gdbpy_enter::get_gdbarch (),
-			       locspec.get (), NULL, -1, -1, NULL, false,
+			       locspec.get (), nullptr, -1, -1, -1,
+			       nullptr, false,
 			       0,
 			       temporary_bp, type,
 			       0,

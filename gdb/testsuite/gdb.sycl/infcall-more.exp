@@ -89,6 +89,7 @@ proc test_inferior_calls {simd_lane} {
     gdb_test "print small_vector_return()" "= \\{1, 2, 3, 4, 5\\}" \
 	"Vectors with size less than 64-bits are returned on GRFs"
 
+    setup_kfail "JIRA DOQG/2980" "*-*-*"
     gdb_test "print long_vector_return()" "= \\{1, 2, 3, 4, 5, 6, 7, 8, 9, 10\\}" \
 	"Vectors with size more than 64-bits are returned on the stack"
 

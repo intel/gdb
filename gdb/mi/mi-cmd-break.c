@@ -172,6 +172,7 @@ mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
   int hardware = 0;
   int temp_p = 0;
   int thread = -1;
+  int simd_lane = -1;
   int ignore_count = 0;
   char *condition = NULL;
   int pending = 0;
@@ -190,7 +191,7 @@ mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
   enum opt
     {
       HARDWARE_OPT, TEMP_OPT, CONDITION_OPT,
-      IGNORE_COUNT_OPT, THREAD_OPT, PENDING_OPT, DISABLE_OPT,
+      IGNORE_COUNT_OPT, THREAD_OPT, SIMD_LANE_OPT, PENDING_OPT, DISABLE_OPT,
       TRACEPOINT_OPT,
       FORCE_CONDITION_OPT,
       QUALIFIED_OPT,
@@ -204,6 +205,7 @@ mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
     {"c", CONDITION_OPT, 1},
     {"i", IGNORE_COUNT_OPT, 1},
     {"p", THREAD_OPT, 1},
+    {"l", SIMD_LANE_OPT, 1},
     {"f", PENDING_OPT, 0},
     {"d", DISABLE_OPT, 0},
     {"a", TRACEPOINT_OPT, 0},
@@ -243,6 +245,9 @@ mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
 	  break;
 	case THREAD_OPT:
 	  thread = atol (oarg);
+	  break;
+	case SIMD_LANE_OPT:
+	  simd_lane = atol (oarg);
 	  break;
 	case PENDING_OPT:
 	  pending = 1;
@@ -358,7 +363,7 @@ mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
     }
 
   create_breakpoint (get_current_arch (), locspec.get (), condition, thread,
-		     extra_string.c_str (),
+		     simd_lane, extra_string.c_str (),
 		     force_condition,
 		     0 /* condition and thread are valid.  */,
 		     temp_p, type_wanted,

@@ -14,6 +14,21 @@ set|show scheduler-locking-eval (on|off)
 
 * Add convenience variable `$_simd_lane`.
 
+* MI changes
+
+  ** '-break-insert -l'
+
+     Added optional -l <simd-lane-id> argument to MI command -break-insert.
+     A lane can be specified only together with the thread: user must provide
+     a thread with -p argument.
+
+     MI result output for -break-insert command will also contain
+     lane="simd-lane-id" information if -l argument was specified.
+
+     Also the MI output of -break-list and -break-info commands will have
+     lane="simd-lane-id" information if the breakpoint is thread and SIMD lane
+     spefific.
+
 *** Changes in GDB 13
 
 * MI version 1 is deprecated, and will be removed in GDB 14.

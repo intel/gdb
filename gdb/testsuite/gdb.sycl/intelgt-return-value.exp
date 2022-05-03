@@ -146,6 +146,7 @@ proc test_call_stack {call_stack_supported} {
         with_test_prefix "iteration $i" {
 	    gdb_test_multiple "continue" "iteration $i" {
 		-re -wrap ".*$srcfile:$return_int4_loc.*" {
+		    setup_kfail "JIRA DOQG/2980" "*-*-*"
 		    set hit_return_int4 true
 		    test_finish "return_int4" "dim0=5" "\\{500, 501, 502, 503\\}" \
 			"make_output \\(dim0=5\\)" $call_stack_supported
@@ -196,12 +197,14 @@ proc test_call_stack {call_stack_supported} {
 		}
 		-re -wrap ".*$srcfile:$return_uchar10_loc.*" {
 		    set hit_return_uchar10 true
+		    setup_kfail "JIRA DOQG/2980" "*-*-*"
 		    test_finish "return_uchar10" "dim0=5" \
 			"\\{50, 51, 52, 53, 54, 55, 56, 57, 58, 59\\}" \
 			"make_output" $call_stack_supported
 		}
 		-re -wrap ".*$srcfile:$do_smt_and_return_uchar10_loc.*" {
 		    set hit_do_smt_and_return_uchar10 true
+		    setup_kfail "JIRA DOQG/2980" "*-*-*"
 		    test_finish "do_smt_and_return_uchar10" "dim0=5" \
 			"\\{50, 51, 52, 53, 54, 55, 56, 57, 58, 59\\}" \
 			"make_output" $call_stack_supported

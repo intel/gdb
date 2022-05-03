@@ -30658,6 +30658,10 @@ Where this breakpoint's condition is evaluated, either @samp{host} or
 If this is a thread-specific breakpoint, then this identifies the
 thread in which the breakpoint can trigger.
 
+@item lane
+If this is a thread and SIMD lane specific breakpoint, then this identifies the
+thread's SIMD lane in which the breakpoint can trigger.
+
 @item task
 If this breakpoint is restricted to a particular Ada task, then this
 field will hold the task identifier.
@@ -31249,7 +31253,7 @@ N.A.
 @smallexample
  -break-insert [ -t ] [ -h ] [ -f ] [ -d ] [ -a ] [ --qualified ]
     [ -c @var{condition} ] [ --force-condition ] [ -i @var{ignore-count} ]
-    [ -p @var{thread-id} ] [ @var{location} ]
+    [ -p @var{thread-id} ] [ -l @var{simd-lane-id} ] [ @var{location} ]
 @end smallexample
 
 @noindent
@@ -31312,6 +31316,9 @@ Initialize the @var{ignore-count}.
 @item -p @var{thread-id}
 Restrict the breakpoint to the thread with the specified global
 @var{thread-id}.
+@item -l @var{simd-lane-id}
+Restrict the breakpoint to the thread's SIMD lane with the specified
+@var{simd-lane-id}.
 @item --qualified
 This option makes @value{GDBN} interpret a function name specified as
 a complete fully-qualified name.

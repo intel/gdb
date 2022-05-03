@@ -39,6 +39,21 @@ maint jit dump
   ** New gdb.connections() function that returns a list of all
      currently active connections.
 
+* MI changes
+
+  ** '-break-insert -l'
+
+     Added optional -l <simd-lane-id> argument to MI command -break-insert.
+     A lane can be specified only together with the thread: user must provide
+     a thread with -p argument.
+
+     MI result output for -break-insert command will also contain
+     lane="simd-lane-id" information if -l argument was specified.
+
+     Also the MI output of -break-list and -break-info commands will have
+     lane="simd-lane-id" information if the breakpoint is thread and SIMD lane
+     spefific.
+
 *** Changes in GDB 11
 
 * The 'set disassembler-options' command now supports specifying options

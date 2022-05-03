@@ -913,7 +913,7 @@ bppy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 	      breakpoint_ops_for_event_location (location.get (), false);
 
 	    create_breakpoint (python_gdbarch,
-			       location.get (), NULL, -1, spec, false,
+			       location.get (), nullptr, -1, -1, spec, false,
 			       1,
 			       temporary_bp, type,
 			       0,

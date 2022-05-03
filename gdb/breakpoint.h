@@ -1440,6 +1440,10 @@ enum breakpoint_create_flags
    the FORCE_CONDITION parameter is ignored and the corresponding argument
    is parsed from EXTRA_STRING.
 
+   If SIMD_LANE value is zero or positive, a thread and a simd lane specific
+   breakpoint is created.  When SIMD_LANE value is zero or positive,
+   THREAD value should also be positive.
+
    If INTERNAL is non-zero, the breakpoint number will be allocated
    from the internal breakpoint count.
 
@@ -1448,7 +1452,7 @@ enum breakpoint_create_flags
 extern int create_breakpoint (struct gdbarch *gdbarch,
 			      struct event_location *location,
 			      const char *cond_string, int thread,
-			      const char *extra_string,
+			      int simd_lane, const char *extra_string,
 			      bool force_condition,
 			      int parse_extra,
 			      int tempflag, enum bptype wanted_type,

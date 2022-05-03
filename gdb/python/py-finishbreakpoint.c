@@ -294,7 +294,7 @@ bpfinishpy_init (PyObject *self, PyObject *args, PyObject *kwargs)
       event_location_up location
 	= new_address_location (get_frame_pc (prev_frame), NULL, 0);
       create_breakpoint (python_gdbarch,
-			 location.get (), NULL, thread, NULL, false,
+			 location.get (), nullptr, thread, -1, nullptr, false,
 			 0,
 			 1 /*temp_flag*/,
 			 bp_breakpoint,

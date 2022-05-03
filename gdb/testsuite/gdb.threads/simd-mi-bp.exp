@@ -1,0 +1,92 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests -break-insert with -l argument (simd lane).
+#
+
+load_lib sycl.exp
+
+standard_testfile simd.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if { ![require_sycl_device "gpu" "Intel*"] } {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+mi_clean_restart $binfile
+
+if {[mi_start_sycl_program] < 0} {
+    return -1
+}
+
+set kernel_first_line [gdb_get_line_number "kernel-first-line"]
+set kernel_dim0_line [gdb_get_line_number "kernel-dim0-defined"]
+set condition_line [gdb_get_line_number "kernel-condition-line"]
+set even_branch_line [gdb_get_line_number "kernel-even-branch"]
+set odd_branch_line [gdb_get_line_number "kernel-odd-branch"]
+
+mi_continue_to_line $kernel_first_line "Continue to 'kernel_first_line' and stop at breakpoint"
+
+set stopped_threads [mi_stopped_thread_ids $srcfile $kernel_first_line]
+set first_thread_id [lindex $stopped_threads 0]
+set second_thread_id [lindex $stopped_threads 1]
+set third_thread_id [lindex $stopped_threads 2]
+
+# Breakpoint with -p <thread> argument, no lane.
+mi_gdb_test "-break-insert -t -p $first_thread_id $kernel_dim0_line" \
+    "\\^done,bkpt=\{number=\".*\",type=\"breakpoint\",disp=\"del\",enabled=\"y\",addr=\"<MULTIPLE>\",thread=\"$first_thread_id\",thread=\"$first_thread_id\".*" \
+    "Insert breakpoint to thread $first_thread_id, no lane argument"
+
+# Breakpoint with -p <thread> and -l <lane> arguments.
+mi_gdb_test "-break-insert -t -p $second_thread_id -l 1 $condition_line" \
+    "\\^done,bkpt=\{number=\".*\",type=\"breakpoint\",disp=\"del\",enabled=\"y\",addr=\"<MULTIPLE>\",thread=\"$second_thread_id\",thread=\"$second_thread_id\",lane=\"1\".*" \
+    "Insert breakpoint to thread $second_thread_id, lane 1"
+
+# Breakpoint to even branch line with odd lane (should not hit).
+mi_gdb_test "-break-insert -t -p $third_thread_id -l 3 $even_branch_line" \
+"\\^done,bkpt=\{number=\".*\",type=\"breakpoint\",disp=\"del\",enabled=\"y\",addr=\"<MULTIPLE>\",thread=\"$third_thread_id\",thread=\"$third_thread_id\",lane=\"3\".*" \
+"Insert breakpoint to even line with odd lane"
+
+# Breakpoint to odd branch line with odd lane (should hit).
+mi_gdb_test "-break-insert -t -p $third_thread_id -l 3 $odd_branch_line" \
+    "\\^done,bkpt=\{number=\".*\",type=\"breakpoint\",disp=\"del\",enabled=\"y\",addr=\"<MULTIPLE>\",thread=\"$third_thread_id\",thread=\"$third_thread_id\",lane=\"3\".*" \
+    "Insert breakpoint to thread $third_thread_id, lane 3"
+
+# Continue and hit first breakpoint.
+mi_send_resuming_command "exec-continue" "continuing to first bp"
+mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $kernel_dim0_line { "" "disp=\"del\"" } "expect bp hit at line $kernel_dim0_line"
+
+# Continue and hit second breakpoint.
+mi_send_resuming_command "exec-continue" "continuing to second bp"
+mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $condition_line { "" "disp=\"del\"" } "expect bp hit at line $condition_line"
+
+# Continue, but will not hit third breakpoint, instead hit fourth breakpoint.
+mi_send_resuming_command "exec-continue" "continuing to third bp"
+mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $odd_branch_line { "" "disp=\"del\"" } "expect bp hit at line $odd_branch_line"
+
+# Continue to end.
+mi_send_resuming_command "exec-continue" "continuing to inferior exit"
+
+# Expect normal exit.
+mi_expect_stop "exited-normally" "" "" "" "" "" "exit normally"

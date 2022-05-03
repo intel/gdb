@@ -888,6 +888,18 @@ live_threads_count (void)
   return std::distance (rng.begin (), rng.end ());
 }
 
+/* See gdbthread.h.  */
+
+bool
+valid_thread_simd_lane (int global_id, int simd_lane)
+{
+  thread_info *tp = find_thread_global_id (global_id);
+  if ((simd_lane >= 0) && (tp != nullptr))
+    return (tp->has_simd_lanes () && (simd_lane < tp->get_simd_width ()));
+
+  return false;
+}
+
 int
 valid_global_thread_id (int global_id)
 {

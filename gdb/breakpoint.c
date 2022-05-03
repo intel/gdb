@@ -6939,6 +6939,12 @@ print_one_breakpoint_location (struct breakpoint *b,
       uiout->text ("\n");
     }
 
+  if (!part_of_multiple && b->simd_lane_num != -1)
+    {
+      if (uiout->is_mi_like_p ())
+	uiout->field_signed ("lane", b->simd_lane_num);
+    }
+
   if (!part_of_multiple && b->task != -1)
     {
       uiout->text ("\tstop only in task ");
@@ -9382,8 +9388,8 @@ int
 create_breakpoint (struct gdbarch *gdbarch,
 		   location_spec *locspec,
 		   const char *cond_string,
-		   int thread, int inferior,
-		   const char *extra_string,
+		   int thread, int simd_lane,
+		   int inferior, const char *extra_string,
 		   bool force_condition, int parse_extra,
 		   int tempflag, enum bptype type_wanted,
 		   int ignore_count,
@@ -9396,7 +9402,6 @@ create_breakpoint (struct gdbarch *gdbarch,
   bool pending = false;
   int task = -1;
   int prev_bkpt_count = breakpoint_count;
-  int simd_lane_num = -1;
 
   gdb_assert (thread == -1 || thread > 0);
   gdb_assert (inferior == -1 || inferior > 0);
@@ -9434,7 +9439,7 @@ create_breakpoint (struct gdbarch *gdbarch,
     {
       /* Parse EXTRA_STRING splitting the parts out.  */
       create_breakpoint_parse_arg_string (extra_string, &cond_string_copy,
-					  &thread, &simd_lane_num,
+					  &thread, &simd_lane,
 					  &inferior, &task,
 					  &extra_string_copy,
 					  &force_condition);
@@ -9565,7 +9570,7 @@ create_breakpoint (struct gdbarch *gdbarch,
 				   std::move (extra_string_copy),
 				   type_wanted,
 				   tempflag ? disp_del : disp_donttouch,
-				   thread, simd_lane_num, task, inferior,
+				   thread, simd_lane, task, inferior,
 				   ignore_count, from_tty, enabled,
 				   internal, flags);
     }
@@ -9631,8 +9636,8 @@ break_command_1 (const char *arg, int flag, int from_tty)
 
   create_breakpoint (get_current_arch (),
 		     locspec.get (),
-		     NULL,
-		     -1 /* thread */, -1 /* inferior */,
+		     nullptr,
+		     -1 /* thread */, -1 /* simd_lane */, -1 /* inferior */,
 		     arg, false, 1 /* parse arg */,
 		     tempflag, type_wanted,
 		     0 /* Ignore count */,
@@ -9742,7 +9747,7 @@ dprintf_command (const char *arg, int from_tty)
 
   create_breakpoint (get_current_arch (),
 		     locspec.get (),
-		     NULL, -1, -1,
+		     nullptr, -1, -1, -1,
 		     arg, false, 0 /* parse arg */,
 		     0, bp_dprintf,
 		     0 /* Ignore count */,
@@ -14265,7 +14270,7 @@ trace_command (const char *arg, int from_tty)
 
   create_breakpoint (get_current_arch (),
 		     locspec.get (),
-		     NULL, -1, -1, arg, false, 1 /* parse arg */,
+		     NULL, -1, -1, -1, arg, false, 1 /* parse arg */,
 		     0 /* tempflag */,
 		     bp_tracepoint /* type_wanted */,
 		     0 /* Ignore count */,
@@ -14283,7 +14288,7 @@ ftrace_command (const char *arg, int from_tty)
 						      current_language);
   create_breakpoint (get_current_arch (),
 		     locspec.get (),
-		     NULL, -1, -1, arg, false, 1 /* parse arg */,
+		     NULL, -1, -1, -1, arg, false, 1 /* parse arg */,
 		     0 /* tempflag */,
 		     bp_fast_tracepoint /* type_wanted */,
 		     0 /* Ignore count */,
@@ -14321,7 +14326,7 @@ strace_command (const char *arg, int from_tty)
 
   create_breakpoint (get_current_arch (),
 		     locspec.get (),
-		     NULL, -1, -1, arg, false, 1 /* parse arg */,
+		     NULL, -1, -1, -1, arg, false, 1 /* parse arg */,
 		     0 /* tempflag */,
 		     type /* type_wanted */,
 		     0 /* Ignore count */,
@@ -14396,7 +14401,7 @@ create_tracepoint_from_upload (struct uploaded_tp *utp)
 
   if (!create_breakpoint (get_current_arch (),
 			  locspec.get (),
-			  utp->cond_string.get (), -1, -1, addr_str,
+			  utp->cond_string.get (), -1, -1, -1, addr_str,
 			  false /* force_condition */,
 			  0 /* parse cond/thread */,
 			  0 /* tempflag */,

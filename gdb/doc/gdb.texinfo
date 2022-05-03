@@ -32263,6 +32263,10 @@ Where this breakpoint's condition is evaluated, either @samp{host} or
 If this is a thread-specific breakpoint, then this identifies the
 thread in which the breakpoint can trigger.
 
+@item lane
+If this is a thread and SIMD lane specific breakpoint, then this identifies the
+thread's SIMD lane in which the breakpoint can trigger.
+
 @item inferior
 If this is an inferior-specific breakpoint, this this identifies the
 inferior in which the breakpoint can trigger.
@@ -32858,7 +32862,8 @@ N.A.
 @smallexample
  -break-insert [ -t ] [ -h ] [ -f ] [ -d ] [ -a ] [ --qualified ]
     [ -c @var{condition} ] [ --force-condition ] [ -i @var{ignore-count} ]
-    [ -p @var{thread-id} ] [ -g @var{thread-group-id} ] [ @var{locspec} ]
+    [ -p @var{thread-id} ] [ -l @var{simd-lane-id} ]
+    [ -g @var{thread-group-id} ] [ @var{locspec} ]
 @end smallexample
 
 @noindent
@@ -32924,6 +32929,9 @@ Restrict the breakpoint to the thread with the specified global
 time the breakpoint is requested.  Breakpoints created with a
 @var{thread-id} will automatically be deleted when the corresponding
 thread exits.
+@item -l @var{simd-lane-id}
+Restrict the breakpoint to the thread's SIMD lane with the specified
+@var{simd-lane-id}.
 @item -g @var{thread-group-id}
 Restrict the breakpoint to the thread group with the specified
 @var{thread-group-id}.

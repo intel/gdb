@@ -115,8 +115,13 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
         """Helper function to check if context is initialized already before
         GDB attaches to the process."""
 
-        # TODO: Implement the logic to check if L0 is initialized.
-        return False
+        # If we attached to the inferior, L0 has likely been
+        # initialized already.  So, this check can cover a large range
+        # of use-cases; however, it is still incomplete, because the
+        # user could have attached to the host inferior after it was
+        # started but before L0 was initialized.  If that's the case,
+        # our attempt to attach to the GPU would fail.
+        return gdb.selected_inferior().was_attached
 
     def handle_new_objfile_event(self, event):
         """Handler for a new object file load event.  If auto-attach has

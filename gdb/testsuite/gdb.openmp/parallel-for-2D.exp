@@ -41,6 +41,9 @@ for {set i 1} {$i <= 5} {incr i} {
     gdb_continue_to_breakpoint "hit the last line occurrence $i" \
 	".*$srcfile:$last_line.*"
 
+    if {[omp_is_gen12]} {
+	setup_kfail "JIRA DOQG/2981" "*-*-*"
+    }
     gdb_test "print in_elem - (in_elem2 * 64 + in_elem3)" "123" \
 	"thread invariant $i"
 }

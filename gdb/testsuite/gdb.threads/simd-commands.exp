@@ -59,11 +59,17 @@ gdb_test_multiple "commands $bp1 $bp2" $test {
 
 gdb_test "p dim0\nend" "" "commands #2"
 
+if {[is_gen12]} {
+    setup_kfail "JIRA DOQG/2974" "*-*-*"
+}
 gdb_continue_to_breakpoint \
     "continue to BPs with commands for a single lane" \
     ".*\\$$decimal = 3\[\r\n\]+\\$$decimal = 0"
 
 # The current SIMD lane has to be 3.
+if {[is_gen12]} {
+    setup_kfail "JIRA DOQG/2974" "*-*-*"
+}
 gdb_test "thread" ".*:3.*" "Check lane after commands for one lane."
 
 set first_thread [get_current_thread "$line_dim0_defined"]
@@ -83,6 +89,9 @@ gdb_test_multiple "commands /a $bp3 $bp4" $test {
 }
 
 gdb_test "p dim0\nend" "" "commands #4"
+if {[is_gen12]} {
+    setup_kfail "JIRA DOQG/2974" "*-*-*"
+}
 gdb_continue_to_breakpoint \
     "continue to BPs with commands for multiple lanes" \
     ".*\\$$decimal = 1\[\r\n\]+\\$$decimal = 3\[\r\n\]+\\$$decimal = 5\[\r\n\]+\\$$decimal = 7\[\r\n\]+.*\\$$decimal = 4"

@@ -46,6 +46,12 @@ info devices
      lane="simd-lane-id" information if the breakpoint is thread and SIMD lane
      specific.
 
+  ** '-thread-info'
+
+     If a thread is stopped, available, and has SIMD lanes, MI output
+     of '-thread-info' for such a thread contains 'execution-mask' and
+     'simd-width' fields.
+
 * Changed remote packets
 
 qXfer:features:read:target.xml

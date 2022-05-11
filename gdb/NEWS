@@ -295,6 +295,9 @@ S+core				score-*-*
 
 GNU/Linux/OpenRISC		or1k*-*-linux*
 
+  ** '-thread-info' result output includes new fields: execution-mask and
+     simd-width, if the thread has SIMD lanes.
+
 *** Changes in GDB 11
 
 * The 'set disassembler-options' command now supports specifying options

@@ -48,9 +48,15 @@ if { [test_compiler_info {flang-*} f90] } {
     set some_module_aux_info ""
 }
 
+if { [test_compiler_info {ifx-*} f90] } {
+    setup_kfail "DOQG/3004" *-*-*
+}
 gdb_test "ptype some_module::get_number" \
     "type = $integer4 \\(${some_module_class_type}${some_module_aux_info}\\)"
 
+if { [test_compiler_info {ifx-*} f90] } {
+    setup_kfail "DOQG/3004" *-*-*
+}
 gdb_test "ptype some_module::set_number" \
     "type = void \\(${some_module_class_type}, $integer4${some_module_aux_info}\\)"
 

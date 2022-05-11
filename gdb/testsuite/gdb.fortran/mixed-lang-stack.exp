@@ -81,6 +81,10 @@ proc run_tests { lang } {
 	    [multi_line \
 		 $bt_stack \
 		 "#10\\s+$hex in main \\($main_args\\) at \[^\r\n\]+"]
+
+	if { [test_compiler_info {ifx-*} f90] } {
+	    setup_kfail "DOQG/2694" *-*-*
+	}
 	gdb_test_multiple "bt -frame-arguments all" "" {
 	    -re -wrap $bt_stack {
 		pass $gdb_test_name

@@ -65,12 +65,21 @@ gdb_test_no_output "call run(no_arg_subroutine)"
 # Return: constant.
 gdb_test "p return_constant()" " = 17"
 # Return derived type and call a function in a module.
+if { [test_compiler_info {ifx-*} f90] } {
+    setup_kfail "DOQG/3003" *-*-*
+}
 gdb_test "p derived_types_and_module_calls::build_cart(7,8)" \
 	 " = \\\( x = 7, y = 8 \\\)"
 
 # Two hidden arguments. 1. returned string and 2. string length.
 # Paragraph 1.
+if { [test_compiler_info {ifx-*} f90] } {
+    setup_kfail "DOQG/3003" *-*-*
+}
 gdb_test "p return_string(returned_string_debugger, 40)" ""
+if { [test_compiler_info {ifx-*} f90] } {
+    setup_kfail "DOQG/3003" *-*-*
+}
 gdb_test "p returned_string_debugger" "'returned in hidden first argument       '"
 
 # Argument type: real(kind=4), complex, array, pointer, derived type,
@@ -79,16 +88,25 @@ gdb_test "p returned_string_debugger" "'returned in hidden first argument       
 gdb_test "p pointer_function(int_pointer)" " = 87"
 # Paragraph 4: array.
 gdb_test "call array_function(integer_array)" " = 17"
+if { [test_compiler_info {ifx-*} f90] } {
+    setup_kfail "DOQG/3003" *-*-*
+}
 gdb_test "p derived_types_and_module_calls::pass_cart(c)" \
 	 " = \\\( x = 2, y = 4 \\\)"
 # Allocatable elements in a derived type. Technical report ISO/IEC 15581.
 gdb_test "p derived_types_and_module_calls::pass_cart_nd(c_nd)" " = 4"
+if { [test_compiler_info {ifx-*} f90] } {
+    setup_kfail "DOQG/3003" *-*-*
+}
 gdb_test "p derived_types_and_module_calls::pass_nested_cart(nested_c)" \
 	  "= \\\( d = \\\( x = 1, y = 2 \\\), z = 3 \\\)"
 # Result within some tolerance.
 gdb_test "p real4_argument(real4)" " = 3.${decimal}"
 
 # Paragraph 2. Complex argument and return.
+if { [test_compiler_info {ifx-*} f90] } {
+    setup_kfail "DOQG/3003" *-*-*
+}
 gdb_test "p complex_argument(fft)" " = \\\(2.${decimal},3.${decimal}\\\)"
 
 # Function with optional arguments.

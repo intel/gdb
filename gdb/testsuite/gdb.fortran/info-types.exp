@@ -44,6 +44,9 @@ GDBInfoSymbols::check_header "All defined types:"
 GDBInfoSymbols::check_optional_entry "${srcfile}" "" "${character1}"
 GDBInfoSymbols::check_entry "${srcfile}" "" "${integer4}"
 GDBInfoSymbols::check_entry "${srcfile}" "" "${logical4}"
+if { [test_compiler_info {ifx-*} f90] } {
+    setup_kfail  "CMPLRLLVM/37124" *-*-*
+}
 GDBInfoSymbols::check_entry "${srcfile}" "$decimal" "Type m1t1;"
 GDBInfoSymbols::check_entry "${srcfile}" "" "${real4}"
 

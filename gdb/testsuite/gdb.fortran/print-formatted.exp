@@ -36,4 +36,7 @@ gdb_test "set output-radix 16" \
     "Output radix now set to decimal 16, hex 10, octal 20." \
     "setting the output-radix to 16"
 
+if { [test_compiler_info {ifx-*} f90] } {
+    setup_kfail "CMPLRLLVM/37536" *-*-*
+}
 gdb_test "print ii" " = 0xa" "print ii in hex"

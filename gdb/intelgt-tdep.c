@@ -304,6 +304,24 @@ intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
 
   dprintf ("emask: %lx, dmask: %x", emask, sr0_2);
 
+  /* The higher bits of dmask are undefined if they are outside the
+     SIMD width.  Clear them explicitly.
+     We cannot query the simd-width if the thread is executing.  */
+  if (tp->executing)
+    return 0;
+
+  unsigned int width = tp->get_simd_width ();
+  uint32_t width_mask = 0xffffffff;
+  if (width < 32)
+    width_mask = ~(width_mask << width);
+
+  dprintf ("width: %d, width_mask: %x", width, width_mask);
+
+  /* With ESIMD, width would be 1.  Skip masking.
+     FIXME: Need a solution to address this case.  */
+  if (width > 1)
+    sr0_2 &= width_mask;
+
   return emask & sr0_2;
 }
 

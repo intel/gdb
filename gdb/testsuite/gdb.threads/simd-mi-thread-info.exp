@@ -1,0 +1,147 @@
+# Copyright 2022-2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests -thread-info and checks execution-mask and simd-width values.
+#
+
+load_lib sycl.exp
+
+standard_testfile simd.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	mi_clean_restart $binfile
+
+	if {![mi_runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set kernel_dim0_line [gdb_get_line_number "kernel-dim0-defined"]
+	set odd_branch_line [gdb_get_line_number "kernel-odd-branch"]
+
+	mi_continue_to_line $kernel_dim0_line "Continue to 'kernel_dim0_line' and stop at breakpoint"
+
+	set stopped_threads [mi_stopped_thread_ids $srcfile $kernel_dim0_line]
+	set first_thread_id [lindex $stopped_threads 0]
+
+	# First get _simd_width convenience variable value to compare
+	# correctness of the MI command output.
+	mi_gdb_test "-data-evaluate-expression \$_simd_width" \
+	    "\\^done,value=\".*\"" \
+	    "get \$_simd_width value"
+
+	set output $expect_out(buffer)
+	regexp {value=\"(.*)\"} $output -> simd_width
+	verbose -log "simd width is $simd_width"
+
+	# Calculate the expected emask.
+	set mask 0xffffffff
+	set emask_int [expr $mask & int(pow(2, $simd_width) - 1)]
+	set emask_hex [format 0x%x $emask_int]
+	verbose -log "emask is $emask_hex"
+
+	mi_gdb_test "-thread-info $first_thread_id" \
+	    "\\^done,threads=\\\[\{id=\".*\",target-id=.*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",thread-group=\"i$decimal\",state=\"stopped\"\}\\\]" \
+	    "Check execution mask and simd width for thread $first_thread_id at line $kernel_dim0_line"
+
+	mi_continue_to_line $odd_branch_line "Continue to 'odd_branch_line' and stop at breakpoint"
+
+	# Calculate the expected emask.
+	set mask 0xaaaaaaaa
+	set emask_int [expr $mask & int(pow(2, $simd_width) - 1)]
+	set emask_hex [format 0x%x $emask_int]
+	verbose -log "emask is $emask_hex"
+
+	mi_gdb_test "-thread-info $first_thread_id" \
+	    "\\^done,threads=\\\[\{id=\".*\",target-id=.*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",thread-group=\"i$decimal\",state=\"stopped\"\}\\\]" \
+	    "Check execution mask and simd width for thread $first_thread_id at line $odd_branch_line"
+
+	# Expect a hit-lane-mask of 0x8.
+	set stopped_threads [mi_stopped_thread_ids $srcfile $odd_branch_line]
+	set second_thread_id [lindex $stopped_threads 1]
+
+	set reachable_breakpoint "-p $second_thread_id -l 3"
+	set unreachable_breakpoint "-p $second_thread_id -l 42"
+
+	# Set first unreachable temporary breakpoint to line
+	# $odd_branch_line and continue.
+	mi_gdb_test "-break-insert $unreachable_breakpoint $srcfile:$odd_branch_line" \
+	    {\^done,bkpt=.*} \
+	    "insert unreachable breakpoint"
+
+	# Set second reachable temporary breakpoint to line
+	# $odd_branch_line and continue.
+	mi_gdb_test "-break-insert $reachable_breakpoint $srcfile:$odd_branch_line" \
+	    {\^done,bkpt=.*} \
+	    "insert reachable breakpoint"
+
+	# Continue and expect to hit the breakpoint at odd line.
+	mi_send_resuming_command "exec-continue" "continuing to bp"
+	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $odd_branch_line \
+	    [list ",execution-mask=\"$hex\",simd-width=\"$decimal\"" \
+		 "disp=\"keep\",hit-lanes-mask=\"0x8\"" \
+		 "locno=\"$decimal\""] \
+	    "expect bp hit at line $odd_branch_line"
+
+	# Test hit lanes mask for current thread.
+	mi_gdb_test "-thread-hit-lanes-mask" \
+	    "\\^done,hit-lanes-mask=\"0x8\".*" \
+	    "hit lanes mask for current thread"
+
+	# Test hit lanes mask with current thread argument.
+	mi_gdb_test "-thread-hit-lanes-mask --thread $second_thread_id" \
+	    "\\^done,hit-lanes-mask=\"0x8\".*" \
+	    "hit lanes mask for thread $second_thread_id"
+
+	# Test a host thread that it does not contain emask or simd width fields.
+	send_gdb "-thread-info 1\n"
+	gdb_expect 10 {
+	    -re "execution-mask.*$mi_gdb_prompt$" {
+		fail "host thread has no execution mask output"
+	    }
+	    -re "simd-width.*$mi_gdb_prompt$" {
+		fail "host thread has no simd-width output"
+	    }
+	    -re "\\^done.*$mi_gdb_prompt$" {
+		pass "no SIMD output"
+	    }
+	    timeout {
+		fail "(timeout) -thread-info 1"
+	    }
+	}
+
+	# Continue to end.
+	mi_send_resuming_command "exec-continue" \
+	    "continuing to inferior exit"
+    }
+}

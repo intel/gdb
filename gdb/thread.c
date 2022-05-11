@@ -1392,6 +1392,15 @@ print_thread_row (struct ui_out *uiout, thread_info *tp,
 			     /* For MI output, print frame level.  */
 			     uiout->is_mi_like_p (),
 			     LOCATION, 0);
+
+	  /* SIMD specific fields for MI.  */
+	  if (uiout->is_mi_like_p () && tp->has_simd_lanes ())
+	    {
+	      unsigned int mask = tp->active_simd_lanes_mask ();
+	      uiout->field_fmt ("execution-mask", "0x%x", mask);
+	      unsigned int width = tp->get_simd_width ();
+	      uiout->field_fmt ("simd-width", "%u", width);
+	    }
 	}
       else
 	{

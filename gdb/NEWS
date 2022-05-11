@@ -62,6 +62,9 @@ maint jit dump
      lane="simd-lane-id" information if the breakpoint is thread and SIMD lane
      spefific.
 
+  ** '-thread-info' result output includes new fields: execution-mask and
+     simd-width, if the thread has SIMD lanes.
+
 *** Changes in GDB 11
 
 * The 'set disassembler-options' command now supports specifying options

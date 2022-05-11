@@ -1358,6 +1358,17 @@ print_thread_row (struct ui_out *uiout, thread_info *tp,
   int core = target_core_of_thread (tp->ptid);
   if (uiout->is_mi_like_p () && core != -1)
     uiout->field_signed ("core", core);
+
+  if (tp->has_simd_lanes () && uiout->is_mi_like_p ()
+      && tp->state != THREAD_RUNNING)
+    {
+      unsigned int mask = tp->active_simd_lanes_mask ();
+      uiout->field_string ("execution-mask", (string_printf (_("0x%x"),
+			   mask)).c_str ());
+      unsigned int width = tp->get_simd_width ();
+      uiout->field_string ("simd-width", (string_printf (_("%d"),
+			   width)).c_str ());
+    }
 }
 
 /* Like print_thread_info, but in addition, GLOBAL_IDS indicates

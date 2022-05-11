@@ -30934,6 +30934,14 @@ if the thread is stopped.  Its format is documented in
 @item core
 The value of this field is an integer number of the processor core the
 thread was last seen on.  This field is optional.
+
+@item execution-mask
+SIMD lanes execution mask of the thread.  Value is in hexadecimal format.  This
+field is only present if the thread has SIMD lanes.
+
+@item simd-width
+SIMD lanes width of the thread.  This field is only present if the thread has
+SIMD lanes.
 @end table
 
 @node GDB/MI Ada Exception Information

@@ -148,19 +148,35 @@ gdb_expect {
     -re "580\\^done,value=\"<not associated>\".*${mi_gdb_prompt}$" {
 	pass $test
 
-	mi_create_varobj_checked pvla2_not_associated pvla2 "$real \\(:,:\\)" \
+	# Ifort emits Fortran pointer types as DW_TAG_pointer_type referencing
+	# the underlying type.  This leads to GDB output like 'PTR TO -> TYPE'
+	# when printing the type as compared to e.g. gfortran, which just
+	# prints the type directly.  The regexes below accept both kind of
+	# outputs.  The children of the local variable pvla2_not_associated
+	# will also differ.
+	mi_create_varobj_checked pvla2_not_associated pvla2 \
+	    "(PTR TO -> \\( )?$real \\(:,:\\)( \\))?" \
 	    "create local variable pvla2_not_associated"
 	mi_gdb_test "581-var-info-type pvla2_not_associated" \
-	    "581\\^done,type=\"$real \\(:,:\\)\"" \
+	    "581\\^done,type=\"(PTR TO -> \\( )?$real \\(:,:\\)( \\))?\"" \
 	    "info type variable pvla2_not_associated"
 	mi_gdb_test "582-var-show-format pvla2_not_associated" \
 	    "582\\^done,format=\"natural\"" \
-	    "show format variable pvla2_not_associated"
+	    "show format variable pvla2_not_associated"	
 	mi_gdb_test "583-var-evaluate-expression pvla2_not_associated" \
-	    "583\\^done,value=\"\\\[0\\\]\"" \
+	    "583\\^done,value=\"(<not associated>|\\\[0\\\])\"" \
 	    "eval variable pvla2_not_associated"
-	mi_list_array_varobj_children_with_index "pvla2_not_associated" "0" "1" \
-	    "$real" "get children of pvla2_not_associated"
+
+	if { [test_compiler_info {ifort-*} f90] } {
+	    set exp_child_type "$real\ \\(:,:\\)"
+	    mi_list_varobj_children "pvla2_not_associated" [list \
+		[list "pvla2_not_associated\\.\\*pvla2" "\\*pvla2" "0" "$exp_child_type"] \
+		] "get children of pvla2_not_associated"
+	} else {
+	    mi_list_array_varobj_children_with_index \
+		"pvla2_not_associated" "0" "1" \
+		"$real" "get children of pvla2_not_associated"
+	}
     }
     -re "580\\^error,msg=\"value contents too large \\(\[0-9\]+ bytes\\).*${mi_gdb_prompt}$" {
 	# Undefined behaviour in gfortran.
@@ -181,12 +197,32 @@ mi_create_breakpoint "-t vla.f90:$bp_lineno" \
 mi_run_cmd
 mi_expect_stop "breakpoint-hit" "vla" "" ".*vla.f90" "$bp_lineno" \
   { "" "disp=\"del\"" } "run to breakpoint at line $bp_lineno"
-mi_gdb_test "590-data-evaluate-expression pvla2" \
-  "590\\^done,value=\"\\(\\(2, 2, 2, 2, 2\\) \\(2, 2, 2, 2, 2\\)\\)\"" \
-  "evaluate associated vla"
 
-mi_create_varobj_checked pvla2_associated pvla2 \
-  "$real \\\(5,2\\\)" "create local variable pvla2_associated"
+# Ifort emits Fortran pointer types as DW_TAG_pointer_type referencing
+# the underlying type.  This leads to GDB output like 'PTR TO -> TYPE'
+# when printing the type as compared to e.g. gfortran, which just
+# prints the type directly.  The regexes and tests below accept both kind of
+# outputs.
+set testname "evaluate associated vla"
+set cmd "590-data-evaluate-expression pvla2"
+gdb_test_multiple $cmd $testname -prompt "${mi_gdb_prompt}$" {
+    -re "590\\^done,value=\"\\(\\(2, 2, 2, 2, 2\\) \\(2, 2, 2, 2, 2\\)\\)\"\r\n${mi_gdb_prompt}$" {
+	pass $gdb_test_name
+	mi_create_varobj_checked pvla2_associated pvla2 \
+	    "$real \\\(5,2\\\)" "create local variable pvla2_associated"
+    }
+    -re "590\\^done,value=\"$hex\"\r\n${mi_gdb_prompt}$" {
+	pass $gdb_test_name
+	mi_gdb_test "590-data-evaluate-expression *pvla2" \
+	    "590\\^done,value=\"\\(\\(2, 2, 2, 2, 2\\) \\(2, 2, 2, 2, 2\\)\\)\"" \
+	    "evaluate associated *vla"
+	# Create an object from the dereferenced variable instead in case
+	# of the DW_TAG_pointer_type representation.
+	mi_create_varobj_checked pvla2_associated *pvla2 \
+	    "$real \\\(5,2\\\)" "create local variable pvla2_associated"
+    }
+}
+
 mi_gdb_test "591-var-info-type pvla2_associated" \
   "591\\^done,type=\"$real \\\(5,2\\\)\"" \
   "info type variable pvla2_associated"

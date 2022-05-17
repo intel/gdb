@@ -2,9 +2,6 @@
 
 Home of the [Intel(R) Distribution for GDB*](https://www.intel.com/content/www/us/en/developer/tools/oneapi/distribution-for-gdb.html).
 
-Please note that this code is **pre-production quality**. See the
-[Branches](#Branches) section for further details.
-
 Getting started guides:
 
 * [Linux](https://www.intel.com/content/www/us/en/docs/distribution-for-gdb/get-started-guide-linux)

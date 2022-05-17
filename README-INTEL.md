@@ -2,9 +2,6 @@
 
 Home of the [Intel(R) Distribution for GDB*](https://software.intel.com/content/www/us/en/develop/tools/oneapi/components/distribution-for-gdb.html).
 
-Please note that this code is **pre-production quality**. See the
-[Branches](#Branches) section for further details.
-
 Getting started guides:
 
 * [Linux](https://software.intel.com/content/www/us/en/develop/documentation/get-started-with-debugging-dpcpp-linux/top.html)

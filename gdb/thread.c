@@ -2069,6 +2069,8 @@ thread_apply_all_command_1 (const char *cmd, int from_tty,
 		 skipped.  */
 	      for_active_lanes (saved.emask, [&] (int lane)
 		{
+		  switch_to_thread (tp);
+
 		  if (tp->is_simd_lane_active (lane))
 		    {
 		      tp->set_current_simd_lane (lane);

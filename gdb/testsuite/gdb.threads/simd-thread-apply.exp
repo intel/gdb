@@ -455,3 +455,75 @@ foreach prefix [list "" "$inf."] {
 	     [all_even_lanes_of "$inf.$t_4"]] \
 	$msg "$inf\.$decimal:$decimal" "$inf\.$decimal:0"
 }
+
+# Test that we switch to the thread for the 'thread apply all-lanes'
+# command.  To test this, for each lane of each thread, we print the
+# context and then change the context to t_2:6 in the executed
+# command.  The command should not impact the context of the next
+# execution.
+#
+# First define the command that is to be executed by each lane.
+gdb_test_multiline "define lane command" \
+    "define lane_cmd" "" \
+    "  printf \"CTX1= %d:%d\\n\", \$_thread, \$_simd_lane" "" \
+    "  thread $inf.$t_2:6" "" \
+    "  printf \"CTX2= %d:%d\\n\", \$_thread, \$_simd_lane" "" \
+    "end" ""
+
+set cmd "thread apply all-lanes lane_cmd"
+set test "thread switch before executing thr_try_catch_cmd for all-lanes"
+set any "\[^\r\n\]*"
+set thread_switches 0
+
+set thread_ctx "Thread (${decimal}\.${decimal}(:$decimal)?) $any:\r\n"
+set output_1 "CTX1= ($decimal:$decimal)\r\n"
+set output_2 "CTX2= ($decimal:$decimal)\r\n"
+
+# Initial values are deliberately different.
+set the_ctx "invalid"
+set ctx_1 "not-valid"
+
+# The output may be very long.  Consume it line by line.
+gdb_test_multiple "$cmd" "$test" {
+    -re "^$cmd\r\n" {
+	# Trim the expect buffer.
+	exp_continue
+    }
+    -re "^${thread_ctx}" {
+	set the_ctx $expect_out(1,string)
+	exp_continue
+    }
+    -re "^${output_1}" {
+	set ctx_1 $expect_out(1,string)
+	exp_continue
+    }
+    -re "^${output_2}" {
+	set ctx_2 $expect_out(1,string)
+
+	if {"$the_ctx" eq "invalid"} {
+	    fail "$gdb_test_name: the_ctx is invalid"
+	}
+	if {"$ctx_1" eq "not-valid"} {
+	    fail "$gdb_test_name: ctx_1 is invalid"
+	}
+	# Counting the occurrences only for a fixed thread is
+	# sufficient.  Use t_1 for this purpose.
+	if {[regexp "$inf\.$t_1:$decimal" "$the_ctx"]} {
+	    gdb_assert {{"$the_ctx" eq "$inf.$ctx_1"}} \
+		"$gdb_test_name: $the_ctx matches $ctx_1"
+	    gdb_assert {{"$ctx_2" eq "$t_2:6"}} \
+		"$gdb_test_name: $ctx_2 matches $t_2:6 in $the_ctx"
+	    incr thread_switches
+	}
+	set the_ctx "invalid"
+	set ctx_1 "not-valid"
+	exp_continue
+    }
+    -re "^$gdb_prompt $" {
+	set num_even_lanes [expr $num_lanes / 2]
+	gdb_assert {$thread_switches == $num_even_lanes} $gdb_test_name
+    }
+    -re "^$any\r\n" {
+	exp_continue
+    }
+}

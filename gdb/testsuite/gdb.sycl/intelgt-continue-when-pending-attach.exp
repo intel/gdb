@@ -29,6 +29,11 @@ if {![require_sycl_device "gpu" "Intel*"]} {
     return 0
 }
 
+if {[is_level_zero_debug_api]} {
+    unsupported "test is aimed at the DCD-based stack only"
+    return
+}
+
 if {[prepare_sycl_for_testing $binfile $srcfile]} {
     return -1
 }

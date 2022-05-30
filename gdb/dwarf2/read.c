@@ -14556,6 +14556,43 @@ read_subroutine_type (struct die_info *die, struct dwarf2_cu *cu)
   if (prototyped_function_p (die, cu))
     ftype->set_is_prototyped (true);
 
+  /* If this is a trampoline function store it and its target here.  */
+  attr = dwarf2_attr (die, DW_AT_trampoline, cu);
+  if (attr != nullptr)
+    {
+      TYPE_FUNC_FLAGS (ftype) |= FUNC_TYPE_TRAMPOLINE;
+      TYPE_TRAMPOLINE_TARGET (ftype)
+	= (trampoline_target *) TYPE_ZALLOC (ftype,
+					     sizeof (trampoline_target));
+
+      /* A DW_AT_trampoline can be either an address, a flag, a reference or a
+	 string.  */
+      if (attr->form_is_string ())
+	TYPE_TRAMPOLINE_TARGET (ftype)->set_target_name
+	  (attr->as_string ());
+      else if (attr->form_is_ref ())
+	{
+	  die_info *target_die;
+	  dwarf2_cu *target_cu = cu;
+	  unrelocated_addr lowpc;
+
+	  target_die = follow_die_ref (die, attr, &target_cu);
+
+	  if (dwarf2_get_pc_bounds (target_die, &lowpc, NULL, target_cu,
+				    nullptr, nullptr) <= PC_BOUNDS_INVALID)
+	    complaint (_("DW_AT_trampoline target DIE has invalid "
+			 "low pc, for referencing DIE %s[in module %s]"),
+			 sect_offset_str (die->sect_off),
+			 objfile_name (objfile));
+	  else
+	    TYPE_TRAMPOLINE_TARGET (ftype)->set_target_addr (lowpc);
+	}
+      else if (attr->form_is_unsigned ())
+	TYPE_TRAMPOLINE_TARGET (ftype)->set_target_flag (attr->as_boolean ());
+      else
+	TYPE_TRAMPOLINE_TARGET (ftype)->set_target_addr (attr->as_address ());
+    }
+
   /* Store the calling convention in the type if it's available in
      the subroutine die.  Otherwise set the calling convention to
      the default value DW_CC_normal.  */
@@ -14573,7 +14610,7 @@ read_subroutine_type (struct die_info *die, struct dwarf2_cu *cu)
      if the DWARF producer set that information.  */
   attr = dwarf2_attr (die, DW_AT_noreturn, cu);
   if (attr && attr->as_boolean ())
-    TYPE_NO_RETURN (ftype) = 1;
+    TYPE_FUNC_FLAGS (ftype) |= FUNC_TYPE_NO_RETURN;
 
   /* We need to add the subroutine type to the die immediately so
      we don't infinitely recurse when dealing with parameters

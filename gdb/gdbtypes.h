@@ -123,6 +123,21 @@ enum type_instance_flag_value : unsigned
 
 DEF_ENUM_FLAGS_TYPE (enum type_instance_flag_value, type_instance_flags);
 
+/* * Define flags for function types.  */
+enum func_type_flag_value : unsigned
+{
+  /* * Flag indicates, whether this function normally returns to its
+     caller.  It is set from the DW_AT_noreturn attribute if set on
+     the DW_TAG_subprogram.  */
+  FUNC_TYPE_NO_RETURN = (1 << 0),
+
+  /* * Flag is used for functions marked with DW_AT_trampoline.  These
+     are compiler generated wrappers that should be hidden from the user.  */
+  FUNC_TYPE_TRAMPOLINE = (1 << 1)
+};
+
+DEF_ENUM_FLAGS_TYPE (enum func_type_flag_value, func_type_flags);
+
 /* * Not textual.  By default, GDB treats all single byte integers as
    characters (or elements of strings) unless this flag is set.  */
 
@@ -1742,11 +1757,9 @@ struct func_type
 
     ENUM_BITFIELD (dwarf_calling_convention) calling_convention : 8;
 
-    /* * Whether this function normally returns to its caller.  It is
-       set from the DW_AT_noreturn attribute if set on the
-       DW_TAG_subprogram.  */
+    /* * For storing function types defined in eunm func_type_flag_value.  */
 
-    unsigned int is_noreturn : 1;
+    func_type_flags flags;
 
     /* * Only those DW_TAG_call_site's in this function that have
        DW_AT_call_tail_call set are linked in this list.  Function
@@ -1761,6 +1774,78 @@ struct func_type
        contains the method.  */
 
     struct type *self_type;
+
+    struct trampoline_target *self_trampoline_target;
+  };
+
+/* The kind of location held by this call site target.  */
+enum trampoline_target_kind
+  {
+    /* An address.  */
+    TRAMPOLINE_TARGET_PHYSADDR,
+    /* A (mangled) name.  */
+    TRAMPOLINE_TARGET_PHYSNAME,
+    /* An flag (target is unknown).  */
+    TRAMPOLINE_TARGET_FLAG,
+  };
+
+struct trampoline_target
+  {
+    trampoline_target_kind target_kind () const
+    {
+      return m_target_kind;
+    }
+
+    void set_target_physaddr (CORE_ADDR physaddr)
+    {
+      m_target_kind = TRAMPOLINE_TARGET_PHYSADDR;
+      m_trampoline_target.physaddr = physaddr;
+    }
+
+    CORE_ADDR target_physaddr () const
+    {
+      gdb_assert (m_target_kind == TRAMPOLINE_TARGET_PHYSADDR);
+      return m_trampoline_target.physaddr;
+    }
+
+    void set_target_physname (const char *physname)
+    {
+      m_target_kind = TRAMPOLINE_TARGET_PHYSNAME;
+      m_trampoline_target.physname = physname;
+    }
+
+    const char *target_physname () const
+    {
+      gdb_assert (m_target_kind == TRAMPOLINE_TARGET_PHYSNAME);
+      return m_trampoline_target.physname;
+    }
+
+    void set_target_flag (bool flag)
+    {
+      m_target_kind = TRAMPOLINE_TARGET_FLAG;
+      m_trampoline_target.flag = flag;
+    }
+
+    bool target_flag () const
+    {
+      gdb_assert (m_target_kind == TRAMPOLINE_TARGET_FLAG);
+      return m_trampoline_target.flag;
+    }
+
+  private:
+
+    union
+    {
+      /* Address.  */
+      CORE_ADDR physaddr;
+      /* Mangled name.  */
+      const char *physname;
+      /* Flag.  */
+      bool flag;
+    } m_trampoline_target;
+
+    /* * Discriminant for union m_trampoline_target.  */
+    ENUM_BITFIELD (trampoline_target_kind) m_target_kind : 2;
   };
 
 /* struct call_site_parameter can be referenced in callees by several ways.  */
@@ -2114,8 +2199,16 @@ extern void set_type_vptr_basetype (struct type *, struct type *);
 #define TYPE_GNAT_SPECIFIC(thistype) TYPE_MAIN_TYPE(thistype)->type_specific.gnat_stuff
 #define TYPE_DESCRIPTIVE_TYPE(thistype) TYPE_GNAT_SPECIFIC(thistype)->descriptive_type
 #define TYPE_CALLING_CONVENTION(thistype) TYPE_MAIN_TYPE(thistype)->type_specific.func_stuff->calling_convention
-#define TYPE_NO_RETURN(thistype) TYPE_MAIN_TYPE(thistype)->type_specific.func_stuff->is_noreturn
+#define TYPE_FUNC_FLAGS(thistype) \
+  TYPE_MAIN_TYPE(thistype)->type_specific.func_stuff->flags
+#define TYPE_NO_RETURN(thistype) \
+  (TYPE_MAIN_TYPE(thistype)->type_specific.func_stuff->flags \
+   & FUNC_TYPE_NO_RETURN)
 #define TYPE_TAIL_CALL_LIST(thistype) TYPE_MAIN_TYPE(thistype)->type_specific.func_stuff->tail_call_list
+#define TYPE_IS_TRAMPOLINE(thistype) \
+  (TYPE_MAIN_TYPE(thistype)->type_specific.func_stuff->flags \
+   & FUNC_TYPE_TRAMPOLINE)
+#define TYPE_TRAMPOLINE_TARGET(thistype) TYPE_MAIN_TYPE(thistype)->type_specific.func_stuff->self_trampoline_target
 #define TYPE_BASECLASS(thistype,index) ((thistype)->field (index).type ())
 #define TYPE_N_BASECLASSES(thistype) TYPE_CPLUS_SPECIFIC(thistype)->n_baseclasses
 #define TYPE_BASECLASS_NAME(thistype,index) (thistype->field (index).name ())

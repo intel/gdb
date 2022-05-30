@@ -72,6 +72,7 @@
 #include "gdbsupport/gdb_string_view.h"
 #include "gdbsupport/pathstuff.h"
 #include "gdbsupport/common-utils.h"
+#include "gdbsupport/symbol.h"
 
 /* Forward declarations for local functions.  */
 
@@ -4059,6 +4060,60 @@ find_function_alias_target (bound_minimal_symbol msymbol)
   return NULL;
 }
 
+/* See symtab.h.  */
+
+bool
+in_trampoline_function (CORE_ADDR pc)
+{
+  /* Find the innermost function containing pc.  This might be an inlined
+     function.  */
+  symbol *sym = find_pc_sect_containing_function (pc,
+						  find_pc_mapped_section (pc));
+  return sym != nullptr && TYPE_IS_TRAMPOLINE (SYMBOL_TYPE (sym));
+}
+
+/* See symtab.h.  */
+
+CORE_ADDR
+find_function_trampoline_target (CORE_ADDR pc)
+{
+  /* Find the innermost function containing pc.  This might be an inlined
+     function.  */
+  symbol *sym = find_pc_sect_containing_function (pc,
+						  find_pc_mapped_section (pc));
+  CORE_ADDR target_address = 0;
+
+  if (sym != nullptr && TYPE_IS_TRAMPOLINE (SYMBOL_TYPE (sym)))
+    {
+      trampoline_target *trampoline
+	= TYPE_TRAMPOLINE_TARGET (SYMBOL_TYPE (sym));
+
+      /* DW_AT_trampoline can be given as an address, name, or flag here (die
+	 references have been resolved as names at this point.  In the case
+	 where DW_AT_trampoline contains a flag we do not know the target
+	 address and return 0.  */
+      if (trampoline->target_kind () == TRAMPOLINE_TARGET_PHYSNAME)
+	{
+	  /* Handle both the mangled and demangled PHYSNAME.  */
+	  const char *physname = trampoline->target_physname ();
+
+	  if (find_minimal_symbol_address (physname,
+					   &target_address,
+					   nullptr) != 0)
+	    target_address = 0;
+	}
+      else if (trampoline->target_kind () == TRAMPOLINE_TARGET_PHYSADDR)
+	{
+	  /* If the function symbol containing this trampoline target has
+	     been relocated we assume the target_address also needs relocation.
+	     If it has not been relocated the offset should be zero.  */
+	  target_address = trampoline->target_physaddr ()
+	    + symbol_objfile (sym)->section_offsets[sym->section_index ()];
+	}
+    }
+
+  return target_address;
+}
 
 /* If P is of the form "operator[ \t]+..." where `...' is
    some legitimate operator text, return a pointer to the

@@ -1885,6 +1885,20 @@ extern const struct gnu_ifunc_fns *gnu_ifunc_fns_p;
 
 extern CORE_ADDR find_solib_trampoline_target (struct frame_info *, CORE_ADDR);
 
+/* Return wether or not the current pc is within a block that belongs to a
+   function that is marked as a trampoline by the compiler.  */
+
+extern bool in_trampoline_function (CORE_ADDR pc);
+
+/* Find the target of a trampoline function marked via the DW_AT_trampoline
+   attribute and return its address.  Returns 0 if the pc is not contained
+   in a trampoline function (inlined or not).  If DW_AT_trampoline
+   is given as a flag, the target is unknown and the function will still return
+   0.  One has to additionally query in_trampoline_function to cover this
+   case.  */
+
+extern CORE_ADDR find_function_trampoline_target (CORE_ADDR pc);
+
 struct symtab_and_line
 {
   /* The program space of this sal.  */

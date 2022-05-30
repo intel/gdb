@@ -17511,6 +17511,49 @@ read_subroutine_type (struct die_info *die, struct dwarf2_cu *cu)
   if (prototyped_function_p (die, cu))
     ftype->set_is_prototyped (true);
 
+  /* If this is a trampoline function store it and its target here.  */
+  attr = dwarf2_attr (die, DW_AT_trampoline, cu);
+  if (attr != nullptr)
+    {
+      CORE_ADDR baseaddr = objfile->text_section_offset ();
+
+      TYPE_IS_TRAMPOLINE (ftype) = true;
+      TYPE_TRAMPOLINE_TARGET (ftype)
+	= (trampoline_target *) TYPE_ZALLOC (ftype,
+					     sizeof (trampoline_target));
+
+      /* A DW_AT_trampoline can be either an address, a flag, a reference or a
+	 string.  */
+      if (attr->form_is_string ())
+	TYPE_TRAMPOLINE_TARGET (ftype)->set_target_physname
+	  (attr->as_string ());
+      else if (attr->form_is_ref ())
+	{
+	  die_info *target_die;
+	  dwarf2_cu *target_cu = cu;
+
+	  target_die = follow_die_ref (die, attr, &target_cu);
+	  const char* target_name = dwarf2_name (target_die, target_cu);
+	  if (target_name == nullptr)
+	    {
+	      complaint (_("DW_AT_trampoline target DIE has no name for"
+			 "referencing DIE %s [in module %s]"),
+			 sect_offset_str (die->sect_off),
+			 objfile_name (objfile));
+	    }
+	  TYPE_TRAMPOLINE_TARGET (ftype)->set_target_physname (target_name);
+	}
+      else if (attr->form_is_unsigned ())
+	TYPE_TRAMPOLINE_TARGET (ftype)->set_target_flag (attr->as_boolean ());
+      else
+	{
+	  CORE_ADDR target_addr = attr->as_address ();
+	  target_addr = gdbarch_adjust_dwarf2_addr (objfile->arch (),
+						    target_addr + baseaddr);
+	  TYPE_TRAMPOLINE_TARGET (ftype)->set_target_physaddr (target_addr);
+	}
+    }
+
   /* Store the calling convention in the type if it's available in
      the subroutine die.  Otherwise set the calling convention to
      the default value DW_CC_normal.  */

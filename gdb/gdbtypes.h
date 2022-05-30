@@ -1706,6 +1706,83 @@ struct func_type
        contains the method.  */
 
     struct type *self_type;
+
+    /* * For functions marked with the DW_AT_trampoline.  These are
+       compiler generated wrappers that should be hidden from the user.  */
+
+    unsigned int is_trampoline : 1;
+
+    struct trampoline_target *self_trampoline_target;
+  };
+
+/* The kind of location held by this call site target.  */
+enum trampoline_target_kind
+  {
+    /* An address.  */
+    TRAMPOLINE_TARGET_PHYSADDR,
+    /* A (mangled) name.  */
+    TRAMPOLINE_TARGET_PHYSNAME,
+    /* An flag (target is unknown).  */
+    TRAMPOLINE_TARGET_FLAG,
+  };
+
+struct trampoline_target
+  {
+    trampoline_target_kind target_kind () const
+    {
+      return m_target_kind;
+    }
+
+    void set_target_physaddr (CORE_ADDR physaddr)
+    {
+      m_target_kind = TRAMPOLINE_TARGET_PHYSADDR;
+      m_trampoline_target.physaddr = physaddr;
+    }
+
+    CORE_ADDR target_physaddr () const
+    {
+      gdb_assert (m_target_kind == TRAMPOLINE_TARGET_PHYSADDR);
+      return m_trampoline_target.physaddr;
+    }
+
+    void set_target_physname (const char *physname)
+    {
+      m_target_kind = TRAMPOLINE_TARGET_PHYSNAME;
+      m_trampoline_target.physname = physname;
+    }
+
+    const char *target_physname () const
+    {
+      gdb_assert (m_target_kind == TRAMPOLINE_TARGET_PHYSNAME);
+      return m_trampoline_target.physname;
+    }
+
+    void set_target_flag (bool flag)
+    {
+      m_target_kind = TRAMPOLINE_TARGET_FLAG;
+      m_trampoline_target.flag = flag;
+    }
+
+    bool target_flag () const
+    {
+      gdb_assert (m_target_kind == TRAMPOLINE_TARGET_FLAG);
+      return m_trampoline_target.flag;
+    }
+
+  private:
+
+    union
+    {
+      /* Address.  */
+      CORE_ADDR physaddr;
+      /* Mangled name.  */
+      const char *physname;
+      /* Flag.  */
+      bool flag;
+    } m_trampoline_target;
+
+    /* * Discriminant for union m_trampoline_target.  */
+    ENUM_BITFIELD (trampoline_target_kind) m_target_kind : 2;
   };
 
 /* struct call_site_parameter can be referenced in callees by several ways.  */
@@ -1954,6 +2031,8 @@ extern void set_type_vptr_basetype (struct type *, struct type *);
 #define TYPE_CALLING_CONVENTION(thistype) TYPE_MAIN_TYPE(thistype)->type_specific.func_stuff->calling_convention
 #define TYPE_NO_RETURN(thistype) TYPE_MAIN_TYPE(thistype)->type_specific.func_stuff->is_noreturn
 #define TYPE_TAIL_CALL_LIST(thistype) TYPE_MAIN_TYPE(thistype)->type_specific.func_stuff->tail_call_list
+#define TYPE_IS_TRAMPOLINE(thistype) TYPE_MAIN_TYPE(thistype)->type_specific.func_stuff->is_trampoline
+#define TYPE_TRAMPOLINE_TARGET(thistype) TYPE_MAIN_TYPE(thistype)->type_specific.func_stuff->self_trampoline_target
 #define TYPE_BASECLASS(thistype,index) ((thistype)->field (index).type ())
 #define TYPE_N_BASECLASSES(thistype) TYPE_CPLUS_SPECIFIC(thistype)->n_baseclasses
 #define TYPE_BASECLASS_NAME(thistype,index) TYPE_FIELD_NAME(thistype, index)

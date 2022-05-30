@@ -60,6 +60,9 @@ thread apply thread-list|all|all-lanes -unavailable
      Added new MI command '-device-info' which is equivalent to CLI command
      'info devices'.
 
+  ** Stop events include execution-mask, simd-width and hit-lanes-mask fields if
+     available.
+
 * New remote packets
 
 qXfer:libraries:read's response

@@ -5074,6 +5074,33 @@ print_fixed_point_type_info (struct type *type, int spaces)
 	      type->fixed_point_scaling_factor ().str ().c_str ());
 }
 
+/* Print the contents of the TYPE's self_trampoline_target, assuming that its
+   type-specific kind is TYPE_SPECIFIC_FUNC and is_trampoline is not 0.  */
+static void
+print_trampoline_target_info (struct type *type, int spaces)
+{
+  switch (TYPE_TRAMPOLINE_TARGET (type)->target_kind ())
+    {
+    case TRAMPOLINE_TARGET_PHYSADDR:
+      gdb_printf ("%*starget physaddr: 0x%s\n", spaces + 2, "",
+		  print_core_address (type->arch_owner (),
+				      TYPE_TRAMPOLINE_TARGET (type)
+				      ->target_physaddr ()));
+      break;
+    case TRAMPOLINE_TARGET_PHYSNAME:
+      gdb_printf ("%*starget physname: %s\n", spaces + 2, "",
+		  TYPE_TRAMPOLINE_TARGET (type)->target_physname ());
+      break;
+    case TRAMPOLINE_TARGET_FLAG:
+      gdb_printf ("%*starget flag: %d\n", spaces + 2, "",
+		  TYPE_TRAMPOLINE_TARGET (type)->target_flag ());
+      break;
+    default:
+      gdb_assert_not_reached ("unhandled trampoline target kind");
+      break;
+    }
+}
+
 static struct obstack dont_print_type_obstack;
 
 /* Print the dynamic_prop PROP.  */
@@ -5400,6 +5427,10 @@ recursive_dump_type (struct type *type, int spaces)
       gdb_printf ("%*scalling_convention %d\n", spaces, "",
 		  TYPE_CALLING_CONVENTION (type));
       /* tail_call_list is not printed.  */
+      gdb_printf ("%*sfunc_type_flags %u\n", spaces, "",
+		  (unsigned int) TYPE_FUNC_FLAGS (type));
+      if (TYPE_IS_TRAMPOLINE (type))
+	print_trampoline_target_info (type, spaces);
       break;
 
     case TYPE_SPECIFIC_SELF_TYPE:
@@ -5614,8 +5645,10 @@ copy_type_recursive (struct type *type, htab_t copied_types)
     case TYPE_SPECIFIC_FUNC:
       INIT_FUNC_SPECIFIC (new_type);
       TYPE_CALLING_CONVENTION (new_type) = TYPE_CALLING_CONVENTION (type);
-      TYPE_NO_RETURN (new_type) = TYPE_NO_RETURN (type);
+      TYPE_FUNC_FLAGS (new_type) |= TYPE_NO_RETURN (type);
       TYPE_TAIL_CALL_LIST (new_type) = NULL;
+      TYPE_FUNC_FLAGS (new_type) |= TYPE_IS_TRAMPOLINE (type);
+      TYPE_TRAMPOLINE_TARGET (new_type) = TYPE_TRAMPOLINE_TARGET (type);
       break;
     case TYPE_SPECIFIC_FLOATFORMAT:
       TYPE_FLOATFORMAT (new_type) = TYPE_FLOATFORMAT (type);

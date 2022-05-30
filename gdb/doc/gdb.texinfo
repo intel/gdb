@@ -30826,6 +30826,18 @@ is not.
 @item what
 Some extra data, the exact contents of which are type-dependent.
 
+@item execution-mask
+SIMD lanes execution mask of the thread.  Value is in hexadecimal format.  This
+field is only present if the thread has SIMD lanes.
+
+@item simd-width
+SIMD lanes width of the thread.  This field is only present if the thread has
+SIMD lanes.
+
+@item hit-lanes-mask
+Mask of the SIMD lanes which were hit by the breakpoint.  Value is in
+hexadecimal format.  This field is only present if the thread has SIMD lanes.
+
 @item locations
 This field is present if the breakpoint has multiple locations.  It is also
 exceptionally present if the breakpoint is enabled and has a single, disabled

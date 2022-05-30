@@ -12912,6 +12912,9 @@ bkpt_print_it (bpstat bs)
       uiout->field_string ("reason",
 			   async_reason_lookup (EXEC_ASYNC_BREAKPOINT_HIT));
       uiout->field_string ("disp", bpdisp_text (b->disposition));
+      if (inferior_thread ()->has_simd_lanes ())
+	uiout->field_string ("hit-lanes-mask", (string_printf (_("0x%x"),
+			     bs->simd_lane_mask)).c_str ());
     }
   if (bp_temp)
     uiout->message ("Temporary breakpoint %pF, ",

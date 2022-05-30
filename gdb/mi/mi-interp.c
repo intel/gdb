@@ -650,7 +650,17 @@ mi_on_normal_stop_1 (struct bpstats *bs, int print_frame)
       if (console_print)
 	print_stop_event (mi->cli_uiout);
 
+      if (tp->not_executing_has_registers_has_simd_lanes () && tp->is_active ())
+	{
+	  mi_uiout->field_string ("execution-mask",
+				  (string_printf (_("0x%x"),
+				  tp->active_simd_lanes_mask ())).c_str ());
+	  mi_uiout->field_string ("simd-width", (string_printf (_("%d"),
+				  tp->get_simd_width ())).c_str ());
+	}
+
       mi_uiout->field_signed ("thread-id", tp->global_num);
+
       if (non_stop)
 	{
 	  ui_out_emit_list list_emitter (mi_uiout, "stopped-threads");

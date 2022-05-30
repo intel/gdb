@@ -44,7 +44,8 @@ foreach_with_prefix async {"off" "on"} {
     }
 
     # Run till a temporary BP inside a kernel.
-    mi_runto_helper "get_dim" "continue"
+    set first_kernel_line [gdb_get_line_number "kernel-first-line"]
+    mi_continue_to_line $first_kernel_line "Continue to 'kernel_first_line' and stop at breakpoint"
     # Send resuming command.
     mi_send_resuming_command "exec-continue" "continuing to inferior exit"
     # Expect normal exit.

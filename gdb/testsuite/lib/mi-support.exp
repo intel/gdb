@@ -1131,6 +1131,12 @@ proc mi_next { test } {
   return [mi_next_to {.*} {.*} {.*} {.*} $test]
 }
 
+# Next to the next statement with extra argument
+
+proc mi_next_extra { extra test } {
+  mi_execute_to "exec-next" "end-stepping-range" ".*" ".*" ".*" ".*" \
+    $extra "$test"
+}
 
 # Step to the next statement
 # For return values, see mi_execute_to_helper

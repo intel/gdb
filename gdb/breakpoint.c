@@ -12032,6 +12032,8 @@ ordinary_breakpoint::print_it (const bpstat *bs) const
       uiout->field_string ("reason",
 			   async_reason_lookup (EXEC_ASYNC_BREAKPOINT_HIT));
       uiout->field_string ("disp", bpdisp_text (disposition));
+      if (inferior_thread ()->has_simd_lanes ())
+	uiout->field_fmt ("hit-lanes-mask", "0x%x", bs->hit_lane_mask);
     }
 
   if (bp_temp)

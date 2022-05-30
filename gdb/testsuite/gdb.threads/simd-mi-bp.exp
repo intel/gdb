@@ -81,15 +81,15 @@ foreach device $sycl_device_list {
 
 	# Continue and hit first breakpoint.
 	mi_send_resuming_command "exec-continue" "continuing to first bp"
-	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $kernel_dim0_line { "" "disp=\"del\"" } "expect bp hit at line $kernel_dim0_line"
+	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $kernel_dim0_line [list ",execution-mask=\"$hex\",simd-width=\"$decimal\"" "disp=\"del\",hit-lanes-mask=\"$hex\"" {locno="[0-9]+"}] "expect bp hit at line $kernel_dim0_line"
 
 	# Continue and hit second breakpoint.
 	mi_send_resuming_command "exec-continue" "continuing to second bp"
-	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $condition_line { "" "disp=\"del\"" } "expect bp hit at line $condition_line"
+	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $condition_line [list ",execution-mask=\"$hex\",simd-width=\"$decimal\"" "disp=\"del\",hit-lanes-mask=\"$hex\"" {locno="[0-9]+"}] "expect bp hit at line $condition_line"
 
 	# Continue, but will not hit third breakpoint, instead hit fourth breakpoint.
 	mi_send_resuming_command "exec-continue" "continuing to third bp"
-	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $odd_branch_line { "" "disp=\"del\"" } "expect bp hit at line $odd_branch_line"
+	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $odd_branch_line [list ",execution-mask=\"$hex\",simd-width=\"$decimal\"" "disp=\"del\",hit-lanes-mask=\"$hex\"" {locno="[0-9]+"}] "expect bp hit at line $odd_branch_line"
 
 	# Continue to end.
 	mi_send_resuming_command "exec-continue" "continuing to inferior exit"

@@ -939,6 +939,17 @@ platform.
 
 * New commands
 
+set skip-trampoline-functions on|off
+show skip-trampoline-functions
+  This setting is 'on' by default.  When 'on' it controls whether GDB will
+  recognize function calls that have been marked as trampolines in the debug
+  info.  It improves stepping behavior in that it steps over the trampoline
+  code and hides it from the user.  Currently, only DWARF trampolines are
+  supported.
+
+  If this is turned off, GDB will handle @dfn{trampoline functions} the same
+  as any other function.
+
 maint set backtrace-on-fatal-signal on|off
 maint show backtrace-on-fatal-signal
   This setting is 'on' by default.  When 'on' GDB will print a limited

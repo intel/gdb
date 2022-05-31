@@ -5,6 +5,20 @@
 
 * New commands
 
+set skip-trampoline-functions (on|off)
+show skip-trampoline-functions
+  This controls whether GDB's stepping behavior will recognize function calls
+  that have been marked as trampolines in the debug info.  It improves
+  stepping behavior in that it steps through trampoline code and hides it from
+  the user.  GDB can now step through trampolines that are correctly marked as
+  such in the compiler's debug info.  If the target of a trampoline is unknown,
+  GDB will continue until the trampoline section is left again and only then
+  hand control back to the user.  GDB does this even if the trampoline has no
+  associated line info.  If this is turned off, GDB will step into trampolines
+  if there is line table information for them or step over the trampoline calls
+  if there is no line table information.  Currently, only DWARF trampolines
+  are supported.
+
 info devices
   Show additional information about inferiors which are considered
   devices by GDB.  For devices, the description displayed by 'info

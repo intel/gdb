@@ -1,0 +1,245 @@
+# Copyright 2019-2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This test checks GDB's handling of functions/inlined functions marked
+# DW_AT_trampoline by the compiler.  A function marked as trampoline should
+# generally be hidden from the user.  We check whether we can step through
+# trampolines.  Every trampoline is defined using a different type for its
+# target: a string, an address, a DIE reference or a flag.
+# Setting skip-trampoline-functions to false inside GDB should make it return
+# to its 'normal' behavior, ignore the DW_AT_trampoline, and skip all of the
+# non-inlined trampoline calls (as their DIEs don't have any source
+# information).
+
+load_lib dwarf.exp
+
+# This test can only be run on targets which support DWARF-2 and use gas.
+if {![dwarf2_support]} {
+    return 0
+}
+
+standard_testfile .c .S
+
+set asm_file [standard_output_file $srcfile2]
+Dwarf::assemble $asm_file {
+    global srcdir subdir srcfile
+    declare_labels lines_label trampoline_label
+
+    get_func_info target
+    get_func_info trampoline
+    get_func_info chained_trampoline
+    get_func_info doubly_chained_trampoline
+    get_func_info main
+
+    set target_decl_line [gdb_get_line_number "target decl line"]
+    set main_decl_line [gdb_get_line_number "main decl line"]
+    set main_call_inlined_trampoline_line [gdb_get_line_number "main call inlined_trampoline"]
+
+    cu {} {
+	compile_unit {
+	    {language @DW_LANG_C}
+	    {name dw2-function-trampolines.c}
+	    {low_pc 0 addr}
+	    {stmt_list ${lines_label} DW_FORM_sec_offset}
+	} {
+	    subprogram {
+		{name target}
+		{low_pc $target_start addr}
+		{high_pc "$target_start + $target_len" addr}
+		{decl_file 1 data1}
+		{decl_line $target_decl_line data1}
+	    }
+	    # The 'trampoline' subprogram declares its target by name.
+	    trampoline_label: subprogram {
+		    {name trampoline}
+		    {low_pc $trampoline_start addr}
+		    {high_pc "$trampoline_start + $trampoline_len" addr}
+		    {trampoline target string}
+		}
+	    # The 'chained_trampoline' subprogram declares its target as die
+	    # reference.
+	    subprogram {
+		{name chained_trampoline}
+		{low_pc $chained_trampoline_start addr}
+		{high_pc "$chained_trampoline_start + $chained_trampoline_len" addr}
+		{trampoline %$trampoline_label}
+	    }
+	    # The 'doubly_chained_trampoline' subprogram declares no target.
+	    # Its DW_AT_trampoline is a flag set to true.
+	    subprogram {
+		{name doubly_chained_trampoline}
+		{low_pc $doubly_chained_trampoline_start addr}
+		{high_pc "$doubly_chained_trampoline_start + $doubly_chained_trampoline_len" addr}
+		{trampoline 1 flag}
+	    }
+	    subprogram {
+		{external 1 flag}
+		{name main}
+		{main_subprogram 1 flag}
+		{low_pc $main_start addr}
+		{high_pc "$main_start + $main_len" addr}
+		{decl_file 1 data1}
+		{decl_line $main_decl_line data1}
+	    } {
+		# The 'inlined_trampoline' subroutine declares its target as
+		# an address.
+		inlined_subroutine {
+		    {name inlined_trampoline}
+		    {low_pc main_label2 addr}
+		    {high_pc main_label3 addr}
+		    {trampoline $target_start addr}
+		    {call_file 1 data1}
+		    {call_line $main_call_inlined_trampoline_line data1}
+		}
+	    }
+	}
+    }
+
+    lines {version 2} lines_label {
+	include_dir "${srcdir}/${subdir}"
+	file_name "$srcfile" 1
+
+	program {
+	    {DW_LNE_set_address $main_start}
+	    {line [gdb_get_line_number "main set global_var"]}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address main_label}
+	    {line [gdb_get_line_number "main set global_var"]}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address main_label2}
+	    {line [gdb_get_line_number "main call inlined_trampoline"]}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address inlined_trampoline_label}
+	    {line [gdb_get_line_number "inlined_trampoline add"]}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address inlined_trampoline_label2}
+	    {line [gdb_get_line_number "inlined_trampoline target call"]}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address main_label3}
+	    {line [gdb_get_line_number "main call trampoline"]}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address main_label4}
+	    {line [gdb_get_line_number "main call chained_trampoline"]}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address main_label5}
+	    {line [gdb_get_line_number "main call doubly_chained_trampoline"]}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address main_label6}
+	    {line [gdb_get_line_number "main call return"]}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address $main_end}
+	    {DW_LNE_end_sequence}
+
+	    {DW_LNE_set_address $target_start}
+	    {line [gdb_get_line_number "target prologue"]}
+	    {DW_LNS_negate_stmt}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address target_label}
+	    {line [gdb_get_line_number "target add"]}
+	    {DW_LNS_negate_stmt}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address target_label2}
+	    {line [gdb_get_line_number "target return"]}
+	    {DW_LNS_copy}
+	    {DW_LNE_set_address $target_end}
+	    {DW_LNE_end_sequence}
+	}
+    }
+}
+
+if {[prepare_for_testing "failed to prepare" ${testfile} \
+	[list $srcfile $asm_file] {nodebug additional_flags=-O0}]} {
+    return -1
+}
+
+set target_first_line_pattern ".*target add.*"
+set target_second_line_pattern ".*target return.*"
+
+if ![runto_main] {
+    return -1
+}
+
+gdb_test "show skip-trampoline-functions" \
+    "Skipping trampoline functions is on\." \
+    "check skip-trampoline-functions is enabled"
+
+with_test_prefix "with trampoline handling" {
+    foreach {trampoline return_line} { "inlined_trampoline" "trampoline" \
+	"trampoline" "chained_trampoline" \
+	"chained_trampoline" "doubly_chained_trampoline" } {
+
+	gdb_test "s" "$target_first_line_pattern" "step through $trampoline"
+	gdb_test "s" "$target_second_line_pattern" \
+	    "step target second line from $trampoline"
+	gdb_test "s" ".*main call $return_line.*" \
+	    "step back through $trampoline"
+    }
+
+    # The doubly_chained_trampoline has only been marked as trampoline but no
+    # target was given.  In this case GDB steps into the trampoline and then
+    # continues until the trampoline section is left again.
+
+    # When compiled with gcc 7.5 (and possibly others) on a 32 bit system, the
+    # trampoline function contains a call to __x86.get_pc_thunk.ax before the
+    # actual target call.  So, we end up in __x86.get_pc_thunk.ax.  Issuing a
+    # second step command will return from the function call back into the
+    # trampoline and go on inside the trampoline towards the actual target call.
+    # On other targets we step directly towards the target call.
+    gdb_test_multiple "s" "step through double_chained_trampoline" {
+	-re -wrap "$target_first_line_pattern" {
+	    pass $gdb_test_name
+	}
+	-re -wrap ".*__x86.get_pc_thunk.ax.*" {
+	    gdb_test "s" "$target_first_line_pattern" \
+		"step through double_chained_trampoline 2nd try"
+	}
+    }
+    gdb_test "s" "$target_second_line_pattern" \
+	"step target second line fromdoubly_chained_trampoline"
+    gdb_test "s" ".*main call return.*" \
+	"step back through doubly_chained_trampoline"
+}
+
+clean_restart ${testfile}
+
+if ![runto_main] {
+    return -1
+}
+
+gdb_test_no_output "set skip-trampoline-functions off" \
+    "disable trampoline handling"
+gdb_test "show skip-trampoline-functions" \
+    "Skipping trampoline functions is off." \
+    "check skip-trampoline-functions is disabled"
+
+with_test_prefix "without trampoline handling" {
+    gdb_test "s" ".*main call inlined_trampoline.*"
+    gdb_test "s" ".*inlined_trampoline add.*" \
+	"step into inlined_trampoline with skip-trampoline off"
+    gdb_test "s" ".*inlined_trampoline target call.*" \
+	"step in inlined_trampoline with skip-trampoline off"
+    gdb_test "s" "$target_first_line_pattern" \
+	"step into target with skip-trampoline off"
+    gdb_test "s" "$target_second_line_pattern" \
+	"step second line in target with skip-trampoline off"
+    gdb_test "s" ".*main call trampoline.*" \
+	"step brack from target with skip-trampoline off"
+    gdb_test "s" ".*main call chained_trampoline.*" \
+	"skip trampoline call with no line info"
+    gdb_test "s" ".*main call doubly_chained_trampoline.*" \
+	"skip chained_trampoline call with no line info"
+    gdb_test "s" ".*main call return.*" \
+	"skip doubly_chained_trampoline call with no line info"
+}

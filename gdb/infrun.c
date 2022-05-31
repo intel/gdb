@@ -160,6 +160,12 @@ static previous_thread_ptid_simd_lane previous_thread_focus;
 
 static bool detach_fork = true;
 
+/* If set (default) GDB will step through functions/inlined subroutines marked
+   DW_AT_trampoline by the compiler.  If false, GDB will ignore the
+   attribute.  */
+
+static bool skip_trampoline_functions = true;
+
 bool debug_infrun = false;
 static void
 show_debug_infrun (struct ui_file *file, int from_tty,
@@ -7236,7 +7242,6 @@ process_event_stop_test (struct execution_control_state *ecs)
 		  != find_pc_function (ecs->event_thread->suspend.stop_pc)))))
     {
       CORE_ADDR stop_pc = ecs->event_thread->suspend.stop_pc;
-      CORE_ADDR real_stop_pc;
 
       infrun_debug_printf ("stepped into subroutine");
 
@@ -7308,8 +7313,42 @@ process_event_stop_test (struct execution_control_state *ecs)
 	 calling routine and the real function), locate the real
 	 function.  That's what tells us (a) whether we want to step
 	 into it at all, and (b) what prologue we want to run to the
-	 end of, if we do step into it.  */
-      real_stop_pc = skip_language_trampoline (frame, stop_pc);
+	 end of, if we do step into it.  For functions marked as
+	 trampoline functions we try to find their target and step
+	 towards it (if skip_trampoline_functions is not set to false by the
+	 user).  If no target can be determined we just step into the
+	 trampoline and hand control back to the user.  */
+      CORE_ADDR real_stop_pc = 0;
+      bool in_trampoline = skip_trampoline_functions
+			   && in_trampoline_function (stop_pc);
+
+      if (in_trampoline)
+	{
+	  real_stop_pc = find_function_trampoline_target (stop_pc);
+
+	  /* Resolve a certian number of trampoline chains - 10 seems big
+	     enough here, but is arbitrary.  */
+	  for (int i = 0; i < 10 && in_trampoline_function (real_stop_pc); ++i)
+	    {
+		real_stop_pc = find_function_trampoline_target (real_stop_pc);
+		/* Exit if find_function_trampoline_target failed to find the
+		   trampoline target.  Do not try to resolve the trampolines
+		   in this case.  */
+		if (real_stop_pc == 0x0)
+		  break;
+	    }
+
+	  /* If we failed to find a target we will just single step in the
+	     hope of leaving the trampoline again soon.  */
+	  if (real_stop_pc == 0x0)
+	    {
+	      keep_going (ecs);
+	      return;
+	    }
+	}
+
+      if (real_stop_pc == 0)
+	real_stop_pc = skip_language_trampoline (frame, stop_pc);
       if (real_stop_pc == 0)
 	real_stop_pc = gdbarch_skip_trampoline_code (gdbarch, frame, stop_pc);
       if (real_stop_pc != 0)
@@ -7330,6 +7369,8 @@ process_event_stop_test (struct execution_control_state *ecs)
       /* If we have line number information for the function we are
 	 thinking of stepping into and the function isn't on the skip
 	 list, step into it.
+	 If we are about to step into a function marked trampoline with no
+	 line number information, we still want to enter it here.
 
 	 If there are several symtabs at that PC (e.g. with include
 	 files), just want to know whether *any* of them have line
@@ -7338,7 +7379,9 @@ process_event_stop_test (struct execution_control_state *ecs)
 	struct symtab_and_line tmp_sal;
 
 	tmp_sal = find_pc_line (ecs->stop_func_start, 0);
-	if (tmp_sal.line != 0
+	if ((tmp_sal.line != 0
+	     || (skip_trampoline_functions
+		 && in_trampoline_function (ecs->stop_func_start)))
 	    && !function_name_is_marked_for_skip (ecs->stop_func_name,
 						  tmp_sal)
 	    && !inline_frame_is_marked_for_skip (true, ecs->event_thread))
@@ -7470,6 +7513,19 @@ process_event_stop_test (struct execution_control_state *ecs)
 	 one instruction.  */
       infrun_debug_printf ("stepi/nexti");
       end_stepping_range (ecs);
+      return;
+    }
+
+  /* If we ended up in a function trampoline without stepping into a new
+     function we are either in some inlined trampoline or returning through a
+     trampoline function.  In either case we continue to single step until we
+     are out of the trampoline code again.  This check has to be done before
+     stop_pc_sal.line == 0 below, as trampolines usually don't have source
+     line information associated with them.  */
+  if (skip_trampoline_functions && in_trampoline_function (stop_pc_sal.pc))
+    {
+      infrun_debug_printf ("stepped into trampoline code");
+      keep_going (ecs);
       return;
     }
 
@@ -9795,6 +9851,14 @@ show_exec_direction_func (struct ui_file *out, int from_tty,
 }
 
 static void
+show_skip_trampoline_functions (ui_file *file, int from_tty,
+				cmd_list_element *c,
+				const char *value)
+{
+  fprintf_filtered (file, _("Skipping trampoline functions is %s.\n"), value);
+}
+
+static void
 show_schedule_multiple (struct ui_file *file, int from_tty,
 			struct cmd_list_element *c, const char *value)
 {
@@ -10151,6 +10215,18 @@ Options are 'forward' or 'reverse'."),
 			_("Tells gdb whether to execute forward or backward."),
 			set_exec_direction_func, show_exec_direction_func,
 			&setlist, &showlist);
+
+  add_setshow_boolean_cmd ("skip-trampoline-functions", class_run,
+			  &skip_trampoline_functions, _("\
+Set whether gdb will stop when stepping into/through functions that have\n\
+been marked as trampolines in the compiler's debug info."), _("\
+Show whether gdb will stop when stepping into/through functions that have\n\
+been marked trampolines in the compiler's debug info."), _("\
+If on, gdb will skip through function trampolines and inlined function\n\
+trampolines that have been marked trampolines in the compiler's debug info.\n\
+If off, gdb will ignore the DW_TAG_trampoline while stepping."),
+			  nullptr, show_skip_trampoline_functions, &setlist,
+			  &showlist);
 
   /* Set/show detach-on-fork: user-settable mode.  */
 

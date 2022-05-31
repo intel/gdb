@@ -6435,6 +6435,42 @@ debug information.  This is the default.
 Show whether @value{GDBN} will stop in or step over functions without
 source line debug information.
 
+@kindex set skip-trampoline-functions
+@item set skip-trampoline-functions
+@cindex trampoline functions
+@cindex stepping through trampoline functions
+@itemx set skip-trampoline-functions on
+When calling a function in any language, some compilers might generate
+so-called trampoline functions, which wrap the actual function call (the
+target of the trampoline).  The compiler might mark such a trampoline in its
+debug information.  Often, such trampolines do not have any source line
+information associated with them which will lead the @code{step} command to
+behave like a @code{next} and skip the function call completely.
+
+The @code{set skip-trampoline-functions on} command will cause the @code{step}
+command to treat these trampolines differently.  When issuing a @code{step} at
+the call site of a trampoline function if @code{skip-trampoline-functions} is
+set @value{GDBN} will attempt to determine the target of the trampoline and
+then step through the trampoline stopping at the target.  If the target could
+not be found or was not given in the debug info, @value{GDBN} will simply
+continue execution until it leaves the trampoline code again, even if the
+trampoline has no line info associated with it.  When returning from a target
+function call and stepping back into the trampoline, @value{GDBN} will again
+step through the trampoline towards the call site.
+Additionally, even if stopped in a trampoline function with source line
+information, issuing a @code{step} will prompt @value{GDBN} to resume execution
+until leaving the trampoline region again.  The @code{stepi} command is not
+affected by the setting which is enabled by default.  Currently, only
+DWARF trampolines marked via DW_AT_trampoline are supported by this.
+
+@item set skip-trampoline-functions off
+Causes the @code{step} command to completely ignore any trampoline information
+a compiler might have emitted in its debug info.  Trampolines will be treated
+like any other function when stepping.
+
+@item show skip-trampoline-functions
+Show whether @value{GDBN} tries to skip trampolines or not.
+
 @kindex finish
 @kindex fin @r{(@code{finish})}
 @item finish

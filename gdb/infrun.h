@@ -76,6 +76,10 @@ infrun_debug_show_threads (const char *title, ThreadRange threads)
 }
 
 
+/* Maximum size of trampoline chain to process while resolving
+   trampolines.  */
+#define MAX_TRAMPOLINE_CHAIN_SIZE 10
+
 /* Nonzero if we want to give control to the user when we're notified
    of shared library events by the dynamic linker.  */
 extern int stop_on_solib_events;

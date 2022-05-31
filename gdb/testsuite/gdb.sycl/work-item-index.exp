@@ -41,5 +41,8 @@ gdb_continue_to_breakpoint "last line" \
 
 # Access the data element through work item index.
 # It does not matter which thread reported the breakpoint hit.
+if {[require_sycl_device "gpu" "Intel*"]} {
+    setup_kfail "JIRA XDEPS/3982" "*-*-*"
+}
 gdb_test "print in_elem == accessorIn\[wiID\]" "true" \
     "access data element via wiID"

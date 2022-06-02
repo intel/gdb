@@ -47,8 +47,10 @@ proc get_current_line {} {
 proc test_call_stack {call_stack_supported} {
     global srcfile valnum_re decimal inferior_exited_re gdb_prompt
 
-    set inner_loc [gdb_get_line_number "ordinary-inner-loc"]
-    set middle_loc [gdb_get_line_number "ordinary-middle-loc"]
+    set fourth_loc [gdb_get_line_number "ordinary-fourth-loc"]
+    set third_loc [gdb_get_line_number "ordinary-third-loc"]
+    set second_loc [gdb_get_line_number "ordinary-second-loc"]
+    set first_loc [gdb_get_line_number "ordinary-first-loc"]
     set outer_loc [gdb_get_line_number "ordinary-outer-loc"]
     set inlined_inner_loc [gdb_get_line_number "inlined-inner-loc"]
     set inlined_middle_loc [gdb_get_line_number "inlined-middle-loc"]
@@ -56,9 +58,11 @@ proc test_call_stack {call_stack_supported} {
 
     set fill "\[^\r\n\]*"
 
-    set inner_desc  "second \\(x=20, y=9\\) at ${fill}$srcfile:$inner_loc"
-    set middle_desc "first \\(num1=15, num2=3\\) at ${fill}$srcfile:$middle_loc"
-    set outer_desc  "${fill}operator\\(\\)${fill} at ${fill}$srcfile:$outer_loc"
+    set fourth_desc "fourth \\(x4=30, y4=81\\) at ${fill}$srcfile:$fourth_loc"
+    set third_desc "third \\(x3=25, y3=27\\) at ${fill}$srcfile:$third_loc"
+    set second_desc "second \\(x2=20, y2=9\\) at ${fill}$srcfile:$second_loc"
+    set first_desc "first \\(x1=15, y1=3\\) at ${fill}$srcfile:$first_loc"
+    set outer_desc "${fill}operator\\(\\)${fill} at ${fill}$srcfile:$outer_loc"
     set inlined_inner_desc \
 	"inlined_second ${fill} at ${fill}$srcfile:$inlined_inner_loc"
     set inlined_middle_desc \
@@ -73,10 +77,10 @@ proc test_call_stack {call_stack_supported} {
     # with the call stack feature GDB skips the BP or the FunctionControl
     # flag can be ignored by IGC.
     gdb_test_multiple "continue" "break_at_first" {
-	-re ".*$srcfile:$middle_loc.*$gdb_prompt $" {
+	-re -wrap ".*$srcfile:$first_loc.*" {
 	    pass $gdb_test_name
 	}
-	-re ".*$srcfile:$outer_loc.*$gdb_prompt $" {
+	-re -wrap ".*$srcfile:$outer_loc.*" {
 	    fail $gdb_test_name
 	    if {$call_stack_supported} {
 		# We end up here if the FunctionControl flag was not honored.
@@ -86,7 +90,7 @@ proc test_call_stack {call_stack_supported} {
 		return
 	    }
 	}
-	-re "${inferior_exited_re}.*$gdb_prompt $" {
+	-re -wrap "${inferior_exited_re}.*" {
 	    # With certain versions of NEO, GDB does not stop at a BP with
 	    # IGC_FunctionControl=3.
 	    fail $gdb_test_name
@@ -96,67 +100,82 @@ proc test_call_stack {call_stack_supported} {
     }
 
     # Set breakpoint inside the kernel.
-    gdb_breakpoint "$srcfile:$inner_loc"
-    gdb_continue_to_breakpoint "innermost-body" ".*$srcfile:$inner_loc.*"
+    gdb_breakpoint "$srcfile:$fourth_loc"
+    gdb_continue_to_breakpoint "innermost-body" ".*$srcfile:$fourth_loc.*"
 
-    # Limit the backtrace to 3 frames because frame #3
+    # Limit the backtrace to 5 frames because frame #5
     # and beyond are implementation-specific to the SYCL runtime.
-    gdb_test "backtrace 3" [multi_line \
-				"#0${fill} $inner_desc" \
-				"#1${fill} $middle_desc" \
-				"#2${fill} $outer_desc.*"] \
+    gdb_test "backtrace 5" [multi_line \
+				"#0${fill} $fourth_desc" \
+				"#1${fill} $third_desc" \
+				"#2${fill} $second_desc" \
+				"#3${fill} $first_desc" \
+				"#4${fill} $outer_desc.*"] \
 	"first backtrace"
 
-    # Now switch frames and examine locals.
-    gdb_test "frame 1" "#1${fill} $middle_desc.*" "switch to frame 1"
-    gdb_test "print num1" "= 15" "print num1 at first bp"
-    gdb_test "print num2" "= 3" "print num2 at first bp"
+    # Store frame descriptors as a list for convenience.
+    # We use this when we iterate through frames.
+    set list_desc [list $fourth_desc $third_desc $second_desc $first_desc $outer_desc]
 
-    gdb_test "frame 2" "#2${fill} $outer_desc.*" "switch to frame 2"
+    # Switch between frames and check the values of arguments.
+    for {set frame 1} {$frame < 4} {incr frame} {
+	set desc [lindex $list_desc $frame]
+	gdb_test "frame $frame" "#$frame${fill} $desc.*" "switch to frame $frame"
+
+	# Compute expected arguments values.
+	set num [expr 4 - $frame]
+	set x_exp [expr 15 + ($num - 1) * 5]
+	set y_exp [expr 3 ** $num]
+	gdb_test "print x$num" "= $x_exp" "print x$num at first bp"
+	gdb_test "print y$num" "= $y_exp" "print y$num at first bp"
+    }
+
+    gdb_test "frame 4" "#4${fill} $outer_desc.*" "switch to frame 4"
     gdb_test "print fourteen" "= 14" "print fourteen at first bp"
     gdb_test "print four" "= 4"
     gdb_test "print ten" "= 10"
 
-    gdb_test "frame 0" "#0${fill} $inner_desc.*" "switch to frame 0"
-    gdb_test "print x" "= 20" "print x at first bp"
-    gdb_test "print y" "= 9" "print y at first bp"
+    # Go back to frame zero and check that args are still displayed correctly.
+    gdb_test "frame 0" "#0${fill} $fourth_desc.*" "switch to frame 0"
+    gdb_test "print x4" "= 30" "print x4 at first bp"
+    gdb_test "print y4" "= 81" "print y4 at first bp"
 
-    # Finish the function calls.  Normally we expect to see a "Value
-    # returned is ..." line.  However, some SYCL device compilers may
-    # inline the kernel functions.  In that case we won't get that line.
-    set value_returned "(\r\nValue returned is $valnum_re = 180)"
-    if {!$call_stack_supported} {
-	append value_returned "?"
+    # We finish frames from fourth to first in a loop.
+    # After every finish we check the backtrace.
+    for {set i 0} {$i < 4} {incr i} {
+	with_test_prefix "finish and backtrace #$i" {
+	    # Compute the expected value at the current level.
+	    set val_exp [expr 2430 + $i * 30]
+
+	    # Finish the function calls.  Normally we expect to see a "Value
+	    # returned is ..." line.  However, some SYCL device compilers may
+	    # inline the kernel functions.  In that case we won't get that line.
+	    set value_returned "(\r\nValue returned is $valnum_re = $val_exp)"
+	    if {!$call_stack_supported} {
+		append value_returned "?"
+	    }
+
+	    # Find frame descriptors for the starting and ending frames.
+	    set desc_from [lindex $list_desc $i]
+	    set desc_to [lindex $list_desc [expr $i + 1]]
+
+	    gdb_test "finish" [multi_line \
+				   "Run till exit from #0$fill$desc_from" \
+				   "$fill$desc_to" \
+				   "${fill}${value_returned}"]
+
+	    # Construct the expected backtrace value.
+	    set bt_exp ""
+	    set num [expr 4 - $i]
+	    for {set frame 0} {$frame < $num} {incr frame} {
+		# Index of frame descriptor from LIST_DESC list.
+		set desc_index_exp [expr $i + $frame + 1]
+		append bt_exp "#${frame}${fill} [lindex $list_desc $desc_index_exp]\r\n"
+	    }
+	    append bt_exp "\\(More stack frames follow...\\)"
+	    gdb_test "backtrace $num" $bt_exp
+	}
     }
-
-    gdb_test "finish" [multi_line \
-			   "Run till exit from #0 $fill second \\(x=20, y=9\\) $fill" \
-			   "${fill}first \\(num1=15, num2=3\\)${fill}" \
-			   "${fill}${value_returned}"] \
-	"finish the innermost frame"
-
-    gdb_test "backtrace 2" [multi_line \
-				"#0${fill} $middle_desc" \
-				"#1${fill} $outer_desc.*"] \
-	"second backtrace"
-
-    # 'finish' may not have stopped at the perfect spot.  Redefine
-    # 'middle_desc' to prevent error propagation.
-    set middle_desc "first \\(num1=3, num2=4\\) at ${fill}$srcfile:$decimal"
-
-    set value_returned "(\r\nValue returned is $valnum_re = 210)"
-    if {!$call_stack_supported} {
-	append value_returned "?"
-    }
-    gdb_test "finish" [multi_line \
-			   "Run till exit from #0 $fill first \\(num1=15, num2=3\\) $fill.*" \
-			   "${fill}operator\\(\\)${fill}" \
-			   "${fill}${value_returned}"] \
-	"finish the middle frame"
-
-    gdb_test "backtrace 1" "#0${fill} $outer_desc.*" \
-	"third backtrace"
-
     # Test inlined function calls.
     gdb_breakpoint $inlined_inner_loc
 
@@ -182,35 +201,82 @@ proc test_call_stack {call_stack_supported} {
     gdb_test "print x" "= 15" "print x at second bp"
     gdb_test "print y" "= 6" "print y at second bp"
 
-    # Test defining a breakpoint using the function name.
     delete_breakpoints
-    gdb_breakpoint "$inner_loc"
 
-    set inner_desc  "second ${fill} at ${fill}$srcfile:$inner_loc"
-    set middle_desc "first ${fill} at ${fill}$srcfile:$middle_loc"
-    gdb_continue_to_breakpoint "innermost-return" ".*$srcfile:$inner_loc.*"
+    # Now we will stop at the beginning of prologue of the fourth function
+    # and instruction step through the function until it returns back
+    # to the third.
+
+    # Find the address of fourth prologue.
+    set fourth_at_prologue_address "invalid"
+    global hex
+    gdb_test_multiple "info address fourth" "find prologue of fourth inner function" {
+	-re -wrap "Symbol \"fourth\\(int, int\\)\" is a function at address \(${hex}\).*" {
+	    set fourth_at_prologue_address $expect_out(1,string)
+	    pass $gdb_test_name
+	}
+	timeout {
+	    fail "$gdb_test_name (timeout)"
+	}
+    }
+    gdb_assert {{$fourth_at_prologue_address ne "invalid"}}
+
+    gdb_breakpoint "*$fourth_at_prologue_address"
+
+    gdb_test "continue" "fourth.*$srcfile.*" "continue to fourth prologue"
     set i 0
     set current_line [get_current_line]
+    set fourth_prologue_line $current_line
+
+    # Update description to not include arguments.
+    set third_desc "third ${fill} at ${fill}$srcfile:$third_loc"
+    set second_desc "second ${fill} at ${fill}$srcfile:$second_loc"
+    set first_desc "first ${fill} at ${fill}$srcfile:$first_loc"
+
+    # Print the current instruction and framedesc for logging purposes.
+    gdb_test "display/i \$pc"
+    gdb_test "display/x \$framedesc"
 
     # Check the backtrace at each instruction until the return.  We do not
-    # check the args here, as they might become invalid at the last
-    # instructions.  Check that there are no additional messages after
+    # check the args here, as they might be invalid at prologue and epilogue.
+    # Also check that there are no additional messages after
     # the backtrace except "(More stack frames follow...)".
-    while {$current_line == $inner_loc && $i < 20} {
+    while {($current_line == $fourth_prologue_line
+	    || $current_line == $fourth_loc)
+	   && $i < 100} {
 	with_test_prefix "iteration $i" {
-	    # Print the current instruction for logging purposes.
-	    gdb_test "x/i \$pc"
-	    gdb_test "backtrace 4" [multi_line \
-					"#0${fill} $inner_desc" \
-					"#1${fill} $middle_desc" \
-					"#2${fill} main${fill}operator${fill}lambda${fill} at .*" \
-					"#3${fill}(\r\n\\(More stack frames follow\\.\\.\\.\\))?${fill}"] \
-		"backtrace at last line of second"
+	    if {[require_sycl_device "gpu" "Intel*"]} {
+		set fourth_desc "fourth ${fill} at ${fill}$srcfile:$current_line"
+		gdb_test "backtrace 6" [multi_line \
+					    "#0${fill} $fourth_desc" \
+					    "#1${fill} $third_desc" \
+					    "#2${fill} $second_desc" \
+					    "#3${fill} $first_desc" \
+					    "#4${fill} main${fill}operator${fill}lambda${fill} at .*" \
+					    "#5${fill}(\r\n\\(More stack frames follow\\.\\.\\.\\))?"] \
+		    "backtrace in fourth"
+	    } else {
+		# On CPU the backtrace in prologue might include additional RT specific frames.
+		# Do not assume any frame numbers and do a deeper backtrace.
+		# Do not expect the line number at fourth.
+		# We expect to see our frames somewhere in the middle.
+		set fourth_desc "fourth ${fill} at ${fill}$srcfile:$decimal"
+		gdb_test "backtrace 10" [multi_line \
+					     "${fill} $fourth_desc" \
+					     "${fill} $third_desc" \
+					     "${fill} $second_desc" \
+					     "${fill} $first_desc" \
+					     "${fill} main${fill}operator${fill}lambda${fill} at .*"] \
+		    "backtrace in fourth"
+	    }
 	    gdb_test "stepi"
 	    incr i
 	    set current_line [get_current_line]
 	}
     }
+
+    # Disable printing of PC and FRAMEDESC.
+    gdb_test "undisplay 1-2"
 }
 
 with_test_prefix "FunctionControl=0" {

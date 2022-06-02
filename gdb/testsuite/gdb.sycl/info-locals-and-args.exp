@@ -66,7 +66,7 @@ gdb_test_multiple "info locals" "info locals 1" {
 }
 
 gdb_continue_to_breakpoint "bp 2" ".*$srcfile:$inner_loc.*"
-gdb_test "info locals" "result = 180.*" "info locals 2"
+gdb_test "info locals" "result = 2490.*" "info locals 2"
 gdb_test "info args"  [multi_line \
-			   "num1 = 15" \
-			   "num2 = 3"]
+			   "x1 = 15" \
+			   "y1 = 3"]

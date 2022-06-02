@@ -41,7 +41,7 @@ gdb_breakpoint $inside
 gdb_breakpoint $outside
 
 gdb_continue_to_breakpoint "inside" ".*$srcfile:$inside.*"
-gdb_test "print second(3, 4)" "= 12" "infcall inside kernel"
+gdb_test "print second(3, 4)" "= 528" "infcall inside kernel"
 
 gdb_continue_to_breakpoint "outside" ".*$srcfile:$outside.*"
-gdb_test "print second(5, 7)" "= 35" "infcall outside kernel"
+gdb_test "print second(5, 7)" "= 1005" "infcall outside kernel"

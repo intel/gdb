@@ -20,15 +20,27 @@
 #include "../lib/sycl-util.cpp"
 
 int
-second (int x, int y)
+fourth (int x4, int y4)
 {
-  return x * y; /* ordinary-inner-loc */
+  return x4 * y4; /* ordinary-fourth-loc */
 }
 
 int
-first (int num1, int num2)
+third (int x3, int y3)
 {
-  int result = second (num1 + 5, num2 * 3); /* ordinary-middle-loc */
+  return fourth (x3 + 5, y3 * 3) + 30; /* ordinary-third-loc */
+}
+
+int
+second (int x2, int y2)
+{
+  return third (x2 + 5, y2 * 3) + 30; /* ordinary-second-loc */
+}
+
+int
+first (int x1, int y1)
+{
+  int result = second (x1 + 5, y1 * 3); /* ordinary-first-loc */
   return result + 30; /* kernel-function-return */
 }
 

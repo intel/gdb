@@ -1,0 +1,128 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests for the Intel(R) Graphics Technology $framedesc register via a
+# SYCL program.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {![require_sycl_device "gpu" "Intel*"]} {
+    unsupported "test is aimed at Intel GPUs only"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+if {[start_sycl_program] < 0} {
+    return -1
+}
+
+# Wrap the entire test in a namespace to avoid contaminating other tests.
+namespace eval $testfile {
+
+# Compare all fields of the current $framedesc against the previously
+# saved register.  For the "return_ip" and the "return_emask", up in the stack,
+# the "return_ip" and "return_emask" of frame N should have the same values as
+# frame N-1 (where N > 0).
+
+proc test_unwound_framedesc {frame_id} {
+    variable framedesc_values
+    set hex_char "0x0-9a-fA-F"
+
+    set expected_framedesc $framedesc_values($frame_id)
+    set next_framedesc $framedesc_values([expr $frame_id - 1])
+
+    # Make sure that the $framedesc registers have the correct format.
+    if {![string match "\{return_ip =* return_emask =* be_sp =* be_fp =* fe_fp =* fe_sp =*\}" $expected_framedesc]} {
+	verbose -log "Wrong expected_framedesc format: $expected_framedesc"
+	fail "test_unwound_framedesc"
+	return -1
+    }
+
+    if {![string match "\{return_ip =* return_emask =*\}" $next_framedesc]} {
+	verbose -log "Wrong next_framedesc format: $next_framedesc"
+	fail "test_unwound_framedesc"
+	return -1
+    }
+
+    # Read different fields of the $framedesc.
+    scan $expected_framedesc "\{return_ip = %*\[$hex_char\], return_emask = %*\[$hex_char\], be_sp = %\[$hex_char\], be_fp = %\[$hex_char\], fe_fp = %\[$hex_char\], fe_sp = %\[$hex_char\]\}" \
+	be_sp be_fp fe_fp fe_sp
+    scan $next_framedesc "\{return_ip = %\[$hex_char\], return_emask = %\[$hex_char\], *\}" return_ip return_emask
+
+    gdb_test "print /x \$framedesc.return_ip" "$return_ip" \
+        "Check return_ip field"
+    gdb_test "print /x \$framedesc.return_emask" "$return_emask" \
+        "Check return_emask field"
+    gdb_test "print /x \$framedesc.be_sp" "$be_sp" \
+        "Check be_sp field"
+    gdb_test "print /x \$framedesc.be_fp" "$be_fp" \
+        "Check be_fp field"
+    gdb_test "print /x \$framedesc.fe_fp" "$fe_fp" \
+        "Check fe_fp field"
+    gdb_test "print /x \$framedesc.fe_sp" "$fe_sp" \
+	"Check fe_sp field"
+}
+
+array set breakpoints {}
+set breakpoints(0) [gdb_get_line_number "ordinary-fourth-loc"]
+set breakpoints(1) [gdb_get_line_number "ordinary-third-loc"]
+set breakpoints(2) [gdb_get_line_number "ordinary-second-loc"]
+set breakpoints(3) [gdb_get_line_number "ordinary-first-loc"]
+set breakpoints(4) [gdb_get_line_number "ordinary-outer-loc"]
+
+variable framedesc_values
+array set framedesc_values {}
+foreach_with_prefix frame_id [list 4 3 2 1 0] {
+    # Set a temporary breakpoint.
+    gdb_breakpoint $breakpoints($frame_id) {temporary}
+
+    # Continue to the set breakpoint.
+    gdb_continue_to_breakpoint "continue to bp $frame_id: $breakpoints($frame_id)" \
+	"$srcfile:$breakpoints($frame_id).*"
+
+    # Save the framedesc register.
+    set framedesc_values($frame_id) [get_valueof "/x" "\$framedesc" "invalid"]
+}
+
+# Go up in the stack frames and compare the unwound $framedesc register
+# with the previously saved one.
+foreach frame_id [list 1 2 3 4] {
+    with_test_prefix "up to frame: $frame_id" {
+	gdb_test "frame $frame_id" "$srcfile:$breakpoints($frame_id).*"
+	test_unwound_framedesc $frame_id
+    }
+}
+
+# Revisit the stack frames while going down and recheck
+# the unwound $framedesc register.
+foreach frame_id [list 3 2 1] {
+    with_test_prefix "down to frame: $frame_id" {
+	gdb_test "frame $frame_id" "$srcfile:$breakpoints($frame_id).*"
+	test_unwound_framedesc $frame_id
+    }
+}
+
+# End of namespace.
+}

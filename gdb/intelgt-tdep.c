@@ -406,15 +406,41 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
   return RETURN_VALUE_REGISTER_CONVENTION;
 }
 
+/* Callback function to unwind the $framedesc register.  */
+
+static value *
+intelgt_dwarf2_prev_framedesc (frame_info *this_frame, void **this_cache,
+			       int regnum)
+{
+  gdbarch *gdbarch = get_frame_arch (this_frame);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+  /* $framedesc is an alias of the GRF count-3.  */
+  gdb_assert (data->regset_ranges[intelgt::regset_grf].end > 3);
+  int actual_regnum = data->regset_ranges[intelgt::regset_grf].end - 3;
+
+  /* Unwind the actual GRF register.  */
+  return frame_unwind_register_value (this_frame, actual_regnum);
+}
+
 static void
 intelgt_init_reg (gdbarch *gdbarch, int regnum, dwarf2_frame_state_reg *reg,
 		  frame_info *this_frame)
 {
   int ip_regnum = intelgt_pseudo_register_num (gdbarch, "ip");
+  int framedesc_regnum = intelgt_pseudo_register_num (gdbarch, "framedesc");
+
   if (regnum == ip_regnum)
     reg->how = DWARF2_FRAME_REG_RA;
   else if (regnum == gdbarch_sp_regnum (gdbarch))
     reg->how = DWARF2_FRAME_REG_CFA;
+  /* We use special functions to unwind the $emask
+     and $framedesc registers.  */
+  else if (regnum == framedesc_regnum)
+    {
+      reg->how = DWARF2_FRAME_REG_FN;
+      reg->loc.fn = intelgt_dwarf2_prev_framedesc;
+    }
 }
 
 /* The 'unwind_pc' gdbarch method.  */

@@ -989,17 +989,30 @@ fortran_wrap3_kind (type *base_type)
 
 static int
 parse_number (struct parser_state *par_state,
-	      const char *p, int len, int parsed_float, YYSTYPE *putithere)
+	      const char *buf, int len, int parsed_float, YYSTYPE *putithere)
 {
-  LONGEST n = 0;
-  LONGEST prevn = 0;
+  ULONGEST n = 0;
+  ULONGEST prevn = 0;
+  ULONGEST un;
+
+  int i = 0;
   int c;
   int base = input_radix;
   int unsigned_p = 0;
+
+  /* Number of "L" suffixes encountered.  */
   int long_p = 0;
+
+  /* We have found a "L" or "U" (or "i") suffix.  */
+  int found_suffix = 0;
+
   ULONGEST high_bit;
   struct type *signed_type;
   struct type *unsigned_type;
+  char *p;
+
+  p = (char *) alloca (len);
+  memcpy (p, buf, len);
 
   if (parsed_float)
     {
@@ -1023,19 +1036,29 @@ parse_number (struct parser_state *par_state,
     }
 
   /* Handle base-switching prefixes 0x, 0t, 0d, 0 */
-  if (p[0] == '0')
+  if (p[0] == '0' && len > 1)
     switch (p[1])
       {
       case 'x':
       case 'X':
+	  if (len >= 3)
+	    {
+	      p += 2;
+	      base = 16;
+	      len -= 2;
+	    }
+	break;
+
+      case 'b':
+      case 'B':
 	if (len >= 3)
 	  {
 	    p += 2;
-	    base = 16;
+	    base = 2;
 	    len -= 2;
 	  }
 	break;
-	
+
       case 't':
       case 'T':
       case 'd':
@@ -1047,91 +1070,131 @@ parse_number (struct parser_state *par_state,
 	    len -= 2;
 	  }
 	break;
-	
+
       default:
 	base = 8;
 	break;
       }
-  
+
   while (len-- > 0)
     {
       c = *p++;
-      if (isupper (c))
-	c = tolower (c);
-      if (len == 0 && c == 'l')
-	long_p = 1;
-      else if (len == 0 && c == 'u')
-	unsigned_p = 1;
+      if (c >= 'A' && c <= 'Z')
+	c += 'a' - 'A';
+      if (c != 'l' && c != 'u' && c != 'i')
+	n *= base;
+      if (c >= '0' && c <= '9')
+	{
+	  if (found_suffix)
+	    return ERROR;
+	  n += i = c - '0';
+	}
       else
 	{
-	  int i;
-	  if (c >= '0' && c <= '9')
-	    i = c - '0';
-	  else if (c >= 'a' && c <= 'f')
-	    i = c - 'a' + 10;
+	  if (base > 10 && c >= 'a' && c <= 'f')
+	    {
+	      if (found_suffix)
+		return ERROR;
+	      n += i = c - 'a' + 10;
+	    }
+	  else if (c == 'l')
+	    {
+	      ++long_p;
+	      found_suffix = 1;
+	    }
+	  else if (c == 'u')
+	    {
+	      unsigned_p = 1;
+	      found_suffix = 1;
+	    }
 	  else
-	    return ERROR;	/* Char not a digit */
-	  if (i >= base)
-	    return ERROR;		/* Invalid digit in this base */
-	  n *= base;
-	  n += i;
+	    return ERROR;       /* Char not a digit */
 	}
+      if (i >= base)
+	return ERROR;           /* Invalid digit in this base */
+
       /* Portably test for overflow (only works for nonzero values, so make
-	 a second check for zero).  */
-      if ((prevn >= n) && n != 0)
-	unsigned_p=1;		/* Try something unsigned */
-      /* If range checking enabled, portably test for unsigned overflow.  */
-      if (RANGE_CHECK && n != 0)
+	 a second check for zero).  FIXME: Can't we just make n and prevn
+	 unsigned and avoid this?  */
+      if (c != 'l' && c != 'u' && c != 'i' && (prevn >= n) && n != 0)
+	unsigned_p = 1;         /* Try something unsigned */
+
+      /* Portably test for unsigned overflow.
+	 FIXME: This check is wrong; for example it doesn't find overflow
+	 on 0x123456789 when LONGEST is 32 bits.  */
+      if (c != 'l' && c != 'u' && c != 'i' && n != 0)
 	{
-	  if ((unsigned_p && (unsigned)prevn >= (unsigned)n))
-	    range_error (_("Overflow on numeric constant."));
+	  if (unsigned_p && prevn >= n)
+	    error (_("Numeric constant too large."));
 	}
       prevn = n;
     }
-  
-  /* If the number is too big to be an int, or it's got an l suffix
-     then it's a long.  Work out if this has to be a long by
-     shifting right and seeing if anything remains, and the
-     target int size is different to the target long size.
-     
-     In the expression below, we could have tested
-     (n >> gdbarch_int_bit (parse_gdbarch))
-     to see if it was zero,
-     but too many compilers warn about that, when ints and longs
-     are the same size.  So we shift it twice, with fewer bits
-     each time, for the same result.  */
-  
-  if ((gdbarch_int_bit (par_state->gdbarch ())
-       != gdbarch_long_bit (par_state->gdbarch ())
-       && ((n >> 2)
-	   >> (gdbarch_int_bit (par_state->gdbarch ())-2))) /* Avoid
-							    shift warning */
-      || long_p)
+
+  /* An integer constant is an int, a long, or a long long.  An L
+     suffix forces it to be long; an LL suffix forces it to be long
+     long.  If not forced to a larger size, it gets the first type of
+     the above that it fits in.  To figure out whether it fits, we
+     shift it right and see whether anything remains.  Note that we
+     can't shift sizeof (LONGEST) * HOST_CHAR_BIT bits or more in one
+     operation, because many compilers will warn about such a shift
+     (which always produces a zero result).  Sometimes gdbarch_int_bit
+     or gdbarch_long_bit will be that big, sometimes not.  To deal with
+     the case where it is we just always shift the value more than
+     once, with fewer bits each time.  */
+
+  un = n >> 2;
+  if (long_p == 0
+      && (un >> (gdbarch_int_bit (par_state->gdbarch ()) - 2)) == 0)
     {
-      high_bit = ((ULONGEST)1)
-      << (gdbarch_long_bit (par_state->gdbarch ())-1);
+      high_bit
+	= ((ULONGEST)1) << (gdbarch_int_bit (par_state->gdbarch ()) - 1);
+
+      /* A large decimal (not hex or octal) constant (between INT_MAX
+	 and UINT_MAX) is a long or unsigned long, according to ANSI,
+	 never an unsigned int, but this code treats it as unsigned
+	 int.  This probably should be fixed.  GCC gives a warning on
+	 such constants.  */
+
+      unsigned_type = parse_type (par_state)->builtin_unsigned_int;
+      signed_type = parse_type (par_state)->builtin_int;
+    }
+  else if (long_p <= 1
+	   && (un >> (gdbarch_long_bit (par_state->gdbarch ()) - 2)) == 0)
+    {
+      high_bit
+	= ((ULONGEST)1) << (gdbarch_long_bit (par_state->gdbarch ()) - 1);
       unsigned_type = parse_type (par_state)->builtin_unsigned_long;
       signed_type = parse_type (par_state)->builtin_long;
     }
-  else 
+  else
     {
-      high_bit =
-	((ULONGEST)1) << (gdbarch_int_bit (par_state->gdbarch ()) - 1);
-      unsigned_type = parse_type (par_state)->builtin_unsigned_int;
-      signed_type = parse_type (par_state)->builtin_int;
-    }    
-  
-  putithere->typed_val.val = n;
-  
-  /* If the high bit of the worked out type is set then this number
-     has to be unsigned.  */
-  
-  if (unsigned_p || (n & high_bit)) 
-    putithere->typed_val.type = unsigned_type;
-  else 
-    putithere->typed_val.type = signed_type;
-  
-  return INT;
+      int shift;
+      if (sizeof (ULONGEST) * HOST_CHAR_BIT
+	  < gdbarch_long_long_bit (par_state->gdbarch ()))
+	/* A long long does not fit in a LONGEST.  */
+	shift = (sizeof (ULONGEST) * HOST_CHAR_BIT - 1);
+      else
+	shift = (gdbarch_long_long_bit (par_state->gdbarch ()) - 1);
+      high_bit = (ULONGEST) 1 << shift;
+      unsigned_type = parse_type (par_state)->builtin_unsigned_long_long;
+      signed_type = parse_type (par_state)->builtin_long_long;
+    }
+
+   putithere->typed_val.val = n;
+
+   /* If the high bit of the worked out type is set then this number
+      has to be unsigned. */
+
+   if (unsigned_p || (n & high_bit))
+     {
+       putithere->typed_val.type = unsigned_type;
+     }
+   else
+     {
+       putithere->typed_val.type = signed_type;
+     }
+
+   return INT;
 }
 
 /* Called to setup the type stack when we encounter a '(kind=N)' type

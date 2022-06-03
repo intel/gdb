@@ -247,6 +247,11 @@ proc test_call_stack {call_stack_supported} {
 	with_test_prefix "iteration $i" {
 	    if {[require_sycl_device "gpu" "Intel*"]} {
 		set fourth_desc "fourth ${fill} at ${fill}$srcfile:$current_line"
+
+		if {$i < 5} {
+		    setup_kfail "JIRA DOQG/3011" "*-*-*"
+		}
+
 		gdb_test "backtrace 6" [multi_line \
 					    "#0${fill} $fourth_desc" \
 					    "#1${fill} $third_desc" \

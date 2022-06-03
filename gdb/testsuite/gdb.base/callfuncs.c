@@ -96,7 +96,7 @@ long double _Complex ldc3 = 3.0L + 3.0Li;
 long double _Complex ldc4 = 4.0L + 4.0Li;
 #endif /* TEST_COMPLEX */
 
-#define DELTA (0.001)
+#define DELTA (0.001f)
 
 char *string_val1 = (char *)"string 1";
 char *string_val2 = (char *)"string 2";

@@ -170,6 +170,10 @@ proc parse_number { lang n } {
 	    return [list long $n]
 	} elseif { [fits_in_type $n $long_bits u] } {
 	    return [list "unsigned long" $n]
+	} elseif { [fits_in_type $n $long_long_bits s] } {
+	    return [list "long long" $n]
+	} elseif { [fits_in_type $n $long_long_bits u] } {
+	    return [list "unsigned long long" $n]
 	} else {
 	    # Overflow.
 	    return [list $re_overflow $re_overflow]

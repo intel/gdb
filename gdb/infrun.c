@@ -94,6 +94,10 @@ static bool maybe_software_singlestep (struct gdbarch *gdbarch);
 
 static void resume (gdb_signal sig);
 
+static bool schedlock_applies_to_thread (thread_info *tp);
+
+static bool schedlock_applies (bool step);
+
 static void wait_for_inferior (inferior *inf);
 
 static void restart_threads (struct thread_info *event_thread,
@@ -2148,6 +2152,9 @@ ptid_t
 user_visible_resume_ptid (int step)
 {
   ptid_t resume_ptid;
+  thread_info *tp = nullptr;
+  if (inferior_ptid != null_ptid)
+    tp = inferior_thread ();
 
   if (non_stop)
     {
@@ -2155,22 +2162,13 @@ user_visible_resume_ptid (int step)
 	 individually.  */
       resume_ptid = inferior_ptid;
     }
-  else if ((scheduler_mode == schedlock_on)
-	   || (scheduler_mode == schedlock_step && step))
+  else if (schedlock_applies (step))
     {
       /* User-settable 'scheduler' mode requires solo thread
 	 resume.  */
       resume_ptid = inferior_ptid;
     }
-  else if ((scheduler_mode == schedlock_replay)
-	   && target_record_will_replay (minus_one_ptid, execution_direction))
-    {
-      /* User-settable 'scheduler' mode requires solo thread resume in replay
-	 mode.  */
-      resume_ptid = inferior_ptid;
-    }
-  else if (inferior_ptid != null_ptid
-	   && inferior_thread ()->control.in_cond_eval)
+  else if (tp != nullptr && tp->control.in_cond_eval)
     {
       /* The inferior thread is evaluating a BP condition.  Other threads
 	 might be stopped or running and we do not want to change their
@@ -2919,15 +2917,23 @@ thread_still_needs_step_over (struct thread_info *tp)
   return what;
 }
 
-/* Returns true if scheduler locking applies.  STEP indicates whether
-   we're about to do a step/next-like command to a thread.  */
+/* Returns true if scheduler locking applies to TP.  */
 
 static bool
-schedlock_applies (struct thread_info *tp)
+schedlock_applies_to_thread (thread_info *tp)
+{
+  bool step = (tp != nullptr) && tp->control.stepping_command;
+  return schedlock_applies (step);
+}
+
+/* Returns true if scheduler locking applies.  STEP indicates whether
+   we're about to do a step/next-like command.  */
+
+static bool
+schedlock_applies (bool step)
 {
   return (scheduler_mode == schedlock_on
-	  || (scheduler_mode == schedlock_step
-	      && tp->control.stepping_command)
+	  || (scheduler_mode == schedlock_step && step)
 	  || (scheduler_mode == schedlock_replay
 	      && target_record_will_replay (minus_one_ptid,
 					    execution_direction)));
@@ -3317,7 +3323,7 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 
   /* If scheduler locking applies, we can avoid iterating over all
      threads.  */
-  if (!non_stop && !schedlock_applies (cur_thr))
+  if (!non_stop && !schedlock_applies_to_thread (cur_thr))
     {
       for (thread_info *tp : all_non_exited_threads (resume_target,
 						     resume_ptid))
@@ -7791,7 +7797,7 @@ switch_back_to_stepped_thread (struct execution_control_state *ecs)
 	 current thread is stepping.  If some other thread not the
 	 event thread is stepping, then it must be that scheduler
 	 locking is not in effect.  */
-      if (schedlock_applies (ecs->event_thread))
+      if (schedlock_applies_to_thread (ecs->event_thread))
 	return false;
 
       /* Otherwise, we no longer expect a trap in the current thread.

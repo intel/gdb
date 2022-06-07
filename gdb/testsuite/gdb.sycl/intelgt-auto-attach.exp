@@ -31,6 +31,23 @@ if {[build_executable "failed to compile $srcfile" \
     return -1
 }
 
+# Count available inferiors within the current debugging session.
+
+proc total_inferiors {} {
+    set output  ""
+    gdb_test_multiple "info inferiors" "check for existing inferiors" {
+	-re -wrap "(1.*process.*)\r\nType.*" {
+	    set output $expect_out(1,string)
+	}
+    }
+
+    set out_list [split $output "\n"]
+    set total_inf [llength $out_list]
+
+    verbose -log "Total inferiors: $total_inf"
+    return $total_inf
+}
+
 # Run until the end, potentially with BPs inside and outside the kernel.
 
 proc run_end_to_end {has_kernel_bp has_outside_bp device} {
@@ -95,9 +112,10 @@ proc run_to_bp {which_bp scenario iter device} {
 	}
     }
     verbose -log "host pid is $host_pid"
+    set total_inf [total_inferiors]
 
     # GT inferior is created anew each time we run.
-    set gt_inf [expr $iter + 1]
+    set gt_inf [expr $iter * ($total_inf - 1) + 1]
     set fill "\[^\r\n\]*"
 
     set output ".*inferior $gt_inf $fill has been removed.*"

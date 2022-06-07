@@ -107,7 +107,8 @@ static std::set<process_stratum_target *> start_step_over ();
 
 static bool step_over_info_valid_p (void);
 
-static bool schedlock_applies (struct thread_info *tp);
+static bool schedlock_applies (thread_info *tp);
+static bool schedlock_applies (bool step);
 
 /* Asynchronous signal handler registered as event loop source for
    when we have pending events ready to be passed to the core.  */
@@ -2428,18 +2429,10 @@ user_visible_resume_ptid (int step)
 	 individually.  */
       resume_ptid = inferior_ptid;
     }
-  else if ((scheduler_mode == schedlock_on)
-	   || (scheduler_mode == schedlock_step && step))
+  else if (schedlock_applies (step))
     {
       /* User-settable 'scheduler' mode requires solo thread
 	 resume.  */
-      resume_ptid = inferior_ptid;
-    }
-  else if ((scheduler_mode == schedlock_replay)
-	   && target_record_will_replay (minus_one_ptid, execution_direction))
-    {
-      /* User-settable 'scheduler' mode requires solo thread resume in replay
-	 mode.  */
       resume_ptid = inferior_ptid;
     }
   else if (inferior_ptid != null_ptid
@@ -3266,15 +3259,23 @@ thread_still_needs_step_over (struct thread_info *tp)
   return what;
 }
 
-/* Returns true if scheduler locking applies.  STEP indicates whether
-   we're about to do a step/next-like command to a thread.  */
+/* Returns true if scheduler locking applies to TP.  */
 
 static bool
-schedlock_applies (struct thread_info *tp)
+schedlock_applies (thread_info *tp)
+{
+  bool step = (tp != nullptr) && tp->control.stepping_command;
+  return schedlock_applies (step);
+}
+
+/* Returns true if scheduler locking applies.  STEP indicates whether
+   we're about to do a step/next-like command.  */
+
+static bool
+schedlock_applies (bool step)
 {
   return (scheduler_mode == schedlock_on
-	  || (scheduler_mode == schedlock_step
-	      && tp->control.stepping_command)
+	  || (scheduler_mode == schedlock_step && step)
 	  || (scheduler_mode == schedlock_replay
 	      && target_record_will_replay (minus_one_ptid,
 					    execution_direction)));

@@ -3665,7 +3665,12 @@ symfile_map_offsets_to_segments (bfd *abfd,
       if (which > num_segment_bases)
 	which = num_segment_bases;
 
-      offsets[i] = segment_bases[which - 1] - data->segments[which - 1].base;
+      /* Intel GT only supports absolute ELF files at the moment.  We don't
+	 need to adjust its addresses.  Hardcode the offsets to 0x0.  */
+      if (get_elf_backend_data (abfd)->elf_machine_code == EM_INTELGT)
+	offsets[i] = 0x0;
+      else
+	offsets[i] = segment_bases[which - 1] - data->segments[which - 1].base;
     }
 
   return 1;

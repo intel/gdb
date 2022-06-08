@@ -423,12 +423,34 @@ intelgt_dwarf2_prev_framedesc (frame_info *this_frame, void **this_cache,
   return frame_unwind_register_value (this_frame, actual_regnum);
 }
 
+/* Callback function to unwind the $emask register.  */
+
+static value *
+intelgt_dwarf2_prev_emask (frame_info *this_frame, void **this_cache,
+			   int regnum)
+{
+  gdbarch *gdbarch = get_frame_arch (this_frame);
+  int framedesc_regnum = intelgt_pseudo_register_num (gdbarch, "framedesc");
+  type *type = register_type (gdbarch, regnum);
+  bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+
+  /* Unwind the $emask register using the $framedesc.return_emask field
+     of the next frame (inner, younger).  */
+  value *val = get_frame_register_value (this_frame, framedesc_regnum);
+
+  const gdb_byte *raw_bytes = value_contents (val);
+  uint32_t return_emask
+    = extract_unsigned_integer (raw_bytes + 4, 4, byte_order);
+  return value_from_ulongest (type, return_emask);
+}
+
 static void
 intelgt_init_reg (gdbarch *gdbarch, int regnum, dwarf2_frame_state_reg *reg,
 		  frame_info *this_frame)
 {
   int ip_regnum = intelgt_pseudo_register_num (gdbarch, "ip");
   int framedesc_regnum = intelgt_pseudo_register_num (gdbarch, "framedesc");
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
 
   if (regnum == ip_regnum)
     reg->how = DWARF2_FRAME_REG_RA;
@@ -440,6 +462,11 @@ intelgt_init_reg (gdbarch *gdbarch, int regnum, dwarf2_frame_state_reg *reg,
     {
       reg->how = DWARF2_FRAME_REG_FN;
       reg->loc.fn = intelgt_dwarf2_prev_framedesc;
+    }
+  else if (regnum == data->emask_regnum)
+    {
+      reg->how = DWARF2_FRAME_REG_FN;
+      reg->loc.fn = intelgt_dwarf2_prev_emask;
     }
 }
 

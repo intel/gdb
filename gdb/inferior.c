@@ -41,6 +41,7 @@
 #include "interps.h"
 #include <map>
 #include <tuple>
+#include <algorithm>
 
 intrusive_list<inferior> inferior_list;
 static int highest_inferior_num;
@@ -1255,6 +1256,18 @@ info_devices_command (const char *args, int from_tty)
   /* Don't accept arguments for the 'info devices' command.  */
   if (args != nullptr && *args != 0)
     error (_("The \"info devices\" command does not take any arguments."));
+
+  print_devices (current_uiout);
+}
+
+/* Print device information when -device-info MI command is used.  */
+
+void
+mi_cmd_device_info (const char *command, const char *const * argv, int argc)
+{
+  /* Don't accept arguments for the '-device-info' command.  */
+  if (argc > 0)
+    error (_("-device-info command does not take any arguments."));
 
   print_devices (current_uiout);
 }

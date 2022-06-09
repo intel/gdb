@@ -253,6 +253,7 @@ add_builtin_mi_commands ()
 		 &mi_suppress_notification.memory);
   add_mi_cmd_mi ("data-write-register-values",
 		 mi_cmd_data_write_register_values);
+  add_mi_cmd_mi ("device-info", mi_cmd_device_info),
   add_mi_cmd_mi ("enable-timings", mi_cmd_enable_timings);
   add_mi_cmd_mi ("enable-pretty-printing", mi_cmd_enable_pretty_printing);
   add_mi_cmd_mi ("enable-frame-filters", mi_cmd_enable_frame_filters);

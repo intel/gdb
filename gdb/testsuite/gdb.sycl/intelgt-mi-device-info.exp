@@ -1,0 +1,72 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests -device-info MI command.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-1D.cpp
+
+if {[skip_sycl_tests]} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    return -1
+}
+
+mi_clean_restart $binfile
+
+if {[mi_start_sycl_program] < 0} {
+    return -1
+}
+
+set any_location "\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}"
+set any_name "\[^\r\n\]+"
+set warning ".*warning: -device-info: No devices\..*"
+
+# Test device-info before start.
+mi_gdb_test "-device-info" \
+    "${warning}\\^done" \
+    "device-info before start"
+
+# Hit the kernel breakpoint.
+set last_kernel_line [gdb_get_line_number "kernel-last-line"]
+mi_continue_to_line $last_kernel_line "Continue to 'last_kernel_line' and stop at breakpoint"
+
+# Check the device-info command output - there should be one now if on GPU.
+if {[require_sycl_device "gpu" "Intel*"]} {
+    # On GPU.
+    mi_gdb_test "-device-info" \
+	"\\^done,devices=\\\[\{number=\"${decimal}\",location=\"${any_location}\",sub-device=\"(${decimal}|-)\",vendor-id=\"${hex}\",target-id=\"${hex}\",cores=\"${decimal}\",device-name=\"${any_name}\",thread-groups=\\\[\"i${decimal}\"\\\]\}\\\],current-device=\"${decimal}\"" \
+	"device-info returns one device info"
+} else {
+    # On CPU.
+    mi_gdb_test "-device-info" \
+	"${warning}\\^done" \
+	"no devices on cpu"
+}
+
+# Test arguments.
+mi_gdb_test "-device-info 123" \
+    "\\^error,msg=\"-device-info command does not take any arguments\.\"" \
+    "test device-info refuses arguments"
+
+# Continue to end.
+mi_send_resuming_command "exec-continue" "continuing to inferior exit"
+
+# Expect normal exit.
+mi_expect_stop "exited-normally" "" "" "" "" "" "exit normally"

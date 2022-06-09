@@ -96,6 +96,7 @@ static struct mi_cmd mi_cmds[] =
 		   &mi_suppress_notification.memory),
   DEF_MI_CMD_MI ("data-write-register-values",
 		 mi_cmd_data_write_register_values),
+  DEF_MI_CMD_MI ("device-info", mi_cmd_device_info),
   DEF_MI_CMD_MI ("enable-timings", mi_cmd_enable_timings),
   DEF_MI_CMD_MI ("enable-pretty-printing", mi_cmd_enable_pretty_printing),
   DEF_MI_CMD_MI ("enable-frame-filters", mi_cmd_enable_frame_filters),

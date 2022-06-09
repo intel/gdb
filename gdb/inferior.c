@@ -39,6 +39,7 @@
 #include <map>
 #include <tuple>
 #include <vector>
+#include <algorithm>
 
 /* Keep a registry of per-inferior data-pointers required by other GDB
    modules.  */
@@ -1107,7 +1108,7 @@ print_devices (ui_out *uiout)
      devices are displayed lexigraphically ordered by PCI slot, subdevice_id,
      vendor_id and target_id.  */
   std::map<std::tuple<std::string, std::string, std::string, std::string>,
-	   const inferior *> devices_to_print;
+	   std::vector<const inferior *>> devices_to_print;
   for (const inferior *inf : all_inferiors ())
     {
       /* Only display devices connected to an inferior.  */
@@ -1124,72 +1125,111 @@ print_devices (ui_out *uiout)
       const std::string target_id
 	= tdesc_find_device_info_attribute (tdesc, "target_id");
 
-      /* Should a device be associated with two inferiors, we just overwrite
-	 the tdesc here - it should be the same anyway.  */
       devices_to_print[std::make_tuple (pci_slot, subdevice_id, vendor_id,
-					target_id)] = inf;
+					target_id)].push_back (inf);
     }
 
   if (devices_to_print.empty ())
     {
-      uiout->message ("No devices.\n");
+      if (uiout->is_mi_like_p ())
+	warning (_("-device-info: No devices."));
+      else
+	uiout->message ("No devices.\n");
       return;
     }
 
-  ui_out_emit_table table_emitter (uiout, 7, devices_to_print.size (),
-				   "InfoDevicesTable");
-  uiout->table_header (1, ui_left, "current", "");
-  uiout->table_header (10, ui_left, "location", "Location");
-  uiout->table_header (12, ui_left, "sub-device", "Sub-device");
-  uiout->table_header (11, ui_left, "vendor_id", "Vendor Id");
-  uiout->table_header (11, ui_left, "target_id", "Target Id");
-  uiout->table_header (7, ui_left, "cores", "Cores");
-  uiout->table_header (12, ui_left, "device_name", "Device Name");
+  int current_device = -1;
 
-  uiout->table_body ();
+  {
+    gdb::optional<ui_out_emit_list> list_emitter;
+    gdb::optional<ui_out_emit_table> table_emitter;
 
-  for (const auto& device_id_desc_pair : devices_to_print)
-    {
-      const inferior *inf = device_id_desc_pair.second;
-      const target_desc *tdesc = gdbarch_target_desc (inf->gdbarch);
+    if (!uiout->is_mi_like_p ())
+      {
+	table_emitter.emplace (uiout, 7, devices_to_print.size (),
+			       "InfoDevicesTable");
+	uiout->table_header (1, ui_left, "current", "");
+	uiout->table_header (10, ui_left, "location", "Location");
+	uiout->table_header (12, ui_left, "sub-device", "Sub-device");
+	uiout->table_header (11, ui_left, "vendor-id", "Vendor Id");
+	uiout->table_header (11, ui_left, "target-id", "Target Id");
+	uiout->table_header (7, ui_left, "cores", "Cores");
+	uiout->table_header (12, ui_left, "device-name", "Device Name");
 
-      ui_out_emit_tuple tuple_emitter (uiout, nullptr);
+	uiout->table_body ();
+      }
+    else
+      list_emitter.emplace (uiout, "devices");
 
-      if (inf == current_inferior ())
-	uiout->field_string ("current", "*");
-      else
-	uiout->field_skip ("current");
+    unsigned int counter = 1;
 
-      const std::string pci_slot
-	= tdesc_find_device_info_attribute (tdesc, "pci_slot");
-      uiout->field_string ("location",
-			   string_printf ("[%s]", pci_slot.c_str ()));
+    for (const auto& device_id_desc_pair : devices_to_print)
+      {
+	const std::vector<const inferior *> &inf = device_id_desc_pair.second;
+	/* gdbarch is the same for all inferiors.  */
+	const target_desc *tdesc = gdbarch_target_desc (inf[0]->gdbarch);
 
-      const std::string subdevice_id
-	= tdesc_find_device_info_attribute (tdesc, "subdevice_id");
-      if (subdevice_id == "")
-	uiout->field_string ("sub-device", "-");
-      else
-	uiout->field_string ("sub-device", subdevice_id.c_str ());
+	const std::string pci_slot
+	  = tdesc_find_device_info_attribute (tdesc, "pci_slot");
+	const std::string subdevice_id
+	  = tdesc_find_device_info_attribute (tdesc, "subdevice_id");
+	const std::string vendor_id
+	  = tdesc_find_device_info_attribute (tdesc, "vendor_id");
+	const std::string target_id
+	  = tdesc_find_device_info_attribute (tdesc, "target_id");
+	const std::string total_cores
+	  = tdesc_find_device_info_attribute (tdesc, "total_cores");
+	const std::string device_name
+	  = tdesc_find_device_info_attribute (tdesc, "device_name");
 
-      const std::string vendor_id
-	= tdesc_find_device_info_attribute (tdesc, "vendor_id");
-      uiout->field_string ("vendor_id", vendor_id.c_str ());
+	ui_out_emit_tuple tuple_emitter (uiout, nullptr);
 
-      const std::string target_id
-	= tdesc_find_device_info_attribute (tdesc, "target_id");
-      uiout->field_string ("target_id", target_id.c_str ());
+	if (std::find (inf.begin (), inf.end (), current_inferior ())
+	    != inf.end ())
+	  {
+	    current_device = counter;
+	    if (!uiout->is_mi_like_p ())
+	      uiout->field_string ("current", "*");
+	  }
+	else if (!uiout->is_mi_like_p ())
+	  uiout->field_skip ("current");
 
-      const std::string total_cores
-	= tdesc_find_device_info_attribute (tdesc, "total_cores");
-      uiout->field_string ("cores", total_cores.c_str ());
+	if (uiout->is_mi_like_p ())
+	  uiout->field_unsigned ("number", counter);
 
-      const std::string device_name
-	= tdesc_find_device_info_attribute (tdesc, "device_name");
-      uiout->field_string ("device_name", device_name.c_str ());
+	uiout->field_string ("location",
+			     (uiout->is_mi_like_p ()
+			      ? string_printf ("%s", pci_slot.c_str ())
+			      : string_printf ("[%s]", pci_slot.c_str ())));
 
-      uiout->text ("\n");
-    }
+	if (subdevice_id.empty ())
+	  uiout->field_string ("sub-device", "-");
+	else
+	  uiout->field_string ("sub-device", subdevice_id.c_str ());
+
+	uiout->field_string ("vendor-id", vendor_id.c_str ());
+
+	uiout->field_string ("target-id", target_id.c_str ());
+
+	uiout->field_string ("cores", total_cores.c_str ());
+
+	uiout->field_string ("device-name", device_name.c_str ());
+
+	if (!uiout->is_mi_like_p ())
+	  uiout->text ("\n");
+	else
+	  {
+	    ui_out_emit_list group_list_emitter (uiout, "thread-groups");
+	    for (const inferior *i : inf)
+	      uiout->field_fmt (nullptr, "i%d", i->num);
+	  }
+
+	counter++;
+      }
+  }
+
+  if (uiout->is_mi_like_p () && current_device > 0)
+    uiout->field_signed ("current-device", current_device);
 }
 
 /* Print information about currently active devices.  */
@@ -1200,6 +1240,18 @@ info_devices_command (const char *args, int from_tty)
   /* Don't accept arguments for the 'info devices' command.  */
   if (args != nullptr && *args != 0)
     error (_("The \"info devices\" command does not take any arguments."));
+
+  print_devices (current_uiout);
+}
+
+/* Print device information when -device-info MI command is used.  */
+
+void
+mi_cmd_device_info (const char *command, char **argv, int argc)
+{
+  /* Don't accept arguments for the '-device-info' command.  */
+  if (argc > 0)
+    error (_("-device-info command does not take any arguments."));
 
   print_devices (current_uiout);
 }

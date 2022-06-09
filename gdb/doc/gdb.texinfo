@@ -37734,6 +37734,69 @@ The corresponding @value{GDBN} command is @samp{complete}.
 
 @end smallexample
 
+@subheading The @code{-device-info} Command
+@findex -device-info
+
+@subheading Synopsis
+
+@smallexample
+-device-info
+@end smallexample
+
+Lists all devices that are exposed to @value{GDBN}.
+
+@subheading Result
+
+The result contains a list of @samp{devices} and a @samp{current-device} which
+points to the currently selected device @samp{number}.
+
+The @samp{devices} list contains tuples with the following fields:
+
+@table @samp
+@item number
+The number of the device.
+
+@item location
+The device location as a PCI address.
+
+@item sub-device
+The sub-device ID.  Some devices might be composites of multiple sub-devices
+@value{GDBN} can connect to.  If no information about sub-devices was given by
+the target, the value is a @samp{-} instead of an ID.  This may be the
+case if the target has no notion for sub-devices.
+
+@item vendor-id
+The device's PCI vendor ID.
+
+@item target-id
+The device's PCI target ID identifying the device type.
+
+@item cores
+The amount of available compute cores on the device.
+
+@item device-name
+The name of the device.
+
+@item thread-groups
+The list of thread groups in which the device is used.
+
+@end table
+
+@subheading @value{GDBN} Command
+
+The corresponding @value{GDBN} command is @samp{info devices}.
+
+@subheading Example
+
+@smallexample
+-device-info
+^done,devices=[
+@{number="1",location="00:02.0",sub-device="0",vendor-id="0x8086",
+target-id="0x3ea5",cores="48",device-name="Intel(R) Iris(R) Plus Graphics 655",
+thread-groups=["i2"]@}],current-device="1"
+(gdb)
+@end smallexample
+
 @node Annotations
 @chapter @value{GDBN} Annotations
 

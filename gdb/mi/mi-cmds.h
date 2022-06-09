@@ -58,6 +58,7 @@ extern mi_cmd_argv_ftype mi_cmd_data_read_memory_bytes;
 extern mi_cmd_argv_ftype mi_cmd_data_write_memory;
 extern mi_cmd_argv_ftype mi_cmd_data_write_memory_bytes;
 extern mi_cmd_argv_ftype mi_cmd_data_write_register_values;
+extern mi_cmd_argv_ftype mi_cmd_device_info;
 extern mi_cmd_argv_ftype mi_cmd_enable_timings;
 extern mi_cmd_argv_ftype mi_cmd_env_cd;
 extern mi_cmd_argv_ftype mi_cmd_env_dir;

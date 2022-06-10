@@ -168,7 +168,11 @@ INTERNAL_GDBFLAGS
 
 Command line options passed to all GDB invocations.
 
-The default is "-nw -nx".
+The default is "-nw -nx --data-directory".  If GDB is given, the
+default is "-nw -nx", as the build tree and data directory
+therein might not be available.  So, if a data-directory option
+is needed, then in such a case, it should be passed as a GDB
+argument.
 
 `-nw' disables any of the windowed interfaces.
 `-nx' disables ~/.gdbinit, so that it doesn't interfere with

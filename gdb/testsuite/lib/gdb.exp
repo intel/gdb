@@ -5184,8 +5184,21 @@ proc gdb_compile_objc {source dest type options} {
 # gdb_compile, above, for discussion of the parameters to this proc.
 
 proc gdb_compile_openmp {source dest type options} {
-    lappend options "additional_flags=-fopenmp"
-    return [gdb_compile $source $dest $type $options]
+    # Configure OpenMP compilation and linking options for oneAPI DPC++
+    # /C++ Compiler and Intel® Fortran Compiler.
+    if {[lsearch -exact $options "c++"] >= 0
+	&& ([test_compiler_info {icx-*} c++]
+	    || [test_compiler_info {dpcpp-*} c++])} {
+	set new_options {additional_flags=-qopenmp}
+    } elseif {[lsearch -exact $options "f90"] >= 0
+	      && [test_compiler_info {ifx-*} f90]} {
+        set new_options {additional_flags=-qopenmp}
+    } elseif {[test_compiler_info {icx-*} c]} {
+	set new_options {additional_flags=-qopenmp}
+    } else {
+	set new_options {additional_flags=-fopenmp}
+    }
+    return [gdb_compile $source $dest $type [concat $new_options $options]]
 }
 
 # Send a command to GDB.

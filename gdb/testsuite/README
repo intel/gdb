@@ -553,6 +553,11 @@ gdbserver,debug
   When set gdbserver debug is sent to the file gdbserver.debug in the test
   output directory.  For valid values see the entry for GDBSERVER_DEBUG.
 
+gdb,openmp
+
+  The flag required to force the OpenMP compilation and linker flags
+  to build OpenMP tests.
+
 Testsuite Organization
 **********************
 

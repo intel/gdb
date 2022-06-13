@@ -23,6 +23,8 @@
 #include "arch/intelgt.h"
 
 #include <level_zero/zet_intel_gpu_debug.h>
+#include <iomanip>
+#include <sstream>
 
 
 /* FIXME make into a target method?  */
@@ -185,6 +187,19 @@ intelgt_write_cr0 (thread_info *tp, int subreg, uint32_t value)
 {
   struct regcache *regcache = get_thread_regcache (tp, /* fetch = */ false);
   intelgt_write_cr0 (regcache, subreg, value);
+}
+
+/* Return a human-readable device UUID string.  */
+
+static std::string
+device_uuid_str (const uint8_t uuid[], size_t size)
+{
+  std::stringstream sstream;
+  for (int i = size - 1; i >= 0; --i)
+    sstream << std::hex << std::setfill ('0') << std::setw (2)
+	    << static_cast<int> (uuid[i]);
+
+  return sstream.str ();
 }
 
 /* Target op definitions for Intel GT target based on level-zero.  */
@@ -386,6 +401,27 @@ intelgt_ze_target::create_tdesc
   target_desc_up tdesc = allocate_target_description ();
   set_tdesc_architecture (tdesc.get (), "intelgt");
   set_tdesc_osabi (tdesc.get (), "GNU/Linux");
+
+  std::string device_uuid = device_uuid_str (
+    dinfo->properties.uuid.id, sizeof (dinfo->properties.uuid.id));
+  const uint32_t total_cores = (properties.numSlices
+				* properties.numSubslicesPerSlice
+				* properties.numEUsPerSubslice);
+  const uint32_t total_threads = (total_cores * properties.numThreadsPerEU);
+
+  tdesc_device *device_info = new tdesc_device ();
+  device_info->vendor_id = properties.vendorId;
+  device_info->target_id = properties.deviceId;
+  device_info->name = properties.name;
+  device_info->pci_slot = dinfo->pci_slot;
+  device_info->uuid = device_uuid;
+  device_info->total_cores = total_cores;
+  device_info->total_threads = total_threads;
+
+  if (properties.flags & ZE_DEVICE_PROPERTY_FLAG_SUBDEVICE)
+    device_info->subdevice_id = properties.subdeviceId;
+
+  set_tdesc_device_info (tdesc.get (), device_info);
 
   long regnum = 0;
   for (const zet_debug_regset_properties_t &regprop : regset_properties)

@@ -23,6 +23,8 @@
 #include "arch/intelgt.h"
 
 #include <level_zero/zet_intel_gpu_debug.h>
+#include <iomanip>
+#include <sstream>
 
 
 /* FIXME make into a target method?  */
@@ -229,6 +231,7 @@ protected:
   target_desc *create_tdesc
     (const ze_device_properties_t &,
      const std::vector<zet_debug_regset_properties_t> &,
+     const ze_pci_ext_properties_t &,
      ze_regset_info_t &, expedite_t &) override;
 
   target_stop_reason get_stop_reason (thread_info *, gdb_signal &) override;
@@ -395,6 +398,7 @@ target_desc *
 intelgt_ze_target::create_tdesc
   (const ze_device_properties_t &properties,
    const std::vector<zet_debug_regset_properties_t> &regset_properties,
+   const ze_pci_ext_properties_t &pci_properties,
    ze_regset_info_t &regsets, expedite_t &expedite)
 {
   if (properties.vendorId != 0x8086)
@@ -412,6 +416,36 @@ intelgt_ze_target::create_tdesc
 			      std::to_string (12));
   tdesc_add_device_attribute (tdesc.get (), "gen_minor",
 			      std::to_string (71));
+
+  tdesc_add_device_attribute (tdesc.get (), "vendor_id",
+			      string_printf ("0x%04" PRIx32,
+					     properties.vendorId));
+  /* Within GDB the the device_id is called target_id.  Device ID is used in
+     GDB to identify devices internally.  */
+  tdesc_add_device_attribute (tdesc.get (), "target_id",
+			      string_printf ("0x%04" PRIx32,
+					     properties.deviceId));
+  if (properties.flags & ZE_DEVICE_PROPERTY_FLAG_SUBDEVICE)
+    tdesc_add_device_attribute (tdesc.get (), "subdevice_id",
+				std::to_string (properties.subdeviceId));
+
+  tdesc_add_device_attribute (tdesc.get (), "pci_slot",
+			      string_printf ("%02" PRIx32 ":%02" PRIx32
+					     ".%" PRId32,
+					     pci_properties.address.bus,
+					     pci_properties.address.device,
+					     pci_properties.address.function));
+
+  const uint64_t total_cores = (properties.numSlices
+				* properties.numSubslicesPerSlice
+				* properties.numEUsPerSubslice);
+  const uint64_t total_threads = (total_cores * properties.numThreadsPerEU);
+  tdesc_add_device_attribute (tdesc.get (), "total_cores",
+			      std::to_string (total_cores));
+  tdesc_add_device_attribute (tdesc.get (), "total_threads",
+			      std::to_string (total_threads));
+  tdesc_add_device_attribute (tdesc.get (), "device_name",
+			      properties.name);
 
   long regnum = 0;
   for (const zet_debug_regset_properties_t &regprop : regset_properties)

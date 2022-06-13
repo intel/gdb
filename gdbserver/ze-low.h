@@ -394,6 +394,7 @@ protected:
   virtual target_desc *create_tdesc
     (const ze_device_properties_t &,
      const std::vector<zet_debug_regset_properties_t> &,
+     const ze_pci_ext_properties_t &,
      ze_regset_info_t &, expedite_t &) = 0;
 
   /* TP stopped.  Find out why and return the stop reason.  Optionally

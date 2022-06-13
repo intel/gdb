@@ -424,6 +424,8 @@ protected: /* Target ops from nonstop_process_target.  */
 
   void resume_all_threads (int pid) override;
 
+  void cleanup_post_resume () override;
+
   bool thread_still_has_status_pending (thread_info *thread) override;
 
   bool thread_needs_step_over (thread_info *thread) override;
@@ -1563,6 +1565,17 @@ intelgt_process_target::low_send_sigstop (nonstop_thread_info *nti)
 
   if (target_is_async_p ())
     async_file_mark ();
+}
+
+void
+intelgt_process_target::cleanup_post_resume ()
+{
+  dprintf ("enter");
+
+  APIResult result = igfxdbg_RescanThreads (nullptr);
+  if (result != eGfxDbgResultSuccess)
+    dprintf (_("igfxdbg_RescanThreads failed; result: %s"),
+	     igfxdbg_result_to_string (result));
 }
 
 void

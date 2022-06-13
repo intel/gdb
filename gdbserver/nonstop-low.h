@@ -109,6 +109,10 @@ protected:
      dequeuing a deferred signal.  */
   virtual void post_set_resume_request (thread_info *thread);
 
+  /* Hook methods to give the low targets an opportunity to do
+     target-specific cleanup before and after the resume requests are
+     handled.  By default, empty.  */
+  virtual void cleanup_pre_resume ();
   virtual void cleanup_post_resume ();
 
   /* Return true if THREAD still has an interesting status pending.

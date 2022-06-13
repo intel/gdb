@@ -280,6 +280,8 @@ nonstop_process_target::resume (thread_resume *resume_info, size_t n)
 	debug_printf ("Resuming, no pending status or step over needed\n");
     }
 
+  cleanup_pre_resume ();
+
   /* Even if we're leaving threads stopped, resume them because e.g.
      we may have to queue all signals we'd otherwise deliver.  */
   for_each_thread ([&] (thread_info *thread)
@@ -402,6 +404,12 @@ nonstop_process_target::resume_request_applies_to_thread (thread_info *thread,
     }
 
   return true;
+}
+
+void
+nonstop_process_target::cleanup_pre_resume ()
+{
+    /* Do nothing by default.  */
 }
 
 void

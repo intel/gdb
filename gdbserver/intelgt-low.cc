@@ -424,6 +424,7 @@ protected: /* Target ops from nonstop_process_target.  */
 
   void resume_all_threads (int pid) override;
 
+  void cleanup_pre_resume () override;
   void cleanup_post_resume () override;
 
   bool thread_still_has_status_pending (thread_info *thread) override;
@@ -1568,6 +1569,17 @@ intelgt_process_target::low_send_sigstop (nonstop_thread_info *nti)
 }
 
 void
+intelgt_process_target::cleanup_pre_resume ()
+{
+  dprintf ("enter");
+
+  APIResult result = igfxdbg_EnableAttentionReporting (nullptr, false);
+  if (result != eGfxDbgResultSuccess)
+    dprintf (_("disabling AttentionReporting failed; result: %s"),
+	     igfxdbg_result_to_string (result));
+}
+
+void
 intelgt_process_target::cleanup_post_resume ()
 {
   dprintf ("enter");
@@ -1575,6 +1587,11 @@ intelgt_process_target::cleanup_post_resume ()
   APIResult result = igfxdbg_RescanThreads (nullptr);
   if (result != eGfxDbgResultSuccess)
     dprintf (_("igfxdbg_RescanThreads failed; result: %s"),
+	     igfxdbg_result_to_string (result));
+
+  result = igfxdbg_EnableAttentionReporting (nullptr, true);
+  if (result != eGfxDbgResultSuccess)
+    dprintf (_("enabling AttentionReporting failed; result: %s"),
 	     igfxdbg_result_to_string (result));
 }
 

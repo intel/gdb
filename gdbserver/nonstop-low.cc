@@ -299,6 +299,8 @@ nonstop_process_target::resume (thread_resume *resume_info, size_t n)
   if (need_step_over != nullptr)
     start_step_over (need_step_over);
 
+  cleanup_post_resume ();
+
   if (debug_threads)
     {
       debug_printf ("resume done\n");
@@ -400,6 +402,12 @@ nonstop_process_target::resume_request_applies_to_thread (thread_info *thread,
     }
 
   return true;
+}
+
+void
+nonstop_process_target::cleanup_post_resume ()
+{
+    /* Do nothing by default.  */
 }
 
 void

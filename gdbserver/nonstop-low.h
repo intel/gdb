@@ -109,6 +109,8 @@ protected:
      dequeuing a deferred signal.  */
   virtual void post_set_resume_request (thread_info *thread);
 
+  virtual void cleanup_post_resume ();
+
   /* Return true if THREAD still has an interesting status pending.
      If not (e.g., it had stopped for a breakpoint that is gone), return
      false.  */

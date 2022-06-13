@@ -1107,6 +1107,18 @@ ze_target::attach_to_device (uint32_t pid, ze_device_handle_t device)
   dinfo->handle = device;
   dinfo->properties = properties;
 
+  ze_pci_ext_properties_t pci_properties {};
+  status = zeDevicePciGetPropertiesExt (device, &pci_properties);
+  if (status != ZE_RESULT_SUCCESS)
+    {
+      warning (_("Failed to obtain PCI properties in %s (%x)."),
+	       properties.name, status);
+      pci_properties.address.domain = 0;
+      pci_properties.address.bus = 0;
+      pci_properties.address.device = 0;
+      pci_properties.address.function = 0;
+    }
+
   target_desc *tdesc = create_tdesc (dinfo.get (), regsets,
 				     pci_properties);
   dinfo->tdesc.reset (tdesc);

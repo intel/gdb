@@ -1019,6 +1019,7 @@ BFD64_BACKENDS = \
 	elf64-hppa.lo \
 	elf64-ia64-vms.lo \
 	elf64-ia64.lo \
+	elf64-intelgt.lo \
 	elf64-intelgt-legacy.lo \
 	elf64-kvx.lo \
 	elf64-loongarch.lo \

@@ -7493,6 +7493,10 @@ assembler and not (currently) written to any object files.  */
   BFD_RELOC_LARCH_ADD_ULEB128,
   BFD_RELOC_LARCH_SUB_ULEB128,
   BFD_RELOC_LARCH_64_PCREL,
+
+/* IntelGT relocations.  */
+  BFD_RELOC_ZE_SYM_ADDR32_HI,
+  BFD_RELOC_ZE_PER_THREAD_PAYLOAD_OFFSET_32,
   BFD_RELOC_UNUSED };
 typedef enum bfd_reloc_code_real bfd_reloc_code_real_type;
 

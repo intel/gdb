@@ -768,6 +768,7 @@ extern const bfd_target ia64_elf64_hpux_be_vec;
 extern const bfd_target ia64_elf64_vms_vec;
 extern const bfd_target ia64_pei_vec;
 extern const bfd_target intelgt_legacy_elf64_vec;
+extern const bfd_target intelgt_elf64_vec;
 extern const bfd_target ip2k_elf32_vec;
 extern const bfd_target iq2000_elf32_vec;
 extern const bfd_target kvx_elf32_vec;
@@ -1127,6 +1128,7 @@ static const bfd_target * const _bfd_target_vector[] =
 	&ia64_elf64_vms_vec,
 	&ia64_pei_vec,
 	&intelgt_legacy_elf64_vec,
+	&intelgt_elf64_vec,
 #endif
 
 	&ip2k_elf32_vec,

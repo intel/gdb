@@ -124,6 +124,7 @@
 #include "elf/kvx.h"
 #include "elf/lm32.h"
 #include "elf/iq2000.h"
+#include "elf/intelgt.h"
 #include "elf/m32c.h"
 #include "elf/m32r.h"
 #include "elf/m68k.h"
@@ -2029,6 +2030,10 @@ dump_relocations (Filedata *filedata,
 
 	case EM_AMDGPU:
 	  rtype = elf_amdgpu_reloc_type (type);
+	  break;
+
+	case EM_INTELGT:
+	  rtype = elf_intelgt_reloc_type (type);
 	  break;
 	}
 
@@ -14992,6 +14997,8 @@ is_32bit_abs_reloc (Filedata * filedata, unsigned int reloc_type)
       return reloc_type == 1; /* R_XTENSA_32.  */
     case EM_Z80:
       return reloc_type == 6; /* R_Z80_32.  */
+    case EM_INTELGT:
+      return reloc_type == 2; /* R_ZE_SYM_ADDR_32 */
     default:
       {
 	static unsigned int prev_warn = 0;
@@ -15131,6 +15138,8 @@ is_64bit_abs_reloc (Filedata * filedata, unsigned int reloc_type)
       return reloc_type == 18;	/* R_MIPS_64.  */
     case EM_KVX:
       return reloc_type == 3; /* R_KVX_64 */
+    case EM_INTELGT:
+      return reloc_type == 1;	/* R_ZE_SYM_ADDR.  */
     default:
       return false;
     }

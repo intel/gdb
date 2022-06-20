@@ -7515,6 +7515,10 @@ enum bfd_reloc_code_real
   BFD_RELOC_LARCH_TLS_LD_PCREL20_S2,
   BFD_RELOC_LARCH_TLS_GD_PCREL20_S2,
   BFD_RELOC_LARCH_TLS_DESC_PCREL20_S2,
+
+  /* IntelGT relocations.  */
+  BFD_RELOC_ZE_SYM_ADDR32_HI,
+  BFD_RELOC_ZE_PER_THREAD_PAYLOAD_OFFSET_32,
   BFD_RELOC_UNUSED
 };
 typedef enum bfd_reloc_code_real bfd_reloc_code_real_type;

@@ -789,6 +789,14 @@ case "${targ}" in
     targ_defvec=i386_elf32_vec
     targ_selvecs="i386_msdos_vec i386_aout_vec"
     ;;
+
+#ifdef BFD64
+  intelgt-*-elf)
+    targ_defvec=intelgt_elf64_vec
+    want64=true
+    ;;
+#endif
+
   ip2k-*-elf)
     targ_defvec=ip2k_elf32_vec
     targ_underscore=yes

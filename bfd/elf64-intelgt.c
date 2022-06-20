@@ -1,5 +1,5 @@
-/* BFD support for the Intel(R) Graphics Technology architecture.
-   Copyright (C) 2019-2020 Free Software Foundation, Inc.
+/* Intel(R) Graphics Technology-specific support for ELF
+   Copyright (C) 2022 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -21,21 +21,28 @@
 #include "sysdep.h"
 #include "bfd.h"
 #include "libbfd.h"
+#include "elf-bfd.h"
 
-const bfd_arch_info_type bfd_intelgt_arch =
-  {
-    32, /* 64 bits in a word.  */
-    64, /* 64 bits in an address.  */
-    8,  /* 8 bits in a byte.  */
-    bfd_arch_intelgt, /* Architecture.  */
-    bfd_mach_intelgt, /* Machine number.  */
-    "intelgt", /* Architecture name.  */
-    "intelgt", /* Printable name.  */
-    3, /* Section alignment power.  */
-    true, /* Default machine for this architecture.  */
-    bfd_default_compatible, /* Check for compatibility.  */
-    bfd_default_scan, /* Check for an arch and mach hit.  */
-    bfd_arch_default_fill, /* Allocate and fill bfd.  */
-    NULL, /* Pointer to next.  */
-    0 /* Maximum offset of a reloc from the start of an insn.  */
-  };
+#include "elf/common.h"
+#include "elf/intelgt.h"
+
+
+static bool
+elf64_intelgt_elf_object_p (bfd *abfd)
+{
+  return bfd_default_set_arch_mach (abfd, bfd_arch_intelgt, bfd_mach_intelgt);
+}
+
+#define TARGET_LITTLE_SYM		    intelgt_elf64_vec
+#define TARGET_LITTLE_NAME		    "elf64-intelgt"
+#define ELF_ARCH			    bfd_arch_intelgt
+#define ELF_MACHINE_CODE		    EM_INTELGT
+#define ELF_OSABI			    0
+#define ELF_MAXPAGESIZE			    0x40000000
+
+#define elf_backend_object_p		    elf64_intelgt_elf_object_p
+
+#define bfd_elf64_bfd_reloc_type_lookup     bfd_default_reloc_type_lookup
+#define bfd_elf64_bfd_reloc_name_lookup     _bfd_norelocs_bfd_reloc_name_lookup
+
+#include "elf64-target.h"

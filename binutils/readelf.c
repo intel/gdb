@@ -124,6 +124,7 @@
 #include "elf/kvx.h"
 #include "elf/lm32.h"
 #include "elf/iq2000.h"
+#include "elf/intelgt.h"
 #include "elf/m32c.h"
 #include "elf/m32r.h"
 #include "elf/m68k.h"
@@ -2372,6 +2373,10 @@ dump_relocations (Filedata *          filedata,
 
 	case EM_AMDGPU:
 	  rtype = elf_amdgpu_reloc_type (type);
+	  break;
+
+	case EM_INTELGT:
+	  rtype = elf_intelgt_reloc_type (type);
 	  break;
 	}
 

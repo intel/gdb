@@ -714,12 +714,12 @@ case "${targ}" in
     ;;
   x86_64-*-linux-*)
     targ_defvec=x86_64_elf64_vec
-    targ_selvecs="i386_elf32_vec iamcu_elf32_vec x86_64_elf32_vec i386_pei_vec x86_64_pe_vec x86_64_pei_vec intelgt_legacy_elf64_vec"
+    targ_selvecs="i386_elf32_vec iamcu_elf32_vec x86_64_elf32_vec i386_pei_vec x86_64_pe_vec x86_64_pei_vec intelgt_legacy_elf64_vec intelgt_elf64_vec"
     want64=true
     ;;
   x86_64-*-mingw* | x86_64-*-pe | x86_64-*-pep | x86_64-*-cygwin)
     targ_defvec=x86_64_pe_vec
-    targ_selvecs="x86_64_pe_vec x86_64_pei_vec x86_64_pe_big_vec x86_64_elf64_vec i386_pe_vec i386_pei_vec i386_elf32_vec iamcu_elf32_vec pdb_vec"
+    targ_selvecs="x86_64_pe_vec x86_64_pei_vec x86_64_pe_big_vec x86_64_elf64_vec i386_pe_vec i386_pei_vec i386_elf32_vec iamcu_elf32_vec pdb_vec intelgt_elf64_vec intelgt_legacy_elf64_vec"
     want64=true
     targ_underscore=no
     ;;
@@ -788,6 +788,11 @@ case "${targ}" in
 #ifdef BFD64
   intelgt_legacy-*-elf)
     targ_defvec=intelgt_legacy_elf64_vec
+    want64=true
+    ;;
+  intelgt-*-elf)
+    targ_defvec=intelgt_elf64_vec
+    targ_selvecs="intelgt_elf64_vec intelgt_legacy_elf64_vec"
     want64=true
     ;;
 #endif

@@ -1280,9 +1280,29 @@ ze_target::fetch_events (ze_device_info &device)
 
 	    bool need_ack
 	      = ((event.flags & ZET_DEBUG_EVENT_FLAG_NEED_ACK) != 0);
-	    loaded_dll (process, event.info.module.moduleBegin,
-			event.info.module.moduleEnd,
-			event.info.module.load, need_ack);
+
+	    /* HACK: empty module load event
+
+	       If an application does not provide an ELF file
+	       (e.g. shared library), level-zero provides a module load event
+	       with begin and end initialized to zero.  Those 'empty' events
+	       result in an error when forwarded to GDB.
+
+	       We ignore 'empty' module load events on GDB-server
+	       side and acknowledge the event to level-zero.
+
+	       This hack will become obsolete with zebin.  */
+	    if (event.info.module.moduleBegin < event.info.module.moduleEnd)
+	      loaded_dll (process, event.info.module.moduleBegin,
+			  event.info.module.moduleEnd,
+			  event.info.module.load, need_ack);
+	    else
+	      {
+		dprintf ("empty module load event received: %s",
+			 ze_event_str (event).c_str ());
+		ze_ack_event (device, event);
+		continue;
+	      }
 
 	    /* If level-zero is not requesting the event to be
 	       acknowledged, we're done.
@@ -1319,9 +1339,17 @@ ze_target::fetch_events (ze_device_info &device)
 	    process_info *process = device.process;
 	    gdb_assert (process != nullptr);
 
-	    unloaded_dll (process, event.info.module.moduleBegin,
-			  event.info.module.moduleEnd,
-			  event.info.module.load);
+	    /* HACK: empty module unload event
+
+	       We ignore the module load event for 'empty' events and
+	       need to ignore the corresponding module unload event.  */
+	    if (event.info.module.moduleBegin < event.info.module.moduleEnd)
+	      unloaded_dll (process, event.info.module.moduleBegin,
+			    event.info.module.moduleEnd,
+			    event.info.module.load);
+	    else
+	      dprintf ("empty module unload event received: %s",
+		       ze_event_str (event).c_str ());
 
 	    /* We don't need an ack, here, but maybe level-zero does.  */
 	    ze_ack_event (device, event);

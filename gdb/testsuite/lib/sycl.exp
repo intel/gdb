@@ -38,6 +38,12 @@ if {![info exists sycl_driver_platform]} {
 if {![info exists sycl_selected_device]} {
     set sycl_selected_device ""
 }
+if {![info exists OFFLOAD_GPU_ID]} {
+    set OFFLOAD_GPU_ID ""
+}
+if {![info exists OFFLOAD_DEVICE_GROUP]} {
+    set OFFLOAD_DEVICE_GROUP ""
+}
 
 # Start the process by passing the SYCL device type and a
 # substring of the device name as the command line arguments.
@@ -134,6 +140,10 @@ proc get_sycl_supported_devices {sycl_device_list} {
     verbose -log "\nSYCL: Compilation succeeded"
 
     foreach device $sycl_device_list {
+	if ![is_sycl_device_filtered $device] {
+	    continue
+	}
+
 	set test_prefix [sycl_init_device "$device"]
 	if {[string match "" $test_prefix]} {
 	    continue
@@ -426,6 +436,45 @@ proc get_another_stopped_thread {srcfile line ids_to_ignore {msg ""}} {
     }
 
     return $another_stopped_thread
+}
+
+# Returns 1 if the target device is selected via OFFLOAD_DEVICE_GROUP
+# and OFFLOAD_GPU_ID, 0 otherwise.
+
+proc is_sycl_device_filtered {device} {
+    global OFFLOAD_DEVICE_GROUP OFFLOAD_GPU_ID
+
+    # Filter according to OFFLOAD_DEVICE_GROUP.
+    set checking_gpu_device [string match -nocase "*Graphics*" $device]
+    set checking_cpu_device 0
+    if {([string match -nocase "*CPU*" $device]
+	|| [string match -nocase "*Core*" $device])} {
+	set checking_cpu_device 1
+    }
+    set checking_fpga_device [string match -nocase "*FPGA*" $device]
+    set checking_host_device [string match -nocase "*Host*" $device]
+    if {![string match "" $OFFLOAD_DEVICE_GROUP]} {
+	if {($checking_cpu_device
+	     && ![string match -nocase "*cpu*" $OFFLOAD_DEVICE_GROUP)])
+	    || ($checking_host_device
+		&& ![string match -nocase "*host*" $OFFLOAD_DEVICE_GROUP])
+	    || ($checking_fpga_device
+		&& ![string match -nocase "*accelerator*" $OFFLOAD_DEVICE_GROUP])
+	    || ($checking_gpu_device
+		&& ![string match -nocase "*gpu*" $OFFLOAD_DEVICE_GROUP])} {
+	    return 0
+	}
+    }
+
+    # Filter according to OFFLOAD_GPU_ID.
+    if {![string match "" $OFFLOAD_GPU_ID]} {
+	if {$checking_gpu_device
+	    && ![string match -nocase "*${OFFLOAD_GPU_ID}*" $device]} {
+	    return 0
+	}
+    }
+
+    return 1
 }
 
 # Sets the global variables required for the arguments of SYCL tests and

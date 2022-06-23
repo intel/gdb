@@ -36,6 +36,9 @@
 #include "gdbthread.h"
 #include "inferior.h"
 #include "user-regs.h"
+#include "objfiles.h"
+#include "block.h"
+#include "elf-bfd.h"
 #include <algorithm>
 
 /* Address space flags.
@@ -484,9 +487,7 @@ intelgt_dwarf2_prev_framedesc (const frame_info_ptr &this_frame,
   gdbarch *gdbarch = get_frame_arch (this_frame);
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
 
-  /* $framedesc is an alias of the GRF count-3.  */
-  gdb_assert (data->regset_ranges[intelgt::regset_grf].end > 3);
-  int actual_regnum = data->regset_ranges[intelgt::regset_grf].end - 3;
+  int actual_regnum = data->framedesc_base_regnum ();
 
   /* Unwind the actual GRF register.  */
   return frame_unwind_register_value (this_frame, actual_regnum);

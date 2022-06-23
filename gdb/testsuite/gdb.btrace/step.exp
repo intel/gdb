@@ -17,36 +17,43 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-if { [skip_btrace_tests] } {
-    unsupported "target does not support record-btrace"
-    return -1
-}
-
 standard_testfile record_goto.c
-if [prepare_for_testing "failed to prepare" $testfile $srcfile] {
+if {![target_supports_btrace]} {
+    unsupported "target does not support btrace."
     return -1
 }
 
-if ![runto_main] {
-    untested "failed to run to main"
+if [build_executable "failed to prepare" $testfile $srcfile] {
     return -1
 }
 
-# trace the call to the test function
-with_test_prefix "record" {
-    gdb_test_no_output "record btrace"
-    gdb_test "next"
-}
+foreach_with_prefix method {"bts" "pt"} {
+    if { [skip_btrace_tests $method] } {
+	unsupported "target does not support record-btrace ${method}"
+	continue
+    }
+    clean_restart "${testfile}"
+    if ![runto_main] {
+	untested "failed to run to main"
+	continue
+    }
 
-# let's step around a bit
-with_test_prefix "replay" {
-    gdb_test "reverse-next" ".*main\.2.*" "reverse-next.1"
-    gdb_test "step" ".*fun4\.2.*" "step.1"
-    gdb_test "next" ".*fun4\.3.*" "next.1"
-    gdb_test "step" ".*fun2\.2.*" "step.2"
-    gdb_test "finish" ".*fun4\.4.*" "finish.1"
-    gdb_test "reverse-step" ".*fun2\.3.*" "reverse-step.1"
-    gdb_test "reverse-finish" ".*fun4\.3.*" "reverse-finish.1"
-    gdb_test "reverse-next" ".*fun4\.2.*" "reverse-next.2"
-    gdb_test "reverse-finish" ".*main\.2.*" "reverse-finish.2"
+    # trace the call to the test function
+    with_test_prefix "record" {
+	gdb_test_no_output "record btrace ${method}"
+	gdb_test "next"
+    }
+
+    # let's step around a bit
+    with_test_prefix "replay" {
+	gdb_test "reverse-next" ".*main\.2.*" "reverse-next.1"
+	gdb_test "step" ".*fun4\.2.*" "step.1"
+	gdb_test "next" ".*fun4\.3.*" "next.1"
+	gdb_test "step" ".*fun2\.2.*" "step.2"
+	gdb_test "finish" ".*fun4\.4.*" "finish.1"
+	gdb_test "reverse-step" ".*fun2\.3.*" "reverse-step.1"
+	gdb_test "reverse-finish" ".*fun4\.3.*" "reverse-finish.1"
+	gdb_test "reverse-next" ".*fun4\.2.*" "reverse-next.2"
+	gdb_test "reverse-finish" ".*main\.2.*" "reverse-finish.2"
+    }
 }

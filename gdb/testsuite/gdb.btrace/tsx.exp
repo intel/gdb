@@ -15,6 +15,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+if {![target_supports_btrace]} {
+    unsupported "target does not support btrace."
+    return -1
+}
+
 if { [skip_btrace_pt_tests] } {
     unsupported "target does not support PT"
     return -1

@@ -15,13 +15,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-if { [skip_btrace_tests] } {
-    unsupported "target does not support record-btrace"
+if { [skip_shlib_tests]  } {
+    unsupported "target does not support shared library tests"
     return -1
 }
 
-if { [skip_shlib_tests]  } {
-    unsupported "target does not support shared library tests"
+if {![target_supports_btrace]} {
+    unsupported "target does not support btrace."
     return -1
 }
 
@@ -36,24 +36,31 @@ if { [gdb_compile_shlib $srcfile_lib $binfile_lib {}] != "" } {
     return -1
 }
 
-if { [prepare_for_testing "failed to prepare" $testfile $srcfile \
+if { [build_executable "failed to prepare" $testfile $srcfile \
 	  [list additional_flags=-DDSO_NAME=\"$binfile_lib\" libs=-ldl]] } {
     return -1
 }
 
-if ![runto_main] {
-    untested "failed to run to main"
-    return -1
+foreach_with_prefix method {"bts" "pt"} {
+    if { [skip_btrace_tests $method] } {
+	unsupported "target does not support record-btrace ${method}"
+	continue
+    }
+    clean_restart "${testfile}"
+    if ![runto_main] {
+	untested "failed to run to main"
+	continue
+    }
+
+    # Trace the test function
+    #
+    gdb_test_no_output "record btrace ${method}"
+    gdb_test "next"
+
+    # The memory containing the library call we traced is already gone.
+    # Trace decode used to run into a SEGV after corrupting the cleanup chain.
+    #
+    # The test passes if we don't crash GDB.
+    #
+    gdb_test "info record"
 }
-
-# Trace the test function
-#
-gdb_test_no_output "record btrace"
-gdb_test "next"
-
-# The memory containing the library call we traced is already gone.
-# Trace decode used to run into a SEGV after corrupting the cleanup chain.
-#
-# The test passes if we don't crash GDB.
-#
-gdb_test "info record"

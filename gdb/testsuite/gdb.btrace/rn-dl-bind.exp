@@ -21,46 +21,54 @@
 # Test that we can reverse-next over the dynamic linker's symbol
 # lookup code.
 
-if { [skip_btrace_tests] } {
-    unsupported "target does not support record-btrace"
+standard_testfile
+if {![target_supports_btrace]} {
+    unsupported "target does not support btrace."
     return -1
 }
 
-standard_testfile
-if [prepare_for_testing "failed to prepare" $testfile $srcfile \
+if [build_executable "failed to prepare" $testfile $srcfile \
 	{c++ debug ldflags=-Wl,-z,lazy}] {
     return -1
 }
 
-if ![runto_main] {
-    untested "failed to run to main"
-    return -1
-}
+foreach_with_prefix method {"bts" "pt"} {
+    if { [skip_btrace_tests $method] } {
+	unsupported "target does not support record-btrace ${method}"
+	continue
+    }
+    clean_restart "${testfile}"
 
-# trace the code for the call to test
-gdb_test_no_output "record btrace"
-gdb_test "next" ".*main\.2.*"
+    if ![runto_main] {
+	untested "failed to run to main"
+	continue
+    }
 
-# just dump the function-call-history to help debugging
-gdb_test_no_output "set record function-call-history-size 0"
-gdb_test "record function-call-history /cli 1" ".*"
-
-# check that we can reverse-next and next
-with_test_prefix "main" {
-    gdb_test "reverse-next" ".*main\.1.*"
+    # trace the code for the call to test
+    gdb_test_no_output "record btrace ${method}"
     gdb_test "next" ".*main\.2.*"
-}
 
-# now go into test and try to (reverse-)next over the library call
-#
-# reverse-stepping through the epilogue is not very reliable; depending on
-# debug information we may stop at the closing brace or at the return.
-#
-# instead, run to test
-gdb_breakpoint test {temporary}
-gdb_test "reverse-continue" ".*test\.1.*"
+    # just dump the function-call-history to help debugging
+    gdb_test_no_output "set record function-call-history-size 0"
+    gdb_test "record function-call-history /cli 1" ".*"
 
-with_test_prefix "test" {
-    gdb_test "next" ".*test\.2.*"
-    gdb_test "reverse-next" ".*test\.1.*"
+    # check that we can reverse-next and next
+    with_test_prefix "main" {
+	gdb_test "reverse-next" ".*main\.1.*"
+	gdb_test "next" ".*main\.2.*"
+    }
+
+    # now go into test and try to (reverse-)next over the library call
+    #
+    # reverse-stepping through the epilogue is not very reliable; depending on
+    # debug information we may stop at the closing brace or at the return.
+    #
+    # instead, run to test
+    gdb_breakpoint test {temporary}
+    gdb_test "reverse-continue" ".*test\.1.*"
+
+    with_test_prefix "test" {
+	gdb_test "next" ".*test\.2.*"
+	gdb_test "reverse-next" ".*test\.1.*"
+    }
 }

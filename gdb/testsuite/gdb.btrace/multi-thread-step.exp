@@ -17,8 +17,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-if { [skip_btrace_tests] } {
-    unsupported "target does not support record-btrace"
+if {![target_supports_btrace]} {
+    unsupported "target does not support btrace."
     return -1
 }
 
@@ -27,17 +27,6 @@ if {[gdb_compile_pthreads "$srcdir/$subdir/$srcfile" "$binfile" executable {debu
     untested "failed to prepare"
     return -1
 }
-clean_restart $testfile
-
-if ![runto_main] {
-    untested "failed to run to main"
-    return -1
-}
-
-# set up breakpoints
-set bp_1 [gdb_get_line_number "bp.1" $srcfile]
-set bp_2 [gdb_get_line_number "bp.2" $srcfile]
-set bp_3 [gdb_get_line_number "bp.3" $srcfile]
 
 proc gdb_cont_to_line { line } {
     gdb_breakpoint $line
@@ -64,14 +53,6 @@ proc check_not_replaying { thread } {
         }
     }
 }
-
-# trace the code between the two breakpoints
-delete_breakpoints
-gdb_cont_to_line $srcfile:$bp_1
-# make sure GDB knows about the new thread
-gdb_test "info threads" ".*"
-gdb_test_no_output "record btrace"
-gdb_cont_to_line $srcfile:$bp_2
 
 proc test_navigate {} {
     with_test_prefix "navigate" {
@@ -172,46 +153,71 @@ proc test_goto_end {} {
     }
 }
 
-foreach schedlock { "replay" "on" "step" } {
-    with_test_prefix "schedlock-$schedlock" {
-        gdb_test_no_output "set scheduler-locking $schedlock"
-
-        test_navigate
-        test_step
-        if { $schedlock == "step" } {
-            test_cont_all
-        } else {
-            test_cont
-        }
-        test_rstep
-        test_goto_end
+foreach_with_prefix method {"bts" "pt"} {
+    if { [skip_btrace_tests $method] } {
+	unsupported "target does not support record-btrace ${method}"
+	continue
     }
-}
-
-# schedlock-off is difficult to test since we can't really say where the other
-# thread will be when the resumed thread stops.
-
-# navigate back into the history for thread 1 and continue thread 2
-with_test_prefix "cont-to-end" {
-    # this test only works for scheduler-locking replay
-    gdb_test_no_output "set scheduler-locking replay"
-
-    gdb_test "thread 1" ".*"
-    with_test_prefix "thread 1" {
-        gdb_test "record goto begin" ".*"
-
-        check_replay_insn 1 1
+    clean_restart "${testfile}"
+    if ![runto_main] {
+        untested "failed to run to main"
+        continue
     }
-    gdb_test "thread 2" ".*"
-    with_test_prefix "thread 2" {
-        gdb_test "record goto end" ".*"
 
-        check_not_replaying 2
+    # set up breakpoints
+    set bp_1 [gdb_get_line_number "bp.1" $srcfile]
+    set bp_2 [gdb_get_line_number "bp.2" $srcfile]
+    set bp_3 [gdb_get_line_number "bp.3" $srcfile]
 
-        # if we reach the breakpoint, thread 2 terminated...
-        gdb_cont_to_line $srcfile:$bp_3
+    # trace the code between the two breakpoints
+    delete_breakpoints
+    gdb_cont_to_line $srcfile:$bp_1
+    # make sure GDB knows about the new thread
+    gdb_test "info threads" ".*"
+    gdb_test_no_output "record btrace ${method}"
+    gdb_cont_to_line $srcfile:$bp_2
 
-        # and thread 1 stopped replaying
-        check_not_replaying 1
+    foreach schedlock { "replay" "on" "step" } {
+	with_test_prefix "schedlock-$schedlock" {
+	    gdb_test_no_output "set scheduler-locking $schedlock"
+
+	    test_navigate
+	    test_step
+	    if { $schedlock == "step" } {
+		test_cont_all
+	    } else {
+		test_cont
+	    }
+	    test_rstep
+	    test_goto_end
+	}
+    }
+
+    # schedlock-off is difficult to test since we can't really say where the other
+    # thread will be when the resumed thread stops.
+
+    # navigate back into the history for thread 1 and continue thread 2
+    with_test_prefix "cont-to-end" {
+	# this test only works for scheduler-locking replay
+	gdb_test_no_output "set scheduler-locking replay"
+
+	gdb_test "thread 1" ".*"
+	with_test_prefix "thread 1" {
+	    gdb_test "record goto begin" ".*"
+
+	    check_replay_insn 1 1
+	}
+	gdb_test "thread 2" ".*"
+	with_test_prefix "thread 2" {
+	    gdb_test "record goto end" ".*"
+
+	    check_not_replaying 2
+
+	    # if we reach the breakpoint, thread 2 terminated...
+	    gdb_cont_to_line $srcfile:$bp_3
+
+	    # and thread 1 stopped replaying
+	    check_not_replaying 1
+	}
     }
 }

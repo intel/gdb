@@ -17,6 +17,11 @@
 
 # Ensure gdb doesn't regress with user level interrupts.
 
+if {![target_supports_btrace]} {
+    unsupported "target does not support btrace."
+    return -1
+}
+
 if {[skip_btrace_pt_tests]} {
     unsupported "Target does not support record btrace pt."
     return -1

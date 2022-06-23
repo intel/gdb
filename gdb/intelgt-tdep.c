@@ -36,6 +36,9 @@
 #include "gdbthread.h"
 #include "inferior.h"
 #include "user-regs.h"
+#include "objfiles.h"
+#include "block.h"
+#include "elf-bfd.h"
 #include <algorithm>
 
 /* Address space flags.
@@ -484,9 +487,7 @@ intelgt_dwarf2_prev_framedesc (const frame_info_ptr &this_frame,
   gdbarch *gdbarch = get_frame_arch (this_frame);
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
 
-  /* $framedesc is an alias of the GRF count-3.  */
-  gdb_assert (data->regset_ranges[intelgt::regset_grf].end > 3);
-  int actual_regnum = data->regset_ranges[intelgt::regset_grf].end - 3;
+  int actual_regnum = data->framedesc_base_regnum ();
 
   /* Unwind the actual GRF register.  */
   return frame_unwind_register_value (this_frame, actual_regnum);
@@ -572,7 +573,8 @@ intelgt_frame_prev_register (const frame_info_ptr &this_frame,
   gdbarch *arch = get_frame_arch (this_frame);
   /* FIXME: Do the values below exist in an ABI?  */
   constexpr int STORAGE_REG_RET_PC = 1;
-  constexpr int STORAGE_REG_SP = 125;
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  int STORAGE_REG_SP = data->framedesc_base_regnum ();
 
   if (regnum == intelgt_pseudo_register_num (arch, "ip"))
     return frame_unwind_got_register (this_frame, regnum,

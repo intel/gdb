@@ -35,6 +35,9 @@
 #include "gdbthread.h"
 #include "inferior.h"
 #include "user-regs.h"
+#include "objfiles.h"
+#include "block.h"
+#include "elf-bfd.h"
 #include <algorithm>
 
 /* Address space flags.
@@ -153,8 +156,173 @@ private:
 		       gdb_byte *buff_write, int len);
 };
 
-/* The 'gdbarch_data' stuff specific for this architecture.  */
+/* The encoding for XE version enumerates follows this pattern, which is
+   aligned with the IGA encoding.  */
 
+#define XE_VERSION(MAJ, MIN) (((MAJ) << 24) | (MIN))
+
+/* Supported GDB GEN platforms.  */
+
+enum xe_version
+{
+  XE_INVALID = 0,
+  XE_HP = XE_VERSION (1, 1),
+  XE_HPG = XE_VERSION (1, 2),
+  XE_HPC = XE_VERSION (1, 4),
+};
+
+/* Helper functions to request and translate the device id/version.  */
+
+static xe_version get_xe_version (unsigned int device_id);
+static uint32_t get_device_id (inferior *inferior);
+static uint32_t get_device_id (gdbarch *gdbarch);
+
+/* Intelgt memory handler to manage memory allocation and releasing of
+   a target memory region.  We are using a linked list to keep track of
+   memory blocks and serve the ALLOC request with the first-fit approach.
+
+   This class is currently used to manage memory allocations of the scratch
+   debug area.  */
+
+class target_memory_allocator
+{
+  struct data_block
+  {
+    data_block (CORE_ADDR addr, size_t size, bool reserved, data_block *next)
+      : addr (addr), size (size), reserved (reserved), next (next)
+    {}
+    /* Disable copying.  */
+    data_block &operator= (const data_block &) = delete;
+    data_block (const data_block &) = delete;
+
+    /* Merge the NEXT block into this block and delete NEXT.  */
+    void merge_with_next ()
+    {
+      if (next != nullptr)
+	{
+	  gdb_assert (!reserved && !next->reserved);
+
+	  data_block *next_blk = next;
+	  size += next_blk->size;
+	  next = next_blk->next;
+	  delete next_blk;
+	}
+      else
+	dprintf ("Cannot apply merge to the last block.");
+    }
+
+    CORE_ADDR addr;
+    size_t size;
+    bool reserved;
+    data_block *next;
+  };
+
+public:
+  target_memory_allocator (CORE_ADDR start, size_t size)
+  {
+    blocks_list = new data_block (start, size, false, nullptr);
+  }
+
+  ~target_memory_allocator ()
+  {
+    /* Free up the list.  */
+    data_block *head = blocks_list;
+    while (head != nullptr)
+      {
+	data_block *current_blk = head;
+	head = head->next;
+	delete current_blk;
+      }
+  }
+
+  /* Disable copying and delete default constructor.  */
+  target_memory_allocator &operator= (const target_memory_allocator &)
+    = delete;
+  target_memory_allocator (const target_memory_allocator &) = delete;
+  target_memory_allocator () = delete;
+
+  /* Return the first fitting free block.  */
+  CORE_ADDR alloc (size_t size) const
+  {
+    data_block *head = blocks_list;
+    while (head != nullptr)
+      {
+	/* We found a larger fit block, split it.  */
+	if (!head->reserved && (head->size > size))
+	  {
+	    data_block *new_free_block
+	      = new data_block (head->addr + size,
+				head->size - size, false, head->next);
+	    head->size = size;
+	    head->reserved = true;
+	    head->next = new_free_block;
+	    break;
+	  }
+	else if (!head->reserved && head->size == size)
+	  {
+	    /* No need to create a new block, just re-use this one.  */
+	    head->reserved = true;
+	    break;
+	  }
+
+	head = head->next;
+      }
+
+    if (head == nullptr)
+      error (_("Failed to allocate %" PRIu64
+	       " bytes in the debug scratch area."), (uint64_t) size);
+
+    return head->addr;
+  }
+
+  void free (CORE_ADDR addr) const
+  {
+    data_block *head = blocks_list;
+    data_block *prev_head = nullptr;
+    while (head != nullptr)
+      {
+	/* The memory address does not belong to any block.  */
+	if (addr < head->addr)
+	  {
+	    dprintf ("Cannot find the corresponding allocated memory in "
+		     "scratch area: Addr %s",
+		     paddress (target_gdbarch (), addr));
+	    head = nullptr;
+	    break;
+	  }
+
+	if (head->addr == addr)
+	  {
+	    /* No need to do anything, the block is already free.  */
+	    if (!head->reserved)
+	      internal_error (_("Double free from the debug scratch area "
+				"detected: Addr %s"),
+			      paddress (target_gdbarch (), addr));
+
+	    head->reserved = false;
+	    /* Merge adjacent free blocks.  */
+	    if ((head->next != nullptr) && !head->next->reserved)
+	      head->merge_with_next ();
+	    if ((prev_head != nullptr) && !prev_head->reserved)
+	      prev_head->merge_with_next ();
+	    break;
+	  }
+
+	prev_head = head;
+	head = head->next;
+      }
+
+    if (head == nullptr)
+      internal_error (_("Failed to free memory from the debug scratch area: "
+			"Addr %s"), paddress (target_gdbarch (), addr));
+  }
+
+private:
+  /* Linked list of blocks ordered by increasing address.  */
+  data_block *blocks_list;
+};
+
+>>>>>>> 57b5ee00b06 (squash! gdb, intelgt: define frame descriptor register based on ELF machine type.)
 /* The 'gdbarch_data' stuff specific for this architecture.  */
 
 struct intelgt_gdbarch_data
@@ -180,6 +348,16 @@ struct intelgt_gdbarch_data
   intelgt_gdbarch_data ()
   {
     memset (&regset_ranges, -1, sizeof regset_ranges);
+  }
+
+  /* Return regnum where frame descriptors are stored.  */
+
+  int
+  framedesc_base_regnum ()
+  {
+    /* For EM_INTELGT frame descriptors are stored at MAX_GRF - 1.  */
+    gdb_assert (regset_ranges[intelgt::regset_grf].end > 1);
+    return regset_ranges[intelgt::regset_grf].end - 1;
   }
 
 #if defined (HAVE_LIBIGA64)
@@ -475,9 +653,7 @@ intelgt_dwarf2_prev_framedesc (frame_info_ptr this_frame, void **this_cache,
   gdbarch *gdbarch = get_frame_arch (this_frame);
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
 
-  /* $framedesc is an alias of the GRF count-3.  */
-  gdb_assert (data->regset_ranges[intelgt::regset_grf].end > 3);
-  int actual_regnum = data->regset_ranges[intelgt::regset_grf].end - 3;
+  int actual_regnum = data->framedesc_base_regnum ();
 
   /* Unwind the actual GRF register.  */
   return frame_unwind_register_value (this_frame, actual_regnum);
@@ -561,7 +737,8 @@ intelgt_frame_prev_register (frame_info_ptr this_frame,
   gdbarch *arch = get_frame_arch (this_frame);
   /* FIXME: Do the values below exist in an ABI?  */
   constexpr int STORAGE_REG_RET_PC = 1;
-  constexpr int STORAGE_REG_SP = 125;
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  int STORAGE_REG_SP = data->framedesc_base_regnum ();
 
   if (regnum == intelgt_pseudo_register_num (arch, "ip"))
     return frame_unwind_got_register (this_frame, regnum,
@@ -953,9 +1130,7 @@ intelgt_pseudo_register_read_value (gdbarch *arch,
 
   if (strcmp (name, "framedesc") == 0)
     {
-      /* Frame description is stored in GRF count-3.  */
-      gdb_assert (data->regset_ranges[intelgt::regset_grf].end > 3);
-      int grf_num = data->regset_ranges[intelgt::regset_grf].end - 3;
+      int grf_num = data->framedesc_base_regnum ();
       value *grf = regcache->cooked_read_value (grf_num);
       if (!grf->entirely_available ())
 	throw_error (NOT_AVAILABLE_ERROR,
@@ -995,9 +1170,7 @@ intelgt_pseudo_register_write (gdbarch *arch,
 
   if (strcmp (name, "framedesc") == 0)
     {
-      /* Frame description is stored in GRF count-3.  */
-      gdb_assert (data->regset_ranges[intelgt::regset_grf].end > 3);
-      int grf_num = data->regset_ranges[intelgt::regset_grf].end - 3;
+      int grf_num = data->framedesc_base_regnum ();
       int grf_size = register_size (arch, grf_num);
       int desc_size = register_size (arch, regnum);
       gdb_assert (grf_size >= desc_size);

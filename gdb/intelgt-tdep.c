@@ -35,6 +35,9 @@
 #include "gdbthread.h"
 #include "inferior.h"
 #include "user-regs.h"
+#include "objfiles.h"
+#include "block.h"
+#include "elf-bfd.h"
 #include <algorithm>
 
 /* Address space flags.
@@ -153,7 +156,51 @@ private:
 		       gdb_byte *buff_write, int len);
 };
 
-/* The 'gdbarch_data' stuff specific for this architecture.  */
+/* Return the machine code of the current elf.  */
+
+static int
+intelgt_get_current_machine_code ()
+{
+  regcache *regcache = get_current_regcache ();
+  CORE_ADDR pc = regcache_read_pc (regcache);
+
+  obj_section *section = find_pc_section (pc);
+  if (section != nullptr)
+    {
+      gdb_assert (section->objfile != nullptr);
+
+      bfd *abfd = section->objfile->obfd.get ();
+      const elf_backend_data *ebd = get_elf_backend_data (abfd);
+      if (ebd == nullptr)
+	error (_("Cannot find elf backend data: PC %s."),
+	       paddress (regcache->arch (), pc));
+      return ebd->elf_machine_code;
+    }
+
+  /* If the PC does not belong to any section (e.g. the PC is in the scratch
+     area when the infcall returns), we look if all the ELF files
+     agree on the machine code.  */
+  int global_machine_code = EM_NONE;
+  for (objfile *obj : current_program_space->objfiles ())
+    {
+      bfd *abfd = obj->obfd.get ();
+      const elf_backend_data *ebd = get_elf_backend_data (abfd);
+      if (ebd == nullptr)
+	error (_("Cannot find elf backend data: objfile %s."),
+	       paddress (regcache->arch (), obj->addr_low));
+
+      if (global_machine_code == EM_NONE)
+	global_machine_code = ebd->elf_machine_code;
+      else if (ebd->elf_machine_code != global_machine_code)
+	{
+	  dprintf ("All ELF files did not agree on the machine code");
+	  global_machine_code = EM_NONE;
+	  break;
+	}
+    }
+
+  return global_machine_code;
+}
 
 /* The 'gdbarch_data' stuff specific for this architecture.  */
 
@@ -180,6 +227,29 @@ struct intelgt_gdbarch_data
   intelgt_gdbarch_data ()
   {
     memset (&regset_ranges, -1, sizeof regset_ranges);
+  }
+
+  /* Return regnum where frame descriptors are stored.  */
+
+  int
+  framedesc_base_regnum ()
+  {
+    int machine = intelgt_get_current_machine_code ();
+    if (machine == EM_INTELGT)
+      {
+	/* For EM_INTELGT frame descriptors are stored at MAX_GRF - 1.  */
+	gdb_assert (regset_ranges[intelgt::regset_grf].end > 1);
+	return regset_ranges[intelgt::regset_grf].end - 1;
+      }
+
+    if (machine == EM_INTEL_GEN)
+      {
+	/* For EM_INTEL_GEN frame descriptors are stored at MAX_GRF - 3.  */
+	gdb_assert (regset_ranges[intelgt::regset_grf].end > 3);
+	return regset_ranges[intelgt::regset_grf].end - 3;
+      }
+
+    gdb_assert_not_reached ("Machine code is unknown.");
   }
 
 #if defined (HAVE_LIBIGA64)
@@ -493,9 +563,7 @@ intelgt_dwarf2_prev_framedesc (frame_info_ptr this_frame, void **this_cache,
   gdbarch *gdbarch = get_frame_arch (this_frame);
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
 
-  /* $framedesc is an alias of the GRF count-3.  */
-  gdb_assert (data->regset_ranges[intelgt::regset_grf].end > 3);
-  int actual_regnum = data->regset_ranges[intelgt::regset_grf].end - 3;
+  int actual_regnum = data->framedesc_base_regnum ();
 
   /* Unwind the actual GRF register.  */
   return frame_unwind_register_value (this_frame, actual_regnum);
@@ -579,7 +647,8 @@ intelgt_frame_prev_register (frame_info_ptr this_frame,
   gdbarch *arch = get_frame_arch (this_frame);
   /* FIXME: Do the values below exist in an ABI?  */
   constexpr int STORAGE_REG_RET_PC = 1;
-  constexpr int STORAGE_REG_SP = 125;
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  int STORAGE_REG_SP = data->framedesc_base_regnum ();
 
   if (regnum == intelgt_pseudo_register_num (arch, "ip"))
     return frame_unwind_got_register (this_frame, regnum,
@@ -971,9 +1040,7 @@ intelgt_pseudo_register_read_value (gdbarch *arch,
 
   if (strcmp (name, "framedesc") == 0)
     {
-      /* Frame description is stored in GRF count-3.  */
-      gdb_assert (data->regset_ranges[intelgt::regset_grf].end > 3);
-      int grf_num = data->regset_ranges[intelgt::regset_grf].end - 3;
+      int grf_num = data->framedesc_base_regnum ();
       value *grf = regcache->cooked_read_value (grf_num);
       if (!grf->entirely_available ())
 	throw_error (NOT_AVAILABLE_ERROR,
@@ -1013,9 +1080,7 @@ intelgt_pseudo_register_write (gdbarch *arch,
 
   if (strcmp (name, "framedesc") == 0)
     {
-      /* Frame description is stored in GRF count-3.  */
-      gdb_assert (data->regset_ranges[intelgt::regset_grf].end > 3);
-      int grf_num = data->regset_ranges[intelgt::regset_grf].end - 3;
+      int grf_num = data->framedesc_base_regnum ();
       int grf_size = register_size (arch, grf_num);
       int desc_size = register_size (arch, regnum);
       gdb_assert (grf_size >= desc_size);

@@ -35,6 +35,9 @@
 #include "gdbthread.h"
 #include "inferior.h"
 #include "user-regs.h"
+#include "objfiles.h"
+#include "block.h"
+#include "elf-bfd.h"
 #include <algorithm>
 
 /* Address space flags.
@@ -160,6 +163,27 @@ private:
 		       gdb_byte *buff_write, int len);
 };
 
+/* Return the machine code of the current elf.  */
+
+static int
+intelgt_get_current_machine_code ()
+{
+  regcache *regcache = get_current_regcache ();
+  CORE_ADDR pc = regcache_read_pc (regcache);
+  const block *block = block_for_pc (pc);
+
+  if (block == nullptr)
+    error (_("Cannot read block for PC 0x%lx."), pc);
+
+  objfile *obj = block_objfile (block);
+
+  if (obj == nullptr)
+    error (_("Cannot find object file for block containg PC 0x%lx."), pc);
+
+  bfd *abfd = obj->obfd.get ();
+  return get_elf_backend_data (abfd)->elf_machine_code;
+}
+
 struct intelgt_gdbarch_data
 {
   /* $emask register number in the regcache.  */
@@ -183,6 +207,29 @@ struct intelgt_gdbarch_data
   intelgt_gdbarch_data ()
   {
     memset (&regset_ranges, -1, sizeof regset_ranges);
+  }
+
+  /* Return regnum where frame descriptors are stored.  */
+
+  int
+  framedesc_base_regnum ()
+  {
+    int machine = intelgt_get_current_machine_code ();
+    if (machine == EM_INTELGT)
+      {
+	/* For EM_INTELGT frame descriptors are stored at MAX_GRF - 1.  */
+	gdb_assert (regset_ranges[intelgt::regset_grf].end > 1);
+	return regset_ranges[intelgt::regset_grf].end - 1;
+      }
+
+    if (machine == EM_INTEL_GEN)
+      {
+	/* For EM_INTEL_GEN frame descriptors are stored at MAX_GRF - 3.  */
+	gdb_assert (regset_ranges[intelgt::regset_grf].end > 3);
+	return regset_ranges[intelgt::regset_grf].end - 3;
+      }
+
+    gdb_assert_not_reached ("Machine code is unknown.");
   }
 
 #if defined (HAVE_LIBIGA64)
@@ -428,9 +475,7 @@ intelgt_dwarf2_prev_framedesc (frame_info_ptr this_frame, void **this_cache,
   gdbarch *gdbarch = get_frame_arch (this_frame);
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
 
-  /* $framedesc is an alias of the GRF count-3.  */
-  gdb_assert (data->regset_ranges[intelgt::regset_grf].end > 3);
-  int actual_regnum = data->regset_ranges[intelgt::regset_grf].end - 3;
+  int actual_regnum = data->framedesc_base_regnum ();
 
   /* Unwind the actual GRF register.  */
   return frame_unwind_register_value (this_frame, actual_regnum);
@@ -541,7 +586,8 @@ intelgt_frame_prev_register (frame_info_ptr this_frame,
   gdbarch *arch = get_frame_arch (this_frame);
   /* FIXME: Do the values below exist in an ABI?  */
   constexpr int STORAGE_REG_RET_PC = 1;
-  constexpr int STORAGE_REG_SP = 125;
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  int STORAGE_REG_SP = data->framedesc_base_regnum ();
 
   if (regnum == intelgt_pseudo_register_num (arch, "ip"))
     return frame_unwind_got_register (this_frame, regnum,
@@ -933,9 +979,7 @@ intelgt_pseudo_register_read_value (gdbarch *arch,
 
   if (strcmp (name, "framedesc") == 0)
     {
-      /* Frame description is stored in GRF count-3.  */
-      gdb_assert (data->regset_ranges[intelgt::regset_grf].end > 3);
-      int grf_num = data->regset_ranges[intelgt::regset_grf].end - 3;
+      int grf_num = data->framedesc_base_regnum ();
       value *grf = regcache->cooked_read_value (grf_num);
       if (!value_entirely_available (grf))
 	throw_error (NOT_AVAILABLE_ERROR,
@@ -975,9 +1019,7 @@ intelgt_pseudo_register_write (gdbarch *arch,
 
   if (strcmp (name, "framedesc") == 0)
     {
-      /* Frame description is stored in GRF count-3.  */
-      gdb_assert (data->regset_ranges[intelgt::regset_grf].end > 3);
-      int grf_num = data->regset_ranges[intelgt::regset_grf].end - 3;
+      int grf_num = data->framedesc_base_regnum ();
       int grf_size = register_size (arch, grf_num);
       int desc_size = register_size (arch, regnum);
       gdb_assert (grf_size >= desc_size);

@@ -1811,8 +1811,21 @@ proc mi_send_resuming_command_raw {command test} {
     global library_loaded_re
 
     send_gdb "$command\n"
+    set has_running_line 0
+    set has_running_thread_line 0
     gdb_expect {
-	-re "\\^running\r\n(\\*running,thread-id=\"\[^\"\]+\"\r\n)+($library_loaded_re)*($thread_selected_re)?${mi_gdb_prompt}" {
+	-re "\\^running\r\n" {
+	    set has_running_line 1
+	    exp_continue
+	}
+	-re "^(\\*running,thread-id=\"\[^\"\r\n\]+\"\r\n)+" {
+	    # If the target has many threads, the buffer may become very long.
+	    # Consume these lines to avoid problems about regexp matching
+	    # or the internal buffer becoming full.
+	    set has_running_thread_line 1
+	    exp_continue
+	}
+	-re "^($library_loaded_re)*($thread_selected_re)?${mi_gdb_prompt}" {
 	    # Note that lack of 'pass' call here -- this works around limitation
 	    # in DejaGNU xfail mechanism. mi-until.exp has this:
 	    #
@@ -1822,7 +1835,13 @@ proc mi_send_resuming_command_raw {command test} {
 	    # and mi_execute_to uses mi_send_resuming_command.  If we use 'pass' here,
 	    # it will reset kfail, so when the actual test fails, it will be flagged
 	    # as real failure.
-	    return 0
+
+	    if {$has_running_line && $has_running_thread_line} {
+		return 0
+	    } else {
+		fail "$test (failed to resume)"
+		return -1
+	    }
 	}
 	-re "\\^error,msg=\"Displaced stepping is only supported in ARM mode\".*" {
 	    unsupported "$test (Thumb mode)"
@@ -1833,6 +1852,8 @@ proc mi_send_resuming_command_raw {command test} {
 	    return -1
 	}
 	-re ".*${mi_gdb_prompt}" {
+	    # If the 'mi_gdb_prompt' case above does not match,
+	    # any other output means failure.
 	    fail "$test (failed to resume)"
 	    return -1
 	}

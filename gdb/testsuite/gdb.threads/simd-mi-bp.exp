@@ -89,4 +89,9 @@ mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $odd_branch_line { "" "disp=\"del
 mi_send_resuming_command "exec-continue" "continuing to inferior exit"
 
 # Expect normal exit.
+with_timeout_factor 2 {
+if {[is_level_zero_debug_api]} {
+    kfail "JIRA DOQG/3115" "timeout had to be increased"
+}
 mi_expect_stop "exited-normally" "" "" "" "" "" "exit normally"
+}

@@ -99,6 +99,10 @@ prepare_second_thread
 # Thread clause, lane clause, condition for several lanes and threads.
 gdb_breakpoint "$fourth_line thread $first_thread:6 if dim0 % 2 == 0"
 
+if {[is_level_zero_debug_api]} {
+    kfail "JIRA DOQG/3115" "timeout had to be increased"
+}
+with_timeout_factor 3 {
 foreach iter {1 2 3} {
     with_test_prefix "iteration $iter" {
 	gdb_test_multiple "continue" "continue to conditional BP" {
@@ -135,4 +139,5 @@ foreach iter {1 2 3} {
 	    }
 	}
     }
+}
 }

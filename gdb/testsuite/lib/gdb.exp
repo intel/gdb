@@ -5190,14 +5190,40 @@ proc gdb_compile_openmp {source dest type options} {
 	&& ([test_compiler_info {icx-*} c++]
 	    || [test_compiler_info {dpcpp-*} c++])} {
 	set new_options {additional_flags=-qopenmp}
+	lappend new_options {libs=-lstdc++}
+	lappend new_options {additional_flags=-fopenmp-targets=spir64}
+	lappend new_options {optimize=-O0}
     } elseif {[lsearch -exact $options "f90"] >= 0
 	      && [test_compiler_info {ifx-*} f90]} {
         set new_options {additional_flags=-qopenmp}
+	lappend new_options {additional_flags=-fopenmp-targets=spir64}
+	lappend new_options {optimize=-O0}
     } elseif {[test_compiler_info {icx-*} c]} {
 	set new_options {additional_flags=-qopenmp}
+	lappend new_options {additional_flags=-fopenmp-targets=spir64}
+	lappend new_options {optimize=-O0}
     } else {
 	set new_options {additional_flags=-fopenmp}
     }
+
+    # If optimze option is given multiple times, only the last use is
+    # significant in DEJAGNU.  So, to make optimize option set in the test
+    # significant, input 'options' are appended to the end here.
+    return [gdb_compile $source $dest $type [concat $new_options $options]]
+}
+
+# Build a sycl program from SOURCE.  See prefatory comment for
+# gdb_compile, above, for discussion of the parameters to this proc.
+
+proc gdb_compile_sycl {source dest type options} {
+    set new_options {additional_flags=-fsycl}
+    lappend new_options {additional_flags=-fsycl-unnamed-lambda}
+    lappend new_options {c++}
+    lappend new_options {optimize=-O0}
+
+    # If optimze option is given multiple times, only the last use is
+    # significant in DEJAGNU.  So, to make optimize option set in the test
+    # significant, input 'options' are appended to the end here.
     return [gdb_compile $source $dest $type [concat $new_options $options]]
 }
 
@@ -7076,7 +7102,7 @@ proc build_executable_from_specs {testname executable options args} {
     set binfile [standard_output_file $executable]
 
     set func gdb_compile
-    set func_index [lsearch -regexp $options {^(pthreads|shlib|shlib_pthreads|openmp)$}]
+    set func_index [lsearch -regexp $options {^(pthreads|shlib|shlib_pthreads|openmp|sycl)$}]
     if {$func_index != -1} {
 	set func "${func}_[lindex $options $func_index]"
     }

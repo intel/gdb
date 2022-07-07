@@ -44,6 +44,9 @@ if {![info exists OFFLOAD_GPU_ID]} {
 if {![info exists OFFLOAD_DEVICE_GROUP]} {
     set OFFLOAD_DEVICE_GROUP ""
 }
+if {![info exists OFFLOAD_IGNORE_PREPARE_FOR_TESTING]} {
+    set OFFLOAD_IGNORE_PREPARE_FOR_TESTING "0"
+}
 
 # Start the process by passing the SYCL device type and a
 # substring of the device name as the command line arguments.
@@ -127,15 +130,24 @@ proc require_sycl_device {type name} {
 
 proc get_sycl_supported_devices {sycl_device_list} {
     global srcdir objdir subdir gdb_prompt inferior_exited_re
+    global OFFLOAD_IGNORE_PREPARE_FOR_TESTING
+
     set supported_sycl_device_list {}
 
     # Set up, compile, and execute a simple SYCL program.
-    set exe "sycl-hello"
+    set exe "$objdir/sycl-hello"
     set src "$srcdir/lib/sycl-hello.cpp"
-    if {[build_executable "failed to compile $src" \
+
+    # Don't re-compile in case OFFLOAD_IGNORE_PREPARE_FOR_TESTING option
+    # is set.
+    if {$OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"} {
+        clean_restart $exe
+    } else {
+	if {[build_executable "failed to compile $src" \
 			    $exe $src {sycl debug}]} {
-	verbose "SYCL: Compilation failed" 0
-	return 1
+	    verbose "SYCL: Compilation failed" 0
+	    return 1
+	}
     }
     verbose -log "\nSYCL: Compilation succeeded"
 
@@ -185,6 +197,7 @@ gdb_caching_proc init_sycl_devices_list {
     global srcdir objdir subdir gdb_prompt
     global inferior_exited_re
     global sycl_device_list
+    global env OFFLOAD_IGNORE_PREPARE_FOR_TESTING
 
     set sycl_device_list {}
     set supported_sycl_device_list {}
@@ -195,15 +208,21 @@ gdb_caching_proc init_sycl_devices_list {
     }
 
     # Set up, compile, and execute a simple SYCL program.
-    set exe "sycl-devices"
+    set exe "$objdir/sycl-devices"
     set src "$srcdir/lib/sycl-devices.cpp"
 
-    if {[prepare_for_testing "failed to compile $src" \
+    # Don't re-compile in case OFFLOAD_IGNORE_PREPARE_FOR_TESTING option
+    # is set.
+    if {$OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"} {
+	clean_restart $exe
+    } else {
+	if {[prepare_for_testing "failed to compile $src" \
 		$exe $src {sycl debug}]} {
-	verbose "SYCL: Compilation failed" 0
-	return $sycl_device_list
+	    verbose "SYCL: Compilation failed" 0
+	    return $sycl_device_list
+	}
+	verbose -log "\nSYCL: Compilation succeeded"
     }
-    verbose -log "\nSYCL: Compilation succeeded"
 
     if {![runto_main]} {
 	untested "failed to run sycl-devices to main"
@@ -520,7 +539,7 @@ proc sycl_init_device {device} {
 # function for each device.
 
 proc test_initialize {{option ""}} {
-    global binfile srcfile testfile
+    global binfile srcfile testfile OFFLOAD_IGNORE_PREPARE_FOR_TESTING
 
     set sycl_device_list [init_sycl_devices_list]
     if {[llength $sycl_device_list] == 0} {
@@ -528,9 +547,11 @@ proc test_initialize {{option ""}} {
 	return 0
     }
 
-    if {[build_executable "failed to compile $srcfile" \
-			  "${binfile}" $srcfile [concat sycl debug $option]]} {
-	return -1
+    if {$OFFLOAD_IGNORE_PREPARE_FOR_TESTING != "1"} {
+	if {[build_executable "failed to compile $srcfile" \
+			    "${binfile}" $srcfile [concat sycl debug $option]]} {
+	    return -1
+	}
     }
 
     foreach device $sycl_device_list {
@@ -551,6 +572,12 @@ proc test_initialize {{option ""}} {
 # return 0.
 
 proc is_sycl_offload_supported_compiler {} {
+    global OFFLOAD_IGNORE_PREPARE_FOR_TESTING
+
+    if {$OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"} {
+	return 1
+    }
+
     if {[test_compiler_info {icx-*} c++]} {
 	return 1
     }

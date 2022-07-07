@@ -18,27 +18,42 @@
 
 load_lib openmp.exp
 
-if {[skip_openmp_tests]} {
-    untested "skipping openmp test"
-    return 0
+foreach extension $openmp_languages_list {
+    set device_list [omp_get_device_list $extension]
+    if {[llength $device_list] == 0} {
+	unsupported "target does not support OpenMP for ${extension}"
+	continue
+    }
+
+    standard_testfile "single-task.${extension}"
+    set exe "${binfile}_${extension}"
+
+    if {[prepare_openmp_for_testing ${exe} ${srcfile} $extension] == -1} {
+	untested "OpenMP: Fail to prepare the test ${exe}"
+	continue
+    }
+
+    foreach device_info "${device_list}" {
+	with_test_prefix [init_openmp_device $device_info $extension] {
+
+	    if {![start_openmp_program $extension]} {
+		untested "Fail to start the program"
+		continue
+	    }
+
+	    set line_number [gdb_get_line_number line-before-kernel]
+	    gdb_breakpoint "$srcfile:$line_number" {message}
+
+	    # Test that we actually hit the breakpoint.
+	    gdb_continue_to_breakpoint "line before kernel" \
+		".*$srcfile:$line_number.*"
+
+	    # Now we should be able to run to the end without hitting
+	    # any other kernel/non-kernel breakpoints.
+	    if {[require_openmp_device "GPU"]} {
+		setup_kfail "JIRA DOQG/314" "*-*-*"
+	    }
+	    continue_openmp_program_to_termination
+	}
+   }
 }
-
-standard_testfile single-task.${openmp_program_extension}
-
-if {[start_openmp_program]} {
-    return -1
-}
-
-set line_number [gdb_get_line_number line-before-kernel]
-gdb_breakpoint "$srcfile:$line_number" {message}
-
-# Test that we actually hit the breakpoint.
-gdb_continue_to_breakpoint "line before kernel" \
-    ".*$srcfile:$line_number.*"
-
-# Now we should be able to run to the end without hitting
-# any other kernel/non-kernel breakpoints.
-if {[require_openmp_device "GPU"]} {
-    setup_kfail "JIRA DOQG/314" "*-*-*"
-}
-continue_openmp_program_to_termination

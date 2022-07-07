@@ -25,21 +25,29 @@
 
 load_lib openmp.exp
 
-if {[skip_openmp_tests] || [skip_fortran_tests] } {
+if {[skip_fortran_tests] } {
     untested "skipping openmp test"
-    return 0
-} elseif {$openmp_program_extension eq "cpp"} {
-    unsupported "this test is fortran only"
     return 0
 }
 
+if ![string match -nocase "*f90*" $openmp_languages_list] {
+    untested "Fortran is not enabled in openmp_languages_list"
+    return 0
+}
+
+set device_list [init_omp_f90_devices_list]
+if {[llength $device_list] == 0} {
+    unsupported "target does not support OpenMP Fortran"
+    return -1
+}
+
 standard_testfile mixed-lang-stack.cpp mixed-lang-stack.f90
-set options_cpp [regexp -all -inline {\S+} "[openmp_compilation_options "cpp"]"]
-set options_f90 [regexp -all -inline {\S+} "[openmp_compilation_options "f90"]"]
+set options_cpp [regexp -all -inline {\S+} {openmp c++ debug}]
+set options_f90 [regexp -all -inline {\S+} {openmp f90 debug}]
 set options [lsort -unique [concat $options_f90 $options_cpp]]
 
 if {[prepare_for_testing_full "failed to prepare" \
-	 [list ${binfile} $options \
+	 [list "${binfile}_f90" $options \
 	      $srcfile $options_cpp \
 	      $srcfile2 $options_f90]]} {
     return -1
@@ -47,11 +55,11 @@ if {[prepare_for_testing_full "failed to prepare" \
 
 # Runs the test program and examins the stack.  LANG is a string, the
 # value to pass to GDB's 'set language ...' command.
-proc run_tests { lang } {
+proc run_tests {lang exe} {
     with_test_prefix "lang=${lang}" {
-	global binfile hex
+	global hex
 
-	clean_restart ${binfile}
+	clean_restart $exe
 
 	if ![runto_main] {
 	    untested "could not run to main"
@@ -136,13 +144,18 @@ proc run_tests { lang } {
     }
 }
 
-if {[require_openmp_device "GPU"]} {
-    kfail "JIRA DOQG/3362" "breakpoint not hit on GPU"
-} elseif {[require_openmp_device "CPU"]} {
-    kfail "JIRA DOQG/2784 && DOQG/2526" "bug in bt for offload to CPU and breakpoint not hit"
-} else {
-    run_tests "auto"
-    run_tests "fortran"
-    run_tests "c"
-    run_tests "c++"
+foreach device ${device_list} {
+    with_test_prefix [init_openmp_device $device "f90"] {
+	if {[require_openmp_device "GPU"]} {
+	    kfail "JIRA DOQG/3362" "breakpoint not hit on GPU"
+	} elseif {[require_openmp_device "CPU"]} {
+	    kfail "JIRA DOQG/2784 && DOQG/2526" "bug in bt for offload to CPU and breakpoint not hit"
+	} else {
+	    set exe "${binfile}_f90"
+	    run_tests "auto" ${exe}
+	    run_tests "fortran" ${exe}
+	    run_tests "c" ${exe}
+	    run_tests "c++" ${exe}
+	}
+    }
 }

@@ -18,24 +18,39 @@
 
 load_lib openmp.exp
 
-if {[skip_openmp_tests]} {
-    untested "skipping openmp test"
-    return 0
+foreach extension $openmp_languages_list {
+    set device_list [omp_get_device_list $extension]
+    if {[llength $device_list] == 0} {
+	unsupported "target does not support OpenMP ${extension}"
+	continue
+    }
+
+    standard_testfile "single-task.${extension}"
+    set exe "${binfile}_${extension}"
+
+    if {[prepare_openmp_for_testing ${exe} ${srcfile} $extension] == -1} {
+	untested "OpenMP: Fail to prepare the test ${exe}"
+	continue
+    }
+
+    foreach device_info "${device_list}" {
+	with_test_prefix [init_openmp_device $device_info $extension] {
+
+	    if {![start_openmp_program $extension]} {
+		untested "Fail to start the program"
+		continue
+	    }
+
+	    # Break at the first line of the kernel, then make steps.
+	    set first_line [gdb_get_line_number "kernel-line-1"]
+	    gdb_breakpoint $first_line
+	    gdb_continue_to_breakpoint "first line" ".*$srcfile:$first_line.*"
+
+	    gdb_test "next" "four = .*" "next 1"
+	    gdb_test "next" "fourteen = .*" "next 2"
+	    gdb_test "next" "z = .*" "next 3"
+
+	    continue_openmp_program_to_termination
+	}
+   }
 }
-
-standard_testfile single-task.${openmp_program_extension}
-
-if {[start_openmp_program]} {
-    return -1
-}
-
-# Break at the first line of the kernel, then make steps.
-set first_line [gdb_get_line_number "kernel-line-1"]
-gdb_breakpoint $first_line
-gdb_continue_to_breakpoint "first line" ".*$srcfile:$first_line.*"
-
-gdb_test "next" "four = .*" "next 1"
-gdb_test "next" "fourteen = .*" "next 2"
-gdb_test "next" "z = .*" "next 3"
-
-continue_openmp_program_to_termination

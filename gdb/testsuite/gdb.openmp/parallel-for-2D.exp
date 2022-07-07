@@ -17,30 +17,45 @@
 
 load_lib openmp.exp
 
-if {[skip_openmp_tests]} {
-    untested "skipping openmp test"
-    return 0
-}
+foreach extension $openmp_languages_list {
+    set device_list [omp_get_device_list $extension]
+    if {[llength $device_list] == 0} {
+	unsupported "target does not support OpenMP ${extension}"
+	continue
+    }
 
-standard_testfile parallel-for-2D.${openmp_program_extension}
+    standard_testfile ".${extension}"
+    set exe "${binfile}_${extension}"
 
-if {[start_openmp_program]} {
-    return -1
-}
+    if {[prepare_openmp_for_testing ${exe} ${srcfile} $extension] == -1} {
+	untested "OpenMP: Fail to prepare the test ${exe}"
+	continue
+    }
 
-set last_line [gdb_get_line_number "kernel-last-line"]
-gdb_breakpoint $last_line
+    foreach device_info "${device_list}" {
+	with_test_prefix [init_openmp_device $device_info $extension] {
 
-# Check that we hit the BP for a number of elements.  We do not check
-# for each element because the number of hits received may depend on
-# whether the kernel was vectorized, and if so, the width of vectors.
-# Since the data array in the test program is large, having a small
-# number of trips here should be safe.
+	    if {![start_openmp_program $extension]} {
+		untested "Fail to start the program"
+		continue
+	    }
 
-for {set i 1} {$i <= 5} {incr i} {
-    gdb_continue_to_breakpoint "hit the last line occurrence $i" \
-	".*$srcfile:$last_line.*"
+	    set last_line [gdb_get_line_number "kernel-last-line"]
+	    gdb_breakpoint $last_line
 
-    gdb_test "print in_elem - (in_elem2 * 64 + in_elem3)" "123" \
-	"thread invariant $i"
+	    # Check that we hit the BP for a number of elements.  We do not check
+	    # for each element because the number of hits received may depend on
+	    # whether the kernel was vectorized, and if so, the width of vectors.
+	    # Since the data array in the test program is large, having a small
+	    # number of trips here should be safe.
+
+	    for {set i 1} {$i <= 5} {incr i} {
+		gdb_continue_to_breakpoint "hit the last line occurrence $i" \
+		    ".*$srcfile:$last_line.*"
+
+		gdb_test "print in_elem - (in_elem2 * 64 + in_elem3)" "123" \
+		    "thread invariant $i"
+	    }
+	}
+    }
 }

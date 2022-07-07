@@ -351,6 +351,27 @@ OFFLOAD_PERF_AOT_TESTING
 When set to "1", GDB offload performance tests will set the AOT flags
 for compilation.
 
+OFFLOAD_BACKEND_GROUP
+
+By default, it is set to "opencl,level0,host".  This option can be used in the
+"make check" command to filter the required backend by using comma-separated
+values.
+
+For example, this make check command runs offload tests for level0 and opencl
+only.
+
+	make check RUNTESTFLAGS='OFFLOAD_BACKEND_GROUP="level0,opencl"'
+
+OPENMP_LANG_GROUP
+
+This option can be used to filter the required language for openmp tests.  It
+contains comma separated values and possible values for this option are
+cpp and fortran.
+
+For example, this make check command runs OpenMP offload tests for CPP only.
+
+	make check RUNTESTFLAGS='OPENMP_LANG_GROUP="cpp"'
+
 Race detection
 **************
 

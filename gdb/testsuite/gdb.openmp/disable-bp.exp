@@ -17,25 +17,40 @@
 
 load_lib openmp.exp
 
-if {[skip_openmp_tests]} {
-    untested "skipping openmp test"
-    return 0
+foreach extension $openmp_languages_list {
+    set device_list [omp_get_device_list $extension]
+    if {[llength $device_list] == 0} {
+	unsupported "target does not support OpenMP ${extension}"
+	continue
+    }
+
+    standard_testfile "parallel-for-1D.${extension}"
+    set exe "${binfile}_${extension}"
+
+    if {[prepare_openmp_for_testing ${exe} ${srcfile} $extension] == -1} {
+	untested "OpenMP: Fail to prepare the test ${exe}"
+	continue
+    }
+
+    foreach device_info "${device_list}" {
+	with_test_prefix [init_openmp_device $device_info $extension] {
+
+	    if {![start_openmp_program $extension]} {
+		untested "Fail to start the program"
+		continue
+	    }
+
+	    set last_line [gdb_get_line_number "kernel-last-line"]
+	    gdb_breakpoint $last_line
+	    set bpnum [get_integer_valueof "\$bpnum" 0 "get bpnum"]
+
+	    # First, we should hit the breakpoint.  Any thread is fine.
+	    gdb_continue_to_breakpoint "kernel" ".*$srcfile:$last_line.*"
+
+	    # Disable and expect to run until completion.
+	    gdb_test_no_output "disable $bpnum"
+
+	    continue_openmp_program_to_termination
+	}
+    }
 }
-
-standard_testfile parallel-for-1D.${openmp_program_extension}
-
-if {[start_openmp_program]} {
-    return -1
-}
-
-set last_line [gdb_get_line_number "kernel-last-line"]
-gdb_breakpoint $last_line
-set bpnum [get_integer_valueof "\$bpnum" 0 "get bpnum"]
-
-# First, we should hit the breakpoint.  Any thread is fine.
-gdb_continue_to_breakpoint "kernel" ".*$srcfile:$last_line.*"
-
-# Disable and expect to run until completion.
-gdb_test_no_output "disable $bpnum"
-
-continue_openmp_program_to_termination

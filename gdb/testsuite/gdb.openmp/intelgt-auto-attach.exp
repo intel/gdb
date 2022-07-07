@@ -22,30 +22,12 @@ if [use_gdb_stub] {
     return
 }
 
-if {![require_openmp_device "GPU"]} {
-    unsupported "test is aimed at Intel GPUs only"
-    return 0
-}
-
-if {[skip_openmp_tests]} {
-    untested "skipping openmp test"
-    return -1
-}
-
-standard_testfile single-task.${openmp_program_extension}
-
-set option "additional_flags=-DOMIT_REPORT"
-if {[start_openmp_program]} {
-    return -1
-}
-
 # Run until the end, potentially with BPs inside and outside the kernel.
 
-proc run_end_to_end {has_kernel_bp has_outside_bp} {
+proc run_end_to_end {has_kernel_bp has_outside_bp extension} {
     global srcfile
-    global openmp_program_extension
 
-    if {![openmp_run_to_main $openmp_program_extension]} {
+    if {![openmp_run_to_main $extension]} {
 	fail "run the program"
 	return -1
     } else {
@@ -72,11 +54,10 @@ proc run_end_to_end {has_kernel_bp has_outside_bp} {
 
 # Run up to a BP, then kill/detach an inferior.
 
-proc run_to_bp {which_bp scenario iter} {
+proc run_to_bp {which_bp scenario iter extension} {
     global srcfile
-    global openmp_program_extension
 
-    if {![openmp_run_to_main $openmp_program_extension]} {
+    if {![openmp_run_to_main $extension]} {
 	fail "run the program"
         return -1
     } else {
@@ -118,13 +99,12 @@ proc run_to_bp {which_bp scenario iter} {
 # switch to the host inferior and restart execution.  Do this with non-stop
 # mode set to either "on" or "off".
 
-proc run_restart_scenario {non_stop_mode} {
+proc run_restart_scenario {non_stop_mode extension} {
     global srcfile
-    global openmp_program_extension
 
     gdb_test_no_output "set non-stop $non_stop_mode"
 
-    if {![openmp_run_to_main $openmp_program_extension]} {
+    if {![openmp_run_to_main $extension] < 0} {
 	fail "run the program"
 	return -1
     } else {
@@ -162,32 +142,64 @@ proc run_restart_scenario {non_stop_mode} {
     continue_openmp_program_to_termination
 }
 
-# Re-run multiple times until termination, with and without
-# inside/outside BPs.
-foreach_with_prefix has_kernel_bp {0 1} {
-    foreach_with_prefix has_outside_bp {0 1} {
-        clean_restart $binfile
-        foreach_with_prefix iter {1 2 3} {
-            run_end_to_end $has_kernel_bp $has_outside_bp
-        }
+foreach extension $openmp_languages_list {
+    set device_list [omp_get_device_list $extension]
+    if {[llength $device_list] == 0} {
+	unsupported "target does not support OpenMP ${extension}"
+	continue
     }
-}
 
-# Re-run multiple times, where either the host or the gt inferior
-# is killed/detached.
+    standard_testfile "single-task.${extension}"
+    set exe "${binfile}_${extension}"
 
-foreach_with_prefix which_bp {inside outside} {
-    foreach_with_prefix scenario {kill_host detach_host detach_gt} {
-        clean_restart $binfile
-        foreach_with_prefix iter {1 2 3} {
-            run_to_bp $which_bp $scenario $iter
-        }
+    set option "additional_flags=-DOMIT_REPORT"
+    if {[prepare_openmp_for_testing ${exe} ${srcfile} $extension $option]} {
+	untested "OpenMP: Fail to prepare the test ${exe}"
+	continue
     }
-}
 
-# Run the restart scenario for non-stop mode enabled and disabled.
+    foreach device_info "${device_list}" {
+	with_test_prefix [init_openmp_device $device_info $extension] {
 
-foreach_with_prefix non_stop_mode {"off" "on"} {
-    clean_restart $binfile
-    run_restart_scenario $non_stop_mode
+	    if {![require_openmp_device "GPU"]} {
+		unsupported "test is aimed at Intel GPUs only"
+		continue
+	    }
+
+	    if {![start_openmp_program $extension]} {
+		untested "Fail to start the program"
+		continue
+	    }
+
+	    # Re-run multiple times until termination, with and without
+	    # inside/outside BPs.
+	    foreach_with_prefix has_kernel_bp {0 1} {
+		foreach_with_prefix has_outside_bp {0 1} {
+		    clean_restart $exe
+		    foreach_with_prefix iter {1 2 3} {
+			run_end_to_end $has_kernel_bp $has_outside_bp $extension
+		    }
+		}
+	    }
+
+	    # Re-run multiple times, where either the host or the gt inferior
+	    # is killed/detached.
+
+	    foreach_with_prefix which_bp {inside outside} {
+		foreach_with_prefix scenario {kill_host detach_host detach_gt} {
+		    clean_restart $exe
+		    foreach_with_prefix iter {1 2 3} {
+			run_to_bp $which_bp $scenario $iter $extension
+		    }
+		}
+	    }
+
+	    # Run the restart scenario for non-stop mode enabled and disabled.
+
+	    foreach_with_prefix non_stop_mode {"off" "on"} {
+		clean_restart $exe
+		run_restart_scenario $non_stop_mode $extension
+	    }
+	}
+    }
 }

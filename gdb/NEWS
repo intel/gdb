@@ -77,6 +77,10 @@ $_simd_lane
      Added new MI command '-thread-simd-width' which returns the SIMD width of a
      stopped thread.
 
+  ** '-thread-execution-mask'
+
+     Added new MI command for getting thread execution mask.
+
 * New remote packets
 
 qXfer:libraries:read's response

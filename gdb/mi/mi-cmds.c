@@ -329,6 +329,7 @@ add_builtin_mi_commands ()
   add_mi_cmd_mi ("target-flash-erase", mi_cmd_target_flash_erase);
   add_mi_cmd_cli ("target-select", "target", 1);
   add_mi_cmd_mi ("thread-simd-width", mi_cmd_thread_simd_width);
+  add_mi_cmd_mi ("thread-execution-mask", mi_cmd_thread_execution_mask);
   add_mi_cmd_mi ("thread-info", mi_cmd_thread_info);
   add_mi_cmd_mi ("thread-list-ids", mi_cmd_thread_list_ids);
   add_mi_cmd_mi ("thread-select", mi_cmd_thread_select,

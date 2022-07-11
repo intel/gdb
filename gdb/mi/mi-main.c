@@ -21,6 +21,7 @@
 
 #include "arch-utils.h"
 #include "extract-store-integer.h"
+#include "gdbsupport/common-gdbthread.h"
 #include "target.h"
 #include "inferior.h"
 #include "infrun.h"
@@ -545,6 +546,29 @@ mi_cmd_thread_simd_width (const char *command, const char *const *argv,
     error (_("Thread %d is not stopped."), tp->global_num);
   else
     error (_("Thread %d has no SIMD width."), tp->global_num);
+}
+
+void
+mi_cmd_thread_execution_mask (const char *command, const char *const *argv,
+			      int argc)
+{
+  if (argc != 0)
+    error (_("-thread-execution-mask: No arguments required."));
+
+  thread_info *tp = inferior_thread ();
+
+  if (tp->has_simd_lanes ())
+    {
+      ui_out *uiout = current_uiout;
+      lanes_mask_t mask = tp->active_simd_lanes_mask ();
+      uiout->field_string ("execution-mask",
+			   (string_printf (_("0x%" PRI_lanes_mask),
+			    mask)).c_str ());
+    }
+  else if (tp->executing ())
+    error (_("Thread %d is not stopped."), tp->global_num);
+  else
+    error (_("Thread %d has no execution mask."), tp->global_num);
 }
 
 void

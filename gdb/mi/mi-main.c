@@ -566,6 +566,27 @@ mi_cmd_thread_simd_width (const char *command, char **argv, int argc)
 }
 
 void
+mi_cmd_thread_execution_mask (const char *command, char **argv, int argc)
+{
+  if (argc != 0)
+    error (_("-thread-execution-mask: No arguments required."));
+
+  thread_info *tp = inferior_thread ();
+
+  if (tp->not_executing_has_registers_has_simd_lanes ())
+    {
+      ui_out *uiout = current_uiout;
+      unsigned int mask = tp->active_simd_lanes_mask ();
+      uiout->field_string ("execution-mask", (string_printf (_("0x%x"),
+			   mask)).c_str ());
+    }
+  else if (tp->executing)
+    error (_("Thread %d is not stopped."), tp->global_num);
+  else
+    error (_("Thread %d has no execution mask."), tp->global_num);
+}
+
+void
 mi_cmd_thread_select (const char *command, char **argv, int argc)
 {
   if (argc != 1)

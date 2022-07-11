@@ -32544,6 +32544,27 @@ The corresponding @value{GDBN} command is @samp{print $_simd_width}.
 (gdb)
 @end smallexample
 
+@subheading The @code{-thread-execution-mask} Command
+@findex -thread-execution-mask
+
+@smallexample
+-thread-execution-mask [--thread @var{thread-id}]
+@end smallexample
+
+Get the execution mask of the thread.
+
+@subsubheading @value{GDBN} Command
+
+There's no corresponding @value{GDBN} command.
+
+@subsubheading Example
+
+@smallexample
+-thread-execution-mask
+^done,execution-mask="0xaa"
+(gdb)
+@end smallexample
+
 @c %%%%%%%%%%%%%%%%%%%%%%%%%%%% SECTION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 @node GDB/MI Ada Tasking Commands
 @section @sc{gdb/mi} Ada Tasking Commands

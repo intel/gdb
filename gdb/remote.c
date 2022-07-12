@@ -79,6 +79,7 @@
 #include <unordered_map>
 #include "async-event.h"
 #include "gdbsupport/selftest.h"
+#include <map>
 
 /* The remote target.  */
 
@@ -210,6 +211,7 @@ enum {
   PACKET_qXfer_siginfo_read,
   PACKET_qXfer_siginfo_write,
   PACKET_qAttached,
+  PACKET_qDeltaThreadList,
 
   /* Support for conditional tracepoints.  */
   PACKET_ConditionalTracepoints,
@@ -1116,6 +1118,7 @@ public: /* Remote specific methods.  */
 
   char *remote_get_noisy_reply ();
   int remote_query_attached (int pid);
+  bool remote_query_delta_thread_list ();
   inferior *remote_add_inferior (bool fake_pid_p, int pid, int attached,
 				 int try_open_exec);
 
@@ -1279,6 +1282,14 @@ public: /* Remote specific methods.  */
   bool vcont_r_supported ();
 
   remote_features m_features;
+
+  /* Some remote targets report their thread list initially and then
+     their thread list stays fixed or only partially changes.  E.g.  targets
+     that model hardware threads.  For such targets, certain optimizations are
+     possible.  We do not need to update their entire thread list.  For example,
+     for dynamic tdesc updates on threads we query which threads have changed.
+   */
+  bool has_delta_thread_list = false;
 
 private:
 
@@ -2673,6 +2684,38 @@ remote_target::remote_query_attached (int pid)
     }
 
   return 0;
+}
+
+/* Find out if the target can send a delta thread list for changed threads.  */
+
+bool
+remote_target::remote_query_delta_thread_list ()
+{
+  struct remote_state *rs = get_remote_state ();
+  size_t size = get_remote_packet_size ();
+
+  if (m_features.packet_support (PACKET_qDeltaThreadList) == PACKET_DISABLE)
+    return false;
+
+  xsnprintf (rs->buf.data (), size, "qDeltaThreadList");
+
+  putpkt (rs->buf);
+  getpkt (&rs->buf, 0);
+
+  switch (m_features.packet_ok (rs->buf, PACKET_qDeltaThreadList))
+    {
+    case PACKET_OK:
+      if (strcmp (rs->buf.data (), "1") == 0)
+	return true;
+      break;
+    case PACKET_ERROR:
+      warning (_("Remote failure reply: %s"), rs->buf.data ());
+      break;
+    case PACKET_UNKNOWN:
+      break;
+    }
+
+  return false;
 }
 
 /* Add PID to GDB's inferior table.  If FAKE_PID_P is true, then PID
@@ -4169,26 +4212,29 @@ remote_target::update_thread_list ()
 
       /* CONTEXT now holds the current thread list on the remote
 	 target end.  Delete GDB-side threads no longer found on the
-	 target.  */
-      for (thread_info *tp : all_threads_safe ())
-	{
-	  if (tp->inf->process_target () != this)
-	    continue;
+	 target except when we have a delta thread list in which case the
+	 thread list is fixed but changes in a thread's state are still
+	 reported.  */
+      if (!this->has_delta_thread_list)
+	for (thread_info *tp : all_threads_safe ())
+	  {
+	    if (tp->inf->process_target () != this)
+	      continue;
 
-	  if (!context.contains_thread (tp->ptid))
-	    {
-	      /* Do not remove the thread if it is the last thread in
-		 the inferior.  This situation happens when we have a
-		 pending exit process status to process.  Otherwise we
-		 may end up with a seemingly live inferior (i.e.  pid
-		 != 0) that has no threads.  */
-	      if (has_single_non_exited_thread (tp->inf))
-		continue;
+	    if (!context.contains_thread (tp->ptid))
+	      {
+		/* Do not remove the thread if it is the last thread in
+		   the inferior.  This situation happens when we have a
+		   pending exit process status to process.  Otherwise we
+		   may end up with a seemingly live inferior (i.e.  pid
+		   != 0) that has no threads.  */
+		if (has_single_non_exited_thread (tp->inf))
+		  continue;
 
-	      /* Not found.  */
-	      delete_thread (tp);
-	    }
-	}
+		/* Not found.  */
+		delete_thread (tp);
+	      }
+	  }
 
       /* Remove any unreported fork child threads from CONTEXT so
 	 that we don't interfere with follow fork, which is where
@@ -5082,6 +5128,9 @@ remote_target::start_remote_1 (int from_tty, int extended_p)
 	 The '?' query below will then tell us about which threads are
 	 stopped.  */
       this->update_thread_list ();
+
+      /* Check if this target is able to send partial changes in threads.  */
+      this->has_delta_thread_list = remote_query_delta_thread_list ();
     }
   else if (m_features.packet_support (PACKET_QNonStop) == PACKET_ENABLE)
     {
@@ -5129,6 +5178,11 @@ remote_target::start_remote_1 (int from_tty, int extended_p)
 
       /* Fetch thread list.  */
       target_update_thread_list ();
+
+      /* Check if this target has a delta list of threads.  It is
+	 important to do this check *after* the update_thread_list
+	 call above to receive the list of threads initially.  */
+      this->has_delta_thread_list = remote_query_delta_thread_list ();
 
       /* Let the stub know that we want it to return the thread.  */
       set_continue_thread (any_thread_ptid);
@@ -15882,6 +15936,9 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
   add_packet_config_cmd (PACKET_vKill, "vKill", "kill", 0);
 
   add_packet_config_cmd (PACKET_qAttached, "qAttached", "query-attached", 0);
+
+  add_packet_config_cmd (PACKET_qDeltaThreadList, "qDeltaThreadList",
+			 "query-delta-thread-list", 0);
 
   add_packet_config_cmd (PACKET_ConditionalTracepoints,
 			 "ConditionalTracepoints", "conditional-tracepoints",

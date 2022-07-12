@@ -832,6 +832,24 @@ process_stratum_target::thread_pending_child (thread_info *thread)
 }
 
 bool
+process_stratum_target::has_delta_thread_list ()
+{
+  return false;
+}
+
+bool
+process_stratum_target::thread_changed (thread_info *thread)
+{
+  return false;
+}
+
+void
+process_stratum_target::set_thread_changed (thread_info *thread, bool state)
+{
+  error (_("Target does not support delta thread lists."));
+}
+
+bool
 process_stratum_target::supports_software_single_step ()
 {
   return false;

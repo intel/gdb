@@ -830,6 +830,12 @@ process_stratum_target::thread_pending_child (thread_info *thread)
 }
 
 bool
+process_stratum_target::has_fixed_thread_list ()
+{
+  return false;
+}
+
+bool
 process_stratum_target::supports_software_single_step ()
 {
   return false;

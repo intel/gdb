@@ -484,6 +484,9 @@ public:
      return this child, else nullptr.  */
   virtual thread_info *thread_pending_child (thread_info *thread);
 
+  /* Return whether this target has a fixed list of threads.  */
+  virtual bool has_fixed_thread_list ();
+
   /* Returns true if the target can software single step.  */
   virtual bool supports_software_single_step ();
 

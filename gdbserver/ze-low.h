@@ -342,6 +342,9 @@ public:
   bool supports_thread_stopped () override { return true; }
   bool thread_stopped (struct thread_info *tp) override;
 
+  /* We model h/w threads - the list is fixed.  */
+  bool has_fixed_thread_list () override { return true; }
+
   void request_interrupt () override;
 
   void pause_all (bool freeze) override;

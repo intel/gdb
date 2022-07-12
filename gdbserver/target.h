@@ -483,6 +483,19 @@ public:
      return this child, else nullptr.  */
   virtual thread_info *thread_pending_child (thread_info *thread);
 
+  /* Return whether this target can return a differential thread list.  */
+  virtual bool has_delta_thread_list ();
+
+  /* Return whether a thread of this target has changed between stops.  The
+     callee needs to handle its state appropriately, i.e. when called it
+     should reset the change status.  This defaults to FALSE.  */
+  virtual bool thread_changed (thread_info *thread);
+
+  /* Reset indicator that a thread has changed.  If you implement this
+     there's a likelyhood you will also need thread_changed.  See also
+     thread_changed.  */
+  virtual void set_thread_changed (thread_info *thread, bool state);
+
   /* Returns true if the target can software single step.  */
   virtual bool supports_software_single_step ();
 

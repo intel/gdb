@@ -36,6 +36,7 @@
 #include "dll.h"
 #include "hostio.h"
 #include <vector>
+#include <sstream>
 #include "gdbsupport/common-inferior.h"
 #include "gdbsupport/job-control.h"
 #include "gdbsupport/environ.h"
@@ -1827,7 +1828,38 @@ handle_qxfer_threads_worker (thread_info *thread, std::string *buffer)
 static bool
 handle_qxfer_threads_proper (std::string *buffer)
 {
-  *buffer += "<threads>\n";
+  /* Reply with a threads delta attribute set to the number of threads that
+    changed their target description.  */
+  std::vector<thread_info *> changed_threads;
+  bool delta_thread_list = the_target->has_delta_thread_list ();
+  if (delta_thread_list)
+    {
+      int delta_thread_count = 0;
+
+      for_each_thread ([&] (thread_info *thread)
+	{
+	  if (the_target->thread_changed (thread))
+	    {
+	      delta_thread_count++;
+	      changed_threads.push_back (thread);
+	      the_target->set_thread_changed (thread, false);
+	    }
+	});
+
+      std::stringstream ss;
+      ss << delta_thread_count;
+      string_xml_appendf (*buffer, "<threads delta=\"%s\">\n",
+			 ss.str ().c_str ());
+      /* If there are no thread changes, we can just send an empty XML body.
+	 Note also we avoid calling target pause/unpause in this case.  */
+      if (0 == delta_thread_count)
+	{
+	  *buffer += "</threads>\n";
+	  return true;
+	}
+    }
+  else
+    *buffer += "<threads>\n";
 
   /* The target may need to access memory and registers (e.g. via
      libthread_db) to fetch thread properties.  Even if don't need to
@@ -1839,10 +1871,16 @@ handle_qxfer_threads_proper (std::string *buffer)
   if (non_stop)
     target_pause_all (true);
 
-  for_each_thread ([&] (thread_info *thread)
-    {
-      handle_qxfer_threads_worker (thread, buffer);
-    });
+  if (!delta_thread_list)
+    for_each_thread ([&] (thread_info *thread)
+      {
+	handle_qxfer_threads_worker (thread, buffer);
+      });
+  else
+    for (thread_info *thread : changed_threads)
+      {
+	handle_qxfer_threads_worker (thread, buffer);
+      }
 
   if (non_stop)
     target_unpause_all (true);
@@ -2808,6 +2846,13 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 	}
 
       strcpy (own_buf, process->attached ? "1" : "0");
+      return;
+    }
+
+  if (strcmp (own_buf, "qDeltaThreadList") == 0)
+    {
+      strcpy (own_buf,
+	      the_target->has_delta_thread_list () ? "1" : "0");
       return;
     }
 

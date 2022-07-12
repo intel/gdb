@@ -5,7 +5,10 @@
      notice and this notice are preserved.  -->
 
 <!ELEMENT threads (thread*)>
-<!ATTLIST threads version CDATA #FIXED "1.0">
+<!ATTLIST threads
+ version CDATA #FIXED "1.0"
+ delta CDATA #IMPLIED
+>
 
 <!ELEMENT thread (#PCDATA)>
 

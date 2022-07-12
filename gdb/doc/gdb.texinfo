@@ -24919,6 +24919,10 @@ future connections is shown.  The available settings are:
 @tab @code{qAttached}
 @tab Querying remote process attach state.
 
+@item @code{query-fixed-thread-list}
+@tab @code{qDeltaThreadList}
+@tab Querying if the remote target supports delta thread lists.
+
 @item @code{trace-buffer-size}
 @tab @code{QTBuffer:size}
 @tab @code{set trace-buffer-size}
@@ -46322,6 +46326,25 @@ Reply:
 The remote server attached to an existing process.
 @item 0
 The remote server created a new process.
+@end table
+
+@item qDeltaThreadList
+@cindex query delta thread list, remote request
+@cindex @samp{qDeltaThreadList} packet
+Return an indication of whether the remote target supports sending
+a delta thread list.
+
+This query is used for optimization purposes, for example, to reduce
+the list of threads sent to the client.
+
+Reply:
+@table @samp
+@item 1
+The remote target has a fixed list of threads.
+@item 0
+The remote target does not have a fixed list of threads.
+@item E @var{NN}
+A badly formed request or an error was encountered.
 @end table
 
 @item Qbtrace:bts

@@ -178,6 +178,7 @@ enum {
   PACKET_qXfer_siginfo_read,
   PACKET_qXfer_siginfo_write,
   PACKET_qAttached,
+  PACKET_qFixedThreadList,
 
   /* Support for conditional tracepoints.  */
   PACKET_ConditionalTracepoints,
@@ -1042,6 +1043,7 @@ public: /* Remote specific methods.  */
 
   char *remote_get_noisy_reply ();
   int remote_query_attached (int pid);
+  bool remote_query_fixed_thread_list ();
   inferior *remote_add_inferior (bool fake_pid_p, int pid, int attached,
 				 int try_open_exec);
 
@@ -1211,6 +1213,12 @@ public: /* Remote specific methods.  */
   void packet_command (const char *args, int from_tty);
 
   remote_features m_features;
+
+  /* Some remote targets report their thread list initially and then
+     their thread list stays fixed.  E.g.  targets that model hardware
+     threads.  For such targets, certain optimizations are possible.
+     For instance, we do not need to update their thread list.  */
+  bool has_fixed_thread_list = false;
 
 private: /* data fields */
 
@@ -2556,6 +2564,40 @@ remote_target::remote_query_attached (int pid)
     }
 
   return 0;
+}
+
+/* Find out if the target has a fixed list of threads.  If so, we can
+   avoid having to update the thread list at certain point.  */
+
+bool
+remote_target::remote_query_fixed_thread_list ()
+{
+  struct remote_state *rs = get_remote_state ();
+  size_t size = get_remote_packet_size ();
+
+  if (m_features.packet_support (PACKET_qFixedThreadList) == PACKET_DISABLE)
+    return false;
+
+  xsnprintf (rs->buf.data (), size, "qFixedThreadList");
+
+  putpkt (rs->buf);
+  getpkt (&rs->buf, 0);
+
+  switch (packet_ok (rs->buf,
+		     &m_features.m_protocol_packets[PACKET_qFixedThreadList]))
+    {
+    case PACKET_OK:
+      if (strcmp (rs->buf.data (), "1") == 0)
+	return true;
+      break;
+    case PACKET_ERROR:
+      warning (_("Remote failure reply: %s"), rs->buf.data ());
+      break;
+    case PACKET_UNKNOWN:
+      break;
+    }
+
+  return false;
 }
 
 /* Add PID to GDB's inferior table.  If FAKE_PID_P is true, then PID
@@ -4035,6 +4077,10 @@ remote_target::update_thread_list ()
   struct threads_listing_context context;
   int got_list = 0;
 
+  /* If this target's list of threads is fixed, nothing will change.  */
+  if (this->has_fixed_thread_list)
+    return;
+
   /* We have a few different mechanisms to fetch the thread list.  Try
      them all, starting with the most preferred one first, falling
      back to older methods.  */
@@ -4915,6 +4961,11 @@ remote_target::start_remote (int from_tty, int extended_p)
 	 The '?' query below will then tell us about which threads are
 	 stopped.  */
       this->update_thread_list ();
+
+      /* Check if this target has a fixed list of threads.  It is
+	 important to do this check *after* the update_thread_list
+	 call above to receive the list of threads initially.  */
+      this->has_fixed_thread_list = remote_query_fixed_thread_list ();
     }
   else if (m_features.packet_support (PACKET_QNonStop) == PACKET_ENABLE)
     {
@@ -4966,6 +5017,11 @@ remote_target::start_remote (int from_tty, int extended_p)
 
       /* Fetch thread list.  */
       target_update_thread_list ();
+
+      /* Check if this target has a fixed list of threads.  It is
+	 important to do this check *after* the update_thread_list
+	 call above to receive the list of threads initially.  */
+      this->has_fixed_thread_list = remote_query_fixed_thread_list ();
 
       /* Let the stub know that we want it to return the thread.  */
       set_continue_thread (any_thread_ptid);
@@ -15535,6 +15591,9 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
 
   add_packet_config_cmd (&remote_protocol_packets[PACKET_qAttached],
 			 "qAttached", "query-attached", 0);
+
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_qFixedThreadList],
+			 "qFixedThreadList", "query-fixed-thread-list", 0);
 
   add_packet_config_cmd (&remote_protocol_packets[PACKET_ConditionalTracepoints],
 			 "ConditionalTracepoints",

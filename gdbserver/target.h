@@ -488,6 +488,9 @@ public:
   virtual bool thread_handle (ptid_t ptid, gdb_byte **handle,
 			      int *handle_len);
 
+  /* Return whether this target has a fixed list of threads.  */
+  virtual bool has_fixed_thread_list ();
+
   /* Returns true if the target can software single step.  */
   virtual bool supports_software_single_step ();
 

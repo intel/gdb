@@ -881,6 +881,12 @@ process_stratum_target::thread_handle (ptid_t ptid, gdb_byte **handle,
 }
 
 bool
+process_stratum_target::has_fixed_thread_list ()
+{
+  return false;
+}
+
+bool
 process_stratum_target::supports_software_single_step ()
 {
   return false;

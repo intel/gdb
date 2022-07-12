@@ -23899,6 +23899,10 @@ are:
 @tab @code{qAttached}
 @tab Querying remote process attach state.
 
+@item @code{query-fixed-thread-list}
+@tab @code{qFixedThreadList}
+@tab Querying if the remote target's thread list is fixed.
+
 @item @code{trace-buffer-size}
 @tab @code{QTBuffer:size}
 @tab @code{set trace-buffer-size}
@@ -43620,6 +43624,26 @@ Reply:
 The remote server attached to an existing process.
 @item 0
 The remote server created a new process.
+@item E @var{NN}
+A badly formed request or an error was encountered.
+@end table
+
+@item qFixedThreadList
+@cindex query fixed thread list, remote request
+@cindex @samp{qFixedThreadList} packet
+Return an indication of whether the remote target's thread list
+is fixed.  This can be the case, for instance, if the target models
+hardware threads.
+
+This query is used for optimization purposes, for example, to omit
+updating the target's thread list.
+
+Reply:
+@table @samp
+@item 1
+The remote target has a fixed list of threads.
+@item 0
+The remote target does not have a fixed list of threads.
 @item E @var{NN}
 A badly formed request or an error was encountered.
 @end table

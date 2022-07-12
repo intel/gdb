@@ -2859,6 +2859,13 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
       return;
     }
 
+  if (strcmp (own_buf, "qFixedThreadList") == 0)
+    {
+      strcpy (own_buf,
+	      the_target->has_fixed_thread_list () ? "1" : "0");
+      return;
+    }
+
   if (startswith (own_buf, "qCRC:"))
     {
       /* CRC check (compare-section).  */

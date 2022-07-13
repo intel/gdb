@@ -550,6 +550,27 @@ mi_cmd_target_flash_erase (const char *command, const char *const *argv,
 }
 
 void
+mi_cmd_thread_simd_width (const char *command, const char *const *argv,
+			  int argc)
+{
+  if (argc != 0)
+    error (_("-thread-simd-width: No arguments required."));
+
+  thread_info *tp = inferior_thread ();
+
+  if (tp->has_simd_lanes ())
+    {
+      ui_out *uiout = current_uiout;
+      unsigned int width = tp->get_simd_width ();
+      uiout->field_unsigned ("simd-width", width);
+    }
+  else if (tp->executing ())
+    error (_("Thread %d is not stopped."), tp->global_num);
+  else
+    error (_("Thread %d has no SIMD width."), tp->global_num);
+}
+
+void
 mi_cmd_thread_select (const char *command, const char *const *argv, int argc)
 {
   if (argc != 1)

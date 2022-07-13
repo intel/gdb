@@ -32521,6 +32521,29 @@ args=[@{name="format",value="0x8048e9c \"%*s%c %d %c\\n\""@},
 (gdb)
 @end smallexample
 
+@subheading The @code{-thread-simd-width} Command
+@findex -thread-simd-width
+
+@subsubheading Synopsis
+
+@smallexample
+-thread-simd-width --thread @var{thread-id}
+@end smallexample
+
+Get the SIMD width of the thread.
+
+@subsubheading @value{GDBN} Command
+
+The corresponding @value{GDBN} command is @samp{print $_simd_width}.
+
+@subsubheading Example
+
+@smallexample
+-thread-simd-width --thread 5
+^done,simd-width="8"
+(gdb)
+@end smallexample
+
 @c %%%%%%%%%%%%%%%%%%%%%%%%%%%% SECTION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 @node GDB/MI Ada Tasking Commands
 @section @sc{gdb/mi} Ada Tasking Commands

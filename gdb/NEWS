@@ -87,6 +87,11 @@ maint jit dump
   ** Stop events include execution-mask, simd-width and hit-lanes-mask fields if
      available.
 
+  ** '-thread-simd-width'
+
+     Added new MI command '-thread-simd-width' which returns the SIMD width of a
+     stopped thread.
+
 * New remote packets
 
 qXfer:libraries:read's response

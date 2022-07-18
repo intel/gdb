@@ -4749,8 +4749,11 @@ proc gdb_compile {source dest type options} {
 	# default, unless you pass -Wno-unknown-warning-option as well.
 	# We do that here, so that individual testcases don't have to
 	# worry about it.
-	if {[test_compiler_info "clang-*"]} {
-	  lappend new_options "additional_flags=-Wno-unknown-warning-option"
+	if {[test_compiler_info "clang-*"] || [test_compiler_info "icx-*"]} {
+	    lappend new_options "additional_flags=-Wno-unknown-warning-option"
+	} elseif {[test_compiler_info "icc-*"]} {
+	    # This is the equivalent for the icc compiler.
+	    lappend new_options "additional_flags=-diag-disable=10148"
 	}
 
 	# Starting with 2021.7.0 (recognized as icc-20-21-7 by GDB) icc and

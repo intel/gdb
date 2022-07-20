@@ -1944,17 +1944,29 @@ proc mi_get_stop_line {} {
       set prompt_re "$mi_gdb_prompt$"
   }
 
+  set line ""
+  set nlines 0
   gdb_expect {
-      -re ".*line=\"(\[0-9\]*)\".*\r\n$prompt_re" {
-	  return $expect_out(1,string)
+      -re "\\\*stopped,\[^\\\r\\\n\]*line=\"(\[0-9\]*)\"\[^\\\r\\\n\]*\r\n" {
+	  set line $expect_out(1,string)
+	  incr nlines
+	  exp_continue
       }
-      -re ".*$mi_gdb_prompt" {
-	  fail "wait for stop (unexpected output)"
+      -re "$mi_gdb_prompt" {
+	  if {$nlines == 0} {
+	      fail "wait for stop, not stopped (unexpected output)"
+	  }
+	  if {$nlines > 1} {
+	      fail "wait for stop, multiple lines (unexpected output)"
+	  }
       }
       timeout {
+	  if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
 	  fail "wait for stop (timeout)"
       }
   }
+
+  return $line
 }
 
 # Run a MI test embedded in comments in a C file.

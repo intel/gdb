@@ -44,6 +44,7 @@ gdb_test "print two == input\[id\]" "true" "1D access via id<1>"
 # long) which is a special case.  As size_t is returned by e.g. get_linear_id,
 # passing size_t as the argument of [] is natural and we test that our
 # xmethods script treats these typdefs appropriately.
+setup_kfail "JIRA DOQG/3192" "*-*-*"
 gdb_test "print two == input\[(size_t) id\]" "true" \
     "1D access via id<1> cast to typedef"
 

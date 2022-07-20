@@ -538,7 +538,7 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
 	{
 	  /* Read the address to a temporary buffer.  */
 	  CORE_ADDR addr = 0;
-	  grf.read_integer (retval_regnum, address_size_byte,
+	  grf.read_primitive (retval_regnum, address_size_byte,
 			    (gdb_byte *) &addr);
 	  /* Read the value to the resulting buffer.  */
 	  target_read_memory (addr, readbuf, type_length);
@@ -563,7 +563,7 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
       else if (valtype->is_vector ())
 	grf.read_vector (retval_regnum, valtype, readbuf);
       else if (type_length <= max_primitive_size)
-	grf.read_integer (retval_regnum, type_length, readbuf);
+	grf.read_primitive (retval_regnum, type_length, readbuf);
 
       return RETURN_VALUE_REGISTER_CONVENTION;
     }

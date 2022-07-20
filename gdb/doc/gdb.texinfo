@@ -34140,6 +34140,34 @@ There's no corresponding @value{GDBN} command.
 (gdb)
 @end smallexample
 
+@subheading The @code{-thread-hit-lanes-mask} Command
+@findex -thread-hit-lanes-mask
+
+@smallexample
+-thread-hit-lanes-mask [--thread @var{thread-id}]
+@end smallexample
+
+The command returns a valid value only if the specified thread is stopped due to
+the breakpoint hit and has SIMD lanes.  Non-zero bits encode active SIMD lanes
+which have hit the BP.  For non-conditional breakpoints that would be all active
+lanes of the stopped thread, for conditional breakpoints active lanes for which
+the condition is true.
+
+@subsubheading @value{GDBN} Command
+
+There's no corresponding @value{GDBN} command.
+
+@subsubheading Example
+
+@smallexample
+-thread-hit-lanes-mask
+^done,hit-lanes-mask="0x8"
+(gdb)
+@end smallexample
+
+In this example, the value of @var{hit-lanes-mask} field is 0x8, meaning only
+SIMD lane 3 was hit by the breakpoint.
+
 @c %%%%%%%%%%%%%%%%%%%%%%%%%%%% SECTION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 @node GDB/MI Ada Tasking Commands
 @section @sc{gdb/mi} Ada Tasking Commands

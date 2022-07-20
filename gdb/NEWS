@@ -77,6 +77,10 @@ info devices
      breakpoint, and the thread has SIMD lanes, 'hit-lanes-mask' field contains
      a hex mask of the SIMD lanes which were hit by the breakpoint.
 
+  ** '-thread-hit-lanes-mask'
+
+     Added new MI command for getting thread's breakpoint hit lanes mask.
+
 * New remote packets
 
 qXfer:libraries:read's response

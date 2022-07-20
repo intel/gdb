@@ -4648,6 +4648,13 @@ proc gdb_compile {source dest type options} {
 	lappend new_options "additional_flags=-Wno-unknown-warning-option"
     }
 
+    # Starting with 2021.7.0 (recognized as icc-20-21-7 by GDB) icc and icpc
+    # are marked as deprecated and both compilers emit the remark #10441.  To
+    # let GDB still compile successfully, we disable these warnings here.
+    if {!$getting_compiler_info && [test_compiler_info {icc-20-21-[7-9]}]} {
+	lappend new_options "additional_flags=-diag-disable=10441"
+    }
+
     # Treating .c input files as C++ is deprecated in Clang, so
     # explicitly force C++ language.
     if { !$getting_compiler_info
@@ -4879,6 +4886,17 @@ proc gdb_compile {source dest type options} {
 
     # Prune uninteresting compiler (and linker) output.
     regsub "Creating library file: \[^\r\n\]*\[\r\n\]+" $result "" result
+
+    # Starting with 2021.7.0 icc and icpc are marked as deprecated and both
+    # compilers emit a remark #10441.  To let GDB still compile successfully,
+    # we disable these warnings.  When $getting_compiler_info is true however,
+    # we do not yet know the compiler (nor its version) and instead prune these
+    # lines from the compiler output to let the get_compiler_info pass.
+    if {$getting_compiler_info} {
+	regsub \
+	    "(icc|icpc): remark #10441: The Intel\\(R\\) C\\+\\+ Compiler Classic \\(ICC\\) is deprecated\[^\r\n\]*" \
+	    "$result" "" result
+    }
 
     regsub "\[\r\n\]*$" "$result" "" result
     regsub "^\[\r\n\]*" "$result" "" result

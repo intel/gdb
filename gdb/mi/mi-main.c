@@ -587,6 +587,24 @@ mi_cmd_thread_execution_mask (const char *command, char **argv, int argc)
 }
 
 void
+mi_cmd_thread_hit_lanes_mask (const char *command, char **argv, int argc)
+{
+  if (argc != 0)
+    error (_("-thread-hit-lanes-mask: No arguments required."));
+
+  thread_info *tp = inferior_thread ();
+  ui_out *uiout = current_uiout;
+  bpstat *bp = tp->control.stop_bpstat;
+
+  if (bp != nullptr && tp->has_simd_lanes ())
+    uiout->field_fmt ("hit-lanes-mask", "0x%x", bp->simd_lane_mask);
+  else if (tp->executing ())
+    error (_("Thread %d is not stopped."), tp->global_num);
+  else
+    error (_("Thread %d has no hit lanes mask."), tp->global_num);
+}
+
+void
 mi_cmd_thread_select (const char *command, char **argv, int argc)
 {
   if (argc != 1)

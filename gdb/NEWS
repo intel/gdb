@@ -31,6 +31,11 @@ thread apply thread-list|all|all-lanes -unavailable
   restore previous behaviour of applying also to unavailable
   threads the option "-unavailable" is added.
 
+info threads [-gid] [-stopped] [ID]...
+  This command now takes an optional flag, '-stopped', that causes only
+  the stopped threads to be printed.  The flag can be useful to get a
+  reduced list when there is a large number of unstopped threads.
+
 * Add convenience variable `$_simd_lane`.
 
 * Python API

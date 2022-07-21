@@ -1247,6 +1247,24 @@ pc_in_thread_step_range (CORE_ADDR pc, struct thread_info *thread)
 	  && pc < thread->control.step_range_end);
 }
 
+/* The options for the "info threads" command.  */
+
+struct info_threads_opts
+{
+  /* For "-gid".  */
+  bool show_global_ids = false;
+};
+
+static const gdb::option::option_def info_threads_option_defs[] = {
+
+  gdb::option::flag_option_def<info_threads_opts> {
+    "gid",
+    [] (info_threads_opts *opts) { return &opts->show_global_ids; },
+    N_("Show global thread IDs."),
+  },
+
+};
+
 /* Helper for print_thread_info.  Returns true if THR should be
    printed.  If REQUESTED_THREADS, a list of GDB ids/ranges, is not
    NULL, only print THR if its ID is included in the list.  GLOBAL_IDS
@@ -1255,11 +1273,13 @@ pc_in_thread_step_range (CORE_ADDR pc, struct thread_info *thread)
    is a thread from the process PID.  Otherwise, threads from all
    attached PIDs are printed.  If both REQUESTED_THREADS is not NULL
    and PID is not -1, then the thread is printed if it belongs to the
-   specified process.  Otherwise, an error is raised.  */
+   specified process.  Otherwise, an error is raised.  OPTS is the
+   options of the "info threads" command.  */
 
 static bool
 should_print_thread (const char *requested_threads, int default_inf_num,
-		     int global_ids, int pid, struct thread_info *thr)
+		     int global_ids, int pid, thread_info *thr,
+		     info_threads_opts opts)
 {
   if (requested_threads != NULL && *requested_threads != '\0')
     {
@@ -1313,12 +1333,12 @@ thread_target_id_str (thread_info *tp)
    ACTIVE shows whether we print active lanes now.
    CURRENT shows whether we print the current lane of the current thread.
    DISPLAY_MASK lanes, which should be printed, have bit 1 in the mask.
-   SHOW_GLOBAL_IDS indicates whther global IDs should be shown.  */
+   OPTS is the command options.  */
 
 static void
 print_thread_row (struct ui_out *uiout, thread_info *tp,
 		  bool is_active, bool is_current, unsigned int display_mask,
-		  int show_global_ids)
+		  info_threads_opts opts)
 {
   /* Vector of lanes to display in this row.  */
   std::vector<int> lanes;
@@ -1342,7 +1362,7 @@ print_thread_row (struct ui_out *uiout, thread_info *tp,
       uiout->field_string ("id-in-tg", print_thread_id (tp, &lanes));
     }
 
-  if (show_global_ids || uiout->is_mi_like_p ())
+  if (opts.show_global_ids || uiout->is_mi_like_p ())
     uiout->field_signed ("id", tp->global_num);
 
   /* For the CLI, we stuff everything into the target-id field.
@@ -1436,7 +1456,7 @@ print_thread_row (struct ui_out *uiout, thread_info *tp,
 static void
 print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 		     int global_ids, int pid,
-		     int show_global_ids)
+		     info_threads_opts opts)
 {
   int default_inf_num = current_inferior ()->num;
 
@@ -1473,7 +1493,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	for (thread_info *tp : all_threads ())
 	  {
 	    if (!should_print_thread (requested_threads, default_inf_num,
-				      global_ids, pid, tp))
+				      global_ids, pid, tp, opts))
 	      continue;
 
 	    /* Switch inferiors so we're looking at the right
@@ -1513,12 +1533,12 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	    return;
 	  }
 
-	table_emitter.emplace (uiout, show_global_ids ? 5 : 4,
+	table_emitter.emplace (uiout, opts.show_global_ids ? 5 : 4,
 			       n_threads, "threads");
 
 	uiout->table_header (1, ui_left, "current", "");
 	uiout->table_header (th_col_width, ui_left, "id-in-tg", "Id");
-	if (show_global_ids)
+	if (opts.show_global_ids)
 	  uiout->table_header (4, ui_left, "id", "GId");
 	uiout->table_header (target_id_col_width, ui_left,
 			     "target-id", "Target Id");
@@ -1538,7 +1558,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	    current_exited = true;
 
 	  if (!should_print_thread (requested_threads, default_inf_num,
-				    global_ids, pid, tp))
+				    global_ids, pid, tp, opts))
 	    continue;
 
 	  /* Switch to the thread (and inferior / target).  */
@@ -1549,8 +1569,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	  bool current = (tp == current_thread);
 	  if (tp->state != THREAD_STOPPED)
 	    {
-	      print_thread_row (uiout, tp, false, current, 0x0,
-				show_global_ids);
+	      print_thread_row (uiout, tp, false, current, 0x0, opts);
 	      continue;
 	    }
 
@@ -1578,7 +1597,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 		  bool is_lane_active
 		    = tp->is_simd_lane_active (tp->current_simd_lane ());
 		  print_thread_row (uiout, tp, is_lane_active, true,
-				    selected_lane_mask, show_global_ids);
+				    selected_lane_mask, opts);
 
 		  /* Do not show the current lane of the current thread
 		     for the second time.  */
@@ -1588,7 +1607,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	      /* Print other active lanes if any.  */
 	      if (active_lanes_to_display != 0)
 		print_thread_row (uiout, tp, true, false,
-				  active_lanes_to_display, show_global_ids);
+				  active_lanes_to_display, opts);
 
 	      /* We do not print inactive SIMD lanes for threads with non-zero
 		 active mask.  */
@@ -1597,8 +1616,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	    {
 	      /* All lanes are inactive.  We print one row for such a thread,
 		 and do not show any SIMD lanes.  */
-	      print_thread_row (uiout, tp, false, current, 0x0,
-				show_global_ids);
+	      print_thread_row (uiout, tp, false, current, 0x0, opts);
 	    }
 	}
 
@@ -1628,26 +1646,9 @@ void
 print_thread_info (struct ui_out *uiout, const char *requested_threads,
 		   int pid)
 {
-  print_thread_info_1 (uiout, requested_threads, 1, pid, 0);
+  info_threads_opts opts {false};
+  print_thread_info_1 (uiout, requested_threads, 1, pid, opts);
 }
-
-/* The options for the "info threads" command.  */
-
-struct info_threads_opts
-{
-  /* For "-gid".  */
-  bool show_global_ids = false;
-};
-
-static const gdb::option::option_def info_threads_option_defs[] = {
-
-  gdb::option::flag_option_def<info_threads_opts> {
-    "gid",
-    [] (info_threads_opts *opts) { return &opts->show_global_ids; },
-    N_("Show global thread IDs."),
-  },
-
-};
 
 /* Create an option_def_group for the "info threads" options, with
    IT_OPTS as context.  */
@@ -1673,7 +1674,7 @@ info_threads_command (const char *arg, int from_tty)
   gdb::option::process_options
     (&arg, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_ERROR, grp);
 
-  print_thread_info_1 (current_uiout, arg, 0, -1, it_opts.show_global_ids);
+  print_thread_info_1 (current_uiout, arg, 0, -1, it_opts);
 }
 
 /* Completer for the "info threads" command.  */

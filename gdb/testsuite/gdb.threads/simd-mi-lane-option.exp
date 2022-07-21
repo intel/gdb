@@ -1,4 +1,4 @@
-# Copyright 2022-2023 Free Software Foundation, Inc.
+# Copyright 2022 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -45,6 +45,11 @@ foreach device $sycl_device_list {
 	if {![mi_runto_main [sycl_get_device_args $device]]} {
 	    continue
 	}
+
+	# Check list-features that simd-lanes is supported.
+	mi_gdb_test "-list-features" \
+	    "\\^done,features=\\\[.*\"simd-lanes\".*\\\]" \
+	    "-list-features includes \"simd-lanes\""
 
 	set condition_line [gdb_get_line_number "kernel-condition-line"]
 	set odd_branch_line [gdb_get_line_number "kernel-odd-branch"]

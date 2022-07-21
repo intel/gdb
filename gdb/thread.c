@@ -1253,6 +1253,8 @@ struct info_threads_opts
 {
   /* For "-gid".  */
   bool show_global_ids = false;
+  /* For "-stopped".  */
+  bool show_stopped_threads = false;
 };
 
 static const gdb::option::option_def info_threads_option_defs[] = {
@@ -1261,6 +1263,11 @@ static const gdb::option::option_def info_threads_option_defs[] = {
     "gid",
     [] (info_threads_opts *opts) { return &opts->show_global_ids; },
     N_("Show global thread IDs."),
+  },
+  gdb::option::flag_option_def<info_threads_opts> {
+    "stopped",
+    [] (info_threads_opts *opts) { return &opts->show_stopped_threads; },
+    N_("Show stopped threads only."),
   },
 
 };
@@ -1302,6 +1309,11 @@ should_print_thread (const char *requested_threads, int default_inf_num,
     }
 
   if (thr->state == THREAD_EXITED)
+    return false;
+
+  /* Skip a running thread if the user wants stopped threads only.  */
+  bool is_stopped = (thr->state == THREAD_STOPPED);
+  if (opts.show_stopped_threads && !is_stopped)
     return false;
 
   return true;
@@ -1528,7 +1540,8 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	    if (requested_threads == NULL || *requested_threads == '\0')
 	      uiout->message (_("No threads.\n"));
 	    else
-	      uiout->message (_("No threads match '%s'.\n"),
+	      uiout->message (_("No %sthreads match '%s'.\n"),
+			      (opts.show_stopped_threads ? "stopped " : ""),
 			      requested_threads);
 	    return;
 	  }
@@ -1646,7 +1659,7 @@ void
 print_thread_info (struct ui_out *uiout, const char *requested_threads,
 		   int pid)
 {
-  info_threads_opts opts {false};
+  info_threads_opts opts {false, false};
   print_thread_info_1 (uiout, requested_threads, 1, pid, opts);
 }
 

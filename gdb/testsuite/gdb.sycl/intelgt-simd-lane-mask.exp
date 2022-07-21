@@ -1,0 +1,84 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for checking active lanes in case of SIMD-16 and SIMD-32.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+# Set the -O2 flag explicitly.
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug "optimize=-O2"}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set line_1 [gdb_get_line_number "simd\.1"]
+	set line_2 [gdb_get_line_number "simd\.2"]
+
+	gdb_breakpoint $line_1 {temporary}
+	gdb_continue_to_breakpoint "simd.1" ".*$srcfile:$line_1.*"
+
+	set fill "\[^\r\n\]+"
+
+	with_test_prefix "simd_width_16" {
+	    gdb_assert {[current_thread_has_simd_lanes]}
+	    gdb_test "print \$_simd_width" " = 16"
+
+	    for {set lane 0} {$lane < 16} {incr lane 2} {
+		gdb_test "thread :$lane" \
+		    "Switching to thread ${fill}:$lane ${fill} lane $lane\\).*"
+	    }
+	    for {set lane 1} {$lane < 16} {incr lane 2} {
+		gdb_test "thread :$lane" "SIMD lane $lane is inactive in thread.*"
+	    }
+	}
+
+	gdb_breakpoint $line_2 {temporary}
+	gdb_continue_to_breakpoint "simd.2" ".*$srcfile:$line_2.*"
+
+	with_test_prefix "simd_width_32" {
+	    gdb_assert {[current_thread_has_simd_lanes]}
+	    gdb_test "print \$_simd_width" " = 32"
+
+	    for {set lane 1} {$lane < 32} {incr lane 2} {
+		gdb_test "thread :$lane" \
+		    "Switching to thread ${fill}:$lane ${fill} lane $lane\\).*"
+	    }
+	    for {set lane 0} {$lane < 32} {incr lane 2} {
+		gdb_test "thread :$lane" "SIMD lane $lane is inactive in thread.*"
+	    }
+	}
+    }
+}

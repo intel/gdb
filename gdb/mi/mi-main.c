@@ -1697,6 +1697,7 @@ mi_cmd_list_features (const char *command, char **argv, int argc)
       uiout->field_string (NULL, "undefined-command-error-code");
       uiout->field_string (NULL, "exec-run-start-option");
       uiout->field_string (NULL, "data-disassemble-a-option");
+      uiout->field_string (nullptr, "simd-lanes");
 
       if (ext_lang_initialized_p (get_ext_lang_defn (EXT_LANG_PYTHON)))
 	uiout->field_string (NULL, "python");

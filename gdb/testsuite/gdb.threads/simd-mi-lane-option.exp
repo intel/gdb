@@ -40,6 +40,11 @@ if {[mi_start_sycl_program] < 0} {
     return -1
 }
 
+# Check list-features that simd-lanes is supported.
+mi_gdb_test "-list-features" \
+    "\\^done,features=\\\[.*\"simd-lanes\".*\\\]" \
+    "-list-features includes \"simd-lanes\""
+
 set condition_line [gdb_get_line_number "kernel-condition-line"]
 set odd_branch_line [gdb_get_line_number "kernel-odd-branch"]
 

@@ -1311,12 +1311,12 @@ should_print_thread (const char *requested_threads, int default_inf_num,
   if (thr->state == THREAD_EXITED)
     return false;
 
-  /* Skip a running thread if the user wants stopped threads only.  */
-  bool is_stopped = (thr->state == THREAD_STOPPED);
-  if (opts.show_stopped_threads && !is_stopped)
-    return false;
+  /* Does the user want to restrict the list to stopped threads only?  */
+  if (!opts.show_stopped_threads)
+    return true;
 
-  return true;
+  /* Otherwise, show only stopped threads whose registers are available.  */
+  return (thr->state == THREAD_STOPPED) && !thr->is_unavailable ();
 }
 
 /* Return the string to display in "info threads"'s "Target Id"
@@ -1504,13 +1504,12 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 
 	for (thread_info *tp : all_threads ())
 	  {
+	    /* Switch to the thread to evaluate its SIMD lane state.  */
+	    switch_to_thread (tp);
+
 	    if (!should_print_thread (requested_threads, default_inf_num,
 				      global_ids, pid, tp, opts))
 	      continue;
-
-	    /* Switch inferiors so we're looking at the right
-	       target stack.  */
-	    switch_to_inferior_no_thread (tp->inf);
 
 	    target_id_col_width
 	      = std::max (target_id_col_width,

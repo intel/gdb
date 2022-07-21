@@ -20,6 +20,13 @@ info devices
   one to uniquely identify devices in 'info inferiors' with devices
   displayed in 'info devices'.
 
+* Changed commands
+
+info threads [-gid] [-stopped] [ID]...
+  This command now takes an optional flag, '-stopped', that causes only
+  the stopped threads to be printed.  The flag can be useful to get a
+  reduced list when there is a large number of unstopped threads.
+
 * Add convenience variable `$_simd_lane`.
 
 * MI changes

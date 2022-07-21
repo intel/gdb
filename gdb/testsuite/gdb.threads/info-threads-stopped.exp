@@ -1,0 +1,75 @@
+# Copyright (C) 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test for the '-stopped' flag of the "info threads" command.
+
+standard_testfile
+
+if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
+	 executable debug] != "" } {
+    return -1
+}
+
+save_vars { GDBFLAGS } {
+    append GDBFLAGS " -ex \"set non-stop on\""
+    clean_restart $binfile
+}
+
+gdb_breakpoint "something"
+gdb_run_cmd
+
+# Two threads hit the bp.
+set fill "\[^\r\n\]+"
+set num_hits 0
+gdb_test_multiple "" "hit the breakpoint" -lbl {
+    -re "\r\nThread ${fill} hit Breakpoint 1${fill}" {
+	incr num_hits
+	if {$num_hits < 2} {
+	    exp_continue
+	}
+    }
+    -re "\r\n$gdb_prompt " {
+	exp_continue
+    }
+}
+gdb_assert {$num_hits == 2} "two threads hit the bp"
+
+# Count the number of running/stopped threads reported
+# by the "info threads" command.
+foreach flag {"" "-stopped"} {
+    set num_running 0
+    set num_stopped 0
+    gdb_test_multiple "info threads $flag" "info threads $flag" {
+	-re "Id${fill}Target Id${fill}Frame${fill}" {
+	    exp_continue
+	}
+	-re "^\r\n. ${decimal}${fill}Thread ${fill}.running." {
+	    incr num_running
+	    exp_continue
+	}
+	-re "^\r\n. ${decimal}${fill}Thread ${fill}something ${fill}" {
+	    incr num_stopped
+	    exp_continue
+	}
+	-re "^\r\n$gdb_prompt $" {
+	    gdb_assert {$num_stopped == 2} "$gdb_test_name: num stopped"
+	    if {$flag eq ""} {
+		gdb_assert {$num_running == 3} "$gdb_test_name: num running"
+	    } else {
+		gdb_assert {$num_running == 0} "$gdb_test_name: num running"
+	    }
+	}
+    }
+}

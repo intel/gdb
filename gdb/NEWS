@@ -225,6 +225,13 @@ GNU/Linux/LoongArch		loongarch*-*-linux*
 
 S+core				score-*-*
 
+* Changed commands
+
+info threads [-gid] [-stopped] [ID]...
+  This command now takes an optional flag, '-stopped', that causes only
+  the stopped threads to be printed.  The flag can be useful to get a
+  reduced list when there is a large number of unstopped threads.
+
 * Python API
 
   ** New function gdb.add_history(), which takes a gdb.Value object

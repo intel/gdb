@@ -1378,7 +1378,11 @@ should_print_thread (const char *requested_threads,
   if (thr->state == THREAD_EXITED)
     return false;
 
-  bool is_stopped = (thr->state == THREAD_STOPPED);
+  /* Switch to the thread to evaluate its availability status.  */
+  switch_to_thread (thr);
+
+  bool is_stopped = ((thr->state == THREAD_STOPPED)
+		     && !thr->is_unavailable ());
   if (opts.show_stopped_threads && is_stopped)
     return true;
 
@@ -1626,10 +1630,6 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	    if (!should_print_thread (requested_threads, opts,
 				      default_inf_num, global_ids, pid, tp))
 	      continue;
-
-	    /* Switch inferiors so we're looking at the right
-	       target stack.  */
-	    switch_to_inferior_no_thread (tp->inf);
 
 	    target_id_col_width
 	      = std::max (target_id_col_width,

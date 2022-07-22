@@ -4605,6 +4605,25 @@ bpstat::bpstat (const bpstat &other)
     old_val = release_value (other.old_val->copy ());
 }
 
+/* See breakpoint.h.  */
+
+bool
+bpstat::find_hit_lane_mask (unsigned int &hit_lane_mask) const
+{
+  const bpstat *current = this;
+  while (current != nullptr)
+    {
+      /* If it is a real stop, take the corresponding hit_lane_mask.  */
+      if (current->stop != 0)
+	{
+	  hit_lane_mask = current->hit_lane_mask;
+	  return true;
+	}
+      current = current->next;
+    }
+  return false;
+}
+
 /* Return a copy of a bpstat.  Like "bs1 = bs2" but all storage that
    is part of the bpstat is copied as well.  */
 

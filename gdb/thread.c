@@ -1343,6 +1343,10 @@ print_thread_row (struct ui_out *uiout, thread_info *tp,
 	      uiout->field_fmt ("execution-mask", "0x%x", mask);
 	      unsigned int width = tp->get_simd_width ();
 	      uiout->field_fmt ("simd-width", "%u", width);
+	      bpstat *bp = tp->control.stop_bpstat;
+	      if (bp != nullptr)
+		uiout->field_fmt ("hit-lanes-mask", "0x%x",
+				  bp->simd_lane_mask);
 	    }
 	}
       else

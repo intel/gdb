@@ -329,6 +329,12 @@ GNU/Linux/OpenRISC		or1k*-*-linux*
 
      Added new MI command for getting thread execution mask.
 
+  ** Added 'hit-lanes-mask' field to '-thread-info' output.
+
+     If the '-thread-info' output contains a thread which is stopped at a
+     breakpoint, and the thread has SIMD lanes, 'hit-lanes-mask' field contains
+     a hex mask of the SIMD lanes which were hit by the breakpoint.
+
 * New remote packets
 
 qXfer:libraries:read's response

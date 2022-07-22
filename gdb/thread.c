@@ -1355,6 +1355,9 @@ print_thread_row (struct ui_out *uiout, thread_info *tp,
       unsigned int width = tp->get_simd_width ();
       uiout->field_string ("simd-width", (string_printf (_("%d"),
 			   width)).c_str ());
+      bpstat *bp = tp->control.stop_bpstat;
+      if (bp != nullptr)
+	uiout->field_fmt ("hit-lanes-mask", _("0x%x"), bp->simd_lane_mask);
     }
 }
 

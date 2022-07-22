@@ -1454,6 +1454,9 @@ struct bpstat
 
     /* Lanes that hit the breakpoint.  */
     lanes_mask_t hit_lane_mask;
+
+   /* Find hit_lane_mask.  */
+    bool find_hit_lane_mask (lanes_mask_t &hit_lane_mask) const;
   };
 
 enum inf_context

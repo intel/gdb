@@ -50,7 +50,9 @@ info devices
 
      If a thread is stopped, available, and has SIMD lanes, MI output
      of '-thread-info' for such a thread contains 'execution-mask' and
-     'simd-width' fields.
+     'simd-width' fields.  If a thread is stopped at a breakpoint, add
+     'hit-lanes-mask' to its output.  The mask encodes for which lanes
+     the breakpoint condition was evaluated to true.
 
   ** '-device-info'
 
@@ -68,6 +70,12 @@ info devices
   ** '-thread-execution-mask'
 
      Added new MI command for getting thread execution mask.
+
+  ** Added 'hit-lanes-mask' field to '-thread-info' output.
+
+     If the '-thread-info' output contains a thread which is stopped at a
+     breakpoint, and the thread has SIMD lanes, 'hit-lanes-mask' field contains
+     a hex mask of the SIMD lanes which were hit by the breakpoint.
 
 * New remote packets
 

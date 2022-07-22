@@ -1424,6 +1424,9 @@ struct bpstat
 
     /* Tell which SIMD lanes are hit the BP.  */
     unsigned int hit_lane_mask;
+
+   /* Find hit_lane_mask.  */
+    bool find_hit_lane_mask (unsigned int& hit_lane_mask) const;
   };
 
 enum inf_context

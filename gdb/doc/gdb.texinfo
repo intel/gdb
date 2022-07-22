@@ -31612,6 +31612,11 @@ field is only present if the thread has SIMD lanes.
 @item simd-width
 SIMD lanes width of the thread.  This field is only present if the thread has
 SIMD lanes.
+
+@item hit-lanes-mask
+If the thread is stopped at a breakpoint, this field contains a hexadecimal mask
+of the SIMD lanes which were hit by the breakpoint.  This field is only present
+if the thread has SIMD lanes.
 @end table
 
 @node GDB/MI Ada Exception Information

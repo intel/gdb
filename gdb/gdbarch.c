@@ -259,6 +259,7 @@ struct gdbarch
   gdbarch_get_shstk_pointer_ftype *get_shstk_pointer;
   gdbarch_infcall_bp_address_ftype *infcall_bp_address;
   gdbarch_reserve_stack_space_ftype *reserve_stack_space;
+  gdbarch_get_inferior_call_return_value_ftype *get_inferior_call_return_value;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -386,6 +387,7 @@ gdbarch_alloc (const struct gdbarch_info *info,
   gdbarch->read_core_file_mappings = default_read_core_file_mappings;
   gdbarch->is_inferior_device = false;
   gdbarch->reserve_stack_space = default_reserve_stack_space;
+  gdbarch->get_inferior_call_return_value = default_get_inferior_call_return_value;
   /* gdbarch_alloc() */
 
   return gdbarch;
@@ -630,8 +632,8 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of set_shstk_pointer, has predicate.  */
   /* Skip verify of get_shstk_pointer, has predicate.  */
   /* Skip verify of infcall_bp_address, has predicate.  */
-  if (gdbarch->reserve_stack_space == default_reserve_stack_space)
-    log.puts ("\n\treserve_stack_space");
+  /* Skip verify of reserve_stack_space, invalid_p == 0 */
+  /* Skip verify of get_inferior_call_return_value, invalid_p == 0 */
   if (!log.empty ())
     internal_error (__FILE__, __LINE__,
 		    _("verify_gdbarch: the following are invalid ...%s"),
@@ -1495,6 +1497,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   fprintf_filtered (file,
                       "gdbarch_dump: reserve_stack_space = <%s>\n",
                       host_address_to_string (gdbarch->reserve_stack_space));
+  fprintf_filtered (file,
+                      "gdbarch_dump: get_inferior_call_return_value = <%s>\n",
+                      host_address_to_string (gdbarch->get_inferior_call_return_value));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -5569,4 +5574,21 @@ set_gdbarch_reserve_stack_space (struct gdbarch *gdbarch,
                                  gdbarch_reserve_stack_space_ftype reserve_stack_space)
 {
   gdbarch->reserve_stack_space = reserve_stack_space;
+}
+
+value *
+gdbarch_get_inferior_call_return_value (struct gdbarch *gdbarch, call_return_meta_info *return_info)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->get_inferior_call_return_value != NULL);
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_get_inferior_call_return_value called\n");
+  return gdbarch->get_inferior_call_return_value (gdbarch, return_info);
+}
+
+void
+set_gdbarch_get_inferior_call_return_value (struct gdbarch *gdbarch,
+                                            gdbarch_get_inferior_call_return_value_ftype get_inferior_call_return_value)
+{
+  gdbarch->get_inferior_call_return_value = get_inferior_call_return_value;
 }

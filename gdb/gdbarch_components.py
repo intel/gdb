@@ -2854,3 +2854,13 @@ information about it is available via the 'info devices' command.
     predefault="false",
     invalid=False,
 )
+
+Method(
+    comment="Reserve space on the stack for a value of the given type.",
+    type="CORE_ADDR",
+    name="reserve_stack_space",
+    params=[("const type *", "valtype"), ("CORE_ADDR &", "sp")],
+    predefault="default_reserve_stack_space",
+    predicate=False,
+    invalid=False,
+)

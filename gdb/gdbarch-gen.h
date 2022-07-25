@@ -1680,3 +1680,9 @@ extern bool gdbarch_infcall_bp_address_p (struct gdbarch *gdbarch);
 typedef CORE_ADDR (gdbarch_infcall_bp_address_ftype) (struct gdbarch *gdbarch, thread_info *tp);
 extern CORE_ADDR gdbarch_infcall_bp_address (struct gdbarch *gdbarch, thread_info *tp);
 extern void set_gdbarch_infcall_bp_address (struct gdbarch *gdbarch, gdbarch_infcall_bp_address_ftype *infcall_bp_address);
+
+/* Reserve space on the stack for a value of the given type. */
+
+typedef CORE_ADDR (gdbarch_reserve_stack_space_ftype) (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp);
+extern CORE_ADDR gdbarch_reserve_stack_space (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp);
+extern void set_gdbarch_reserve_stack_space (struct gdbarch *gdbarch, gdbarch_reserve_stack_space_ftype *reserve_stack_space);

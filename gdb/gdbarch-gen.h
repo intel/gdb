@@ -1832,3 +1832,9 @@ extern void set_gdbarch_shadow_stack_push (struct gdbarch *gdbarch, gdbarch_shad
 typedef std::optional<CORE_ADDR> (gdbarch_get_shadow_stack_pointer_ftype) (struct gdbarch *gdbarch, regcache *regcache, bool &shadow_stack_enabled);
 extern std::optional<CORE_ADDR> gdbarch_get_shadow_stack_pointer (struct gdbarch *gdbarch, regcache *regcache, bool &shadow_stack_enabled);
 extern void set_gdbarch_get_shadow_stack_pointer (struct gdbarch *gdbarch, gdbarch_get_shadow_stack_pointer_ftype *get_shadow_stack_pointer);
+
+/* Reserve space on the stack for a value of the given type. */
+
+typedef CORE_ADDR (gdbarch_reserve_stack_space_ftype) (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp);
+extern CORE_ADDR gdbarch_reserve_stack_space (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp);
+extern void set_gdbarch_reserve_stack_space (struct gdbarch *gdbarch, gdbarch_reserve_stack_space_ftype *reserve_stack_space);

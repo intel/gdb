@@ -265,6 +265,7 @@ struct gdbarch
   gdbarch_core_parse_exec_context_ftype *core_parse_exec_context = default_core_parse_exec_context;
   gdbarch_shadow_stack_push_ftype *shadow_stack_push = nullptr;
   gdbarch_get_shadow_stack_pointer_ftype *get_shadow_stack_pointer = default_get_shadow_stack_pointer;
+  gdbarch_reserve_stack_space_ftype *reserve_stack_space = default_reserve_stack_space;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -541,6 +542,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of core_parse_exec_context, invalid_p == 0.  */
   /* Skip verify of shadow_stack_push, has predicate.  */
   /* Skip verify of get_shadow_stack_pointer, invalid_p == 0.  */
+  /* Skip verify of reserve_stack_space, invalid_p == 0.  */
   if (!log.empty ())
     internal_error (_("verify_gdbarch: the following are invalid ...%s"),
 		    log.c_str ());
@@ -1427,6 +1429,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: get_shadow_stack_pointer = <%s>\n",
 	      host_address_to_string (gdbarch->get_shadow_stack_pointer));
+  gdb_printf (file,
+	      "gdbarch_dump: reserve_stack_space = <%s>\n",
+	      host_address_to_string (gdbarch->reserve_stack_space));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -5636,4 +5641,21 @@ set_gdbarch_get_shadow_stack_pointer (struct gdbarch *gdbarch,
 				      gdbarch_get_shadow_stack_pointer_ftype get_shadow_stack_pointer)
 {
   gdbarch->get_shadow_stack_pointer = get_shadow_stack_pointer;
+}
+
+CORE_ADDR
+gdbarch_reserve_stack_space (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->reserve_stack_space != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_reserve_stack_space called\n");
+  return gdbarch->reserve_stack_space (gdbarch, valtype, sp);
+}
+
+void
+set_gdbarch_reserve_stack_space (struct gdbarch *gdbarch,
+				 gdbarch_reserve_stack_space_ftype reserve_stack_space)
+{
+  gdbarch->reserve_stack_space = reserve_stack_space;
 }

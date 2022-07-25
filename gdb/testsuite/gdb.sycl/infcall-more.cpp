@@ -22,6 +22,9 @@
 typedef __attribute__ ((ext_vector_type (5))) unsigned char uchar5;
 typedef __attribute__ ((ext_vector_type (10))) unsigned char uchar10;
 typedef __attribute__ ((ext_vector_type (2))) unsigned int uint2;
+typedef __attribute__ ((ext_vector_type (10))) unsigned int uint10;
+typedef __attribute__ ((ext_vector_type (9))) unsigned int uint9;
+
 
 struct simple_struct
 {
@@ -159,19 +162,48 @@ complex_struct_return (int a, int b, unsigned int c, unsigned int d)
   return ans;
 }
 
-/* Vectors with size less than 64-bits are returned on GRFs.  */
+
+/* Promotable structs are returned by value on GRFs.  */
+simple_struct_128b
+promote_struct_return (uint32_t a, uint32_t b, uint32_t c, uint32_t d)
+{
+  return { a, b, c, d };
+}
+
+/* Vectors that fit in return registers are returned by value on GRFs.  */
 uchar5
-small_vector_return ()
+small_vector_return_1 ()
 {
   return { 1, 2, 3, 4, 5 };
 }
 
-/* Vectors with size more than 64-bits are converted to be passed by reference
-   as the first argument, and returned on the stack.  */
+/* Vectors that fit in return registers are returned by value on GRFs.  */
 uchar10
-long_vector_return ()
+small_vector_return_2 ()
 {
   return { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+}
+
+/* Vectors that do not fit in return GRF registers (currently 8 GRFs)
+   are returned on the stack.  */
+uint10
+long_vector_return_2 (uint32_t a)
+{
+  uint10 ret;
+  for (int i = 0; i < 10; ++i)
+    ret[i] = i * a;
+
+  return ret;
+}
+
+uint9
+long_vector_return_1 (uint32_t a)
+{
+  uint9 ret;
+  for (int i = 0; i < 9; ++i)
+    ret[i] = i + a;
+
+  return ret;
 }
 
 int
@@ -215,8 +247,11 @@ make_all_calls ()
 		      s_s2);
 
   auto c_struct = complex_struct_return (1, 2, 3, 4);
-  auto v1 = small_vector_return ();
-  auto v2 = long_vector_return ();
+  auto s_struct = promote_struct_return (1, 2, 3, 4);
+  auto v1 = small_vector_return_1 ();
+  auto v2 = small_vector_return_2 ();
+  auto v3 = long_vector_return_1 (10);
+  auto v4 = long_vector_return_2 (10);
   return ans;
 }
 

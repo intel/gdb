@@ -2864,3 +2864,13 @@ Method(
     predicate=False,
     invalid=False,
 )
+
+Method(
+    comment="Extract the called function's return value.",
+    type="value *",
+    name="get_inferior_call_return_value",
+    params=[("call_return_meta_info *", "return_info")],
+    predefault="default_get_inferior_call_return_value",
+    predicate=False,
+    invalid=False,
+)

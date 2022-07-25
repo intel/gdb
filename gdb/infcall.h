@@ -26,6 +26,28 @@
 struct value;
 struct type;
 
+/* All the meta data necessary to extract the call's return value.  */
+
+struct call_return_meta_info
+{
+  /* The caller frame's architecture.  */
+  struct gdbarch *gdbarch;
+
+  /* The called function.  */
+  value *function;
+
+  /* The return value's type.  */
+  type *value_type;
+
+  /* Are we returning a value using a structure return or a normal
+     value return?  */
+  int struct_return_p;
+
+  /* If using a structure return, this is the structure's address.  */
+  CORE_ADDR struct_addr;
+};
+
+
 /* Determine a function's address and its return type from its value.
    If the function is a GNU ifunc, then return the address of the
    target function, and set *FUNCTION_TYPE to the target function's
@@ -88,4 +110,12 @@ extern value *default_value_arg_coerce (gdbarch *gdbarch, value *arg,
 extern CORE_ADDR default_reserve_stack_space (gdbarch *gdbarch,
 					      const type *values_type,
 					      CORE_ADDR &sp);
+
+
+/* Extract the called function's return value.  */
+
+extern value *
+default_get_inferior_call_return_value (gdbarch *gdbarch,
+					call_return_meta_info *ri);
+
 #endif

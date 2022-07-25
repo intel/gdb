@@ -1795,3 +1795,9 @@ extern void set_gdbarch_use_target_description_from_corefile_notes (struct gdbar
 
 extern bool gdbarch_is_inferior_device (struct gdbarch *gdbarch);
 extern void set_gdbarch_is_inferior_device (struct gdbarch *gdbarch, bool is_inferior_device);
+
+/* Reserve space on the stack for a value of the given type. */
+
+typedef CORE_ADDR (gdbarch_reserve_stack_space_ftype) (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp);
+extern CORE_ADDR gdbarch_reserve_stack_space (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp);
+extern void set_gdbarch_reserve_stack_space (struct gdbarch *gdbarch, gdbarch_reserve_stack_space_ftype *reserve_stack_space);

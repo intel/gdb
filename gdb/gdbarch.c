@@ -262,6 +262,7 @@ struct gdbarch
   gdbarch_read_core_file_mappings_ftype *read_core_file_mappings = default_read_core_file_mappings;
   bool is_inferior_device = false;
   gdbarch_reserve_stack_space_ftype *reserve_stack_space = default_reserve_stack_space;
+  gdbarch_get_inferior_call_return_value_ftype *get_inferior_call_return_value = default_get_inferior_call_return_value;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -528,6 +529,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of read_core_file_mappings, invalid_p == 0 */
   /* Skip verify of is_inferior_device, invalid_p == 0 */
   /* Skip verify of reserve_stack_space, invalid_p == 0 */
+  /* Skip verify of get_inferior_call_return_value, invalid_p == 0 */
   if (!log.empty ())
     internal_error (_("verify_gdbarch: the following are invalid ...%s"),
 		    log.c_str ());
@@ -1393,6 +1395,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: reserve_stack_space = <%s>\n",
 	      host_address_to_string (gdbarch->reserve_stack_space));
+  gdb_printf (file,
+	      "gdbarch_dump: get_inferior_call_return_value = <%s>\n",
+	      host_address_to_string (gdbarch->get_inferior_call_return_value));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -5487,4 +5492,21 @@ set_gdbarch_reserve_stack_space (struct gdbarch *gdbarch,
 				 gdbarch_reserve_stack_space_ftype reserve_stack_space)
 {
   gdbarch->reserve_stack_space = reserve_stack_space;
+}
+
+value *
+gdbarch_get_inferior_call_return_value (struct gdbarch *gdbarch, call_return_meta_info *return_info)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->get_inferior_call_return_value != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_get_inferior_call_return_value called\n");
+  return gdbarch->get_inferior_call_return_value (gdbarch, return_info);
+}
+
+void
+set_gdbarch_get_inferior_call_return_value (struct gdbarch *gdbarch,
+					    gdbarch_get_inferior_call_return_value_ftype get_inferior_call_return_value)
+{
+  gdbarch->get_inferior_call_return_value = get_inferior_call_return_value;
 }

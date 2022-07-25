@@ -2805,3 +2805,13 @@ The corefile's bfd is passed through COREFILE_BFD.
     predefault="default_use_target_description_from_corefile_notes",
     invalid=False,
 )
+
+Method(
+    comment="Reserve space on the stack for a value of the given type.",
+    type="CORE_ADDR",
+    name="reserve_stack_space",
+    params=[("const type *", "valtype"), ("CORE_ADDR &", "sp")],
+    predefault="default_reserve_stack_space",
+    predicate=False,
+    invalid=False,
+)

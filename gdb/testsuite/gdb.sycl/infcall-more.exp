@@ -25,7 +25,9 @@ if {[llength $sycl_device_list] == 0} {
     return 0
 }
 
-if {[prepare_sycl_for_testing $binfile $srcfile]} {
+# Set -mavx512f flag to avoid compiler warnings.
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug "additional_flags=\"-mavx512f\""}]} {
     return -1
 }
 
@@ -83,12 +85,15 @@ proc test_inferior_calls {simd_lane inside_kernel} {
     gdb_test "print vector_on_stack (1, 2, 3, 4, 5, 6, arr2_uchar10)" "= 176" \
 	"Vector is passed on the stack with the SoA layout: 2"
 
-    gdb_test "print small_vector_return()" "= \\{1, 2, 3, 4, 5\\}" \
-	"Vectors with size less than 64-bits are returned on GRFs"
+    gdb_test "print small_vector_return_1()" "= \\{1, 2, 3, 4, 5\\}" \
+	"Small vectors are returned on GRFs: 1"
+    gdb_test "print small_vector_return_2()" "= \\{1, 2, 3, 4, 5, 6, 7, 8, 9, 10\\}" \
+	"Small vectors are returned on GRFs: 2"
 
-    setup_kfail "JIRA DOQG/2980" "*-*-*"
-    gdb_test "print long_vector_return()" "= \\{1, 2, 3, 4, 5, 6, 7, 8, 9, 10\\}" \
-	"Vectors with size more than 64-bits are returned on the stack"
+    gdb_test "print long_vector_return_1(2)" "= \\{2, 3, 4, 5, 6, 7, 8, 9, 10\\}" \
+	"Long vectors are returned on the stack: 1"
+    gdb_test "print long_vector_return_2(2)" "= \\{0, 2, 4, 6, 8, 10, 12, 14, 16, 18\\}" \
+	"Long vectors are returned on the stack: 2"
 
     gdb_test "print complex_struct_return(1, 2, 3, 4)" "= \\{x = 1, y = 2, vec = \\{3, 4\\}\\}" \
 	"The struct value is returned on the stack: 1"

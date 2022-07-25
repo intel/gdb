@@ -711,16 +711,12 @@ run_inferior_call (std::unique_ptr<call_thread_fsm> sm,
   return caught_error;
 }
 
-/* Reserve space on the stack for a value of the given type.
-   Return the address of the allocated space.
-   Make certain that the value is correctly aligned.
-   The SP argument is modified.  */
+/* See infcall.h.  */
 
-static CORE_ADDR
-reserve_stack_space (const type *values_type, CORE_ADDR &sp)
+CORE_ADDR
+default_reserve_stack_space (gdbarch *gdbarch, const type *values_type,
+			     CORE_ADDR &sp)
 {
-  frame_info_ptr frame = get_current_frame ();
-  struct gdbarch *gdbarch = get_frame_arch (frame);
   CORE_ADDR addr = 0;
 
   if (gdbarch_inner_than (gdbarch, 1, 2))
@@ -1141,7 +1137,7 @@ call_function_by_hand_dummy (struct value *function,
       /* Make a copy of the argument on the stack.  If the argument is
 	 trivially copy ctor'able, copy bit by bit.  Otherwise, call
 	 the copy ctor to initialize the clone.  */
-      CORE_ADDR addr = reserve_stack_space (param_type, sp);
+      CORE_ADDR addr = gdbarch_reserve_stack_space (gdbarch, param_type, sp);
       value *clone
 	= value_from_contents_and_address (param_type, nullptr, addr);
       push_thread_stack_temporary (call_thread.get (), clone);
@@ -1226,7 +1222,7 @@ call_function_by_hand_dummy (struct value *function,
 
   if (return_method != return_method_normal
       || (stack_temporaries && class_or_union_p (values_type)))
-    struct_addr = reserve_stack_space (values_type, sp);
+    struct_addr = gdbarch_reserve_stack_space (gdbarch, values_type, sp);
 
   std::vector<struct value *> new_args;
   if (return_method == return_method_hidden_param)

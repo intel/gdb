@@ -79,4 +79,13 @@ extern void error_call_unknown_return_type (const char *func_name);
 
 extern value *default_value_arg_coerce (gdbarch *gdbarch, value *arg,
 					type *param_type, int is_prototyped);
+
+/* Reserve space on the stack for a value of the given type.
+   Return the address of the allocated space.
+   Make certain that the value is correctly aligned.
+   The SP argument is modified.  */
+
+extern CORE_ADDR default_reserve_stack_space (gdbarch *gdbarch,
+					      const type *values_type,
+					      CORE_ADDR &sp);
 #endif

@@ -1808,3 +1808,9 @@ extern void set_gdbarch_use_target_description_from_corefile_notes (struct gdbar
 typedef core_file_exec_context (gdbarch_core_parse_exec_context_ftype) (struct gdbarch *gdbarch, bfd *cbfd);
 extern core_file_exec_context gdbarch_core_parse_exec_context (struct gdbarch *gdbarch, bfd *cbfd);
 extern void set_gdbarch_core_parse_exec_context (struct gdbarch *gdbarch, gdbarch_core_parse_exec_context_ftype *core_parse_exec_context);
+
+/* Reserve space on the stack for a value of the given type. */
+
+typedef CORE_ADDR (gdbarch_reserve_stack_space_ftype) (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp);
+extern CORE_ADDR gdbarch_reserve_stack_space (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp);
+extern void set_gdbarch_reserve_stack_space (struct gdbarch *gdbarch, gdbarch_reserve_stack_space_ftype *reserve_stack_space);

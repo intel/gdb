@@ -2862,3 +2862,13 @@ which all assume current_inferior() is the one to read from.
     predefault="default_core_parse_exec_context",
     invalid=False,
 )
+
+Method(
+    comment="Reserve space on the stack for a value of the given type.",
+    type="CORE_ADDR",
+    name="reserve_stack_space",
+    params=[("const type *", "valtype"), ("CORE_ADDR &", "sp")],
+    predefault="default_reserve_stack_space",
+    predicate=False,
+    invalid=False,
+)

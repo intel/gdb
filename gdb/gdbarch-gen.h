@@ -1702,3 +1702,9 @@ extern void set_gdbarch_is_inferior_device (struct gdbarch *gdbarch, bool is_inf
 typedef CORE_ADDR (gdbarch_reserve_stack_space_ftype) (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp);
 extern CORE_ADDR gdbarch_reserve_stack_space (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp);
 extern void set_gdbarch_reserve_stack_space (struct gdbarch *gdbarch, gdbarch_reserve_stack_space_ftype *reserve_stack_space);
+
+/* Extract the called function's return value. */
+
+typedef value * (gdbarch_get_inferior_call_return_value_ftype) (struct gdbarch *gdbarch, call_return_meta_info *return_info);
+extern value * gdbarch_get_inferior_call_return_value (struct gdbarch *gdbarch, call_return_meta_info *return_info);
+extern void set_gdbarch_get_inferior_call_return_value (struct gdbarch *gdbarch, gdbarch_get_inferior_call_return_value_ftype *get_inferior_call_return_value);

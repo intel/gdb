@@ -44,6 +44,7 @@ typedef __attribute__(( ext_vector_type(4) )) unsigned char uchar4;
 typedef __attribute__(( ext_vector_type(8) )) unsigned char uchar8;
 typedef __attribute__(( ext_vector_type(10) )) unsigned char uchar10;
 typedef __attribute__(( ext_vector_type(4) )) int int4;
+typedef __attribute__(( ext_vector_type(10) )) int int10;
 
 int
 do_something_and_return (int i) {
@@ -106,6 +107,17 @@ return_int4 (int dim0)
 
   return i4;
 }
+
+int10
+return_int10 (int dim0)
+{
+  int10 i10;
+  for (int i = 0; i < 10; i++) /* bp-at-return_int10 */
+    i10[i] = 100 * dim0 + i;
+
+  return i10;
+}
+
 
 uchar2
 return_uchar2 (int dim0)
@@ -190,6 +202,7 @@ int
 make_output (int dim0)
 {
   int4 i4 = return_int4 (dim0); /* return_int4-outer */
+  int10 i10 = return_int10 (dim0); /* return_int10-outer */
   uchar4 uc4 = return_uchar4 (dim0);
   struct_greater_64b str_gr_64 = return_struct_greater_64b (i4, uc4);
   do_smt_and_return_uchar (dim0);

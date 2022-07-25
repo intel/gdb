@@ -61,10 +61,12 @@ proc test_call_stack {call_stack_supported} {
     global srcfile valnum_re decimal fill inferior_exited_re
 
     set return_int_loc [gdb_get_line_number "bp-at-return_int"]
+    set return_int10_loc [gdb_get_line_number "bp-at-return_int10"]
     set return_int4_loc [gdb_get_line_number "bp-at-return_int4"]
     set return_int4_after_prologue_loc [gdb_get_line_number \
 					    "return_int4-after-prologue"]
     set return_int4_outer_loc [gdb_get_line_number "return_int4-outer"]
+    set return_int10_outer_loc [gdb_get_line_number "return_int10-outer"]
     set do_smt_and_return_uchar_loc [gdb_get_line_number \
 					 "bp-at-do_smt_and_return_uchar"]
     set return_uchar2_loc [gdb_get_line_number "bp-at-return_uchar2"]
@@ -78,6 +80,7 @@ proc test_call_stack {call_stack_supported} {
     set tail_call_inner_int_loc [gdb_get_line_number "bp-at-tail_call_inner_int"]
 
     gdb_breakpoint "return_int4" {temporary}
+    gdb_breakpoint "return_int10" {temporary}
 
     # Without the call stack feature GDB stops in the wrong location,
     # however on certain OSs and NEO versions the FunctionControl
@@ -109,6 +112,7 @@ proc test_call_stack {call_stack_supported} {
 
     # Test different return types.
     gdb_breakpoint $return_int4_loc {temporary}
+    gdb_breakpoint $return_int10_loc {temporary}
     gdb_breakpoint $return_uchar4_loc {temporary}
     gdb_breakpoint $return_int_loc {temporary}
     gdb_breakpoint $do_smt_and_return_uchar_loc {temporary}
@@ -121,6 +125,7 @@ proc test_call_stack {call_stack_supported} {
 
     # Indicators that a certain BP was hit.
     set hit_return_int4 false
+    set hit_return_int10 false
     set hit_return_uchar4 false
     set hit_return_int false
     set hit_do_smt_and_return_uchar false
@@ -139,13 +144,17 @@ proc test_call_stack {call_stack_supported} {
     # other tests are not affected.  We also run "finish" tests only when
     # we are at the correct location.  Afterwards, we check which BPs were
     # hit.
-    while {$i < 10 && $should_continue} {
+    while {$i < 11 && $should_continue} {
         with_test_prefix "iteration $i" {
 	    gdb_test_multiple "continue" "iteration $i" {
 		-re -wrap ".*$srcfile:$return_int4_loc.*" {
-		    setup_kfail "JIRA DOQG/2980" "*-*-*"
 		    set hit_return_int4 true
 		    test_finish "return_int4" "dim0=5" "\\{500, 501, 502, 503\\}" \
+			"make_output \\(dim0=5\\)" $call_stack_supported
+		}
+		-re -wrap ".*$srcfile:$return_int10_loc.*" {
+		    set hit_return_int10 true
+		    test_finish "return_int10" "dim0=5" "\\{500, 501, 502, 503, 504, 505, 506, 507, 508, 509\\}" \
 			"make_output \\(dim0=5\\)" $call_stack_supported
 		}
 		-re -wrap ".*$srcfile:$return_uchar4_loc.*" {
@@ -194,14 +203,12 @@ proc test_call_stack {call_stack_supported} {
 		}
 		-re -wrap ".*$srcfile:$return_uchar10_loc.*" {
 		    set hit_return_uchar10 true
-		    setup_kfail "JIRA DOQG/2980" "*-*-*"
 		    test_finish "return_uchar10" "dim0=5" \
 			"\\{50, 51, 52, 53, 54, 55, 56, 57, 58, 59\\}" \
 			"make_output" $call_stack_supported
 		}
 		-re -wrap ".*$srcfile:$do_smt_and_return_uchar10_loc.*" {
 		    set hit_do_smt_and_return_uchar10 true
-		    setup_kfail "JIRA DOQG/2980" "*-*-*"
 		    test_finish "do_smt_and_return_uchar10" "dim0=5" \
 			"\\{50, 51, 52, 53, 54, 55, 56, 57, 58, 59\\}" \
 			"make_output" $call_stack_supported
@@ -235,6 +242,7 @@ proc test_call_stack {call_stack_supported} {
 
     # Check that all BPs were hit.
     check_hit "hit return_int4" ${hit_return_int4}
+    check_hit "hit return_int10" ${hit_return_int10}
     check_hit "hit return_uchar4" ${hit_return_uchar4}
     check_hit "hit return_int" ${hit_return_int}
     check_hit "hit do_smt_and_return_uchar" ${hit_do_smt_and_return_uchar}

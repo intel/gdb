@@ -38,6 +38,7 @@
 #include "objfiles.h"
 #include "block.h"
 #include "elf-bfd.h"
+#include "infcall.h"
 #include <algorithm>
 
 /* Address space flags.
@@ -51,11 +52,11 @@
    arguments.  */
 constexpr int INTELGT_MAX_GRF_REGS_FOR_ARGS = 12;
 
-/* The maximum size in bytes of a promotable struct return value.  */
-constexpr int PROMOTABLE_STRUCT_MAX_SIZE_RET = 8;
+/* The maximum number of GRF registers to be used for the return value.  */
+constexpr int INTELGT_MAX_GRF_REGS_FOR_RET = 8;
 
-/* The maximum size in bytes of a promotable struct argument.  */
-constexpr int PROMOTABLE_STRUCT_MAX_SIZE_ARG = 16;
+/* The maximum size in bytes of a promotable struct.  */
+constexpr int PROMOTABLE_STRUCT_MAX_SIZE = 16;
 
 /* Intelgt FE stack alignment size in bytes.  */
 constexpr int OWORD_SIZE = 16;
@@ -90,6 +91,106 @@ static int intelgt_pseudo_register_num (gdbarch*, const char*);
 static bool is_a_promotable_small_struct (type *arg_type, int max_size);
 static unsigned int get_field_total_memory (type *struct_type,
 					    int field_index);
+
+/* Read and write vectors on the stack while considering the SIMD
+   vectorization.
+
+   ADDR is the stack memory address.
+   VALTYPE is the type of the vector.
+   BUFF_READ is a non-NULL pointer to read data from when performing
+   stack write.  It is NULL if we are performing a stack read.
+   BUFF_WRITE is a non-NULL writable pointer that will contain the data
+   read from the stack.  It is NULL if we are performing a stack write.
+
+   The returned value is the stack address right after the vector
+   reserved memory.  */
+
+static CORE_ADDR fe_stack_handle_vector (CORE_ADDR addr, type *valtype,
+					 const gdb_byte *buff_read,
+					 gdb_byte *buff_write);
+
+/* Read vector from the stack into BUFF.  */
+
+static CORE_ADDR
+fe_stack_read_vector (CORE_ADDR addr, type *valtype, gdb_byte *buff)
+{
+  return fe_stack_handle_vector (addr, valtype, nullptr, buff);
+}
+
+/* Write vector from BUFF into the stack.  */
+
+static CORE_ADDR
+fe_stack_write_vector (CORE_ADDR addr, type *valtype, const gdb_byte *buff)
+{
+  return fe_stack_handle_vector (addr, valtype, buff, nullptr);
+}
+
+/* Read and write small structures on the stack while considering
+   the SIMD vectorization.
+
+   ADDR is the stack memory address.
+   VALTYPE is the type of the structure.
+   BUFF_READ is a non-NULL pointer to read data from when performing
+   stack write.  It is NULL if we are performing a stack read.
+   BUFF_WRITE is a non-NULL writable pointer that will contain the data
+   read from the stack.  It is NULL if we are performing a stack write.
+
+   The returned value is the stack address right after the structure
+   reserved memory.  */
+
+static CORE_ADDR fe_stack_handle_small_struct (CORE_ADDR addr, type *valtype,
+					       const gdb_byte *buff_read,
+					       gdb_byte *buff_write);
+
+/* Read small structure from the stack into BUFF.  */
+
+static CORE_ADDR
+fe_stack_read_small_struct (CORE_ADDR addr, type *valtype, gdb_byte *buff)
+{
+  return fe_stack_handle_small_struct (addr, valtype, nullptr, buff);
+}
+
+/* Write small structure from BUFF into the stack.  */
+
+static CORE_ADDR
+fe_stack_write_small_struct (CORE_ADDR addr, type *valtype,
+			     const gdb_byte *buff)
+{
+  return fe_stack_handle_small_struct (addr, valtype, buff, nullptr);
+}
+
+/* Read and write up to 8 bytes on the stack while considering the SIMD
+   vectorization.
+
+   ADDR is the stack memory address.
+   LEN is the length in bytes to read or write on the stack.
+   BUFF_READ is a non-NULL pointer to read data from when performing
+   stack write.  It is NULL if we are performing a stack read.
+   BUFF_WRITE is a non-NULL writable pointer that will contain the data
+   read from the stack.  It is NULL if we are performing a stack write.
+
+   The returned value is the stack address right after the data
+   reserved memory.  */
+
+static CORE_ADDR fe_stack_handle_primitive (CORE_ADDR addr, int len,
+					    const gdb_byte *buff_read,
+					    gdb_byte *buff_write);
+
+/* Read up to 8 bytes from the stack into BUFF.  */
+
+static CORE_ADDR
+fe_stack_read_primitive (CORE_ADDR addr, int len, gdb_byte *buff)
+{
+  return fe_stack_handle_primitive (addr, len, nullptr, buff);
+}
+
+/* Write up to 8 bytes from BUFF into the stack.  */
+
+static CORE_ADDR
+fe_stack_write_primitive (CORE_ADDR addr, int len, const gdb_byte *buff)
+{
+  return fe_stack_handle_primitive (addr, len, buff, nullptr);
+}
 
 /* Structure for GRF read / write handling.  */
 
@@ -412,26 +513,20 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
   gdb_assert (inferior_ptid != null_ptid);
 
   int address_size_byte = gdbarch_addr_bit (gdbarch) / 8;
+  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
+  constexpr int max_primitive_size = 8;
 
   /* The vectorized return value is stored at this register and onwards.  */
   int retval_regnum = get_intelgt_gdbarch_data (gdbarch)->retval_regnum;
   unsigned int retval_size = register_size (gdbarch, retval_regnum);
   int type_length = valtype->length ();
   auto grf = grf_handler (retval_size, regcache);
+  bool is_promotable_struct
+    = is_a_promotable_small_struct (valtype, PROMOTABLE_STRUCT_MAX_SIZE);
 
-  /* Promotable structures are returned by value on registers.  */
-  if (is_a_promotable_small_struct (valtype, PROMOTABLE_STRUCT_MAX_SIZE_RET))
-    {
-      if (readbuf != nullptr)
-	grf.read_small_struct (retval_regnum, valtype, readbuf);
-
-      return RETURN_VALUE_REGISTER_CONVENTION;
-    }
-
-  /* Values greater than 64 bits (64 is specified by ABI) or non-promotable
-     structs are stored by reference.  The return value register contains a
-     vectorized sequence of memory addresses.  */
-  if (type_length > 8 || class_or_union_p (valtype))
+  /* Non-promotable structs are stored by reference.  The return value
+     register contains a vectorized sequence of memory addresses.  */
+  if (class_or_union_p (valtype) && !is_promotable_struct)
     {
       if (readbuf != nullptr)
 	{
@@ -451,19 +546,57 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
       return RETURN_VALUE_ABI_RETURNS_ADDRESS;
     }
 
-  /* Return value is stored in the return register.  */
-  if (readbuf != nullptr)
+  /* Promotable structures and vectors are returned by values on registers.
+     In case the GRFs space is not sufficient, the return by value takes place
+     on the stack, at the end of the caller frame.  */
+  if (type_length * simd_width
+      <= INTELGT_MAX_GRF_REGS_FOR_RET * retval_size)
     {
-      /* Read vector value from GRFs.  */
-      if (valtype->is_vector ())
+      /* Return value can fit in the GRF registers.  */
+      if (readbuf == nullptr)
+	return RETURN_VALUE_REGISTER_CONVENTION;
+
+      /* Read the return values from GRFs.  */
+      if (is_promotable_struct)
+	grf.read_small_struct (retval_regnum, valtype, readbuf);
+      else if (valtype->is_vector ())
 	grf.read_vector (retval_regnum, valtype, readbuf);
-
-      /* Read primitive values from GRFs.  */
-      else
+      else if (type_length <= max_primitive_size)
 	grf.read_primitive (retval_regnum, type_length, readbuf);
-    }
 
-  return RETURN_VALUE_REGISTER_CONVENTION;
+      return RETURN_VALUE_REGISTER_CONVENTION;
+    }
+  else
+    {
+      /* Return value is returned on the stack.  */
+      if (readbuf == nullptr)
+	return RETURN_VALUE_ABI_RETURNS_ADDRESS;
+
+      /* The return address of the returned value is deduced from the caller
+	 FE_SP.  Return address = FE_SP - (vectorized and aligned return
+	 type length).  */
+      const int framedesc_regnum
+	= intelgt_pseudo_register_num (gdbarch, "framedesc");
+      CORE_ADDR addr = 0;
+      regcache->cooked_read_part (framedesc_regnum, 24, 8,
+				  (gdb_byte *) &addr);
+
+      CORE_ADDR reserved_struct_memory = align_up (type_length * simd_width,
+						   OWORD_SIZE);
+      if (addr < reserved_struct_memory)
+	error ("Invalid stack address of return value: 0x%lx", addr);
+      addr -= reserved_struct_memory;
+
+      /* Read the returned value from the stack.  */
+      if (is_promotable_struct)
+	fe_stack_read_small_struct (addr, valtype, readbuf);
+      else if (valtype->is_vector ())
+	fe_stack_read_vector (addr, valtype, readbuf);
+      else if (type_length <= max_primitive_size)
+	fe_stack_read_primitive (addr, type_length, readbuf);
+
+      return RETURN_VALUE_ABI_RETURNS_ADDRESS;
+    }
 }
 
 /* Callback function to unwind the $framedesc register.  */
@@ -1162,7 +1295,7 @@ get_argument_required_registers (gdbarch *gdbarch, type *arg_type)
   unsigned int required_memory = 0;
   if (class_or_union_p (arg_type)
       && !(is_a_promotable_small_struct (arg_type,
-					 PROMOTABLE_STRUCT_MAX_SIZE_ARG)))
+					 PROMOTABLE_STRUCT_MAX_SIZE)))
     required_memory = simd_width * address_size_byte;
   else
     required_memory = simd_width * len;
@@ -1213,13 +1346,12 @@ intelgt_dummy_id (struct gdbarch *gdbarch, frame_info_ptr this_frame)
 static int
 intelgt_return_in_first_hidden_param_p (gdbarch *gdbarch, type *type)
 {
-  /* Vector return values greater than 64-bits and non-promotable structure
-     return values are converted to be passed by reference as the first
-     argument in the arguments list of the function.  */
+  /* Non-promotable structure return values are converted
+     to be passed by reference as the first argument in the arguments
+     list of the function.  */
   return (
-    (class_or_union_p (type)
-     && !is_a_promotable_small_struct (type, PROMOTABLE_STRUCT_MAX_SIZE_RET))
-    || (type->is_vector () && type->length () > 8));
+    class_or_union_p (type)
+    && !is_a_promotable_small_struct (type, PROMOTABLE_STRUCT_MAX_SIZE));
 }
 
 /* Adjust the address upwards (direction of stack growth) so that the stack is
@@ -1277,6 +1409,17 @@ intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
      bytes of "framedesc".  */
   regcache->cooked_write_part (framedesc_regnum, 0, 4, (gdb_byte *) &bp_addr);
 
+  /* Determine the reserved space for the returned struct.  This includes
+     large vectors that do not fit into available return GRFs.  */
+  CORE_ADDR reserved_struct_memory = 0;
+  if (return_method == return_method_struct)
+    reserved_struct_memory = fe_sp - struct_addr;
+
+  /* Structures returned by values need to be allocated after arguments.
+     Use the reserved space for pushing arguments, and then reallocate
+     it again at the end of the frame for the return value.  */
+  fe_sp = align_up (fe_sp - reserved_struct_memory, OWORD_SIZE);
+
   /* Push all struct objects (except for promoted structs) to the stack
      and save the corresponding addresses.  */
   std::vector<CORE_ADDR> obj_addrs;
@@ -1290,7 +1433,7 @@ intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
 	 is used for the promotion check.  */
       if (class_or_union_p (arg_type)
 	  && !is_a_promotable_small_struct (arg_type,
-					    PROMOTABLE_STRUCT_MAX_SIZE_ARG))
+					    PROMOTABLE_STRUCT_MAX_SIZE))
 	{
 	  const gdb_byte *val = value_contents (args[index]).data ();
 
@@ -1331,7 +1474,7 @@ intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
 	  int target_regnum = regnum;
 
 	  if (is_a_promotable_small_struct (arg_type,
-					    PROMOTABLE_STRUCT_MAX_SIZE_ARG))
+					    PROMOTABLE_STRUCT_MAX_SIZE))
 	    grf.write_small_struct (target_regnum, arg_type, val);
 
 	  /* The argument has been pushed to the FE stack, and its
@@ -1360,111 +1503,69 @@ intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
 	     in the space left within GRFs.  */
 
 	  if (is_a_promotable_small_struct (arg_type,
-					    PROMOTABLE_STRUCT_MAX_SIZE_ARG))
-	    {
-	      /* Promotable structures are stored in the stack with SoA layout.
-		 Example:
-		 s.a s.a... s.a  s.b s.b... s.b  s.c s.c... s.c.  */
-
-	      int n_fields = arg_type->num_fields ();
-	      field *fields = arg_type->fields ();
-
-	      /* Loop over all structure fields.  */
-	      for (int field_idx = 0; field_idx < n_fields; ++field_idx)
-		{
-		  type *field_type = check_typedef (
-		    arg_type->field (field_idx).type ());
-		  int field_len = field_type->length ();
-
-		  /* Determine the offset of the field within the struct
-		     in bytes.  */
-		  int current_pos = fields[field_idx].loc_bitpos () / 8;
-
-		  int err
-		    = target_write_memory (fe_sp + current_lane * field_len,
-					   val + current_pos, field_len);
-		  if (err != 0)
-		    error ("Target failed to write on the stack: "
-			   "arg %d of type %s", argnum, arg_type->name ());
-
-		  /* Update the stack pointer for the next field while
-		     considering the structure intra/inter-padding.  */
-		  int mem_occupation = simd_width * get_field_total_memory (
-		    arg_type, field_idx);
-		  fe_sp += mem_occupation;
-		}
-
-	      /* Align the entire stack.  */
-	      fe_sp = align_up (fe_sp, OWORD_SIZE);
-	    }
+					    PROMOTABLE_STRUCT_MAX_SIZE))
+	    fe_sp = fe_stack_write_small_struct (fe_sp, arg_type, val);
 	  else if (class_or_union_p (arg_type))
 	    {
 	      /* The object has been previously pushed to the stack, now push
 		 its saved address to be aligned with the rest of the
 		 arguments in the stack.  */
 	      gdb_byte *obj_addr = (gdb_byte *) &obj_addrs[obj_index++];
-	      int err
-		= target_write_memory (fe_sp + current_lane * address_size,
-				       obj_addr, address_size);
-	      if (err != 0)
-		error ("Target failed to write on the stack: "
-		       "arg %d of type %s", argnum, arg_type->name ());
-
-	      fe_sp += align_up (address_size * simd_width, OWORD_SIZE);
+	      fe_sp = fe_stack_write_primitive (fe_sp, address_size, obj_addr);
 	    }
 	  else if (arg_type->is_vector ())
-	    {
-	      /* Vectors are copied to stack with the SoA layout.  */
+	    fe_sp = fe_stack_write_vector (fe_sp, arg_type, val);
 
-	      /* Length in bytes of an element in the vector.  */
-	      int target_type_len = arg_type->target_type ()->length ();
-	      /* Number of elements in the vector.  */
-	      int n_elements = len / target_type_len;
-
-	      for (int element_idx = 0; element_idx < n_elements;
-		   ++element_idx)
-		{
-		  int lane_offset = current_lane * target_type_len;
-
-		  int total_offset
-		    = lane_offset + element_idx * target_type_len * simd_width;
-
-		  /* Location of the element in the vector.  */
-		  const gdb_byte *element_addr
-		    = val + element_idx * target_type_len;
-
-		  int err = target_write_memory (fe_sp + total_offset,
-						 element_addr,
-						 target_type_len);
-
-		  if (err != 0)
-		    error ("Target failed to write on the stack: "
-			   "arg %d of type %s", argnum, arg_type->name ());
-		}
-
-	      /* Align the entire stack.  */
-	      fe_sp = align_up (fe_sp + len * simd_width, OWORD_SIZE);
-	    }
 	  else if (len <= 8)
-	    {
-	      int err = target_write_memory (fe_sp + current_lane * len,
-					     val, len);
-	      if (err != 0)
-		error ("Target failed to write on the stack: "
-		       "arg %d of type %s", argnum, arg_type->name ());
+	    fe_sp = fe_stack_write_primitive (fe_sp, len, val);
 
-	      fe_sp += align_up (len * simd_width, OWORD_SIZE);
-	    }
 	  else
 	    error ("unexpected type %s of arg %d", arg_type->name (), argnum);
 	}
     }
+
+  /* Reallocate space for structures returned by values.  */
+  fe_sp = align_up (fe_sp + reserved_struct_memory, OWORD_SIZE);
 
   /* Update the FE frame pointer (framedesc.fe_fp).  */
   regcache->cooked_write_part (framedesc_regnum, 16, 8, (gdb_byte *) &fe_sp);
   /* Update the FE stack pointer (framedesc.fe_sp).  */
   regcache->cooked_write_part (framedesc_regnum, 24, 8, (gdb_byte *) &fe_sp);
   return fe_sp;
+}
+
+/* Intelgt implementation of the "reserve_stack_space" method.  The SIMD
+   width needs to be considered when reserving memory for VALUE_TYPE.  */
+
+static CORE_ADDR
+intelgt_reserve_stack_space (gdbarch *gdbarch, const type *value_type,
+			     CORE_ADDR &sp)
+{
+  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
+
+  /* Make sure the stack is aligned.  */
+  sp = align_up (sp, OWORD_SIZE);
+  CORE_ADDR struct_addr = sp;
+  sp = align_up (sp + value_type->length () * simd_width, OWORD_SIZE);
+
+  return struct_addr;
+}
+
+/* Intelgt implementation of the "get_inferior_call_return_value" method.  */
+
+static value *
+intelgt_get_inferior_call_return_value (gdbarch *gdbarch,
+					call_return_meta_info *ri)
+{
+  value *retval = nullptr;
+
+  retval = allocate_value (ri->value_type);
+  gdbarch_return_value (ri->gdbarch, ri->function, ri->value_type,
+			get_current_regcache (),
+			value_contents_raw (retval).data (), nullptr);
+
+  gdb_assert (retval != nullptr);
+  return retval;
 }
 
 /* See GRF_HANDLER declaration.  */
@@ -1639,6 +1740,159 @@ grf_handler::handle_primitive (int regnum, const gdb_byte *buff_read,
     m_regcache->cooked_write_part (target_regnum, reg_offset, len, buff_read);
 }
 
+static CORE_ADDR
+fe_stack_handle_vector (CORE_ADDR addr, type *valtype,
+			const gdb_byte *buff_read, gdb_byte *buff_write)
+{
+  gdb_assert (valtype->is_vector ());
+  gdb_assert ((buff_read == nullptr) != (buff_write == nullptr));
+
+  /* Vectors are copied to stack with the SoA layout.  */
+
+  const int current_lane = inferior_thread ()->current_simd_lane ();
+  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
+  int len = valtype->length ();
+  CORE_ADDR fe_addr = addr;
+
+  /* Length in bytes of an element in the vector.  */
+  int target_type_len = valtype->target_type ()->length ();
+  /* Number of elements in the vector.  */
+  int n_elements = len / target_type_len;
+
+  for (int element_idx = 0; element_idx < n_elements; ++element_idx)
+    {
+      int lane_offset = current_lane * target_type_len;
+
+      int total_offset
+	  = lane_offset + element_idx * target_type_len * simd_width;
+
+      if (buff_read != nullptr)
+	{
+	  /* Location of the element in the vector.  */
+	  const gdb_byte *element_addr
+	      = buff_read + element_idx * target_type_len;
+	  int err = target_write_memory (fe_addr + total_offset, element_addr,
+					 target_type_len);
+	  if (err != 0)
+	    error ("Target failed to write vector on the stack: "
+		   "type %s of length %d",
+		   valtype->name (), len);
+	}
+      else if (buff_write != nullptr)
+	{
+	  /* Location of the element in the vector.  */
+	  gdb_byte *element_addr = buff_write
+				   + element_idx * target_type_len;
+	  int err = target_read_memory (fe_addr + total_offset, element_addr,
+					 target_type_len);
+	  if (err != 0)
+	    error ("Target failed to read vector from the stack: "
+		   "type %s of length %d",
+		   valtype->name (), len);
+	}
+    }
+
+  /* Align the stack.  */
+  fe_addr = align_up (fe_addr + len * simd_width, OWORD_SIZE);
+  return fe_addr;
+}
+
+static CORE_ADDR
+fe_stack_handle_primitive (CORE_ADDR addr, int len, const gdb_byte *buff_read,
+			   gdb_byte *buff_write)
+{
+  gdb_assert (len <= 8);
+  gdb_assert ((buff_read == nullptr) != (buff_write == nullptr));
+
+  const int current_lane = inferior_thread ()->current_simd_lane ();
+  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
+  CORE_ADDR fe_addr = addr;
+
+  if (buff_read != nullptr)
+    {
+      int err
+	  = target_write_memory (fe_addr + current_lane * len, buff_read, len);
+      if (err != 0)
+	error ("Target failed to write bytes on the stack: "
+	       "length %d to address 0x%lx", len, addr);
+    }
+  else if (buff_write != nullptr)
+    {
+      int err
+	= target_read_memory (fe_addr + current_lane * len, buff_write, len);
+      if (err != 0)
+	error ("Target failed to read bytes from the stack: "
+	       "length %d from address 0x%lx", len, addr);
+    }
+
+  /* Align the stack.  */
+  fe_addr += align_up (len * simd_width, OWORD_SIZE);
+  return fe_addr;
+}
+
+static CORE_ADDR
+fe_stack_handle_small_struct (CORE_ADDR addr, type *valtype,
+			      const gdb_byte *buff_read, gdb_byte *buff_write)
+{
+  gdb_assert (is_a_promotable_small_struct (valtype,
+					    PROMOTABLE_STRUCT_MAX_SIZE));
+  gdb_assert ((buff_read == nullptr) != (buff_write == nullptr));
+
+  /* Promotable structures are stored in the stack with SoA layout.
+     Example:
+     s.a s.a... s.a  s.b s.b... s.b  s.c s.c... s.c.  */
+
+  const int current_lane = inferior_thread ()->current_simd_lane ();
+  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
+
+  int n_fields = valtype->num_fields ();
+  field *fields = valtype->fields ();
+  CORE_ADDR fe_addr = addr;
+
+  /* Loop over all structure fields.  */
+  for (int field_idx = 0; field_idx < n_fields; ++field_idx)
+    {
+      type *field_type = check_typedef (valtype->field (field_idx).type ());
+      int field_len = field_type->length ();
+
+      /* Determine the offset of the field within the struct
+	 in bytes.  */
+      int current_pos = fields[field_idx].loc_bitpos () / 8;
+
+      if (buff_read != nullptr)
+	{
+	  /* Write the current field on the stack.  */
+	  int err = target_write_memory (fe_addr + current_lane * field_len,
+					 buff_read + current_pos, field_len);
+	  if (err != 0)
+	    error ("Target failed to write struct on the stack: "
+		   "type %s of length %lu",
+		   valtype->name (), valtype->length ());
+	}
+      else if (buff_write != nullptr)
+	{
+	  /* Write the current field on the stack.  */
+	  int err = target_read_memory (fe_addr + current_lane * field_len,
+					 buff_write + current_pos, field_len);
+	  if (err != 0)
+	    error ("Target failed to read struct from the stack: "
+		   "type %s of length %lu",
+		   valtype->name (), valtype->length ());
+	}
+
+      /* Update the stack pointer for the next field while
+	 considering the structure intra/inter-padding.  */
+      int mem_occupation
+	= simd_width * get_field_total_memory (valtype, field_idx);
+      fe_addr += mem_occupation;
+    }
+
+  /* Align the stack.  */
+  fe_addr = align_up (fe_addr, OWORD_SIZE);
+
+  return fe_addr;
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -1800,6 +2054,9 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
     gdbarch, intelgt_return_in_first_hidden_param_p);
   set_gdbarch_value_arg_coerce (gdbarch, intelgt_value_arg_coerce);
   set_gdbarch_dummy_id (gdbarch, intelgt_dummy_id);
+  set_gdbarch_reserve_stack_space (gdbarch, intelgt_reserve_stack_space);
+  set_gdbarch_get_inferior_call_return_value (
+    gdbarch, intelgt_get_inferior_call_return_value);
 
   return gdbarch;
 }

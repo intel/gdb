@@ -432,31 +432,11 @@ get_function_name (CORE_ADDR funaddr, char *buf, int buf_size)
   }
 }
 
-/* All the meta data necessary to extract the call's return value.  */
+/* See infcall.h.  */
 
-struct call_return_meta_info
-{
-  /* The caller frame's architecture.  */
-  struct gdbarch *gdbarch;
-
-  /* The called function.  */
-  struct value *function;
-
-  /* The return value's type.  */
-  struct type *value_type;
-
-  /* Are we returning a value using a structure return or a normal
-     value return?  */
-  int struct_return_p;
-
-  /* If using a structure return, this is the structure's address.  */
-  CORE_ADDR struct_addr;
-};
-
-/* Extract the called function's return value.  */
-
-static struct value *
-get_call_return_value (struct call_return_meta_info *ri)
+value *
+default_get_inferior_call_return_value (gdbarch *gdbarch,
+					call_return_meta_info *ri)
 {
   struct value *retval = NULL;
   thread_info *thr = inferior_thread ();
@@ -558,7 +538,9 @@ call_thread_fsm::should_stop (struct thread_info *thread)
       /* Stash the return value before the dummy frame is popped and
 	 registers are restored to what they were before the
 	 call..  */
-      return_value = get_call_return_value (&return_meta_info);
+      gdbarch *gdbarch = thread->inf->gdbarch;
+      return_value
+	= gdbarch_get_inferior_call_return_value (gdbarch, &return_meta_info);
     }
 
   /* We are always going to stop this thread, but we might not be planning

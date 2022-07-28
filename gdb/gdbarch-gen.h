@@ -1646,3 +1646,11 @@ extern void set_gdbarch_read_core_file_mappings (struct gdbarch *gdbarch, gdbarc
 
 extern bool gdbarch_is_inferior_device (struct gdbarch *gdbarch);
 extern void set_gdbarch_is_inferior_device (struct gdbarch *gdbarch, bool is_inferior_device);
+
+/* Define a custom address to place an inferior breakpoint. */
+
+extern bool gdbarch_infcall_bp_address_p (struct gdbarch *gdbarch);
+
+typedef CORE_ADDR (gdbarch_infcall_bp_address_ftype) (struct gdbarch *gdbarch, thread_info *tp);
+extern CORE_ADDR gdbarch_infcall_bp_address (struct gdbarch *gdbarch, thread_info *tp);
+extern void set_gdbarch_infcall_bp_address (struct gdbarch *gdbarch, gdbarch_infcall_bp_address_ftype *infcall_bp_address);

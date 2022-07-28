@@ -1010,6 +1010,12 @@ call_function_by_hand_dummy (struct value *function,
 	bp_addr = dummy_addr;
 	break;
       }
+    case AT_CUSTOM_POINT:
+      {
+	real_pc = funaddr;
+	bp_addr = gdbarch_infcall_bp_address (gdbarch, call_thread.get ());
+	break;
+      }
     default:
       internal_error (__FILE__, __LINE__, _("bad switch"));
     }

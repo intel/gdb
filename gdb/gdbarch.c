@@ -254,6 +254,7 @@ struct gdbarch
   gdbarch_get_pc_address_flags_ftype *get_pc_address_flags;
   gdbarch_read_core_file_mappings_ftype *read_core_file_mappings;
   bool is_inferior_device;
+  gdbarch_infcall_bp_address_ftype *infcall_bp_address;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -620,6 +621,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of get_pc_address_flags, invalid_p == 0 */
   /* Skip verify of read_core_file_mappings, invalid_p == 0 */
   /* Skip verify of is_inferior_device, invalid_p == 0 */
+  /* Skip verify of infcall_bp_address, has predicate.  */
   if (!log.empty ())
     internal_error (__FILE__, __LINE__,
 		    _("verify_gdbarch: the following are invalid ...%s"),
@@ -1459,6 +1461,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   fprintf_filtered (file,
                       "gdbarch_dump: is_inferior_device = %s\n",
                       plongest (gdbarch->is_inferior_device));
+  fprintf_filtered (file,
+                      "gdbarch_dump: gdbarch_infcall_bp_address_p() = %d\n",
+                      gdbarch_infcall_bp_address_p (gdbarch));
+  fprintf_filtered (file,
+                      "gdbarch_dump: infcall_bp_address = <%s>\n",
+                      host_address_to_string (gdbarch->infcall_bp_address));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -5427,4 +5435,28 @@ set_gdbarch_is_inferior_device (struct gdbarch *gdbarch,
                                 bool is_inferior_device)
 {
   gdbarch->is_inferior_device = is_inferior_device;
+}
+
+bool
+gdbarch_infcall_bp_address_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->infcall_bp_address != NULL;
+}
+
+CORE_ADDR
+gdbarch_infcall_bp_address (struct gdbarch *gdbarch, thread_info *tp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->infcall_bp_address != NULL);
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_infcall_bp_address called\n");
+  return gdbarch->infcall_bp_address (gdbarch, tp);
+}
+
+void
+set_gdbarch_infcall_bp_address (struct gdbarch *gdbarch,
+                                gdbarch_infcall_bp_address_ftype infcall_bp_address)
+{
+  gdbarch->infcall_bp_address = infcall_bp_address;
 }

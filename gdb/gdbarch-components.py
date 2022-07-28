@@ -2687,3 +2687,12 @@ information about it is available via the 'info devices' command.
     predefault="false",
     invalid=False,
 )
+
+Method(
+    comment="Define a custom address to place an inferior breakpoint.",
+    type="CORE_ADDR",
+    name="infcall_bp_address",
+    params=[("thread_info *", "tp")],
+    predicate=True,
+    invalid=True,
+)

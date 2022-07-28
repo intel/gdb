@@ -651,7 +651,7 @@ Method(
 )
 
 Value(
-    type="int",
+    type="call_dummy_location_kind",
     name="call_dummy_location",
     predefault="AT_ENTRY_POINT",
     invalid=False,

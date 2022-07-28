@@ -34,6 +34,7 @@
 #include "gdbthread.h"
 #include "inferior.h"
 #include "user-regs.h"
+#include "objfiles.h"
 #include <algorithm>
 
 /* Address space flags.
@@ -1451,6 +1452,24 @@ intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
   regcache->cooked_write_part (framedesc_regnum, 24, 8, (gdb_byte *) &fe_sp);
   return fe_sp;
 }
+
+/* Implementation of infcall_bp_address gdbarch method.  */
+static CORE_ADDR
+intelgt_infcall_bp_address (gdbarch *gdbarch, thread_info *tp)
+{
+  /* TODO: this needs to be changed once we have kernel start address
+     available in registers.
+     Until then find the section which contains the PC and take its
+     address.  */
+  regcache *regcache = get_thread_regcache (tp);
+  CORE_ADDR pc = regcache_read_pc (regcache);
+  obj_section *s = find_pc_section (pc);
+
+  if (s == nullptr)
+    error (_("Cannot retrieve the kernel starting address."));
+
+  return s->addr ();
+}
 #endif /* not USE_WIN32API */
 
 /* See GRF_HANDLER declaration.  */
@@ -1789,6 +1808,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
     gdbarch, intelgt_return_in_first_hidden_param_p);
   set_gdbarch_value_arg_coerce (gdbarch, intelgt_value_arg_coerce);
   set_gdbarch_dummy_id (gdbarch, intelgt_dummy_id);
+  set_gdbarch_call_dummy_location (gdbarch, AT_CUSTOM_POINT);
+  set_gdbarch_infcall_bp_address (gdbarch, intelgt_infcall_bp_address);
 #endif /* not USE_WIN32API */
 
   return gdbarch;

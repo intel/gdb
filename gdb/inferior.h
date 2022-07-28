@@ -287,7 +287,8 @@ enum stop_kind
 enum call_dummy_location_kind
   {
     ON_STACK = 0,
-    AT_ENTRY_POINT
+    AT_ENTRY_POINT,
+    AT_CUSTOM_POINT
   };
 
 /* Base class for target-specific inferior data.  */

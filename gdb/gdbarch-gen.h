@@ -1672,3 +1672,11 @@ extern bool gdbarch_get_shstk_pointer_p (struct gdbarch *gdbarch);
 typedef void (gdbarch_get_shstk_pointer_ftype) (struct gdbarch *gdbarch, CORE_ADDR *ssp);
 extern void gdbarch_get_shstk_pointer (struct gdbarch *gdbarch, CORE_ADDR *ssp);
 extern void set_gdbarch_get_shstk_pointer (struct gdbarch *gdbarch, gdbarch_get_shstk_pointer_ftype *get_shstk_pointer);
+
+/* Define a custom address to place an inferior breakpoint. */
+
+extern bool gdbarch_infcall_bp_address_p (struct gdbarch *gdbarch);
+
+typedef CORE_ADDR (gdbarch_infcall_bp_address_ftype) (struct gdbarch *gdbarch, thread_info *tp);
+extern CORE_ADDR gdbarch_infcall_bp_address (struct gdbarch *gdbarch, thread_info *tp);
+extern void set_gdbarch_infcall_bp_address (struct gdbarch *gdbarch, gdbarch_infcall_bp_address_ftype *infcall_bp_address);

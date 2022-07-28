@@ -155,6 +155,7 @@ enum call_dummy_location_type
 {
   ON_STACK,
   AT_ENTRY_POINT,
+  AT_CUSTOM_POINT,
 };
 
 #include "gdbarch-gen.h"

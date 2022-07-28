@@ -29,6 +29,7 @@
 #include "infrun.h"
 #include "osabi.h"
 #include "displaced-stepping.h"
+#include "inferior.h"
 
 struct floatformat;
 struct ui_file;

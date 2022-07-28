@@ -97,7 +97,7 @@ struct gdbarch
   gdbarch_active_lanes_mask_ftype *active_lanes_mask;
   int deprecated_fp_regnum;
   gdbarch_push_dummy_call_ftype *push_dummy_call;
-  int call_dummy_location;
+  call_dummy_location_kind call_dummy_location;
   gdbarch_push_dummy_code_ftype *push_dummy_code;
   gdbarch_code_of_frame_writable_ftype *code_of_frame_writable;
   gdbarch_print_registers_info_ftype *print_registers_info;
@@ -2399,7 +2399,7 @@ set_gdbarch_push_dummy_call (struct gdbarch *gdbarch,
   gdbarch->push_dummy_call = push_dummy_call;
 }
 
-int
+call_dummy_location_kind
 gdbarch_call_dummy_location (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
@@ -2411,7 +2411,7 @@ gdbarch_call_dummy_location (struct gdbarch *gdbarch)
 
 void
 set_gdbarch_call_dummy_location (struct gdbarch *gdbarch,
-                                 int call_dummy_location)
+                                 call_dummy_location_kind call_dummy_location)
 {
   gdbarch->call_dummy_location = call_dummy_location;
 }

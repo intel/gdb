@@ -1102,6 +1102,19 @@ call_function_by_hand_dummy (struct value *function,
 	bp_addr = dummy_addr;
 	break;
       }
+    case AT_CUSTOM_POINT:
+      {
+	if (!gdbarch_push_dummy_code_p (gdbarch))
+	  error (_("This target does not support function calls."));
+
+	/* In this call, the arch must set the BP_ADDR and the REAL_PC.
+	   Optionally, it can push to the stack prior to arguments push.  */
+	sp = gdbarch_push_dummy_code (gdbarch, sp, funaddr, args.data (),
+				      args.size (), target_values_type,
+				      &real_pc, &bp_addr,
+				      get_current_regcache ());
+	break;
+      }
     default:
       internal_error (_("bad switch"));
     }

@@ -864,6 +864,28 @@ dwarf_expr_context::read_mem (gdb_byte *buf, CORE_ADDR addr,
 /* See expr.h.  */
 
 void
+dwarf_expr_context::read_reg (gdb_byte *buf, size_t bitoffset,
+			      size_t bitsize, int dwregnum)
+{
+  struct gdbarch * const gdbarch = get_frame_arch (this->m_frame);
+  const int regnum = dwarf_reg_to_regnum_or_error (gdbarch, dwregnum);
+
+  const ULONGEST regsize = register_size (gdbarch, regnum);
+  if ((regsize * 8) <  (bitsize + bitoffset))
+    error (_("DWARF expr: error accessing %s[%" PRIu64 ":%" PRIu64 "]"),
+	   gdbarch_register_name (gdbarch, regnum),
+	   bitsize + bitoffset - 1, bitoffset);
+
+  gdb_byte * const regbuf = (gdb_byte *) alloca (regsize);
+  get_frame_register (this->m_frame, regnum, regbuf);
+
+  const enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  copy_bitwise (buf, 0, regbuf, bitoffset, bitsize, byte_order);
+}
+
+/* See expr.h.  */
+
+void
 dwarf_expr_context::push_dwarf_reg_entry_value (call_site_parameter_kind kind,
 						call_site_parameter_u kind_u,
 						int deref_size)
@@ -2368,6 +2390,20 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	      = dwarf_reg_to_regnum_or_error (get_frame_arch (this->m_frame),
 					      reg);
 	    result_val = value_from_register (type, regnum, this->m_frame);
+	  }
+	  break;
+
+	case DW_OP_INTEL_regval_bits:
+	  {
+	    uint8_t size = *op_ptr++;
+	    const ULONGEST off = value_as_long (fetch (0));
+	    pop ();
+	    const LONGEST dwregnum = value_as_long (fetch (0));
+	    pop ();
+
+	    result = 0;
+	    read_reg ((gdb_byte *) &result, off, size, dwregnum);
+	    result_val = value_from_ulongest (address_type, result);
 	  }
 	  break;
 

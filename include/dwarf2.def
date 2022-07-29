@@ -700,6 +700,10 @@ DW_OP (DW_OP_GNU_const_index, 0xfc)
 /* The GNU variable value extension.
    See http://dwarfstd.org/ShowIssue.php?issue=161109.2 . */
 DW_OP (DW_OP_GNU_variable_value, 0xfd)
+/* https://dwarfstd.org/ShowIssue.php?issue=201007.1
+
+   The DW_OP_regval_bits operation extracts a value from a register.  */
+DW_OP (DW_OP_INTEL_regval_bits, 0xfe)
 /* HP extensions.  */
 DW_OP_DUP (DW_OP_HP_unknown, 0xe0) /* Ouch, the same as GNU_push_tls_address.  */
 DW_OP (DW_OP_HP_is_value, 0xe1)

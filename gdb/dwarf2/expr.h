@@ -261,6 +261,11 @@ private:
      If TYPE == nullptr, defaults to this->address_type ().  */
   value *deref (CORE_ADDR addr, int size, struct type *type = nullptr);
 
+  /* Read BITSIZE bits from the register indicated by the DWARF register
+     number DWREGNUM starting at bit BITOFFSET into BUF.  */
+  void read_reg (gdb_byte *buf, size_t bitoffset, size_t bitsize,
+		 int dwregnum);
+
   /* Return the current SIMD lane for DW_OP_INTEL_push_simd_lane.  */
   ULONGEST get_simd_lane ();
 };

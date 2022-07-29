@@ -3348,6 +3348,7 @@ disassemble_dwarf_expression (struct ui_file *stream,
 	  break;
 
 	case DW_OP_const1u:
+	case DW_OP_INTEL_regval_bits:
 	  ul = extract_unsigned_integer (data, 1, gdbarch_byte_order (arch));
 	  data += 1;
 	  gdb_printf (stream, " %s", pulongest (ul));

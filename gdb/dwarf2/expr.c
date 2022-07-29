@@ -2513,6 +2513,20 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	  }
 	  break;
 
+	case DW_OP_INTEL_regval_bits:
+	  {
+	    uint8_t size = *op_ptr++;
+	    const ULONGEST off = value_as_long (fetch (0));
+	    pop ();
+	    const LONGEST dwregnum = value_as_long (fetch (0));
+	    pop ();
+
+	    result = 0;
+	    read_reg ((gdb_byte *) &result, off, size, dwregnum);
+	    result_val = value_from_ulongest (address_type, result);
+	  }
+	  break;
+
 	case DW_OP_convert:
 	case DW_OP_GNU_convert:
 	case DW_OP_reinterpret:

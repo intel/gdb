@@ -1,0 +1,108 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests for SIMD support in breakpoints hit by threads with execution mask 0x0.
+
+load_lib sycl.exp
+
+standard_testfile intelgt-emask.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set first_line [gdb_get_line_number "kernel-line-1"]
+	gdb_breakpoint "$first_line" {temporary}
+	gdb_continue_to_breakpoint "hit the BP at the first line"
+
+	set fill "\[^\r\n\]*"
+	set current_address [get_hexadecimal_valueof "\$pc" "0"]
+	set join_address "none"
+
+	gdb_test_multiple "disassemble" "find join" {
+	    -re "($hex)${fill}join" {
+		set address $expect_out(1,string)
+		verbose -log "parsed address:  $address"
+		verbose -log "current address: $current_address"
+		if {$address > $current_address && $join_address eq "none"} {
+		    # Remember the first join instruction which is after the current PC.
+		    set join_address $address
+		}
+		exp_continue
+	    }
+	    -re "($hex)$fill" {
+		# Skip non-join entries.
+		exp_continue
+	    }
+	    -re "$gdb_prompt $" {
+		# Proceed only if there is a join instruction found.
+		# Join instruction may be not there.  In this case we mark the test
+		# as unsupported.
+		if {$join_address eq "none"} {
+		    unsupported $gdb_test_name
+		    continue
+		}
+		pass $gdb_test_name
+	    }
+	}
+
+	# Set and hit a BP at a join instruction.  We expect the emask to be 0x0 there.
+	gdb_breakpoint "*$join_address" {temporary}
+	gdb_test "continue" ".*\\(inactive\\).*$srcfile.*" \
+	    "hit inactive thread"
+	# Check that the higher bits of $emask register are 0x0.
+	# We have only 16 SIMD lanes.
+	gdb_test "print\/x \$emask & 0xffff" "= 0x0" \
+	    "print \$emask of an inactive thread"
+	gdb_test "thread" "Current thread.*\\(inactive\\).*" \
+	    "Current thread is marked as inactive"
+	set current_thread [get_current_thread "inactive stop"]
+	gdb_test "info threads -stopped $current_thread" \
+	    "$current_thread.*Thread.*$srcfile.*" \
+	    "info threads for inactive thread"
+
+	set inactive_error "SIMD lane $decimal is inactive in thread $current_thread"
+	# Printing a local variable should give an error.
+	gdb_test "print dim0" "$inactive_error"
+
+	gdb_test "thread $current_thread" \
+	    "Switching to thread $current_thread \\(Thread $decimal\\.$decimal\\) inactive.*"
+
+	# An inactive thread still has the frame displayed, but args cannot
+	# be read.
+	gdb_test "info threads $current_thread" \
+	    "$current_thread${fill}wiID=<error reading variable: $inactive_error>$fill$srcfile:$decimal"
+    }
+}

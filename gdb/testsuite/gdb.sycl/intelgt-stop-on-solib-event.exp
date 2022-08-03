@@ -1,0 +1,146 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDB's support for stopping on solib load events for LevelZero
+# debug API.
+
+load_lib sycl.exp
+
+standard_testfile single-task.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+proc test_solib {device stop_on_solib_events auto_solib_add non_stop_mode} {
+    global srcfile hex inferior_exited_re
+
+    gdb_test_no_output "set non-stop $non_stop_mode"
+    if {![runto_main [sycl_get_device_args $device]]} {
+	return -1
+    }
+
+    set line_before_kernel [gdb_get_line_number "line-before-kernel"]
+    set inside_kernel_4 [gdb_get_line_number "kernel-line-4"]
+    gdb_breakpoint "$srcfile:$line_before_kernel" {temporary}
+
+    gdb_continue_to_breakpoint "line-before-kernel" ".*$srcfile:$line_before_kernel.*"
+
+    gdb_test_no_output "set stop-on-solib-events $stop_on_solib_events"
+    gdb_test_no_output "set auto-solib-add $auto_solib_add"
+
+    if {$stop_on_solib_events} {
+	set num_solib_event 0
+	set test_name "shared library loaded"
+	set in_memory_lib "<in-memory@$hex-$hex>"
+
+	gdb_test_multiple "continue" $test_name {
+	    -re -wrap "Inferior loaded (${in_memory_lib}(\[\\s\r\n\])*)+" {
+		with_test_prefix "iteration $num_solib_event" {
+		    # Stopping at a module load event.
+		    incr num_solib_event
+		    pass "stopped at module load event"
+
+		    if {!$auto_solib_add} {
+			gdb_test "info sharedlibrary" \
+			    "($hex\\s+$hex\\s+No\\s+${in_memory_lib})+"
+			gdb_test "break $inside_kernel_4" "No symbol table is loaded.*" \
+			    "unable to define a breakpoint using line numbers"
+		    } else {
+		      gdb_test "info sharedlibrary" \
+			  "($hex\\s+$hex\\s+Yes\\s+${in_memory_lib})+"
+			gdb_breakpoint "$srcfile:$inside_kernel_4" {temporary}
+		    }
+
+		    send_gdb "continue\n"
+		    exp_continue
+		}
+	    }
+	    -re -wrap "Inferior unloaded (${in_memory_lib}(\[\\s\r\n\])*)+" {
+		pass "stopped at module unload event"
+		send_gdb "continue\n"
+		exp_continue
+	    }
+	    -re -wrap "$srcfile:$inside_kernel_4.*" {
+		# Stopping at kernel breakpoint.
+		gdb_assert {$num_solib_event > 0}
+		pass "hit breakpoint inside kernel"
+		gdb_test "info locals" [multi_line \
+		    "ten = 10" \
+		    "four = 4" \
+		    "fourteen = 14"]
+		send_gdb "continue\n"
+		exp_continue
+	    }
+	    -re -wrap "no libraries added or removed.*" {
+		# Stopped due to a CPU event.
+		send_gdb "continue\n"
+		exp_continue
+	    }
+	    -re "Inferior loaded ${in_memory_lib}" {
+		# In non-stop mode we don't expect any stops.
+		pass $gdb_test_name
+		incr num_solib_event
+	    }
+	    -re -wrap "$inferior_exited_re normally].*" {
+		# Exitting the program normally.
+		pass "program exited normally"
+	    }
+	}
+
+	verbose -log "stopped at solib events $num_solib_event times"
+	gdb_assert {$num_solib_event > 0} "stopped at module load events"
+    } else {
+	# The Intel GT target requires the kernel modules to be ack'ed.
+	# Even when auto-solib-add is turned off, the libraries
+	# should be acknowledged and the program should be able to run to
+	# the end.  If there is no ack, the program would hang.
+	continue_sycl_program_to_termination
+    }
+}
+
+foreach device $sycl_device_list {
+
+    sycl_with_intelgt_lock $device {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![is_level_zero_debug_api]} {
+	    unsupported "test is aimed at Level Zero debug API only"
+	    continue
+	}
+
+	clean_restart "${binfile}"
+
+	foreach_with_prefix stop_on_solib_events {0 1} {
+	    foreach_with_prefix auto_solib_add {"on" "off"} {
+		foreach_with_prefix non_stop_mode {"off" "on"} {
+		    clean_restart $binfile
+		    test_solib $device $stop_on_solib_events $auto_solib_add $non_stop_mode
+		}
+	    }
+	}
+    }
+}

@@ -1,0 +1,87 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDB's support for stopping on solib load events for LevelZero
+# debug API.
+
+load_lib sycl.exp
+
+standard_testfile single-task.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![is_level_zero_debug_api]} {
+	    unsupported "test is aimed at Level Zero debug API only"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set line_before_kernel [gdb_get_line_number "line-before-kernel"]
+	set inside_kernel_4 [gdb_get_line_number "kernel-line-4"]
+	gdb_breakpoint "$srcfile:$line_before_kernel" {temporary}
+	gdb_breakpoint "$srcfile:$inside_kernel_4" {temporary}
+
+	# Continue until the kernel is submitted.
+	gdb_continue_to_breakpoint "line-before-kernel" ".*$srcfile:$line_before_kernel.*"
+
+	# Enable stop on solib events.
+	gdb_test_no_output "set stop-on-solib-events 1"
+
+	# Solib events counter.
+	set num_solib_event 0
+
+	set test_name "shared library loaded"
+	gdb_test_multiple "continue" $test_name {
+	    -re -wrap "Inferior loaded (in-memory-$hex-$hex)" {
+		incr num_solib_event
+		pass "stop-on-solib-event $num_solib_event"
+		set re_info_shared $expect_out(1,string)
+		verbose -log "Solib event for $re_info_shared"
+		gdb_test "info shared" "$hex\\s+$hex\\s+Yes\\s+$re_info_shared" \
+		    "info shared $num_solib_event"
+		send_gdb "continue\n"
+		exp_continue
+	    }
+	    -re -wrap "$srcfile:$inside_kernel_4.*" {
+		gdb_assert {$num_solib_event > 0} $test_name
+		gdb_test "info locals" [multi_line \
+		    "ten = 10" \
+		    "four = 4" \
+		    "fourteen = 14"]
+	    }
+	}
+    }
+}

@@ -21,33 +21,31 @@ load_lib mi-support.exp
 
 standard_testfile parallel-for-1D.cpp
 
-if {[skip_sycl_tests]} {
-    unsupported "target does not support SYCL"
-    return 0
-}
-
-if {[prepare_sycl_for_testing $binfile $srcfile]} {
-    return -1
-}
-
 set MIFLAGS "-i=mi"
 
-# Run a simple flow for both sync and async MI modes:
-# we hit a breakpoint inside the kernel and continue to end.
-foreach_with_prefix async {"off" "on"} {
-    mi_clean_restart $binfile
+# A generic function name is used to call it from the SYCL library.
+proc "sycl_${gdb_test_file_name}_run_tests" {} {
+    global binfile MIFLAGS
 
-    mi_gdb_test "-gdb-set mi-async $async" ".*done.*" "set async $async"
+    # Run a simple flow for both sync and async MI modes:
+    # we hit a breakpoint inside the kernel and continue to end.
+    foreach_with_prefix async {"off" "on"} {
+	mi_clean_restart $binfile
 
-    if {[mi_start_sycl_program] < 0} {
-	return -1
+	mi_gdb_test "-gdb-set mi-async $async" ".*done.*" "set async $async"
+
+	if {[mi_start_sycl_program] < 0} {
+	    return -1
+	}
+
+	# Run till a temporary BP inside a kernel.
+	set first_kernel_line [gdb_get_line_number "kernel-first-line"]
+	mi_continue_to_line $first_kernel_line "Continue to 'kernel_first_line' and stop at breakpoint"
+	# Send resuming command.
+	mi_send_resuming_command "exec-continue" "continuing to inferior exit"
+	# Expect normal exit.
+	mi_expect_stop "exited-normally" "" "" "" "" "" "exit normally"
     }
-
-    # Run till a temporary BP inside a kernel.
-    set first_kernel_line [gdb_get_line_number "kernel-first-line"]
-    mi_continue_to_line $first_kernel_line "Continue to 'kernel_first_line' and stop at breakpoint"
-    # Send resuming command.
-    mi_send_resuming_command "exec-continue" "continuing to inferior exit"
-    # Expect normal exit.
-    mi_expect_stop "exited-normally" "" "" "" "" "" "exit normally"
 }
+
+test_initialize

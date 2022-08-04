@@ -20,24 +20,22 @@ load_lib sycl.exp
 
 standard_testfile single-task.cpp
 
-if {[skip_sycl_tests]} {
-    unsupported "target does not support SYCL"
-    return 0
+# A generic function name is used to call it from the SYCL library.
+proc "sycl_${gdb_test_file_name}_run_tests" {} {
+    global srcfile
+
+    if {[start_sycl_program] < 0} {
+	return -1
+    }
+
+    # Break at the first line of the kernel, then make steps.
+    set first_line [gdb_get_line_number "kernel-line-1"]
+    gdb_breakpoint $first_line
+    gdb_continue_to_breakpoint "first line" ".*$srcfile:$first_line.*"
+
+    gdb_test "next" "int four = .*" "next 1"
+    gdb_test "next" "int fourteen = .*" "next 2"
+    gdb_test "next" "numbers.0. = .*" "next 3"
 }
 
-if {[prepare_sycl_for_testing $binfile $srcfile]} {
-    return -1
-}
-
-if {[start_sycl_program] < 0} {
-    return -1
-}
-
-# Break at the first line of the kernel, then make steps.
-set first_line [gdb_get_line_number "kernel-line-1"]
-gdb_breakpoint $first_line
-gdb_continue_to_breakpoint "first line" ".*$srcfile:$first_line.*"
-
-gdb_test "next" "int four = .*" "next 1"
-gdb_test "next" "int fourteen = .*" "next 2"
-gdb_test "next" "numbers.0. = .*" "next 3"
+test_initialize

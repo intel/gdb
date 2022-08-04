@@ -19,56 +19,52 @@ load_lib sycl.exp
 
 standard_testfile .cpp
 
-if {[skip_sycl_tests]} {
-    unsupported "target does not support SYCL"
-    return 0
-}
+# A generic function name is used to call it from the SYCL library.
+proc "sycl_${gdb_test_file_name}_run_tests" {} {
+    global srcfile
 
-if {![require_sycl_device "gpu" "Intel*"]} {
-    unsupported "test is aimed at Intel GPUs only"
-    return 0
+    if {![require_sycl_device "gpu" "Intel*"]} {
+	unsupported "test is aimed at Intel GPUs only"
+	return 0
+    }
+
+   if {[start_sycl_program] < 0} {
+	return -1
+    }
+
+    set line_1 [gdb_get_line_number "simd\.1"]
+    set line_2 [gdb_get_line_number "simd\.2"]
+
+    gdb_breakpoint $line_1 {temporary}
+    gdb_continue_to_breakpoint "simd.1" ".*$srcfile:$line_1.*"
+
+    with_test_prefix "simd_width_16" {
+	gdb_assert {[current_thread_has_simd_lanes]}
+	gdb_test "print \$_simd_width" " = 16"
+
+	for {set lane 0} {$lane < 16} {incr lane 2} {
+	    gdb_test "thread :$lane" "Switching to thread .*:$lane \\(Thread .* lane $lane\\).*"
+	}
+	for {set lane 1} {$lane < 16} {incr lane 2} {
+	    gdb_test "thread :$lane" "SIMD lane $lane is inactive in thread.*"
+	}
+    }
+
+    gdb_breakpoint $line_2 {temporary}
+    gdb_continue_to_breakpoint "simd.2" ".*$srcfile:$line_2.*"
+
+    with_test_prefix "simd_width_32" {
+	gdb_assert {[current_thread_has_simd_lanes]}
+	gdb_test "print \$_simd_width" " = 32"
+
+	for {set lane 1} {$lane < 32} {incr lane 2} {
+	    gdb_test "thread :$lane" "Switching to thread .*:$lane.*\\(Thread .* lane $lane\\).*"
+	}
+	for {set lane 0} {$lane < 32} {incr lane 2} {
+	    gdb_test "thread :$lane" "SIMD lane $lane is inactive in thread.*"
+	}
+    }
 }
 
 # Set the -O2 flag explicitly.
-set options [concat {c++ debug} {optimize=-O2}]
-set message "failed to compile $srcfile"
-if {[prepare_for_testing $message $binfile $srcfile $options]} {
-    return -1
-}
-
-if {[start_sycl_program] < 0} {
-    return -1
-}
-
-set line_1 [gdb_get_line_number "simd\.1"]
-set line_2 [gdb_get_line_number "simd\.2"]
-
-gdb_breakpoint $line_1 {temporary}
-gdb_continue_to_breakpoint "simd.1" ".*$srcfile:$line_1.*"
-
-with_test_prefix "simd_width_16" {
-    gdb_assert {[current_thread_has_simd_lanes]}
-    gdb_test "print \$_simd_width" " = 16"
-
-    for {set lane 0} {$lane < 16} {incr lane 2} {
-	gdb_test "thread :$lane" "Switching to thread .*:$lane \\(Thread .* lane $lane\\).*"
-    }
-    for {set lane 1} {$lane < 16} {incr lane 2} {
-	gdb_test "thread :$lane" "SIMD lane $lane is inactive in thread.*"
-    }
-}
-
-gdb_breakpoint $line_2 {temporary}
-gdb_continue_to_breakpoint "simd.2" ".*$srcfile:$line_2.*"
-
-with_test_prefix "simd_width_32" {
-    gdb_assert {[current_thread_has_simd_lanes]}
-    gdb_test "print \$_simd_width" " = 32"
-
-    for {set lane 1} {$lane < 32} {incr lane 2} {
-	gdb_test "thread :$lane" "Switching to thread .*:$lane.*\\(Thread .* lane $lane\\).*"
-    }
-    for {set lane 0} {$lane < 32} {incr lane 2} {
-	gdb_test "thread :$lane" "SIMD lane $lane is inactive in thread.*"
-    }
-}
+test_initialize "optimize=-O2"

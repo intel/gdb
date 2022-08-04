@@ -20,29 +20,27 @@ load_lib sycl.exp
 
 standard_testfile parallel-for-2D.cpp
 
-if {[skip_sycl_tests]} {
-    unsupported "target does not support SYCL"
-    return 0
+# A generic function name is used to call it from the SYCL library.
+proc "sycl_${gdb_test_file_name}_run_tests" {} {
+    global srcfile
+
+    if {[start_sycl_program] < 0} {
+	return -1
+    }
+
+    set last_line [gdb_get_line_number "kernel-last-line"]
+    gdb_breakpoint $last_line
+
+    gdb_continue_to_breakpoint "last line" \
+	".*$srcfile:$last_line.*"
+
+    # Access the data element through work item index.
+    # It does not matter which thread reported the breakpoint hit.
+    if {[require_sycl_device "gpu" "Intel*"]} {
+	setup_kfail "JIRA XDEPS/3982" "*-*-*"
+    }
+    gdb_test "print in_elem == accessorIn\[wiID\]" "true" \
+	"access data element via wiID"
 }
 
-if {[prepare_sycl_for_testing $binfile $srcfile]} {
-    return -1
-}
-
-if {[start_sycl_program] < 0} {
-    return -1
-}
-
-set last_line [gdb_get_line_number "kernel-last-line"]
-gdb_breakpoint $last_line
-
-gdb_continue_to_breakpoint "last line" \
-    ".*$srcfile:$last_line.*"
-
-# Access the data element through work item index.
-# It does not matter which thread reported the breakpoint hit.
-if {[require_sycl_device "gpu" "Intel*"]} {
-    setup_kfail "JIRA XDEPS/3982" "*-*-*"
-}
-gdb_test "print in_elem == accessorIn\[wiID\]" "true" \
-    "access data element via wiID"
+test_initialize

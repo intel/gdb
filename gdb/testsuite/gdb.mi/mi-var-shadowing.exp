@@ -35,10 +35,16 @@ set bp_line3 [gdb_get_line_number "bp for locals 3" ${srcfile}]
 set bp_line4 [gdb_get_line_number "bp for locals 4" ${srcfile}]
 set bp_line5 [gdb_get_line_number "bp for locals 5" ${srcfile}]
 
+set val1_d1 [gdb_get_line_number "val1-d1" ${srcfile}]
+set val1_d2 [gdb_get_line_number "val1-d2" ${srcfile}]
+set val2_d1 [gdb_get_line_number "val2-d1" ${srcfile}]
+set val2_d2 [gdb_get_line_number "val2-d2" ${srcfile}]
+set val3_d1 [gdb_get_line_number "val3-d1" ${srcfile}]
+
 set stack_test1_regx "\\^done,(locals|variables)=\\\[\{name=\"a\",type=\"int\",value=\"$decimal\"\},\{name=\"val1\",type=\"unsigned int\",value=\"1\"\},{name=\"val2\",type=\"unsigned int\",value=\"2\"\}\\\]"
-set stack_test2_regx "\\^done,(locals|variables)=\\\[\{name=\"val2\",type=\"unsigned int\",value=\"3\"\},\{name=\"val3\",type=\"unsigned int\",value=\"4\"\},\{name=\"a\",type=\"int\",value=\"101\"\},\{name=\"val1\",type=\"unsigned int\",value=\"1\"\},\{name=\"val2\",shadowed=\"true\",type=\"unsigned int\",value=\"2\"\}\\\]"
-set stack_test3_regx "\\^done,(locals|variables)=\\\[\{name=\"val1\",type=\"unsigned int\",value=\"5\"},{name=\"val2\",type=\"unsigned int\",value=\"3\"\},\{name=\"val3\",type=\"unsigned int\",value=\"4\"\},\{name=\"a\",type=\"int\",value=\"102\"\},\{name=\"val1\",shadowed=\"true\",type=\"unsigned int\",value=\"1\"\},\{name=\"val2\",shadowed=\"true\",type=\"unsigned int\",value=\"2\"\}\\\]"
-set stack_test4_regx "\\^done,(locals|variables)=\\\[\{name=\"val1\",type=\"unsigned int\",value=\"6\"\},\{name=\"val2\",type=\"unsigned int\",value=\"7\"\},\{name=\"val3\",type=\"unsigned int\",value=\"8\"\},\{name=\"val1\",shadowed=\"true\",type=\"unsigned int\",value=\"5\"\},\{name=\"val2\",shadowed=\"true\",type=\"unsigned int\",value=\"3\"\},\{name=\"val3\",shadowed=\"true\",type=\"unsigned int\",value=\"4\"\},\{name=\"a\",type=\"int\",value=\"103\"\},\{name=\"val1\",shadowed=\"true\",type=\"unsigned int\",value=\"1\"\},\{name=\"val2\",shadowed=\"true\",type=\"unsigned int\",value=\"2\"\}\\\]"
+set stack_test2_regx "\\^done,(locals|variables)=\\\[\{name=\"val2\",type=\"unsigned int\",value=\"3\"\},\{name=\"val3\",type=\"unsigned int\",value=\"4\"\},\{name=\"a\",type=\"int\",value=\"101\"\},\{name=\"val1\",type=\"unsigned int\",value=\"1\"\},\{name=\"val2\",shadowed_loc=\"$val2_d1\",type=\"unsigned int\",value=\"2\"\}\\\]"
+set stack_test3_regx "\\^done,(locals|variables)=\\\[\{name=\"val1\",type=\"unsigned int\",value=\"5\"},{name=\"val2\",type=\"unsigned int\",value=\"3\"\},\{name=\"val3\",type=\"unsigned int\",value=\"4\"\},\{name=\"a\",type=\"int\",value=\"102\"\},\{name=\"val1\",shadowed_loc=\"$val1_d1\",type=\"unsigned int\",value=\"1\"\},\{name=\"val2\",shadowed_loc=\"$val2_d1\",type=\"unsigned int\",value=\"2\"\}\\\]"
+set stack_test4_regx "\\^done,(locals|variables)=\\\[\{name=\"val1\",type=\"unsigned int\",value=\"6\"\},\{name=\"val2\",type=\"unsigned int\",value=\"7\"\},\{name=\"val3\",type=\"unsigned int\",value=\"8\"\},\{name=\"val1\",shadowed_loc=\"$val1_d2\",type=\"unsigned int\",value=\"5\"\},\{name=\"val2\",shadowed_loc=\"$val2_d2\",type=\"unsigned int\",value=\"3\"\},\{name=\"val3\",shadowed_loc=\"$val3_d1\",type=\"unsigned int\",value=\"4\"\},\{name=\"a\",type=\"int\",value=\"103\"\},\{name=\"val1\",shadowed_loc=\"$val1_d1\",type=\"unsigned int\",value=\"1\"\},\{name=\"val2\",shadowed_loc=\"$val2_d1\",type=\"unsigned int\",value=\"2\"\}\\\]"
 set stack_test5_regx "\\^done,(locals|variables)=\\\[\{name=\"a\",type=\"int\",value=\"104\"\},\{name=\"val1\",type=\"unsigned int\",value=\"1\"\},\{name=\"val2\",type=\"unsigned int\",value=\"2\"\}\\\]"
 
 mi_gdb_test \
@@ -68,7 +74,7 @@ mi_gdb_test "-stack-list-locals 0"  \
     "\\^done,locals=\\\[name=\"val2\",name=\"val3\",name=\"a\",name=\"val1\",name=\"val2\"\\\]"  \
     "-stack-list-locals 0 at first level"
 mi_gdb_test "-stack-list-variables 0" \
-    "\\^done,variables=\\\[{name=\"val2\"},{name=\"val3\"},{name=\"a\"},{name=\"val1\"},{name=\"val2\",shadowed=\"true\"}\\\]"  \
+    "\\^done,variables=\\\[{name=\"val2\"},{name=\"val3\"},{name=\"a\"},{name=\"val1\"},{name=\"val2\",shadowed_loc=\"$val2_d1\"}\\\]"  \
     "-stack-list-variables 0 at first level"
 mi_gdb_test "-stack-list-locals 2" "${stack_test2_regx}"  \
     "-stack-list-locals 2 at first level"
@@ -85,7 +91,7 @@ mi_gdb_test "-stack-list-locals 0"  \
      "\\^done,locals=\\\[name=\"val1\",name=\"val2\",name=\"val3\",name=\"a\",name=\"val1\",name=\"val2\"\\\]"  \
     "-stack-list-locals 0 at second level"
 mi_gdb_test "-stack-list-variables 0"  \
-     "\\^done,variables=\\\[{name=\"val1\"},{name=\"val2\"},{name=\"val3\"},{name=\"a\"},{name=\"val1\",shadowed=\"true\"},{name=\"val2\",shadowed=\"true\"}\\\]"  \
+     "\\^done,variables=\\\[{name=\"val1\"},{name=\"val2\"},{name=\"val3\"},{name=\"a\"},{name=\"val1\",shadowed_loc=\"$val1_d1\"},{name=\"val2\",shadowed_loc=\"$val2_d1\"}\\\]"  \
     "-stack-list-variables 0 at second level"
 mi_gdb_test "-stack-list-locals 2" "${stack_test3_regx}"  \
      "-stack-list-locals 2 at second level"
@@ -102,7 +108,7 @@ mi_gdb_test "-stack-list-locals 0"  \
     "\\^done,locals=\\\[name=\"val1\",name=\"val2\",name=\"val3\",name=\"val1\",name=\"val2\",name=\"val3\",name=\"a\",name=\"val1\",name=\"val2\"\\\]"  \
     "-stack-list-locals 0 at third level"
 mi_gdb_test "-stack-list-variables 0" \
-    "\\^done,variables=\\\[{name=\"val1\"},{name=\"val2\"},{name=\"val3\"},{name=\"val1\",shadowed=\"true\"},{name=\"val2\",shadowed=\"true\"},{name=\"val3\",shadowed=\"true\"},{name=\"a\"},{name=\"val1\",shadowed=\"true\"},{name=\"val2\",shadowed=\"true\"}\\\]"  \
+    "\\^done,variables=\\\[{name=\"val1\"},{name=\"val2\"},{name=\"val3\"},{name=\"val1\",shadowed_loc=\"$val1_d2\"},{name=\"val2\",shadowed_loc=\"$val2_d2\"},{name=\"val3\",shadowed_loc=\"$val3_d1\"},{name=\"a\"},{name=\"val1\",shadowed_loc=\"$val1_d1\"},{name=\"val2\",shadowed_loc=\"$val2_d1\"}\\\]"  \
     "-stack-list-variables 0 at third level"
 mi_gdb_test "-stack-list-locals 2" "${stack_test4_regx}"  \
     "-stack-list-locals 2 at third level"

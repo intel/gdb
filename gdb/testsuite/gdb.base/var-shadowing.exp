@@ -29,6 +29,12 @@ set bp_line3 [gdb_get_line_number "bp for locals 3" ${srcfile}]
 set bp_line4 [gdb_get_line_number "bp for locals 4" ${srcfile}]
 set bp_line5 [gdb_get_line_number "bp for locals 5" ${srcfile}]
 
+set val1_d1 [gdb_get_line_number "val1-d1" ${srcfile}]
+set val1_d2 [gdb_get_line_number "val1-d2" ${srcfile}]
+set val2_d1 [gdb_get_line_number "val2-d1" ${srcfile}]
+set val2_d2 [gdb_get_line_number "val2-d2" ${srcfile}]
+set val3_d1 [gdb_get_line_number "val3-d1" ${srcfile}]
+
 gdb_breakpoint $srcfile:$bp_line1
 gdb_test "continue" ".*bp for locals 1.*" "continue to outermost level"
 gdb_test "info locals"  [multi_line \
@@ -43,7 +49,7 @@ gdb_test "info locals"  [multi_line \
     "val3 = 4"  \
     "a = 101"   \
     "val1 = 1"  \
-    "val2 = 2\t<shadowed>"  \
+    "val2 = 2\t<shadowed: decl at line $val2_d1>"  \
     ] "info locals first level"
 
 gdb_breakpoint $srcfile:$bp_line3
@@ -53,8 +59,8 @@ gdb_test "info locals" [multi_line \
     "val2 = 3"  \
     "val3 = 4"  \
     "a = 102"   \
-    "val1 = 1\t<shadowed>"  \
-    "val2 = 2\t<shadowed>"  \
+    "val1 = 1\t<shadowed: decl at line $val1_d1>"  \
+    "val2 = 2\t<shadowed: decl at line $val2_d1>"  \
     ] "info locals second level"
 
 gdb_breakpoint $srcfile:$bp_line4
@@ -63,12 +69,12 @@ gdb_test "info locals" [multi_line \
     "val1 = 6"  \
     "val2 = 7"  \
     "val3 = 8"  \
-    "val1 = 5\t<shadowed>" \
-    "val2 = 3\t<shadowed>" \
-    "val3 = 4\t<shadowed>" \
+    "val1 = 5\t<shadowed: decl at line $val1_d2>" \
+    "val2 = 3\t<shadowed: decl at line $val2_d2>" \
+    "val3 = 4\t<shadowed: decl at line $val3_d1>" \
     "a = 103"   \
-    "val1 = 1\t<shadowed>" \
-    "val2 = 2\t<shadowed>" \
+    "val1 = 1\t<shadowed: decl at line $val1_d1>" \
+    "val2 = 2\t<shadowed: decl at line $val2_d1>" \
     ] "info locals at innermost level"
 
 gdb_breakpoint $srcfile:$bp_line5

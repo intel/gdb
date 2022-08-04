@@ -8778,6 +8778,18 @@ The optional flag @samp{-q}, which stands for @samp{quiet}, disables
 printing header information and messages explaining why no local variables
 have been printed.
 
+@smallexample
+1: int x = 3;
+2: @{
+3:       int x = 4; // breakpt
+4: @}
+(gdb) info locals
+x = 4
+x = 3   <shadowed: decl at line 1>
+@end smallexample
+
+If a variable is shadowed, the declaration line is also printed.
+
 @item info locals [-q] [-t @var{type_regexp}] [@var{regexp}]
 Like @kbd{info locals}, but only print the local variables selected
 with the provided regexp(s).
@@ -33231,6 +33243,18 @@ supplied, then Python frame filters will not be executed.
 If the @code{--skip-unavailable} option is specified, local variables
 and arguments that are not available are not listed.  Partially
 available arguments and local variables are still displayed, however.
+
+@smallexample
+1: int x = 3;
+2: @{
+3:       int x = 4; // breakpt
+4: @}
+(gdb) -stack-list-variables 2
+^done,variables=[@{name="x",type="int",value="4"@},@{name="x",shadowed_loc="1",type="int",value="3"@}]
+@end smallexample
+
+If a variable is shadowed, the @code{shadowed_loc} attribute is added and
+the line of declaration is displayed.
 
 @subsubheading Example
 

@@ -2405,10 +2405,17 @@ print_variable_and_value (const char *name, struct symbol *var,
       opts.deref_ref = 1;
       common_val_print_checked (val, stream, indent, &opts, current_language);
 
-      /* Print <shadowed> after the variable value only when it is variable
-	 shadowing case.  */
+      /* Print <shadowed: decl at line %line> after the variable value only
+	 when it is variable shadowing case.  */
       if (shadowed)
-	fprintf_styled (stream, metadata_style.style (), _("\t<shadowed>"));
+	{
+	  if (var->line () > 0)
+	    fprintf_styled (stream, metadata_style.style (),
+			    _("\t<shadowed: decl at line %d>"), var->line ());
+	  else
+	    fprintf_styled (stream, metadata_style.style (),
+			    _("\t<shadowed: decl line not available>"));
+	}
 
       /* common_val_print invalidates FRAME when a pretty printer calls inferior
 	 function.  */

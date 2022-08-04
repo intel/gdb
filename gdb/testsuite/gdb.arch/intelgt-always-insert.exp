@@ -20,26 +20,9 @@ load_lib sycl.exp
 
 standard_testfile .cpp
 
-if {[skip_sycl_tests]} {
-    unsupported "target does not support SYCL"
-    return 0
-}
+proc check_mode {mode bp2 request} {
+    global decimal gdb_prompt srcfile
 
-if {![require_sycl_device "gpu" "Intel*"]} {
-    unsupported "test is aimed at Intel GPUs only"
-    return 0
-}
-
-if {[prepare_sycl_for_testing $binfile $srcfile]} {
-    return -1
-}
-
-if {[start_sycl_program] < 0} {
-    return -1
-}
-
-proc check_mode {mode} {
-    global request decimal gdb_prompt srcfile bp2
     gdb_test "set breakpoint always-inserted $mode"
     set write_count 0
 
@@ -69,24 +52,40 @@ proc check_mode {mode} {
     }
 }
 
-set bp1 [gdb_get_line_number "kernel-first-line"]
-gdb_breakpoint $bp1 {temporary}
-gdb_continue_to_breakpoint "$srcfile:$bp1"
+# A generic function name is used to call it from the SYCL library.
+proc "sycl_${gdb_test_file_name}_run_tests" {} {
+    global srcfile decimal gdb_prompt hex
 
-# Set a new main breakpoint.
-set bp2 [gdb_get_line_number "kernel-last-line"]
+    if {![require_sycl_device "gpu" "Intel*"]} {
+	unsupported "test is aimed at Intel GPUs only"
+	return -1
+    }
 
-set addr "invalid"
-gdb_test_multiple "break $bp2 inferior 2" "break $bp2 inferior 2" {
-    -re -wrap "Breakpoint ($decimal) at ($hex): \[^\r\n\]*$srcfile\[^\r\n\]*" {
-	set addr $expect_out(2,string)
-	pass $gdb_test_name
+    if {[start_sycl_program] < 0} {
+	return -1
+    }
+
+    set bp1 [gdb_get_line_number "kernel-first-line"]
+    gdb_breakpoint $bp1 {temporary}
+    gdb_continue_to_breakpoint "$srcfile:$bp1"
+
+    # Set a new main breakpoint.
+    set bp2 [gdb_get_line_number "kernel-last-line"]
+
+    set addr "invalid"
+    gdb_test_multiple "break $bp2 inferior 2" "break $bp2 inferior 2" {
+	-re -wrap "Breakpoint ($decimal) at ($hex): \[^\r\n\]*$srcfile\[^\r\n\]*" {
+	    set addr $expect_out(2,string)
+	    pass $gdb_test_name
+	}
+    }
+
+    set request [string map {"0x" "\\\$X"} $addr]
+    verbose -log "packet request to look for: $request"
+
+    foreach_with_prefix mode {"off" "on" "auto"} {
+	check_mode $mode $bp2 $request
     }
 }
 
-set request [string map {"0x" "\\\$X"} $addr]
-verbose -log "packet request to look for: $request"
-
-foreach_with_prefix mode {"off" "on" "auto"} {
-    check_mode $mode
-}
+test_initialize

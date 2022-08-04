@@ -20,21 +20,19 @@ load_lib sycl.exp
 
 standard_testfile call-stack.cpp
 
-if {[skip_sycl_tests]} {
-    unsupported "target does not support SYCL"
-    return 0
+# A generic function name is used to call it from the SYCL library.
+proc "sycl_${gdb_test_file_name}_run_tests" {} {
+    global srcfile
+
+    if {[start_sycl_program] < 0} {
+	return -1
+    }
+
+    # Test breaking on a function inside the kernel.
+    gdb_breakpoint "$srcfile:first"
+    gdb_continue_to_breakpoint "break_at_first" ".*$srcfile:.*"
+
+    gdb_test "backtrace 1" "#0.* first .* at .*$srcfile:.*" "first backtrace"
 }
 
-if {[prepare_sycl_for_testing $binfile $srcfile]} {
-    return -1
-}
-
-if {[start_sycl_program] < 0} {
-    return -1
-}
-
-# Test breaking on a function inside the kernel.
-gdb_breakpoint "$srcfile:first"
-gdb_continue_to_breakpoint "break_at_first" ".*$srcfile:.*"
-
-gdb_test "backtrace 1" "#0.* first .* at .*$srcfile:.*" "first backtrace"
+test_initialize

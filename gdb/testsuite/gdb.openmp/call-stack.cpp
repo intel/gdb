@@ -56,9 +56,9 @@ main (int argc, char *argv[])
 #pragma omp target data map(tofrom: data)
 #pragma omp target teams num_teams(1) thread_limit(1)
   {
-    int ten = data[1] + 2;
-    int five = data[2] - 4;
-    int fifteen = ten + five;
+    int ten = data[1] + 2;	/* ten-d1 */
+    int five = data[2] - 4;	/* five-d1 */
+    int fifteen = ten + five;	/* fifteen-d1 */
     data[0] = first (fifteen + 1, 3); /* ordinary-outer-loc */
     data[1] = inlined_first (10, 2); /* inlined-outer-loc */
     data[2] = first (3, 4); /* another-call */

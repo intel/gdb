@@ -39,7 +39,7 @@ init_array (int *array, int n)
 
 inline ATTR int func1(int arg1)
 {
-  int array[64];
+  int array[64];			/* array-d1 */
   init_array (array, 64);
   array_p = array;
   array[0] = result;

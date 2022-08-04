@@ -381,11 +381,11 @@ proc function_range { func src {options {debug}} } {
     }
 
     # Compute the size of the last instruction.
-    # For C++ GDB appends arguments to the names of functions.  These names
-    # will (if no linkage name is present, and, e.g., main generally has none)
-    # make 'dissasemble' print main (and possibly others) as 'main()' or
-    # 'main(int argc, char **argv)' so we take this into accound here by
-    # allowing an optinal argument list after the function name.
+    # For C++, GDB appends arguments to the names of functions if they don't
+    # have a linkage name.  For example, asking gdb to disassemble a C++ main
+    # will print the function name as main() or main(int argc, char **argv).
+    # Take this into account by optionally allowing an argument list after
+    # the function name.
     set func_pattern "$func\(\?\:\\(\.\*\\)\)?"
     if { $func_length != 0 } {
 	set func_pattern "$func_pattern\\+$func_length"

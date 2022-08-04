@@ -36,7 +36,7 @@ data2 (void)
 }
 
 static int __attribute__((noinline, noclone))
-different (int val)
+different (int val)			/* different-d1 */
 {
   val++;
   e (val, val);
@@ -45,7 +45,7 @@ asm ("breakhere_different:");
 }
 
 static int __attribute__((noinline, noclone))
-validity (int lost, int born)
+validity (int lost, int born)		/* validity-d1 */
 {
   lost = data ();
   e (0, 0.0);
@@ -54,7 +54,7 @@ asm ("breakhere_validity:");
 }
 
 static void __attribute__((noinline, noclone))
-invalid (int inv)
+invalid (int inv)			/* invalid-d1 */
 {
   e (0, 0.0);
 asm ("breakhere_invalid:");

@@ -19,19 +19,6 @@ load_lib sycl.exp
 
 standard_testfile parallel-for-1D.cpp
 
-if {[skip_sycl_tests]} {
-    unsupported "target does not support SYCL"
-    return 0
-}
-
-if {[prepare_sycl_for_testing $binfile $srcfile]} {
-    return -1
-}
-
-if {[start_sycl_program] < 0} {
-    return -1
-}
-
 # Helper joining all ARGS with WS inbetween and at the end.
 proc wrap_regex_with_spaces_and_tabs { args } {
     set ws "\[ \\t\]+"
@@ -48,40 +35,56 @@ proc test_table_n_entries { test test_name table_header table_body n_body } {
 	    ] "${test_name}"
 }
 
-# Set breakpoint inside the kernel.
-set last_kernel_line [gdb_get_line_number "kernel-last-line"]
+# A generic function name is used to call it from the SYCL library.
+proc "sycl_${gdb_test_file_name}_run_tests" {} {
+    global srcfile decimal hex
 
-gdb_breakpoint $last_kernel_line
+    if {![require_sycl_device "gpu" "Intel*"]} {
+	unsupported "test is aimed at Intel GPUs only"
+	return 0
+    }
 
-gdb_test "info devices" "No devices\." "info devices before start"
+    if {[start_sycl_program] < 0} {
+	return -1
+    }
 
-# Hit the kernel breakpoint.
-gdb_continue_to_breakpoint "kernel" ".*$srcfile:$last_kernel_line.*"
+    # Set breakpoint inside the kernel.
+    set last_kernel_line [gdb_get_line_number "kernel-last-line"]
 
-# Check the info devices command output - there should be one now if on GPU.
-#   Location   Sub-device   Vendor Id   Target Id   Cores   Device Name
-# * [00:02.0]  0            0x8086      0x4c8a      32      Intel(R) UHD Graphics 750
+    gdb_breakpoint $last_kernel_line
 
-set any_location "\\\[\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
-set any_name "\[^\r\n\]+"
-set table_header [wrap_regex_with_spaces_and_tabs " " "Location" "Sub-device" \
-    "Vendor Id" "Target Id" "Cores" "Device Name"]
-set table_body [wrap_regex_with_spaces_and_tabs "\\*" "${any_location}" \
-    "(${decimal}|-)" "${hex}" "${hex}" "${decimal}" "${any_name}"]
+    gdb_test "info devices" "No devices\." "info devices before start"
 
-if {[require_sycl_device "gpu" "Intel*"]} {
-    # On GPU.
-    test_table_n_entries "info devices" "info devices in kernel" \
-	"${table_header}" "${table_body}" "1"
-} else {
-    # On CPU.
-    gdb_test "info devices" "No devices\." "info devices in kernel"
+    # Hit the kernel breakpoint.
+    gdb_continue_to_breakpoint "kernel" ".*$srcfile:$last_kernel_line.*"
+
+    # Check the info devices command output - there should be one now if on GPU.
+    #   Location   Sub-device   Vendor Id   Target Id   Cores   Device Name
+    # * [00:02.0]  0            0x8086      0x4c8a      32      Intel(R) UHD Graphics 750
+
+    set any_location "\\\[\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
+    set any_name "\[^\r\n\]+"
+    set table_header [wrap_regex_with_spaces_and_tabs " " "Location" "Sub-device" \
+	"Vendor Id" "Target Id" "Cores" "Device Name"]
+    set table_body [wrap_regex_with_spaces_and_tabs "\\*" "${any_location}" \
+	"(${decimal}|-)" "${hex}" "${hex}" "${decimal}" "${any_name}"]
+
+    if {[require_sycl_device "gpu" "Intel*"]} {
+	# On GPU.
+	test_table_n_entries "info devices" "info devices in kernel" \
+	    "${table_header}" "${table_body}" "1"
+    } else {
+	# On CPU.
+	gdb_test "info devices" "No devices\." "info devices in kernel"
+    }
+
+    gdb_test "info devices 1 adsf" "The \"info devices\" command does not take any arguments\." \
+	"test info devices refuses arguments"
+
+    delete_breakpoints
+    continue_sycl_program_to_termination
+
+    gdb_test "info devices" "No devices\." "info devices after termination"
 }
 
-gdb_test "info devices 1 adsf" "The \"info devices\" command does not take any arguments\." \
-    "test info devices refuses arguments"
-
-delete_breakpoints
-continue_sycl_program_to_termination
-
-gdb_test "info devices" "No devices\." "info devices after termination"
+test_initialize

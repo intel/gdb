@@ -39,37 +39,22 @@ if {![info exists sycl_selected_device]} {
     set sycl_selected_device ""
 }
 
-# Return compiler flags for SYCL.
-
-proc sycl_compilation_options {options} {
-    set flags {optimize=-O0}
-    return [concat {c++ debug} $options $flags]
-}
-
-# Compile a given SYCL source file.
-
-proc prepare_sycl_for_testing {binfile srcfile {options ""}} {
-    set options [sycl_compilation_options $options]
-    set message "failed to compile $srcfile"
-    return [prepare_for_testing $message $binfile $srcfile $options]
-}
-
 # Start the process by passing the SYCL device type and a
 # substring of the device name as the command line arguments.
 
 proc start_sycl_program {} {
-    global device_type
-    global device_name
+    global device_type device_name sycl_driver_platform
     global gdb_prompt
 
-    if {![info exists device_type] || ![info exists device_name]} {
-	verbose "SYCL: test parameters not set; use a SYCL board file" 0
+    if {![info exists device_type] || ![info exists device_name]
+	|| ![info exists sycl_driver_platform]} {
+	verbose "SYCL: test parameters not set" 0
 	return -1
     }
 
     # Because we're doing an internal setup, use gdb_test_multiple
     # instead of gdb_test to not include this as a pass.
-    set set_args_cmd "set args '$device_type' '$device_name'"
+    set set_args_cmd "set args '$device_type' '$device_name' '$sycl_driver_platform'"
     gdb_test_multiple $set_args_cmd $set_args_cmd {
 	-re "$gdb_prompt $" { }
     }
@@ -85,18 +70,18 @@ proc start_sycl_program {} {
 # Start SYCL program using MI commands.
 
 proc mi_start_sycl_program {} {
-    global device_type
-    global device_name
+    global device_type device_name sycl_driver_platform
     global mi_gdb_prompt
 
-    if {![info exists device_type] || ![info exists device_name]} {
-	verbose "SYCL: test parameters not set; use a SYCL board file" 0
+    if {![info exists device_type] || ![info exists device_name]
+	|| ![info exists sycl_driver_platform]} {
+	verbose "SYCL: test parameters not set" 0
 	return -1
     }
 
     # Because we're doing an internal setup, use send_gdb and gdb_expect
     # instead of mi_gdb_test to not include this as a pass.
-    send_gdb "-gdb-set args '$device_type' '$device_name'\n"
+    send_gdb "-gdb-set args '$device_type' '$device_name' '$sycl_driver_platform'\n"
     gdb_expect 10 {
 	-re "\\^done.*$mi_gdb_prompt$" { }
     }
@@ -115,11 +100,12 @@ proc mi_start_sycl_program {} {
 # pattern-matching is used.
 
 proc require_sycl_device {type name} {
-    global device_type
+    global device_type sycl_driver_platform
     global device_name
 
-    if {![info exists device_type] || ![info exists device_name]} {
-	verbose "SYCL: test parameters not set; use a SYCL board file" 0
+    if {![info exists device_type] || ![info exists device_name]
+	|| ![info exists sycl_driver_platform]} {
+	verbose "SYCL: test parameters not set" 0
 	return 0
     }
 
@@ -130,45 +116,94 @@ proc require_sycl_device {type name} {
 }
 
 # Run a test on the target to check if it recognizes SYCL.
-# Return 0 if SYCL is supported, 1 otherwise.
+# Remove device from the available devices list if SYCL is not supported
+# and return the updated list.
 
-gdb_caching_proc skip_sycl_tests {
-    global srcdir objdir subdir gdb_prompt
-    global inferior_exited_re
-    global sycl_selected_device
-    global sycl_driver_version
-    global sycl_driver_platform
-    global device_type device_name
-
-    if {![info exists device_type] || ![info exists device_name]} {
-	verbose -log "SYCL: test parameters not set; use a SYCL board file"
-	return 1
-    }
+proc get_sycl_supported_devices {sycl_device_list} {
+    global srcdir objdir subdir gdb_prompt inferior_exited_re
+    set supported_sycl_device_list {}
 
     # Set up, compile, and execute a simple SYCL program.
     set exe "sycl-hello"
     set src "$srcdir/lib/sycl-hello.cpp"
-
-    if {[prepare_sycl_for_testing $exe $src]} {
+    if {[build_executable "failed to compile $src" \
+			    $exe $src {sycl debug}]} {
 	verbose "SYCL: Compilation failed" 0
 	return 1
     }
     verbose -log "\nSYCL: Compilation succeeded"
 
-    if {[start_sycl_program] < 0} {
-	return 1
+    foreach device $sycl_device_list {
+	set test_prefix [sycl_init_device "$device"]
+	if {[string match "" $test_prefix]} {
+	    continue
+	}
+
+	clean_restart "${exe}"
+
+	if {[start_sycl_program] < 0} {
+	    continue
+	}
+
+	set result 1
+	gdb_test_multiple "continue" "continue" {
+	    -re -wrap "$inferior_exited_re normally].*" {
+		set result 0
+	    }
+	    -re -wrap "$inferior_exited_re with code.*" {
+		set result 1
+	    }
+	}
+
+	if {$result == 0} {
+	    verbose "SYCL: Support detected for ${device}" 0
+	    lappend supported_sycl_device_list "${device}"
+	} else {
+	    verbose "SYCL: Support not detected for ${device}" 0
+	}
+
+	gdb_exit
+    }
+
+    return $supported_sycl_device_list
+}
+
+# Get list of devices and return 0 if device list is non-empty else
+# return 1.
+
+gdb_caching_proc init_sycl_devices_list {
+    global srcdir objdir subdir gdb_prompt
+    global inferior_exited_re
+    global sycl_device_list
+
+    set sycl_device_list {}
+    set supported_sycl_device_list {}
+
+    if {![is_sycl_offload_supported_compiler]} {
+	unsupported "SYCL tests supported only for dpcpp and icpx compilers"
+	return $sycl_device_list
+    }
+
+    # Set up, compile, and execute a simple SYCL program.
+    set exe "sycl-devices"
+    set src "$srcdir/lib/sycl-devices.cpp"
+
+    if {[prepare_for_testing "failed to compile $src" \
+		$exe $src {sycl debug}]} {
+	verbose "SYCL: Compilation failed" 0
+	return $sycl_device_list
+    }
+    verbose -log "\nSYCL: Compilation succeeded"
+
+    if {![runto_main]} {
+	untested "failed to run sycl-devices to main"
+	return $sycl_device_list
     }
 
     set result 1
     gdb_test_multiple "continue" "continue" {
-	-re "SYCL: Using device: \\\[(\[^\r\n\]*)\\\] from \\\[(\[^\r\n\]*)\\\] version \\\[(\[^\r\n\]*)\\\]\r\n" {
-	    set dev $expect_out(1,string)
-	    set platform $expect_out(2,string)
-	    set version $expect_out(3,string)
-	    verbose "SYCL: Selected device is '${dev}' from '${platform}' version '${version}'" 0
-	    set sycl_selected_device $dev
-	    set sycl_driver_version $version
-	    set sycl_driver_platform $platform
+	-re "SYCL: List of Target devices: \\\[(\[^\r\n\]*)\\\]\r\n" {
+	    set sycl_device_list [split $expect_out(1,string) ","]
 	    exp_continue
 	}
 	-re -wrap "$inferior_exited_re normally].*" {
@@ -179,15 +214,17 @@ gdb_caching_proc skip_sycl_tests {
 	}
     }
 
-    if {$result == 0} {
-	verbose "SYCL: Support detected" 0
+    set supported_sycl_device_list [get_sycl_supported_devices $sycl_device_list]
+    if {($result == 0) && ([llength $supported_sycl_device_list])} {
+	verbose "SYCL: Devices found: $supported_sycl_device_list" 0
     } else {
-	verbose "SYCL: Support not detected" 0
+	set result 1
+	verbose "SYCL: No device found" 0
     }
 
     gdb_exit
 
-    return $result
+    return $supported_sycl_device_list
 }
 
 # Return non-zero, if we are runing at Level-Zero.
@@ -389,6 +426,87 @@ proc get_another_stopped_thread {srcfile line ids_to_ignore {msg ""}} {
     }
 
     return $another_stopped_thread
+}
+
+# Sets the global variables required for the arguments of SYCL tests and
+# returns the test prefix which is used to identify the test for each device.
+
+proc sycl_init_device {device} {
+    global device_type device_name hex sycl_selected_device
+    global sycl_driver_platform sycl_driver_version
+
+    set device_info [split "$device" ";"]
+    set sycl_driver_platform [lindex $device_info 1]
+    set sycl_driver_version [lindex $device_info 2]
+    set device_name ""
+
+    if {[string match -nocase "*Graphics*" $device]} {
+	set device_type "gpu"
+	set device_name [lindex $device_info 0]
+	set sycl_selected_device [lindex $device_info 0]
+	return "$device_type:$sycl_driver_platform:{[regexp -all -inline $hex $device_name]}"
+    } elseif {[string match -nocase "*CPU*" $device]
+	      || [string match -nocase "*CORE*" $device]} {
+	set device_type "cpu"
+	if {[string match "*Intel*" $device]} {
+	    set device_name "Intel"
+	}
+	return "$device_type:$sycl_driver_platform:cpp"
+    } elseif {[string match -nocase "*FPGA*" $device]} {
+	set device_type "accelerator"
+	if {[string match "*Intel*" $device]} {
+	    set device_name "Intel"
+	}
+	return "$device_type:$sycl_driver_platform:cpp"
+    } elseif {[string match -nocase "*Host*" $device]} {
+	set device_type "host"
+	return "$device_type:$sycl_driver_platform:cpp"
+    }
+
+    verbose "SYCL: Couldn't initialize device $device" 0
+    return ""
+}
+
+# Iterate through available SYCL devices and call the run_tests
+# function for each device.
+
+proc test_initialize {{option ""}} {
+    global binfile srcfile testfile
+
+    set sycl_device_list [init_sycl_devices_list]
+    if {[llength $sycl_device_list] == 0} {
+	unsupported "target does not support SYCL"
+	return 0
+    }
+
+    if {[build_executable "failed to compile $srcfile" \
+			  "${binfile}" $srcfile [concat sycl debug $option]]} {
+	return -1
+    }
+
+    foreach device $sycl_device_list {
+	set test_prefix [sycl_init_device "$device"]
+	if {[string match "" $test_prefix]} {
+	    verbose "SYCL: Ignoring unknown device name $device" 0
+	    continue
+	}
+
+	clean_restart "${binfile}"
+	with_test_prefix "$test_prefix" {
+	    sycl_${testfile}_run_tests
+	}
+    }
+}
+
+# Get compiler info and return 1 if the compiler is icpx, otherwise
+# return 0.
+
+proc is_sycl_offload_supported_compiler {} {
+    if {[test_compiler_info {icx-*} c++]} {
+	return 1
+    }
+
+    return 0
 }
 
 # Get the namespace version for the SYCL header corresponding to the compiler

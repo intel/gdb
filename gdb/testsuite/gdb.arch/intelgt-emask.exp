@@ -20,64 +20,6 @@ load_lib sycl.exp
 
 standard_testfile .cpp
 
-if {[skip_sycl_tests]} {
-    unsupported "target does not support SYCL"
-    return 0
-}
-
-if {![require_sycl_device "gpu" "Intel*"]} {
-    unsupported "test is aimed at Intel GPUs only"
-    return 0
-}
-
-if {[prepare_sycl_for_testing $binfile $srcfile]} {
-    return -1
-}
-
-if {[start_sycl_program] < 0} {
-    return -1
-}
-
-# Wrap the entire test in a namespace to avoid contaminating other tests.
-namespace eval $testfile {
-
-set bp_even_then_then [gdb_get_line_number "break even then-then"]
-set bp_even_then_else [gdb_get_line_number "break even then-else"]
-set bp_even_else_then [gdb_get_line_number "break even else-then"]
-set bp_even_else_else [gdb_get_line_number "break even else-else"]
-set bp_odd_then_then [gdb_get_line_number "break odd then-then"]
-set bp_odd_then_else [gdb_get_line_number "break odd then-else"]
-set bp_odd_else_then [gdb_get_line_number "break odd else-then"]
-set bp_odd_else_else [gdb_get_line_number "break odd else-else"]
-set bp_even_1 [gdb_get_line_number "break even_1"]
-set bp_even_2 [gdb_get_line_number "break even_2"]
-set bp_odd_1 [gdb_get_line_number "break odd_1"]
-set bp_odd_2 [gdb_get_line_number "break odd_2"]
-
-gdb_breakpoint $bp_even_1
-gdb_breakpoint $bp_even_2
-gdb_breakpoint $bp_odd_1
-gdb_breakpoint $bp_odd_2
-gdb_breakpoint $bp_even_then_then
-gdb_breakpoint $bp_even_then_else
-gdb_breakpoint $bp_even_else_then
-gdb_breakpoint $bp_even_else_else
-gdb_breakpoint $bp_odd_then_then
-gdb_breakpoint $bp_odd_then_else
-gdb_breakpoint $bp_odd_else_then
-gdb_breakpoint $bp_odd_else_else
-
-# We expect to hit the breakpoints, but the order is arbitrary.
-# The program sets the subgroup size to 16 for a data range of 25
-# elements.  Hence, we expect to have 2 threads where
-# - one thread covers elements 0-15, with a dmask of 0xffff;
-# - one thread covers elements 16-24, with a dmask of 0x1ff.
-variable bp_hit
-array set bp_hit {}
-for {set i 1} {$i <= 12} {incr i} {
-    set bp_hit($i) 0
-}
-
 # Convenience procedures to check register values.
 
 proc test_regs {emask ret_emask dmask} {
@@ -151,118 +93,168 @@ proc test_emask {expected} {
     gdb_test "p/x \$emask & $dmask" "$expected"
 }
 
+# A generic function name is used to call it from the SYCL library.
+proc "sycl_${gdb_test_file_name}_run_tests" {} {
+    global srcfile
 
-for {set i 0} {$i < 24} {incr i} {
-    gdb_test_multiple "continue" "hit bp" {
-	-re -wrap "Breakpoint .*$srcfile:$bp_even_1.*" {
-	    incr bp_hit(1)
-	    with_test_prefix "even_1, hit $bp_hit(1)" {
-		test_all_frames "0x1111" "0x5555"
-		pass $gdb_test_name
-	    }
-	}
+    if {![require_sycl_device "gpu" "Intel*"]} {
+	unsupported "test is aimed at Intel GPUs only"
+	return 0
+    }
 
-	-re -wrap "Breakpoint .*$srcfile:$bp_even_2.*" {
-	    incr bp_hit(2)
-	    with_test_prefix "even_2, hit $bp_hit(2)" {
-		test_all_frames "0x4444" "0x5555"
-		pass $gdb_test_name
-	    }
-	}
+    if {[start_sycl_program] < 0} {
+	return -1
+    }
 
-	-re -wrap "Breakpoint .*$srcfile:$bp_odd_1.*" {
-	    incr bp_hit(3)
-	    with_test_prefix "odd_1, hit $bp_hit(3)" {
-		test_all_frames "0x2222" "0xaaaa"
-		pass $gdb_test_name
-	    }
-	}
+    set bp_even_then_then [gdb_get_line_number "break even then-then"]
+    set bp_even_then_else [gdb_get_line_number "break even then-else"]
+    set bp_even_else_then [gdb_get_line_number "break even else-then"]
+    set bp_even_else_else [gdb_get_line_number "break even else-else"]
+    set bp_odd_then_then [gdb_get_line_number "break odd then-then"]
+    set bp_odd_then_else [gdb_get_line_number "break odd then-else"]
+    set bp_odd_else_then [gdb_get_line_number "break odd else-then"]
+    set bp_odd_else_else [gdb_get_line_number "break odd else-else"]
+    set bp_even_1 [gdb_get_line_number "break even_1"]
+    set bp_even_2 [gdb_get_line_number "break even_2"]
+    set bp_odd_1 [gdb_get_line_number "break odd_1"]
+    set bp_odd_2 [gdb_get_line_number "break odd_2"]
 
-	-re -wrap "Breakpoint .*$srcfile:$bp_odd_2.*" {
-	    incr bp_hit(4)
-	    with_test_prefix "odd_2, hit $bp_hit(4)" {
-		test_all_frames "0x8888" "0xaaaa"
-		pass $gdb_test_name
-	    }
-	}
-	-re -wrap "Breakpoint .*$srcfile:$bp_even_then_then.*" {
-	    incr bp_hit(5)
-	    with_test_prefix "even then-then, hit $bp_hit(5)" {
-		test_emask "0x101"
-		pass $gdb_test_name
-	    }
-	}
+    gdb_breakpoint $bp_even_1
+    gdb_breakpoint $bp_even_2
+    gdb_breakpoint $bp_odd_1
+    gdb_breakpoint $bp_odd_2
+    gdb_breakpoint $bp_even_then_then
+    gdb_breakpoint $bp_even_then_else
+    gdb_breakpoint $bp_even_else_then
+    gdb_breakpoint $bp_even_else_else
+    gdb_breakpoint $bp_odd_then_then
+    gdb_breakpoint $bp_odd_then_else
+    gdb_breakpoint $bp_odd_else_then
+    gdb_breakpoint $bp_odd_else_else
 
-	-re -wrap "Breakpoint .*$srcfile:$bp_even_then_else.*" {
-	    incr bp_hit(6)
-	    with_test_prefix "even then-else, hit $bp_hit(6)" {
-		test_emask "0x1010"
-		pass $gdb_test_name
-	    }
-	}
+    # We expect to hit the breakpoints, but the order is arbitrary.
+    # The program sets the subgroup size to 16 for a data range of 25
+    # elements.  Hence, we expect to have 2 threads where
+    # - one thread covers elements 0-15, with a dmask of 0xffff;
+    # - one thread covers elements 16-24, with a dmask of 0x1ff.
+    variable bp_hit
+    array set bp_hit {}
+    for {set i 1} {$i <= 12} {incr i} {
+	set bp_hit($i) 0
+    }
 
-	-re -wrap "Breakpoint .*$srcfile:$bp_even_else_then.*" {
-	    incr bp_hit(7)
-	    with_test_prefix "even else-then, hit $bp_hit(7)" {
-		test_emask "0x404"
-		pass $gdb_test_name
+    for {set i 0} {$i < 24} {incr i} {
+	gdb_test_multiple "continue" "hit bp" {
+	    -re -wrap "Breakpoint .*$srcfile:$bp_even_1.*" {
+		incr bp_hit(1)
+		with_test_prefix "even_1, hit $bp_hit(1)" {
+		    test_all_frames "0x1111" "0x5555"
+		    pass $gdb_test_name
+		}
 	    }
-	}
 
-	-re -wrap "Breakpoint .*$srcfile:$bp_even_else_else.*" {
-	    incr bp_hit(8)
-	    with_test_prefix "even else-else, hit $bp_hit(8)" {
-		test_emask "0x4040"
-		pass $gdb_test_name
+	    -re -wrap "Breakpoint .*$srcfile:$bp_even_2.*" {
+		incr bp_hit(2)
+		with_test_prefix "even_2, hit $bp_hit(2)" {
+		    test_all_frames "0x4444" "0x5555"
+		    pass $gdb_test_name
+		}
 	    }
-	}
 
-	-re -wrap "Breakpoint .*$srcfile:$bp_odd_then_then.*" {
-	    incr bp_hit(9)
-	    with_test_prefix "odd then-then, hit $bp_hit(9)" {
-		test_emask "0x202"
-		pass $gdb_test_name
+	    -re -wrap "Breakpoint .*$srcfile:$bp_odd_1.*" {
+		incr bp_hit(3)
+		with_test_prefix "odd_1, hit $bp_hit(3)" {
+		    test_all_frames "0x2222" "0xaaaa"
+		    pass $gdb_test_name
+		}
 	    }
-}
 
-	-re -wrap "Breakpoint .*$srcfile:$bp_odd_then_else.*" {
-	    incr bp_hit(10)
-	    with_test_prefix "odd then-else, hit $bp_hit(10)" {
-		test_emask "0x2020"
-		pass $gdb_test_name
+	    -re -wrap "Breakpoint .*$srcfile:$bp_odd_2.*" {
+		incr bp_hit(4)
+		with_test_prefix "odd_2, hit $bp_hit(4)" {
+		    test_all_frames "0x8888" "0xaaaa"
+		    pass $gdb_test_name
+		}
 	    }
-	}
 
-	-re -wrap "Breakpoint .*$srcfile:$bp_odd_else_then.*" {
-	    incr bp_hit(11)
-	    with_test_prefix "odd else-then, hit $bp_hit(11)" {
-		test_emask "0x808"
-		pass $gdb_test_name
+	    -re -wrap "Breakpoint .*$srcfile:$bp_even_then_then.*" {
+		incr bp_hit(5)
+		with_test_prefix "even then-then, hit $bp_hit(5)" {
+		    test_emask "0x101"
+		    pass $gdb_test_name
+		}
 	    }
-	}
 
-	-re -wrap "Breakpoint .*$srcfile:$bp_odd_else_else.*" {
-	    incr bp_hit(12)
-	    with_test_prefix "odd else-else, hit $bp_hit(12)" {
-		test_emask "0x8080"
-		pass $gdb_test_name
+	    -re -wrap "Breakpoint .*$srcfile:$bp_even_then_else.*" {
+		incr bp_hit(6)
+		with_test_prefix "even then-else, hit $bp_hit(6)" {
+		    test_emask "0x1010"
+		    pass $gdb_test_name
+		}
+	    }
+
+	    -re -wrap "Breakpoint .*$srcfile:$bp_even_else_then.*" {
+		incr bp_hit(7)
+		with_test_prefix "even else-then, hit $bp_hit(7)" {
+		    test_emask "0x404"
+		    pass $gdb_test_name
+		}
+	    }
+
+	    -re -wrap "Breakpoint .*$srcfile:$bp_even_else_else.*" {
+		incr bp_hit(8)
+		with_test_prefix "even else-else, hit $bp_hit(8)" {
+		    test_emask "0x4040"
+		    pass $gdb_test_name
+		}
+	    }
+
+	    -re -wrap "Breakpoint .*$srcfile:$bp_odd_then_then.*" {
+		incr bp_hit(9)
+		with_test_prefix "odd then-then, hit $bp_hit(9)" {
+		    test_emask "0x202"
+		    pass $gdb_test_name
+		}
+	    }
+
+	    -re -wrap "Breakpoint .*$srcfile:$bp_odd_then_else.*" {
+		incr bp_hit(10)
+		with_test_prefix "odd then-else, hit $bp_hit(10)" {
+		    test_emask "0x2020"
+		    pass $gdb_test_name
+		}
+	    }
+
+	    -re -wrap "Breakpoint .*$srcfile:$bp_odd_else_then.*" {
+		incr bp_hit(11)
+		with_test_prefix "odd else-then, hit $bp_hit(11)" {
+		    test_emask "0x808"
+		    pass $gdb_test_name
+		}
+	    }
+
+	    -re -wrap "Breakpoint .*$srcfile:$bp_odd_else_else.*" {
+		incr bp_hit(12)
+		with_test_prefix "odd else-else, hit $bp_hit(12)" {
+		    test_emask "0x8080"
+		    pass $gdb_test_name
+		}
 	    }
 	}
     }
+
+    gdb_assert {$bp_hit(1) == 2} "bp at even_1 is hit twice"
+    gdb_assert {$bp_hit(2) == 2} "bp at even_2 is hit twice"
+    gdb_assert {$bp_hit(3) == 2} "bp at odd_1 is hit twice"
+    gdb_assert {$bp_hit(4) == 2} "bp at odd_2 is hit twice"
+    gdb_assert {$bp_hit(5) == 2} "bp at even then/then is hit twice"
+    gdb_assert {$bp_hit(6) == 2} "bp at even then/else is hit twice"
+    gdb_assert {$bp_hit(7) == 2} "bp at even else/then is hit twice"
+    gdb_assert {$bp_hit(8) == 2} "bp at even else/else is hit twice"
+    gdb_assert {$bp_hit(9) == 2} "bp at odd then/then is hit twice"
+    gdb_assert {$bp_hit(10) == 2} "bp at odd then/else is hit twice"
+    gdb_assert {$bp_hit(11) == 2} "bp at odd else/then is hit twice"
+    gdb_assert {$bp_hit(12) == 2} "bp at odd else/else is hit twice"
 }
 
-gdb_assert {$bp_hit(1) == 2} "bp at even_1 is hit twice"
-gdb_assert {$bp_hit(2) == 2} "bp at even_2 is hit twice"
-gdb_assert {$bp_hit(3) == 2} "bp at odd_1 is hit twice"
-gdb_assert {$bp_hit(4) == 2} "bp at odd_2 is hit twice"
-gdb_assert {$bp_hit(5) == 2} "bp at even then/then is hit twice"
-gdb_assert {$bp_hit(6) == 2} "bp at even then/else is hit twice"
-gdb_assert {$bp_hit(7) == 2} "bp at even else/then is hit twice"
-gdb_assert {$bp_hit(8) == 2} "bp at even else/else is hit twice"
-gdb_assert {$bp_hit(9) == 2} "bp at odd then/then is hit twice"
-gdb_assert {$bp_hit(10) == 2} "bp at odd then/else is hit twice"
-gdb_assert {$bp_hit(11) == 2} "bp at odd else/then is hit twice"
-gdb_assert {$bp_hit(12) == 2} "bp at odd else/else is hit twice"
-
-# End of namespace.
-}
+test_initialize

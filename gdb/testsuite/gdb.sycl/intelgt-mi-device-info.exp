@@ -19,54 +19,57 @@ load_lib sycl.exp
 
 standard_testfile parallel-for-1D.cpp
 
-if {[skip_sycl_tests]} {
-    unsupported "target does not support SYCL"
-    return 0
-}
+# A generic function name is used to call it from the SYCL library.
+proc "sycl_${gdb_test_file_name}_run_tests" {} {
+    global srcfile hex decimal binfile
 
-if {[prepare_sycl_for_testing $binfile $srcfile]} {
-    return -1
-}
+    if {![require_sycl_device "gpu" "Intel*"]} {
+        unsupported "test is aimed at Intel GPUs only"
+        return 0
+    }
 
-mi_clean_restart $binfile
+    mi_clean_restart $binfile
 
-if {[mi_start_sycl_program] < 0} {
-    return -1
-}
+    if {[mi_start_sycl_program] < 0} {
+	return -1
+    }
 
-set any_location "\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}"
-set any_name "\[^\r\n\]+"
-set warning ".*warning: -device-info: No devices\..*"
+    set any_location "\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}"
+    set any_name "\[^\r\n\]+"
+    set warning ".*warning: -device-info: No devices\..*"
 
-# Test device-info before start.
-mi_gdb_test "-device-info" \
-    "${warning}\\^done" \
-    "device-info before start"
-
-# Hit the kernel breakpoint.
-set last_kernel_line [gdb_get_line_number "kernel-last-line"]
-mi_continue_to_line $last_kernel_line "Continue to 'last_kernel_line' and stop at breakpoint"
-
-# Check the device-info command output - there should be one now if on GPU.
-if {[require_sycl_device "gpu" "Intel*"]} {
-    # On GPU.
-    mi_gdb_test "-device-info" \
-	"\\^done,devices=\\\[\{number=\"${decimal}\",location=\"${any_location}\",sub-device=\"(${decimal}|-)\",vendor-id=\"${hex}\",target-id=\"${hex}\",cores=\"${decimal}\",device-name=\"${any_name}\",thread-groups=\\\[\"i${decimal}\"\\\]\}\\\],current-device=\"${decimal}\"" \
-	"device-info returns one device info"
-} else {
-    # On CPU.
+    # Test device-info before start.
     mi_gdb_test "-device-info" \
 	"${warning}\\^done" \
-	"no devices on cpu"
+	"device-info before start"
+
+    # Hit the kernel breakpoint.
+    set last_kernel_line [gdb_get_line_number "kernel-last-line"]
+    mi_continue_to_line $last_kernel_line "Continue to 'last_kernel_line' and stop at breakpoint"
+
+    # Check the device-info command output - there should be one now if on GPU.
+    if {[require_sycl_device "gpu" "Intel*"]} {
+	# On GPU.
+	mi_gdb_test "-device-info" \
+	    "\\^done,devices=\\\[\{number=\"${decimal}\",location=\"${any_location}\",sub-device=\"(${decimal}|-)\",vendor-id=\"${hex}\",target-id=\"${hex}\",cores=\"${decimal}\",device-name=\"${any_name}\",thread-groups=\\\[\"i${decimal}\"\\\]\}\\\],current-device=\"${decimal}\"" \
+	    "device-info returns one device info"
+    } else {
+	# On CPU.
+	mi_gdb_test "-device-info" \
+	    "${warning}\\^done" \
+	    "no devices on cpu"
+    }
+
+    # Test arguments.
+    mi_gdb_test "-device-info 123" \
+	"\\^error,msg=\"-device-info command does not take any arguments\.\"" \
+	"test device-info refuses arguments"
+
+    # Continue to end.
+    mi_send_resuming_command "exec-continue" "continuing to inferior exit"
+
+    # Expect normal exit.
+    mi_expect_stop "exited-normally" "" "" "" "" "" "exit normally"
 }
 
-# Test arguments.
-mi_gdb_test "-device-info 123" \
-    "\\^error,msg=\"-device-info command does not take any arguments\.\"" \
-    "test device-info refuses arguments"
-
-# Continue to end.
-mi_send_resuming_command "exec-continue" "continuing to inferior exit"
-
-# Expect normal exit.
-mi_expect_stop "exited-normally" "" "" "" "" "" "exit normally"
+test_initialize

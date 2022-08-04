@@ -45,21 +45,45 @@ get_device_type (std::string &type_arg)
   return type;
 }
 
+static sycl::backend
+get_backendtype (std::string backend_arg)
+{
+  sycl::backend backend;
+  if (backend_arg.compare ("host") == 0)
+    backend = sycl::backend::host;
+  else if (backend_arg.compare ("opencl") == 0)
+    backend = sycl::backend::opencl;
+  else if (backend_arg.compare ("ext_oneapi_level_zero") == 0
+	   || backend_arg.compare ("level_zero") == 0)
+    backend = sycl::backend::ext_oneapi_level_zero;
+  else
+    {
+      std::cout << "SYCL: Unrecognized backend '"
+		<< backend << "'" << std::endl;
+      exit (1);
+    }
+
+  return backend;
+}
+
 static std::vector<sycl::device>
 get_sycl_devices (int argc, char *argv[])
 {
-  if (argc <= 2)
+  if (argc <= 3)
     {
       std::cout << "Usage: " << argv[0]
 		<< " <host|cpu|gpu|accelerator>"
-		<< " <device name substring>" << std::endl;
+		<< " <device name substring>"
+		<< " <backend name host|opencl|level_zero>" << std::endl;
       exit (1);
     }
 
   std::string type_arg {argv[1]};
   std::string name_arg {argv[2]};
+  std::string backend_arg {argv[3]};
 
   sycl::info::device_type type = get_device_type (type_arg);
+  sycl::backend backend_type = get_backendtype (backend_arg);
 
   std::vector<sycl::device> devices = sycl::device::get_devices (type);
 
@@ -71,8 +95,10 @@ get_sycl_devices (int argc, char *argv[])
 	= device.get_platform ().get_info<sycl::info::platform::name> ();
       std::string version
 	= device.get_info<sycl::info::device::driver_version> ();
+      sycl::backend backend = device.get_backend ();
 
-      if (dev_name.find (name_arg) != std::string::npos)
+      if (dev_name.find (name_arg) != std::string::npos
+	  && backend == backend_type)
 	filtered_devices.push_back (device);
     }
 

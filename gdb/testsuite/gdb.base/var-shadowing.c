@@ -23,15 +23,15 @@ void
 shadowing ()
 {
   int a;
-  unsigned int val1 = 1;
-  unsigned int val2 = 2;
+  unsigned int val1 = 1;		/* val1-d1 */
+  unsigned int val2 = 2;		/* val2-d1 */
   a = 101;  /* bp for locals 1 */
   {
-    unsigned int val2 = 3;
-    unsigned int val3 = 4;
+    unsigned int val2 = 3;		/* val2-d2 */
+    unsigned int val3 = 4;		/* val3-d1 */
     a = 102;  /* bp for locals 2 */
     {
-      unsigned int val1 = 5;
+      unsigned int val1 = 5;		/* val1-d2 */
       a = 103;  /* bp for locals 3 */
       {
 	unsigned int val1 = 6;

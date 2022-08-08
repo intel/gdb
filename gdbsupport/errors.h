@@ -74,12 +74,22 @@ extern void internal_vwarning (const char *file, int line,
 			       const char *fmt, va_list args)
      ATTRIBUTE_PRINTF (3, 0);
 
+/* Return a newly allocated string, containing the PREFIX followed
+   by the system error message for errno (separated by a colon).  */
+
+extern std::string perror_string (const char *prefix);
 
 /* Like "error", but the error message is constructed by combining
    STRING with the system error message for errno.  This function does
    not return.  This function must be provided by the client.  */
 
 extern void perror_with_name (const char *string) ATTRIBUTE_NORETURN;
+
+/* Same as perror_with_name except that it prints a warning instead
+   of throwing an error.  */
+
+extern void
+perror_warning_with_name (const char *string);
 
 /* Call this function to handle memory allocation failures.  This
    function does not return.  This function must be provided by the

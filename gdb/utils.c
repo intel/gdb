@@ -604,16 +604,6 @@ add_internal_problem_command (struct internal_problem *problem)
     }
 }
 
-/* Return a newly allocated string, containing the PREFIX followed
-   by the system error message for errno (separated by a colon).  */
-
-static std::string
-perror_string (const char *prefix)
-{
-  const char *err = safe_strerror (errno);
-  return std::string (prefix) + ": " + err;
-}
-
 /* Print the system error message for errno, and also mention STRING
    as the file name for which the error was encountered.  Use ERRCODE
    for the thrown exception.  Then return to command level.  */
@@ -640,15 +630,6 @@ perror_with_name (const char *string)
   throw_perror_with_name (GENERIC_ERROR, string);
 }
 
-/* Same as perror_with_name except that it prints a warning instead
-   of throwing an error.  */
-
-void
-perror_warning_with_name (const char *string)
-{
-  std::string combined = perror_string (string);
-  warning (_("%s"), combined.c_str ());
-}
 
 /* Print the system error message for ERRCODE, and also mention STRING
    as the file name for which the error was encountered.  */

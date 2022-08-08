@@ -67,3 +67,21 @@ internal_warning (const char *file, int line, const char *fmt, ...)
   internal_vwarning (file, line, fmt, ap);
   va_end (ap);
 }
+
+/* See gdbsupport/errors.h.  */
+
+std::string
+perror_string (const char *prefix)
+{
+  const char *err = safe_strerror (errno);
+  return std::string (prefix) + ": " + err;
+}
+
+/* See gdbsupport/errors.h.  */
+
+void
+perror_warning_with_name (const char *string)
+{
+  std::string combined = perror_string (string);
+  warning (_("%s"), combined.c_str ());
+}

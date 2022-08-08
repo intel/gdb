@@ -17,8 +17,13 @@
 
 # Skip this test if btrace is disabled.
 
-if { [skip_btrace_tests] } {
-    untested "skipping btrace tests"
+if {![target_supports_btrace]} {
+    unsupported "target does not support btrace."
+    return -1
+}
+
+if { [skip_btrace_tests bts] && [skip_btrace_tests pt] } {
+    unsupported "Target does not support record btrace bts and pt."
     return -1
 }
 

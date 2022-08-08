@@ -17,7 +17,13 @@
 
 # Ensure gdb doesn't regress with user level interrupts.
 
-require allow_btrace_uli_tests
+require allow_btrace_uli_tests target_supports_btrace
+
+# Test libipt version (must be >= 2.0.4).
+if {[require_libipt_version 2 0 4]} {
+    unsupported "Libipt doesn't support uiret decoding."
+    return -1
+}
 
 set opts [list debug "additional_flags=-muintr -mgeneral-regs-only -minline-all-stringops"]
 

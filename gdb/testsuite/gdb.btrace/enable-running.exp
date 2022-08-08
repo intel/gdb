@@ -15,32 +15,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-require allow_btrace_tests
-
+require target_supports_btrace
 standard_testfile
+
 if {[gdb_compile_pthreads "$srcdir/$subdir/$srcfile" "$binfile" executable {debug}] != "" } {
     untested "failed to prepare"
     return -1
 }
-
-# We need to enable non-stop mode for the remote case.
-save_vars { GDBFLAGS } {
-    append GDBFLAGS " -ex \"set non-stop on\""
-    clean_restart $testfile
-}
-
-if ![runto_main] {
-    return -1
-}
-
-set bp_1 [gdb_get_line_number "bp.1" $srcfile]
-
-gdb_breakpoint $bp_1
-gdb_continue_to_breakpoint "cont to $bp_1" ".*$bp_1\r\n.*"
-gdb_test "cont&" "Continuing\."
-
-# All threads are running.  Let's start recording.
-gdb_test_no_output "record btrace"
 
 proc check_tracing_enabled { thread } {
     global gdb_prompt
@@ -87,10 +68,36 @@ proc check_tracing_enabled { thread } {
     }
 }
 
-# Check that recording was started on each thread.
-foreach thread {1 2 3 4} {
-    check_tracing_enabled $thread
-}
+foreach_with_prefix method {"bts" "pt"} {
+    if { ![allow_btrace_tests $method] } {
+	unsupported "target does not support record-btrace ${method}"
+	continue
+    }
 
-# Stop recording while all threads are running.
-gdb_test "record stop" "Process record is stopped \[^\\\r\\\n\]*"
+    # We need to enable non-stop mode for the remote case.
+    save_vars { GDBFLAGS } {
+	append GDBFLAGS " -ex \"set non-stop on\""
+	clean_restart $testfile
+    }
+
+    if ![runto_main] {
+	continue
+    }
+
+    set bp_1 [gdb_get_line_number "bp.1" $srcfile]
+
+    gdb_breakpoint $bp_1
+    gdb_continue_to_breakpoint "cont to $bp_1" ".*$bp_1\r\n.*"
+    gdb_test "cont&" "Continuing\."
+
+    # All threads are running.  Let's start recording.
+    gdb_test_no_output "record btrace ${method}"
+
+    # Check that recording was started on each thread.
+    foreach thread {1 2 3 4} {
+	check_tracing_enabled $thread
+    }
+
+    # Stop recording while all threads are running.
+    gdb_test "record stop" "Process record is stopped \[^\\\r\\\n\]*"
+}

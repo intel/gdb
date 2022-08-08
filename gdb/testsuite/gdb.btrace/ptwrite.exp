@@ -17,7 +17,7 @@
 
 load_lib gdb-python.exp
 
-require allow_btrace_ptw_tests allow_python_tests
+require allow_btrace_ptw_tests allow_python_tests target_supports_btrace
 
 set opts {}
 

@@ -9,6 +9,7 @@
   RecordAuxiliary object.  Printing is customizable via a ptwrite filter
   function in Python.  By default, the raw ptwrite payload is printed for
   each ptwrite that is encountered.
+* GDB now supports watchpoints for tagged data pointers on amd64.
 
 * New commands
 

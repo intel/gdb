@@ -42,12 +42,17 @@
 #include "arch/amd64.h"
 #include "target-descriptions.h"
 #include "expop.h"
+#include "inferior.h"
 
 /* The syscall's XML filename for i386.  */
 #define XML_SYSCALL_FILENAME_AMD64 "syscalls/amd64-linux.xml"
 
 #include "record-full.h"
 #include "linux-record.h"
+
+#include <sstream>
+
+#define DEFAULT_TAG_MASK 0xffffffffffffffffULL
 
 /* Mapping between the general-purpose registers in `struct user'
    format and GDB's register cache layout.  */
@@ -1820,6 +1825,60 @@ amd64_dtrace_parse_probe_argument (struct gdbarch *gdbarch,
     }
 }
 
+/* Extract the untagging mask based on the currently active linear address
+   masking (LAM) mode, which is stored in the /proc/<pid>/status file.  */
+
+static CORE_ADDR
+amd64_untag_mask ()
+{
+  if (!target_has_execution ())
+    return 0;
+
+  const int pid = current_inferior ()->pid;
+  if (pid == 0)
+    return 0;
+
+  /* Construct status file name and read the file's content.  */
+  std::string filename {"/proc/" + std::to_string (pid) + "/status"};
+  gdb::unique_xmalloc_ptr<char> status_file
+    = target_fileio_read_stralloc (nullptr, filename.c_str ());
+
+  if (status_file != nullptr)
+    {
+      /* Parse the status file line-by-line and look for the untag mask.  */
+      std::istringstream strm_status_file (status_file.get ());
+      std::string line;
+      while (std::getline (strm_status_file, line))
+	{
+	  const std::string untag_mask_str ("untag_mask:\t");
+	  const size_t found = line.find (untag_mask_str);
+	  if (found != std::string::npos)
+	    {
+	      const size_t tag_length = strlen (untag_mask_str.c_str ());
+	      return std::strtoul
+		(line.substr (found + tag_length).c_str (), nullptr, 0);
+	    }
+	}
+    }
+
+  /* Address tagging is not supported.  */
+   return DEFAULT_TAG_MASK;
+}
+
+/* Adjust watchpoint address based on currently active LAM mode using the
+   untag mask provided by the linux kernel.
+   Check each time for a new mask, as LAM is enabled at runtime.  Also, the LAM
+   configuration may change when entering an enclave.  */
+
+static CORE_ADDR
+amd64_adjust_addr_wpt (struct gdbarch *gdbarch, CORE_ADDR addr)
+{
+  /* Clear insignificant bits of a target address using the untag mask.
+     The untag mask preserves the topmost bit, which distinguishes user space
+     from kernel space address.  */
+  return (addr & amd64_untag_mask ());
+}
+
 static void
 amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch,
 			    int num_disp_step_buffers)
@@ -1872,6 +1931,8 @@ amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch,
 
   set_gdbarch_get_siginfo_type (gdbarch, x86_linux_get_siginfo_type);
   set_gdbarch_report_signal_info (gdbarch, i386_linux_report_signal_info);
+
+  set_gdbarch_remove_non_addr_bits_wpt (gdbarch, amd64_adjust_addr_wpt);
 }
 
 static void

@@ -3,6 +3,8 @@
 
 *** Changes since GDB 13
 
+* GDB now supports watchpoints for tagged data pointers on amd64.
+
 * New convenience variables
 
 $_thread_workgroup

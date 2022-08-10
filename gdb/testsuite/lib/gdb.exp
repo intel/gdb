@@ -9105,6 +9105,70 @@ gdb_caching_proc skip_ctf_tests {
 
     return [expr {!$can_ctf}]
 }
+# Run a test on the target to see if it supports LAM 57.  Return 0 if so,
+# 1 if it does not.  Based on the arch_prctl() handle ARCH_ENABLE_TAGGED_ADDR
+# to enable LAM which fails if the hardware or the OS does not support LAM.
+
+gdb_caching_proc skip_lam_tests {
+    global srcdir subdir gdb_prompt inferior_exited_re
+
+    set me "skip_lam_tests"
+    if { ![istarget "x86_64-*-*"] } {
+	verbose "$me:  target does not support LAM, returning 1" 2
+	return 1
+    }
+
+    # Compile a test program.
+    set src {
+      #define _GNU_SOURCE
+      #include <sys/syscall.h>
+      #include <assert.h>
+      #include <errno.h>
+      #include <asm/prctl.h>
+
+      int configure_lam ()
+      {
+	errno = 0;
+	syscall (SYS_arch_prctl, ARCH_ENABLE_TAGGED_ADDR, 6);
+	assert_perror (errno);
+	return errno;
+      }
+
+      int
+      main () { return configure_lam (); }
+    }
+
+    if {![gdb_simple_compile $me $src executable ""]} {
+	return 1
+    }
+    # No error message, compilation succeeded so now run it via gdb.
+
+    clean_restart $obj
+    gdb_run_cmd
+    gdb_expect {
+	-re ".*$inferior_exited_re with code.*${gdb_prompt} $" {
+	    verbose -log "$me:  LAM support not detected."
+	    set skip_lam_tests 1
+	}
+	-re ".*Program received signal SIGABRT, Aborted.*${gdb_prompt} $" {
+	    verbose -log "$me:  LAM support not detected."
+	    set skip_lam_tests 1
+	}
+	-re ".*$inferior_exited_re normally.*${gdb_prompt} $" {
+	    verbose -log "$me:  LAM support detected."
+	    set skip_lam_tests 0
+	}
+	default {
+	    warning "\n$me:  default case taken."
+	    set skip_lam_tests 1
+	}
+    }
+    gdb_exit
+    remote_file build delete $obj
+
+    verbose "$me:  returning $skip_lam_tests" 2
+    return $skip_lam_tests
+}
 
 # Return 1 if compiler supports -gstatement-frontiers.  Otherwise,
 # return 0.

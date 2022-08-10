@@ -42,12 +42,17 @@
 #include "arch/amd64.h"
 #include "target-descriptions.h"
 #include "expop.h"
+#include "inferior.h"
 
 /* The syscall's XML filename for i386.  */
 #define XML_SYSCALL_FILENAME_AMD64 "syscalls/amd64-linux.xml"
 
 #include "record-full.h"
 #include "linux-record.h"
+
+#include <sstream>
+
+#define DEFAULT_TAG_MASK 0xffffffffffffffffULL
 
 /* Mapping between the general-purpose registers in `struct user'
    format and GDB's register cache layout.  */
@@ -1823,6 +1828,65 @@ amd64_dtrace_parse_probe_argument (struct gdbarch *gdbarch,
     }
 }
 
+/* Extract the untagging mask based on the currently active linear address
+   masking (LAM) mode, which is stored in the /proc/<pid>/status file.
+   If we cannot extract the untag mask (for example, if we don't have
+   execution), we assume address tagging is not enabled and return the
+   DEFAULT_TAG_MASK.  */
+
+static CORE_ADDR
+amd64_linux_lam_untag_mask ()
+{
+  if (!target_has_execution ())
+    return DEFAULT_TAG_MASK;
+
+  inferior *inf = current_inferior ();
+  if (inf->fake_pid_p)
+    return DEFAULT_TAG_MASK;
+
+  /* Construct status file name and read the file's content.  */
+  std::string filename = string_printf ("/proc/%d/status", inf->pid);
+  gdb::unique_xmalloc_ptr<char> status_file
+    = target_fileio_read_stralloc (nullptr, filename.c_str ());
+
+  if (status_file == nullptr)
+    return DEFAULT_TAG_MASK;
+
+  /* Parse the status file line-by-line and look for the untag mask.  */
+  std::istringstream strm_status_file (status_file.get ());
+  std::string line;
+  const std::string untag_mask_str ("untag_mask:\t");
+  while (std::getline (strm_status_file, line))
+    {
+      const size_t found = line.find (untag_mask_str);
+      if (found != std::string::npos)
+	{
+	  const size_t tag_length = untag_mask_str.length();
+	  return std::strtoul (&line[found + tag_length], nullptr, 0);
+	}
+    }
+
+   return DEFAULT_TAG_MASK;
+}
+
+/* Adjust watchpoint address based on the tagging mode which is currently
+   enabled.  For now, linear address masking (LAM) is the only feature
+   which allows to store metadata in pointer values for amd64.  Thus, we
+   adjust the watchpoint address based on the currently active LAM mode
+   using the untag mask provided by the linux kernel.  Check each time for
+   a new mask, as LAM is enabled at runtime.  Also, the LAM configuration
+   may change when entering an enclave.  No untagging will be applied if
+   this function is called while we don't have execution.  */
+
+static CORE_ADDR
+amd64_linux_remove_non_addr_bits_wpt (gdbarch *gdbarch, CORE_ADDR addr)
+{
+  /* Clear insignificant bits of a target address using the untag mask.
+     The untag mask preserves the topmost bit, which distinguishes user space
+     from kernel space address.  */
+  return (addr & amd64_linux_lam_untag_mask ());
+}
+
 static void
 amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch,
 			    int num_disp_step_buffers)
@@ -1877,6 +1941,9 @@ amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch,
 
   set_gdbarch_get_siginfo_type (gdbarch, x86_linux_get_siginfo_type);
   set_gdbarch_report_signal_info (gdbarch, i386_linux_report_signal_info);
+
+  set_gdbarch_remove_non_addr_bits_wpt (gdbarch,
+					amd64_linux_remove_non_addr_bits_wpt);
 }
 
 static void

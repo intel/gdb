@@ -114,9 +114,9 @@ struct piece_closure
   /* The pieces describing this variable.  */
   std::vector<dwarf_expr_piece> pieces;
 
-  /* Frame ID of frame to which a register value is relative, used
+  /* The frame to which a register value is relative, used
      only by DWARF_VALUE_REGISTER.  */
-  struct frame_id frame_id;
+  struct frame_info *frame;
 };
 
 /* Allocate a closure for a value formed from separately-described
@@ -135,10 +135,7 @@ allocate_piece_closure (dwarf2_per_cu_data *per_cu,
   c->per_objfile = per_objfile;
   c->per_cu = per_cu;
   c->pieces = std::move (pieces);
-  if (frame == nullptr)
-    c->frame_id = null_frame_id;
-  else
-    c->frame_id = get_frame_id (frame);
+  c->frame = frame;
 
   for (dwarf_expr_piece &piece : c->pieces)
     if (piece.location == DWARF_VALUE_STACK)
@@ -221,7 +218,7 @@ rw_pieced_value (value *v, value *from, bool check_optimized)
 	{
 	case DWARF_VALUE_REGISTER:
 	  {
-	    frame_info *frame = frame_find_by_id (c->frame_id);
+	    frame_info *frame = c->frame;
 	    gdbarch *arch = get_frame_arch (frame);
 	    int gdb_regnum = dwarf_reg_to_regnum_or_error (arch, p->v.regno);
 	    ULONGEST reg_bits = 8 * register_size (arch, gdb_regnum);

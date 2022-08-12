@@ -75,7 +75,7 @@ proc start_sycl_program {} {
 
 # Start SYCL program using MI commands.
 
-proc mi_start_sycl_program {} {
+proc mi_start_sycl_program {{known_fail "" }} {
     global device_type device_name sycl_driver_platform
     global mi_gdb_prompt
 
@@ -92,7 +92,7 @@ proc mi_start_sycl_program {} {
 	-re "\\^done.*$mi_gdb_prompt$" { }
     }
 
-    if {[mi_runto_main] == -1} {
+    if {[mi_runto_main $known_fail] == -1} {
 	untested "failed to run to main"
 	return -1
     }

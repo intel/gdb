@@ -34,7 +34,12 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
 
 	mi_gdb_test "-gdb-set mi-async $async" ".*done.*" "set async $async"
 
-	if {[mi_start_sycl_program] < 0} {
+	if {$async == "on"} {
+	    set kfail "JIRA DOQG/3265"
+	} else {
+	    set kfail ""
+	}
+	if {[mi_start_sycl_program $kfail] < 0} {
 	    return -1
 	}
 

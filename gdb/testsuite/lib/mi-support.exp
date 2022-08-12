@@ -1107,7 +1107,7 @@ proc mi_clean_restart { args } {
 #
 #  -qualified -- pass --qualified to -break-insert
 
-proc mi_runto_helper {func run_or_continue args} {
+proc mi_runto_helper {func run_or_continue args {known_fail "" }} {
   global mi_gdb_prompt expect_out
   global hex decimal fullname_syntax
 
@@ -1131,17 +1131,17 @@ proc mi_runto_helper {func run_or_continue args} {
       mi_send_resuming_command "exec-continue" "$test"
   }
 
-  mi_expect_stop "breakpoint-hit" $func ".*" ".*" "\[0-9\]+" { "" "disp=\"del\"" } $test
+  mi_expect_stop "breakpoint-hit" $func ".*" ".*" "\[0-9\]+" { "" "disp=\"del\"" } $test $known_fail
 }
 
-proc mi_runto {func} {
-    return [mi_runto_helper $func "run"]
+proc mi_runto {func {known_fail ""}} {
+    return [mi_runto_helper $func "run" $known_fail]
 }
 
 # Just like runto_main but works with the MI interface.
 
-proc mi_runto_main {} {
-    return [mi_runto_helper "main" "run" -qualified]
+proc mi_runto_main {{known_fail "" }} {
+    return [mi_runto_helper "main" "run" -qualified $known_fail]
 }
 
 # Next to the next statement
@@ -1208,7 +1208,7 @@ proc mi_detect_async {} {
 # programmatically.
 #
 # Do not pass .* for any argument if you are expecting more than one stop.
-proc mi_expect_stop { reason func args file line extra test } {
+proc mi_expect_stop { reason func args file line extra test { known_fail "" } } {
 
     global mi_gdb_prompt
     global hex
@@ -1266,6 +1266,7 @@ proc mi_expect_stop { reason func args file line extra test } {
 		gdb_assert {$exited_normally} "$test"
 	    }
 	    timeout {
+		if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
 		fail "$test (timeout)"
 	    }
 	}
@@ -1343,6 +1344,7 @@ proc mi_expect_stop { reason func args file line extra test } {
 	    return -1
 	}
 	timeout {
+	    if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
 	    fail "$test (timeout)"
 	    return -1
 	}
@@ -1830,7 +1832,7 @@ proc mi_tbreak {location} {
 # Send COMMAND that must be a command that resumes
 # the inferior (run/continue/next/etc) and consumes
 # the "^running" output from it.
-proc mi_send_resuming_command_raw {command test} {
+proc mi_send_resuming_command_raw {command test {known_fail ""}} {
 
     global mi_gdb_prompt
     global thread_selected_re
@@ -1884,14 +1886,15 @@ proc mi_send_resuming_command_raw {command test} {
 	    return -1
 	}
 	timeout {
-	    fail "$test"
+	    if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
+	    fail "$test (timeout)"
 	    return -1
 	}
     }
 }
 
-proc mi_send_resuming_command {command test} {
-    mi_send_resuming_command_raw -$command $test
+proc mi_send_resuming_command {command test {known_fail ""}} {
+    mi_send_resuming_command_raw -$command $test $known_fail
 }
 
 # Helper to mi_run_inline_test below.
@@ -1901,15 +1904,15 @@ proc mi_send_resuming_command {command test} {
 # be determined.
 # Does not check that the line is the same as requested.
 # The caller can check itself if required.
-proc mi_continue_to_line {location test} {
+proc mi_continue_to_line {location test {known_fail ""}} {
 
     mi_tbreak $location
-    mi_send_resuming_command "exec-continue" "run to $location (exec-continue)"
-    return [mi_get_stop_line $test]
+    mi_send_resuming_command "exec-continue" "run to $location (exec-continue)" $known_fail
+    return [mi_get_stop_line $test $known_fail]
 }
 
 # Wait until gdb prints the current line.
-proc mi_get_stop_line {test} {
+proc mi_get_stop_line {test {known_fail ""}} {
 
   global mi_gdb_prompt
   global async
@@ -1928,6 +1931,7 @@ proc mi_get_stop_line {test} {
 	  fail "wait for stop ($test)"
       }
       timeout {
+	  if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
 	  fail "wait for stop ($test)"
       }
   }

@@ -33,18 +33,24 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
 	mi_clean_restart $binfile
 
 	mi_gdb_test "-gdb-set mi-async $async" ".*done.*" "set async $async"
+	mi_detect_async
 
-	if {[mi_start_sycl_program] < 0} {
+	if {$async == "on"} {
+	    set kfail "JIRA DOQG/3265"
+	} else {
+	    set kfail ""
+	}
+	if {[mi_start_sycl_program $kfail] < 0} {
 	    return -1
 	}
 
 	# Run till a temporary BP inside a kernel.
 	set first_kernel_line [gdb_get_line_number "kernel-first-line"]
-	mi_continue_to_line $first_kernel_line "Continue to 'kernel_first_line' and stop at breakpoint"
+	mi_continue_to_line $first_kernel_line "Continue to 'kernel_first_line' and stop at breakpoint" $kfail
 	# Send resuming command.
-	mi_send_resuming_command "exec-continue" "continuing to inferior exit"
+	mi_send_resuming_command "exec-continue" "continuing to inferior exit" $kfail
 	# Expect normal exit.
-	mi_expect_stop "exited-normally" "" "" "" "" "" "exit normally"
+	mi_expect_stop "exited-normally" "" "" "" "" "" "exit normally" $kfail
     }
 }
 

@@ -1,0 +1,58 @@
+# Copyright 2019-2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDB's support for SYCL ; in particular, AOT compilation flags,
+# inserting and hitting breakpoints inside and outside a kernel.
+
+load_lib sycl.exp
+
+standard_testfile single-task.cpp
+
+# A generic function name is used to call it from the SYCL library.
+proc "sycl_${gdb_test_file_name}_run_tests" {} {
+    global srcfile
+
+    if {[start_sycl_program] < 0} {
+	return -1
+    }
+
+    # Set breakpoints inside and outside the kernel.
+    array set bp_locations_kernel {}
+    set num_kernel_locations 4
+
+    gdb_breakpoint "$srcfile:[gdb_get_line_number line-after-kernel]" {message}
+
+    for {set i 1} {$i <= $num_kernel_locations} {incr i} {
+	set bp_locations_kernel($i) [gdb_get_line_number "kernel-line-$i"]
+	gdb_breakpoint "$srcfile:$bp_locations_kernel($i)" {message}
+    }
+
+    # Test that we actually hit the breakpoints.
+    for {set i 1} {$i <= $num_kernel_locations} {incr i} {
+	gdb_continue_to_breakpoint "kernel line $i" \
+	    ".*$srcfile:$bp_locations_kernel($i).*"
+    }
+
+    gdb_continue_to_breakpoint "line after kernel" \
+	".*$srcfile:[gdb_get_line_number line-after-kernel].*"
+}
+
+# LD and compile flags setting is needed for AOT testing.
+# gen9: option creates AOT binary for gen9 and newer targets.
+set aot_opts [list \
+    "additional_flags=-fsycl-targets=spir64_x86_64,spir64_fpga,spir64_gen" \
+    "ldflags=-Xsycl-target-backend=spir64_gen \"-q -device gen9:\""]
+
+test_initialize "${aot_opts}"

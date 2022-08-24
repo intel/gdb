@@ -571,10 +571,15 @@ create_target_description (GTDeviceInfo &info)
   tdesc_create_reg (feature, "a0", regnum++, 1, "address", 256, "uint256");
 
   feature = tdesc_create_feature (tdesc.get (), intelgt::feature_acc);
-  for (int i = 0; i <= 9; ++i)
+  bool gen12p71_or_above = (info.gen_major >= 12 && info.gen_minor > 70);
+  /* There are 4 ACC registers for GEN12p71 and above, while 10 for the
+     older GEN's.  */
+  int total_acc = (gen12p71_or_above ? 4 : 10);
+  for (int i = 0; i < total_acc; ++i)
     {
       snprintf (reg_name, 6, "acc%d", i);
-      tdesc_create_reg (feature, reg_name, regnum++, 1, "accumulator", 256, "uint256");
+      tdesc_create_reg (feature, reg_name, regnum++, 1, "accumulator",
+			256, "uint256");
     }
 
   feature = tdesc_create_feature (tdesc.get (), intelgt::feature_flag);
@@ -591,11 +596,16 @@ create_target_description (GTDeviceInfo &info)
   feature = tdesc_create_feature (tdesc.get (), "org.gnu.gdb.intelgt.timestamp");
   tdesc_create_reg (feature, "tm0", regnum++, 1, "timestamp", 128, "uint128");
 
-  feature = tdesc_create_feature (tdesc.get (), intelgt::feature_mme);
-  for (int i = 0; i <= 7; ++i)
+  /* MME registers exist only for GEN12p71 and above.  */
+  if (gen12p71_or_above)
     {
-      snprintf (reg_name, 6, "mme%d", i);
-      tdesc_create_reg (feature, reg_name, regnum++, 1, "mme", 256, "uint256");
+      feature = tdesc_create_feature (tdesc.get (), intelgt::feature_mme);
+      for (int i = 0; i < 8; ++i)
+	{
+	  snprintf (reg_name, 6, "mme%d", i);
+	  tdesc_create_reg (feature, reg_name, regnum++, 1, "mme", 256,
+			    "uint256");
+	}
     }
 
   return tdesc.release ();

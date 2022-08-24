@@ -21,7 +21,7 @@ standard_testfile sycl-simple.cpp
 
 # A generic function name is used to call it from the SYCL library.
 proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile decimal gdb_prompt hex
+    global srcfile decimal gdb_prompt hex sycl_selected_device
 
     if {![require_sycl_device "gpu" "Intel*"]} {
 	unsupported "test is aimed at Intel GPUs only"
@@ -77,6 +77,25 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
     gdb_test "info reg r$regnum" \
 	"r10            0x2a                42" \
 	"read the written register"
+
+    set ws "\[ \t]+"
+    set total_acc 4
+    set total_mme 8
+
+    for {set mme_regnum 0} {$mme_regnum < $total_mme} {incr mme_regnum} {
+	if {[is_level_zero_debug_api]} {
+	    setup_kfail "JIRA XDEPS/5113" "*-*-*"
+	}
+	gdb_test "info reg mme$mme_regnum" \
+	    "mme$mme_regnum           $hex.*" \
+	    "read the mme$mme_regnum register"
+    }
+
+    for {set acc_regnum 0} {$acc_regnum < $total_acc} {incr acc_regnum} {
+	gdb_test "info reg acc$acc_regnum" \
+	    "acc$acc_regnum           $hex.*" \
+	    "read the acc$acc_regnum register"
+    }
 }
 
 test_initialize

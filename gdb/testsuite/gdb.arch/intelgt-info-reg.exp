@@ -50,10 +50,10 @@ foreach device $sycl_device_list {
 	set ws "\[ \t\]+"
 
 	gdb_test "info reg" [multi_line \
-			     "r0${ws}${hex}${ws}${decimal}" \
-			     "r1${ws}${hex}${ws}${decimal}" \
-			     ".*" \
-			]
+			    "r0${ws}${hex}${ws}${decimal}" \
+			    "r1${ws}${hex}${ws}${decimal}" \
+			    ".*" \
+			    ]
 
 	# Below we write a value to an arbitrary register, then step one
 	# instruction, then read the register, and expect to see the value we
@@ -71,7 +71,7 @@ foreach device $sycl_device_list {
 
 	if {$disassembly_output eq ""} {
 	    untested "intelgt register read/write"
-	    return 0
+	    continue
 	}
 
 	# Find a GRF register that does not appear in the instruction.
@@ -88,5 +88,24 @@ foreach device $sycl_device_list {
 	gdb_test "info reg r$regnum" \
 	    "r10            0x2a                42" \
 	    "read the written register"
+
+	set ws "\[ \t]+"
+	set total_acc 4
+	set total_mme 8
+
+	for {set mme_regnum 0} {$mme_regnum < $total_mme} {incr mme_regnum} {
+	    if {[is_level_zero_debug_api]} {
+		setup_kfail "JIRA XDEPS/5113" "*-*-*"
+	    }
+	    gdb_test "info reg mme$mme_regnum" \
+		"mme$mme_regnum           $hex.*" \
+		"read the mme$mme_regnum register"
+	}
+
+	for {set acc_regnum 0} {$acc_regnum < $total_acc} {incr acc_regnum} {
+	    gdb_test "info reg acc$acc_regnum" \
+		"acc$acc_regnum           $hex.*" \
+		"read the acc$acc_regnum register"
+	}
     }
 }

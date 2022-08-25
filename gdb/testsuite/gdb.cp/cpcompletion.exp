@@ -76,10 +76,11 @@ test_class_complete Foo F "complete class methods beginning with F" \
 
 # The tests below depend on the current code scope.
 
-set bp_location [gdb_get_line_number "Set breakpoint here" ${srcfile}]
+set bp_1 [gdb_get_line_number "BP1" ${srcfile}]
+set bp_2 [gdb_get_line_number "BP2" ${srcfile}]
 
-if {![runto "${srcfile}:$bp_location"]} {
-    perror "test suppressed"
+if {![runto "${srcfile}:$bp_1"]} {
+    untested "failed to run to first breakpoint"
     return
 }
 
@@ -135,3 +136,11 @@ with_test_prefix "expression with namespace" {
     # Add a disambiguating character and we get a unique completion.
     test_gdb_complete_unique "p Test_NS::f" "p Test_NS::foo"
 }
+
+gdb_breakpoint "$srcfile:$bp_2"
+gdb_continue_to_breakpoint "continue to second bp" ".*$srcfile:$bp_2.*"
+
+# We should be able to complete on the members.  We are able to print
+# them after all.
+gdb_test "p unique_name_foo" "= 5"
+gdb_test "complete p unique_name_fo" "p unique_name_foo"

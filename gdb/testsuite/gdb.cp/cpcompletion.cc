@@ -79,10 +79,13 @@ int main ()
   baz<int> obj (2.3, 0.1);
   // Anonymous struct with method.
   struct {
-    int get() { return 5; }
+    private:
+      int unique_name_foo = 5;
+    public:
+      int get() { return unique_name_foo; } /* BP2.  */
   } a;
   Foo foo1;
-  foo1.set_foo (42);		// Set breakpoint here.
-  a.get();			// Prevent compiler from throwing 'a' away.
+  foo1.set_foo (42);		/* BP1.  */
+  a.get ();
   return 0;
 }

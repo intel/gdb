@@ -5669,14 +5669,20 @@ completion_list_add_fields (completion_tracker &tracker,
 			    const lookup_name_info &lookup_name,
 			    const char *text, const char *word)
 {
-  if (sym->aclass () == LOC_TYPEDEF)
-    {
-      struct type *t = sym->type ();
-      enum type_code c = t->code ();
-      int j;
+  struct type *t = sym->type ();
 
-      if (c == TYPE_CODE_UNION || c == TYPE_CODE_STRUCT)
-	for (j = TYPE_N_BASECLASSES (t); j < t->num_fields (); j++)
+  if (sym->aclass () == LOC_TYPEDEF
+      || (sym->aclass () == LOC_COMPUTED && t->code () == TYPE_CODE_PTR))
+    {
+      /* Anonymous classes/structs are often/always represented as a
+	 pointer with LOC_COMPUTED.  Since we also want to show their
+	 fields as a completion result (as we can print them) we resolve
+	 their target type.  */
+      if (t->code () == TYPE_CODE_PTR)
+	t = t->target_type ();
+
+      if (t->code () == TYPE_CODE_UNION || t->code () == TYPE_CODE_STRUCT)
+	for (int j = TYPE_N_BASECLASSES (t); j < t->num_fields (); j++)
 	  if (t->field (j).name ())
 	    completion_list_add_name (tracker, sym->language (),
 				      t->field (j).name (),

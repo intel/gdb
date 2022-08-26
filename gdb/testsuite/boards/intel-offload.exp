@@ -28,6 +28,13 @@ set gdb_test_timeout 100
 unset_board_info isremote
 set_board_info isremote 0
 
+# Avoid adding DEJAGNU -lm and --print-multi-lib default options because
+# these are not supported in MinGW environment for Intel compilers.
+if {[istarget "*-*-mingw*"]} {
+    set_board_info multitop ""
+    set_board_info mathlib ""
+}
+
 set_board_info compiler    "icx"
 set_board_info c++compiler "icpx"
 set_board_info f90compiler "ifx"

@@ -81,6 +81,8 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
     }
     gdb_test "continue" ".*reakpoint ${bpnum}.* ${kernel_symbol} .*"
 
+    set kfail ""
+
     # The BP should be hit once only.
     continue_sycl_program_to_termination
 }

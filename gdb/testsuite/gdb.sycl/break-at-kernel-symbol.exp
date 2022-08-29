@@ -81,8 +81,14 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
     }
     gdb_test "continue" ".*reakpoint ${bpnum}.* ${kernel_symbol} .*"
 
+    set kfail ""
+    # On Tigerlake, following test may fail due to unexpected stop event.
+    if {[is_gen12] && [require_sycl_device "gpu" "Intel*"]} {
+	set kfail "JIRA DOQG/3297"
+    }
+
     # The BP should be hit once only.
-    continue_sycl_program_to_termination
+    continue_sycl_program_to_termination "" "${kfail}"
 }
 
 test_initialize

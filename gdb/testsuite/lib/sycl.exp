@@ -333,7 +333,7 @@ proc is_gen12adl {} {
 
 # Issue a 'continue' command and expect to see program termination.
 
-proc continue_sycl_program_to_termination {{msg_suffix ""}} {
+proc continue_sycl_program_to_termination {{msg_suffix ""} {known_fail ""}} {
     global gdb_prompt inferior_exited_re
 
     set is_non_stop 0
@@ -345,6 +345,8 @@ proc continue_sycl_program_to_termination {{msg_suffix ""}} {
 	    set is_non_stop 1
 	}
     }
+
+    if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
 
     if {!$is_non_stop} {
 	gdb_test "continue" "$inferior_exited_re normally].*" \

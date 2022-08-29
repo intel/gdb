@@ -1,0 +1,206 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test the auto-attach script for Intel GT by attaching to a
+# running target.
+
+if {![can_spawn_for_attach]} {
+    return 0
+}
+
+load_lib sycl.exp
+
+standard_testfile spinning-kernel.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+# Find the stopped threads, check their backtrace, and return the
+# thread ids.
+
+proc test_attach {testpid non_stop} {
+    global srcfile gdb_prompt decimal
+
+    # It is expected to find 4 threads exactly, as the input data size
+    # is 64 and subgroup size is 16.  These values can be controlled
+    # with DATA_SIZE (64 by default) and SUB_GROUP_SIZE (16 by
+    # default) flags, if needed.
+    set num_spinning_threads 4
+
+    # Get the spinning kernel line and find the thread ids.
+    set spinning_line [gdb_get_line_number "spinning-line"]
+
+    # Attach GDB to the process.
+    if {!$non_stop} {
+	gdb_test "attach $testpid" "Attaching to program.*" "attach"
+    } else {
+	# In non-stop mode, threads are interrupted and we see stop
+	# events after the prompt.
+	gdb_test -no-prompt-anchor "attach $testpid" \
+	    "Attaching to program.*" "attach"
+
+	# Wait few seconds before getting the list of stopped threads.  As few
+	# targets may take a bit longer to complete the attach.
+	sleep 2
+
+	set another_thread \
+	    [get_another_stopped_thread $::srcfile $spinning_line "1"]
+
+	gdb_test "thread ${another_thread}" \
+	    "Switching to thread ${another_thread}.*"
+
+	set inferior [get_integer_valueof "\$_inferior" -1]
+	gdb_assert {$inferior > 0}
+	# It may take some time for GDB to process all the
+	# stop/unavailable replies.  Make sure the list stabilizes
+	# before continuing.
+
+	set rest_of_line "\[^\r\n\]*(?=\r\n)"
+	set num_tries 10
+	for {set try 0} {$try < $num_tries} {incr try} {
+	    set has_running_thread 0
+	    set num_stopped 0
+	    gdb_test_multiple "info threads $inferior.*" "thread list" -lbl {
+		-re "Id\[ \t\]+Target Id${rest_of_line}" {
+		    exp_continue
+		}
+		-re "^\r\n\[^\r\n\]+.running.${rest_of_line}" {
+		    set has_running_thread 1
+		    exp_continue
+		}
+		-re "^\r\n$::gdb_prompt" {
+		    # Do nothing.
+		}
+		-re "^\r\n${rest_of_line}" {
+		    exp_continue
+		}
+	    }
+
+	    if {!$has_running_thread} {
+		break
+	    }
+
+	    sleep 2
+	}
+
+	# If we ran out of tries, attaching in non-stop mode did not go
+	# as planned.  Give up.
+	if {$try == $num_tries} {
+	    fail "attaching in non-stop mode"
+	    return ""
+	}
+    }
+
+    set spinning_threads [get_stopped_threads $srcfile $spinning_line]
+    verbose -log "spinning threads: $spinning_threads"
+    gdb_assert { [llength $spinning_threads] == $num_spinning_threads } \
+	"expecting $num_spinning_threads spinning threads"
+
+    # For each spinning thread, check the backtrace.
+    set i 1
+    foreach thread $spinning_threads {
+	with_test_prefix "testing spinning thread $i" {
+	    gdb_test "thread $thread" ".*$thread.*" \
+		"switching to $thread"
+	    gdb_test "bt" [multi_line \
+		"#0.*main.*$srcfile:$spinning_line.*" \
+		"#1.*" ]
+	}
+	incr i
+    }
+
+    return $spinning_threads
+}
+
+foreach device $sycl_device_list {
+
+    sycl_with_intelgt_lock $device {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![is_level_zero_debug_api]} {
+	    unsupported "test is aimed at Level-Zero Debug API only"
+	    continue
+	}
+
+	clean_restart "${binfile}"
+
+	foreach_with_prefix non_stop "off on" {
+	    gdb_test_no_output "set non-stop $non_stop"
+
+	    # Spawn sycl proc and attach.
+	    set test_spawn_id [spawn_sycl_proc $binfile $device]
+
+	    # Sleep for two seconds to ensure the workload is offloaded to
+	    # device and we can attach to a program with actively running
+	    # GPU threads.
+	    sleep 2
+
+	    # Return early if it is failed to spawn a sycl proc.
+	    if {$test_spawn_id == -1} {
+		fail "failed to spawn a sycl proc to attach"
+		continue
+	    }
+
+	    # Obtain PID to attach.
+	    set test_pid [spawn_id_get_pid $test_spawn_id]
+	    verbose -log "spawn id: $test_spawn_id, test pid: $test_pid"
+
+	    with_test_prefix "first attach" {
+		set spinning_threads_1 [test_attach $test_pid $non_stop]
+	    }
+
+	    # Detach from the host application and attach again.
+	    gdb_test "detach inferior 1" \
+		"Detaching from program.*intelgt: inferior .* removed."
+
+	    # Re-attach and test the spinning threads, again.
+	    with_test_prefix "second attach" {
+		set spinning_threads_2 [test_attach $test_pid $non_stop]
+	    }
+
+	    # For each spinning thread, stop spinning.
+	    foreach thread $spinning_threads_2 {
+		gdb_test "thread apply $thread:* -q -s p spin = false" \
+		    " = false" "break the loop at $thread"
+	    }
+
+	    # Continue to termination.
+	    if {$non_stop == "on"} {
+		gdb_test_multiple "continue -a" "continue to end" {
+		    -re "$inferior_exited_re normally].*" {
+			pass $gdb_test_name
+		    }
+		}
+	    } else {
+		gdb_test "continue" "$inferior_exited_re normally].*"
+	    }
+
+	    # Should make sure process is killed just in case.
+	    kill_wait_spawned_process $test_spawn_id
+	}
+    }
+}

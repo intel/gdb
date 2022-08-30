@@ -359,6 +359,11 @@ When set to "1", GDB offload tests will only restart the executable
 for the test instead of building it.  This requires a previous run
 without this option set.
 
+OFFLOAD_PERF_AOT_TESTING
+
+When set to "1", GDB offload performance tests will set the AOT flags
+for compilation.
+
 Architecture-specific Parameters
 ******************************
 

@@ -47,6 +47,9 @@ if {![info exists OFFLOAD_DEVICE_GROUP]} {
 if {![info exists OFFLOAD_IGNORE_PREPARE_FOR_TESTING]} {
     set OFFLOAD_IGNORE_PREPARE_FOR_TESTING "0"
 }
+if {![info exists OFFLOAD_PERF_AOT_TESTING]} {
+    set OFFLOAD_PERF_AOT_TESTING "0"
+}
 
 # Start the process by passing the SYCL device type and a
 # substring of the device name as the command line arguments.
@@ -545,6 +548,42 @@ proc is_sycl_offload_supported_compiler {} {
 proc get_sycl_header_version {} {
     if {[test_compiler_info {icx-2023-*} c++]} {
 	return 1
+    }
+
+    return 0
+}
+
+# Function is for the performance tests common "assemble section"
+# of the tests.
+
+proc sycl_perftest_initialize {} {
+    global binfile srcfile OFFLOAD_PERF_AOT_TESTING
+
+    set sycl_device_list [init_sycl_devices_list]
+    if {[llength $sycl_device_list] == 0} {
+	unsupported "target does not support SYCL"
+	return 0
+    }
+
+    set option ""
+    if {$OFFLOAD_PERF_AOT_TESTING == "1"} {
+	# LD and compile flags setting is needed for AOT testing.
+	# gen9: option creates AOT binary for gen9 and newer targets.
+	set option [list "additional_flags=-fsycl-targets=spir64_x86_64,spir64_fpga,spir64_gen" "ldflags=-Xsycl-target-backend=spir64_gen \"-q -device gen9:\""]
+    }
+
+    if {[build_executable "failed to compile $srcfile" \
+	    "${binfile}" $srcfile [concat sycl debug $option]]} {
+	return 0
+    }
+
+    foreach device $sycl_device_list {
+	set test_prefix [sycl_init_device "$device"]
+	if {![string match "" $test_prefix]} {
+	    verbose "SYCL: Initalized the device $device" 0
+	    clean_restart "${binfile}"
+	    return 1
+	}
     }
 
     return 0

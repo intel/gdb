@@ -29,12 +29,8 @@ if [skip_perf_tests] {
 }
 
 PerfTest::assemble {
-    if {[skip_sycl_tests]} {
-	unsupported "target does not support SYCL"
-	return 0
-    }
-
-    if {[prepare_sycl_for_testing $binfile $srcfile]} {
+    if {![sycl_perftest_initialize]} {
+	unsupported "Test initializaton is failed"
 	return -1
     }
 

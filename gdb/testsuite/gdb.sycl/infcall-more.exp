@@ -100,8 +100,14 @@ proc test_inferior_calls {simd_lane inside_kernel} {
     gdb_test "print complex_struct_return(5, 6, 7, 8)" "= \\{x = 5, y = 6, vec = \\{7, 8\\}\\}" \
 	"The struct value is returned on the stack: 2"
 
+    if {[is_level_zero_debug_api]} {
+	setup_kfail "JIRA DOQG/3289" "*-*-*"
+    }
     gdb_test "print mixed_types(s_s1, 12, c_s1, c_s2, 13, arr1_uchar10, arr2_uchar10, s_s2)" "= 4656" \
 	"Mixed types to be passed on GRFs: 1"
+    if {[is_level_zero_debug_api]} {
+	setup_kfail "JIRA DOQG/3289" "*-*-*"
+    }
     gdb_test "print mixed_types(s_s2, 22, c_s2, c_s1, 23, arr2_uchar10, arr1_uchar10, s_s1)" "= 8259" \
 	"Mixed types to be passed on GRFs: 2"
 

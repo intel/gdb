@@ -240,8 +240,12 @@ gdb_caching_proc omp_get_device_list {} {
 
 gdb_caching_proc is_omp_offload_supported_compiler {} {
 
-    if {($extension eq "f90" && [test_compiler_info {ifx-*} f90])
-	 || ($extension eq "c++" && [test_compiler_info {icx-*} c++])} {
+    # When using OFFLOAD_IGNORE_PREPARE_FOR_TESTING, the compiler info is
+    # read from the boardfile. Therefore, we need to allow icpx in addition
+    # to icx.
+    if {[test_compiler_info {ifx-*} f90]
+	|| ([test_compiler_info {icx-*} c++]
+	    || [test_compiler_info {icpx-*} c++])} {
 	return 1
     }
     return 0

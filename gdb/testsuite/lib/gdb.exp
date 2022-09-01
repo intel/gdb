@@ -281,6 +281,10 @@ set bkptno_num_re "$decimal\\.$decimal"
 # with one or several code locations.
 set bkptno_numopt_re "($decimal\\.$decimal|$decimal)"
 
+if {![info exists OFFLOAD_IGNORE_PREPARE_FOR_TESTING]} {
+    set OFFLOAD_IGNORE_PREPARE_FOR_TESTING "0"
+}
+
 ### Only procedures should come after this point.
 
 #
@@ -4760,6 +4764,20 @@ proc get_compiler_info {{language "c"}} {
 
 proc test_compiler_info { {compiler ""} {language "c"} } {
     gdb_persistent_global compiler_info_cache
+    global OFFLOAD_IGNORE_PREPARE_FOR_TESTING
+
+    # Compiler might not be available for pre-build packages so return
+    # compiler from the board info in this case.
+    if {$OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"} {
+	set dest [target_info name]
+	if {$language == "f90" && [board_info $dest exists f90compiler]} {
+	    set compiler_info_cache(f90) "[target_info f90compiler]-"
+	    return [string match $compiler $compiler_info_cache($language)]
+	} elseif {$language == "c++" && [board_info $dest exists c++compiler]} {
+	    set compiler_info_cache(c++) "[target_info c++compiler]-"
+	    return [string match $compiler $compiler_info_cache($language)]
+	}
+    }
 
     if [get_compiler_info $language] {
 	# An error will already have been printed in this case.  Just

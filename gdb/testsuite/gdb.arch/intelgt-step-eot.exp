@@ -1,0 +1,68 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for SYCL; in particular, single-stepping the
+# source and printing values of local vars and data elements.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![is_level_zero_debug_api]} {
+	    unsupported "test is aimed at Level Zero debug API only"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	gdb_breakpoint [gdb_get_line_number "in-kernel"] {temporary}
+	gdb_continue_to_breakpoint "run to kernel" ".*in-kernel.*"
+
+	# Keep other threads stopped.
+	gdb_test_no_output "set scheduler-locking step"
+
+	# Navigate close to the end of the kernel.  This depends on details in
+	# the debug information.
+	gdb_test "finish"
+
+	# Stepping over the end of the kernel ends this thread dispatch.
+	#
+	# GDB used to hang waiting for the single-step completion event that
+	# would never come.
+	gdb_test "next" "\\\[Thread \[0-9\]+\.\[0-9\]+ became inactive\\\]"
+    }
+}

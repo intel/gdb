@@ -410,7 +410,9 @@ protected:
   virtual target_stop_reason get_stop_reason (thread_info *tp,
 					      gdb_signal &signal) = 0;
 
-  /* Prepare TP for resuming with RKIND.  */
+  /* Prepare TP for resuming with RKIND.
+
+   This sets the ze execution state, typically to running.  */
   virtual void prepare_thread_resume (thread_info *tp,
 				      enum resume_kind rkind) = 0;
 };

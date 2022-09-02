@@ -202,6 +202,25 @@ intelgt_write_cr0 (thread_info *tp, int subreg, uint32_t value)
   intelgt_write_cr0 (regcache, subreg, value);
 }
 
+/* Instruction details.  */
+
+enum
+  {
+    /* The opcode mask for bits 6:0.  */
+    intelgt_opc_mask = 0x3f,
+
+    /* Selected instruction opcodes.  */
+    intelgt_opc_send = 0x31,
+    intelgt_opc_sendc = 0x32,
+  };
+
+/* Selected instruction control bit positions.  */
+enum
+  {
+    /* The End Of Thread control.  Only used for SEND and SENDC.  */
+    intelgt_ctrl_eot = 34,
+  };
+
 /* Target op definitions for Intel GT target based on level-zero.  */
 
 class intelgt_ze_target : public ze_target
@@ -233,6 +252,7 @@ protected:
 			      enum resume_kind rkind) override;
 
   bool is_at_breakpoint (thread_info *tp);
+  bool is_at_eot (thread_info *tp);
 
 private:
   /* Add a register set for REGPROP on DEVICE to REGSETS and increment REGNUM
@@ -516,17 +536,52 @@ intelgt_ze_target::is_at_breakpoint (thread_info *tp)
   return intelgt::has_breakpoint (inst);
 }
 
+bool
+intelgt_ze_target::is_at_eot (thread_info *tp)
+{
+  regcache *regcache = get_thread_regcache (tp, /* fetch = */ false);
+  CORE_ADDR pc = read_pc (regcache);
+
+  gdb_byte inst[intelgt::MAX_INST_LENGTH];
+  int status = read_memory (pc, inst, intelgt::MAX_INST_LENGTH);
+  if (status != 0)
+    {
+      ze_device_thread_t zeid = ze_thread_id (tp);
+
+      warning (_("error reading memory for thread %d.%ld (%s) at 0x%"
+		 PRIx64), tp->id.pid (), tp->id.lwp (),
+	       ze_thread_id_str (zeid).c_str (), pc);
+      return false;
+    }
+
+  uint8_t opc = inst[0] & intelgt_opc_mask;
+  switch (opc)
+    {
+    case intelgt_opc_send:
+    case intelgt_opc_sendc:
+      return intelgt::get_inst_bit (inst, intelgt_ctrl_eot);
+
+    default:
+      return false;
+    }
+}
+
 void
 intelgt_ze_target::prepare_thread_resume (thread_info *tp,
 					  enum resume_kind rkind)
 {
-  ze_device_thread_t thread = ze_thread_id (tp);
+  ze_thread_info *zetp = ze_thread (tp);
+  gdb_assert (zetp != nullptr);
+
   regcache *regcache = get_thread_regcache (tp, /* fetch = */ false);
   uint32_t cr0[3] = {
     intelgt_read_cr0 (regcache, 0),
     intelgt_read_cr0 (regcache, 1),
     intelgt_read_cr0 (regcache, 2)
   };
+
+  /* The thread is running.  We may need to overwrite this below.  */
+  zetp->exec_state = ze_thread_state_running;
 
   /* Clear any potential interrupt indication.
 
@@ -538,12 +593,27 @@ intelgt_ze_target::prepare_thread_resume (thread_info *tp,
   /* Distinguish stepping and continuing.  */
   switch (rkind)
     {
+    case resume_step:
+      /* We step by indicating a breakpoint exception, which will be
+	 considered on the next instruction.
+
+	 This does not work for EOT, though.  */
+      if (!is_at_eot (tp))
+	{
+	  cr0[1] |= (1 << intelgt_cr0_1_breakpoint_status);
+	  break;
+	}
+
+      /* At EOT, the thread dispatch ends and the thread becomes idle.
+
+	 There's no point in requesting a single-step exception but we
+	 need to inject an event to tell GDB that the step completed.  */
+      zetp->exec_state = ze_thread_state_unavailable;
+      zetp->waitstatus.set_unavailable ();
+
+      /* Fall through.  */
     case resume_continue:
       cr0[1] &= ~(1 << intelgt_cr0_1_breakpoint_status);
-      break;
-
-    case resume_step:
-      cr0[1] |= (1 << intelgt_cr0_1_breakpoint_status);
       break;
 
     default:
@@ -564,7 +634,7 @@ intelgt_ze_target::prepare_thread_resume (thread_info *tp,
 
   dprintf ("thread %d.%ld (%s) resumed, cr0.0=%" PRIx32 " .1=%" PRIx32
 	   " .2=%" PRIx32 ".", tp->id.pid (), tp->id.lwp (),
-	   ze_thread_id_str (thread).c_str (), cr0[0], cr0[1], cr0[2]);
+	   ze_thread_id_str (zetp->id).c_str (), cr0[0], cr0[1], cr0[2]);
 }
 
 void

@@ -83,6 +83,26 @@ constexpr const char *dwarf_regset_features[regset_count] = {
   feature_mme
 };
 
+/* Instruction details.  */
+
+enum
+{
+  /* The opcode mask for bits 6:0.  */
+  opc_mask = 0x7f,
+
+  /* Send instruction opcodes.  */
+  opc_send = 0x31,
+  opc_sendc = 0x32,
+};
+
+/* Selected instruction control bit positions.  */
+
+enum
+{
+  /* The End Of Thread control.  Only used for SEND and SENDC.  */
+  ctrl_eot = 34,
+};
+
 /* Get the bit at POS in INST.  */
 
 bool get_inst_bit (const gdb_byte inst[], int pos);

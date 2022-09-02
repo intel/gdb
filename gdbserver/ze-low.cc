@@ -927,17 +927,6 @@ ze_resume (ze_device_info &device, ze_device_thread_t thread)
   switch (status)
     {
     case ZE_RESULT_SUCCESS:
-      /* Update our thread state to reflect the target.  */
-      for_each_thread (device, thread, [&] (thread_info *tp)
-	{
-	  ze_thread_info *zetp = ze_thread (tp);
-	  gdb_assert (zetp != nullptr);
-
-	  if (zetp->exec_state != ze_thread_state_stopped)
-	    return;
-
-	  zetp->exec_state = ze_thread_state_running;
-	});
       break;
 
     case ZE_RESULT_ERROR_NOT_AVAILABLE:
@@ -958,9 +947,6 @@ ze_resume (ze_device_info &device, ze_device_thread_t thread)
 	{
 	  ze_thread_info *zetp = ze_thread (tp);
 	  gdb_assert (zetp != nullptr);
-
-	  if (zetp->exec_state != ze_thread_state_stopped)
-	    return;
 
 	  zetp->exec_state = ze_thread_state_unavailable;
 	  zetp->waitstatus.set_unavailable ();

@@ -129,6 +129,7 @@ class IntelgtAutoAttach:
         self.host_inf_for_auto_remove = None
         self.is_nonstop = False
         self.hook_bp = None
+        self.the_bp = None
         env_value = self.get_env_variable("ZET_ENABLE_PROGRAM_DEBUGGING")
         self.use_dcd = env_value is None or env_value == "0"
         if self.use_dcd:
@@ -162,19 +163,6 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
         env_value = self.get_env_variable("INTELGT_AUTO_ATTACH_DISABLE")
         return not(env_value is None or env_value == "0")
 
-    @staticmethod
-    def ze_context_is_initialized():
-        """Helper function to check if context is initialized already before
-        GDB attaches to the process."""
-
-        # If we attached to the inferior, L0 has likely been
-        # initialized already.  So, this check can cover a large range
-        # of use-cases; however, it is still incomplete, because the
-        # user could have attached to the host inferior after it was
-        # started but before L0 was initialized.  If that's the case,
-        # our attempt to attach to the GPU would fail.
-        return gdb.selected_inferior().was_attached
-
     def handle_new_objfile_event(self, event):
         """Handler for a new object file load event.  If auto-attach has
         not been disabled, set a breakpoint at location 'BP_FCT'."""
@@ -191,28 +179,39 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
             and not self.use_dcd):
             DebugLogger.log(
                 f"received {event.new_objfile.filename} loaded event.")
-            if self.ze_context_is_initialized():
-                # We just learnt about the library event, but the
-                # context is already created.  This must be because we
-                # were attached to an already-running process.
-                # Initialize the gt inferiors immediately.
+            if gdb.selected_inferior().was_attached:
+                # We just learnt about the library event and the inferior
+                # was attached.  It is possible that the level-zero backend
+                # is already initialized.  Let us try to initialize the
+                # GT inferiors.  If this does not work, it means level-zero
+                # initialization has not happened yet.  In that case we try
+                # again later via the hook BP.
                 DebugLogger.log("context might already be initialized.")
                 self.init_gt_inferiors()
             return
 
         if ('libigfxdbgxchg64.so' in event.new_objfile.filename
             and self.use_dcd):
-            the_bp = BP_FCT
+            self.the_bp = BP_FCT
         elif ('libze_loader.so' in event.new_objfile.filename
               and not self.use_dcd):
-            the_bp = BP_ZET
+            self.the_bp = BP_ZET
         else:
             return
 
         DebugLogger.log(
             f"received {event.new_objfile.filename} loaded event. "
             "Setting up bp hook.")
-        self.hook_bp = gdb.Breakpoint(the_bp, type=gdb.BP_BREAKPOINT,
+        self.setup_hook_bp()
+
+    def setup_hook_bp(self):
+        """Set a breakpoint at the location of BP_FCT or BP_ZET
+        indicated by self.the_bp.  If not set, return and do nothing."""
+        if not self.the_bp:
+            DebugLogger.log("BP location for the hook is not set.")
+            return
+
+        self.hook_bp = gdb.Breakpoint(self.the_bp, type=gdb.BP_BREAKPOINT,
                                       internal=1, temporary=0)
         self.hook_bp.silent = True
         commands = ("python gdb.function.intelgt_auto_attach" +
@@ -392,18 +391,22 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
             self.host_inf_for_auto_remove = host_inf
             self.remove_gt_inf_if_stored_for_removal()
 
+    @DebugLogger.log_call
     def handle_error(self, inf, details=None):
         """Remove the inferior and clean-up dict in case of error."""
         if details is not None:
             print(details)
-        print(f"""\
-intelgt: {self.gdbserver_gt_binary} failed to start.  The environment variable
-INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
         gdb.execute(f"inferior {inf.num}", False, True)
         # The gt inferior is the last inferior that was added.
         gt_inf = gdb.inferiors()[-1]
         gdb.execute(f"remove-inferior {gt_inf.num}")
         self.inf_dict[inf] = None
+
+    def display_auto_attach_error_msg(self):
+        """Display auto attach error message."""
+        print(f"""\
+intelgt: {self.gdbserver_gt_binary} failed to start.  The environment variable
+INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
 
     @staticmethod
     def get_connection_str(var):
@@ -533,6 +536,7 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
                 if target_str is None:
                     print("intelgt: could not get connection string.")
                     self.handle_error(inf)
+                    self.display_auto_attach_error_msg()
                     return
             else:
                 # Connection over tcp.
@@ -582,6 +586,7 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
         if connection not in ('remote', 'native'):
             print(f"intelgt: connection name '{connection}' not recognized.")
             self.handle_error(host_inf)
+            self.display_auto_attach_error_msg()
             return
 
         self.hook_bp.delete()
@@ -607,23 +612,27 @@ intelgt: the igfxdcd module (i.e. the debug driver) is not loaded.""")
             # This represents the first device.
             try:
                 self.handle_attach_gdbserver_gt(connection, host_inf)
+                # Get the most recent gt inferior.
+                gt_inf = gdb.inferiors()[-1]
+                # For the --attach scenario we use gt_inf; for the
+                # --multi scenario we use gt_inf's connection num.
+                self.inf_dict[host_inf] = (gt_inf, gt_inf.connection_num)
                 # Switch to the host inferior.
                 gdb.execute(f"inferior {host_inf.num}", False, True)
-                if not self.is_nonstop:
-                    gdb.execute("set schedule-multiple on")
             # Fix ctrl-c while attaching to gt inferior.
             except KeyboardInterrupt:
                 self.handle_error(host_inf)
+                self.display_auto_attach_error_msg()
             except gdb.error as ex:
-                self.handle_error(host_inf, details=str(ex))
+                # If auto attach fails due to uninitialized context, it
+                # should be retried by setting up the hook bp.
+                if "attempting to attach too early" in str(ex):
+                    self.handle_error(host_inf)
+                    self.setup_hook_bp()
+                else:
+                    self.handle_error(host_inf, details=str(ex))
+                    self.display_auto_attach_error_msg()
 
-            gt_inf = gdb.inferiors()[-1]
-            # For the --attach scenario we use gt_inf; for the
-            # --multi scenario we use gt_inf's connection num.
-            self.inf_dict[host_inf] = (gt_inf, gt_inf.connection_num)
-
-            # Switch to the host inferior.
-            gdb.execute(f"inferior {host_inf.num}", False, True)
             if not self.is_nonstop:
                 gdb.execute("set schedule-multiple on")
 

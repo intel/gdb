@@ -1958,6 +1958,10 @@ dwarf2_get_symbol_read_needs (gdb::array_view<const gdb_byte> expr,
 	case DW_OP_nop:
 	case DW_OP_GNU_uninit:
 	case DW_OP_push_object_address:
+	case DW_OP_INTEL_push_bit_piece_stack:
+	case DW_OP_INTEL_push_simd_lane:
+	case DW_OP_INTEL_piece_stack:
+	case DW_OP_INTEL_bit_piece_stack:
 	  break;
 
 	case DW_OP_form_tls_address:
@@ -2090,6 +2094,8 @@ dwarf2_get_symbol_read_needs (gdb::array_view<const gdb_byte> expr,
 	case DW_OP_GNU_parameter_ref:
 	case DW_OP_regval_type:
 	case DW_OP_GNU_regval_type:
+	case DW_OP_INTEL_regval_bits:
+	case DW_OP_INTEL_regs:
 	  symbol_needs = SYMBOL_NEEDS_FRAME;
 	  break;
 

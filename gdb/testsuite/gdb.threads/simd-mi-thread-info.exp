@@ -40,7 +40,7 @@ standard_testfile simd.cpp
 
 # A generic function name is used to call it from the SYCL library.
 proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global binfile srcfile expect_out hex mi_gdb_prompt
+    global binfile srcfile expect_out hex mi_gdb_prompt decimal
 
     if {![require_sycl_device "gpu" "Intel*"]} {
 	unsupported "test is aimed at Intel GPUs only"

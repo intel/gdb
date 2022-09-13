@@ -1527,6 +1527,9 @@ print_thread_row (ui_out *uiout, const info_threads_opts &opts,
 	}
     }
 
+  if (uiout->is_mi_like_p () && tp->inf->num > 0)
+    uiout->field_fmt ("thread-group", "i%d", tp->inf->num);
+
   if (uiout->is_mi_like_p ())
     {
       const char *state = "stopped";

@@ -40,7 +40,7 @@ standard_testfile simd.cpp
 
 # A generic function name is used to call it from the SYCL library.
 proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global binfile srcfile expect_out hex mi_gdb_prompt
+    global binfile srcfile expect_out hex mi_gdb_prompt decimal
 
     if {![require_sycl_device "gpu" "Intel*"]} {
 	unsupported "test is aimed at Intel GPUs only"
@@ -78,7 +78,7 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
     set emask_hex [format 0x%x $emask_int]
 
     mi_gdb_test "-thread-info $thread_id" \
-	"\\^done,threads=\\\[\{id=\".*\",target-id=.*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",hit-lanes-mask=\"$hex\"\}\\\]" \
+	"\\^done,threads=\\\[\{id=\".*\",target-id=.*,thread-group=\"i$decimal\".*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",hit-lanes-mask=\"$hex\"\}\\\]" \
 	"Check execution mask and simd width for thread $thread_id at line $kernel_dim0_line"
 
     # Set temporary breakpoint to line $odd_branch_line and continue.
@@ -94,7 +94,7 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
     set emask_hex [format 0x%x $emask_int]
 
     mi_gdb_test "-thread-info $thread_id" \
-	"\\^done,threads=\\\[\{id=\".*\",target-id=.*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",hit-lanes-mask=\"$hex\"\}\\\]" \
+	"\\^done,threads=\\\[\{id=\".*\",target-id=.*,thread-group=\"i$decimal\".*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",hit-lanes-mask=\"$hex\"\}\\\]" \
 	"Check execution mask and simd width for thread $thread_id at line $odd_branch_line"
 
     # Test a host thread that it does not contain emask or simd width fields.

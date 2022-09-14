@@ -2957,6 +2957,8 @@ remote_target::remote_add_thread (ptid_t ptid, bool running, bool executing,
 void
 remote_target::remote_notice_new_inferior (ptid_t currthread, bool executing)
 {
+  inferior *current_inf = current_inferior ();
+
   /* In non-stop mode, we assume new found threads are (externally)
      running until proven otherwise with a stop reply.  In all-stop,
      we can only get here if all threads are stopped.  */
@@ -3037,7 +3039,7 @@ remote_target::remote_notice_new_inferior (ptid_t currthread, bool executing)
 	{
 	  struct remote_state *rs = get_remote_state ();
 
-	  if (!rs->starting_up)
+	  if (!rs->starting_up || inf != current_inf)
 	    {
 	      inf->needs_setup = 1;
 	      notice_new_inferior (new_thr, executing, 0);

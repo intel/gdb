@@ -52,8 +52,13 @@ variables.
    - To change the remote machine address, set the
      INTELGT_AUTO_ATTACH_REMOTE_TARGET environment variable to the
      desired value.
+
+   - To enable developer debug logs of the python script set the
+     INTELGT_AUTO_ATTACH_VERBOSE_LOG environment variable to the
+     desired value.
 """
 
+import re
 import subprocess
 import gdb
 
@@ -63,6 +68,53 @@ BP_ZET = "zeContextCreate"
 
 # Function call to query the number of devices.
 NUM_DEVICES_FCT = "(int)igfxdbgxchgNumDevices()"
+
+class DebugLogger:
+    """Class for convenient debug logs"""
+    @staticmethod
+    def debug_log_is_enabled():
+        """Helper function to check if debug logs are enabled
+        via os environment variable or in inferior's environment."""
+        env_value = IntelgtAutoAttach.get_env_variable(
+            "INTELGT_AUTO_ATTACH_VERBOSE_LOG")
+        return not(env_value is None or env_value == "0")
+
+    @staticmethod
+    def log_call(func):
+        """"Decorative function to mark the corresponding class
+        to log calls when debug logs are enabled."""
+        match = re.search(
+            f"(.+).{func.__name__}", func.__qualname__)
+        self_name = match.group(1) if match else ""
+        def wrapper(*args, **kwargs):
+            if DebugLogger.debug_log_is_enabled():
+                arg_repr = []
+                for arg in args:
+                    match = re.search(
+                        f"<(?:{str(func.__module__)}.)?(.+) "
+                        "object at 0x[0-9a-fA-F]*>", repr(arg))
+                    if match and self_name in match.group(1):
+                        arg_repr.append("self")
+                    else:
+                        arg_repr.append(
+                            match.group(1) if match else repr(arg))
+                for arg_name, arg_value in kwargs.items():
+                    match = re.search(
+                        "<(.+) object at 0x[0-9a-fA-F]*>", repr(arg_value))
+                    arg_repr.append(
+                        f"{arg_name}="
+                        f"{match.group(1) if match else repr(arg_value)}")
+                str_args = ", ".join(arg_repr)
+                print(f"intelgt: calling {func.__name__}({str_args}).")
+            return func(*args, **kwargs)
+        return wrapper
+
+    @staticmethod
+    def log(msg):
+        """Helper function to log debug messages when debug logs
+        are enabled."""
+        if DebugLogger.debug_log_is_enabled():
+            print(f"intelgt: {msg}")
 
 # pylint: disable-next=too-many-instance-attributes
 class IntelgtAutoAttach:
@@ -139,11 +191,14 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
 
         if ('libze_intel_gpu.so' in event.new_objfile.filename
             and not self.use_dcd):
+            DebugLogger.log(
+                f"received {event.new_objfile.filename} loaded event.")
             if self.ze_context_is_initialized():
                 # We just learnt about the library event, but the
                 # context is already created.  This must be because we
                 # were attached to an already-running process.
                 # Initialize the gt inferiors immediately.
+                DebugLogger.log("context might already be initialized.")
                 self.init_gt_inferiors()
             return
 
@@ -156,6 +211,9 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
         else:
             return
 
+        DebugLogger.log(
+            f"received {event.new_objfile.filename} loaded event. "
+            "Setting up bp hook.")
         self.hook_bp = gdb.Breakpoint(the_bp, type=gdb.BP_BREAKPOINT,
                                       internal=1, temporary=0)
         self.hook_bp.silent = True
@@ -179,6 +237,7 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
 
         self.hook_bp.commands = commands + command_suffix
 
+    @DebugLogger.log_call
     def remove_gt_inf_for(self, host_inf):
         """First detach from, then remove the gt inferiors that were created
         for HOST_INF."""
@@ -247,10 +306,12 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
             # pending exit event.
             self.protected_gdb_execute("continue")
 
+    @DebugLogger.log_call
     def remove_gt_inf_if_stored_for_removal(self):
         """If an inferior was marked for removal, detach and then remove all
         the gt inferiors that were created for the marked HOST_INF."""
         if self.host_inf_for_auto_remove is None:
+            DebugLogger.log("no inferior is stored for removal.")
             return
 
         host_inf = self.host_inf_for_auto_remove
@@ -284,6 +345,7 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
         if such an inferior was stored for removal."""
         self.remove_gt_inf_if_stored_for_removal()
 
+    @DebugLogger.log_call
     def handle_exited_event(self, event):
         """Indication that an inferior's process has exited.
         Save the host inferior to remove later the GT inferior that
@@ -325,6 +387,7 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
                 elif event.inferior == gt_inf:
                     self.host_inf_for_auto_remove = key
 
+    @DebugLogger.log_call
     def handle_gdb_exiting_event(self, event):
         """Handler for GDB's exiting event."""
         if event is None:
@@ -334,6 +397,7 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
             self.host_inf_for_auto_remove = host_inf
             self.remove_gt_inf_if_stored_for_removal()
 
+    @DebugLogger.log_call
     def handle_error(self, inf):
         """Remove the inferior and clean-up dict in case of error."""
         print(f"""\
@@ -361,6 +425,7 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
             connection_str = None
         return connection_str
 
+    @DebugLogger.log_call
     def handle_attach_gdbserver_gt(self, connection, inf):
         """Attach gdbserver to gt inferior either locally or remotely."""
         # Check 'INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH' in the inferior's
@@ -400,6 +465,7 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
             if ctrl-c is used whilst attaching to inferior.  """
             raise ex
 
+    @DebugLogger.log_call
     def make_native_gdbserver(self, inf, ld_lib_path, gdbserver_cmd):
         """Spawn and connect to a native instance of gdbserver."""
         # Switch to the gt inferior.  It is the most recent inferior.
@@ -439,6 +505,7 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
             # architecture info.
             print(connection_output.split("\n")[0])
 
+    @DebugLogger.log_call
     def make_remote_gdbserver(self, inf, ld_lib_path, gdbserver_cmd):
         """Spawn and connect to a remote instance of gdbserver."""
         # Check 'INTELGT_AUTO_ATTACH_REMOTE_TARGET' in the inferior's
@@ -502,6 +569,7 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
                 grep.communicate()
                 return grep.returncode == 0
 
+    @DebugLogger.log_call
     def init_gt_inferiors(self):
         """Create/initialize inferiors with gdbserver connection"""
 

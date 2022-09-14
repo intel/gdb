@@ -31,6 +31,23 @@ if {[build_executable "failed to compile $srcfile" \
     return -1
 }
 
+# Get host pid.
+
+proc get_host_pid {} {
+    global decimal
+
+    set host_pid "invalid"
+    gdb_test_multiple "info inferiors 1" "find host pid" {
+	-re -wrap "process ($decimal).*" {
+	    set host_pid $expect_out(1,string)
+	    pass $gdb_test_name
+	}
+    }
+
+    verbose -log "host pid is $host_pid"
+    return $host_pid
+}
+
 # Count available inferiors within the current debugging session.
 
 proc total_inferiors {} {
@@ -46,6 +63,29 @@ proc total_inferiors {} {
 
     verbose -log "Total inferiors: $total_inf"
     return $total_inf
+}
+
+# Prepare for restart, kill-host and detach-host scenarios.
+
+proc prepare_nonstop_test_scenario {non_stop_mode device} {
+    global srcfile
+
+    gdb_test_no_output "set non-stop $non_stop_mode"
+
+    if {![runto_main [sycl_get_device_args $device]]} {
+	fail "run the program"
+    } else {
+	pass "run the program"
+    }
+
+    # Remove the breakpoint set for main, since we want to restart.
+    delete_breakpoints
+
+    # Set a breakpoint inside the kernel and hit it.
+    set inside_kernel [gdb_get_line_number "kernel-line-1"]
+    gdb_breakpoint "$srcfile:$inside_kernel"
+    gdb_continue_to_breakpoint "kernel line" \
+	".*$srcfile:$inside_kernel.*"
 }
 
 # Run until the end, potentially with BPs inside and outside the kernel.
@@ -80,7 +120,7 @@ proc run_end_to_end {has_kernel_bp has_outside_bp device} {
 # Run up to a BP, then kill/detach an inferior.
 
 proc run_to_bp {which_bp scenario iter device} {
-    global srcfile decimal
+    global srcfile
 
     if {![runto_main [sycl_get_device_args $device]]} {
 	fail "run the program"
@@ -104,14 +144,7 @@ proc run_to_bp {which_bp scenario iter device} {
 
     # Host inferior ID is always 1.
     set host_inf 1
-    set host_pid "invalid"
-    gdb_test_multiple "info inferiors 1" "find host pid" {
-	-re -wrap "process ($decimal).*" {
-	    set host_pid $expect_out(1,string)
-	    pass $gdb_test_name
-	}
-    }
-    verbose -log "host pid is $host_pid"
+    set host_pid [get_host_pid]
     set total_inf [total_inferiors]
 
     # GT inferior is created anew each time we run.
@@ -132,7 +165,6 @@ proc run_to_bp {which_bp scenario iter device} {
     }
 }
 
-
 # Test restarting the host and gt inferior while debugging a kernel.
 # Run up to a BP and try to restart the gt inferior, which should fail.  Then,
 # switch to the host inferior and restart execution.  Do this with non-stop
@@ -141,22 +173,7 @@ proc run_to_bp {which_bp scenario iter device} {
 proc run_restart_scenario {non_stop_mode device} {
     global srcfile inferior_exited_re gdb_prompt
 
-    gdb_test_no_output "set non-stop $non_stop_mode"
-
-    if {![runto_main [sycl_get_device_args $device]]} {
-	fail "run the program"
-    } else {
-	pass "run the program"
-    }
-
-    # Remove the breakpoint set for main, since we want to restart.
-    delete_breakpoints
-
-    # Set a breakpoint inside the kernel and hit it.
-    set inside_kernel [gdb_get_line_number "kernel-line-1"]
-    gdb_breakpoint "$srcfile:$inside_kernel"
-    gdb_continue_to_breakpoint "kernel line" \
-	".*$srcfile:$inside_kernel.*"
+    prepare_nonstop_test_scenario $non_stop_mode $device
 
     if {$non_stop_mode eq "on"} {
 	# In non-stop mode we should still sit at the host inferior.
@@ -172,6 +189,7 @@ proc run_restart_scenario {non_stop_mode device} {
 
     # Now try to "run".  We should restart and hit the breakpoint inserted
     # earlier again.
+    set inside_kernel [gdb_get_line_number "kernel-line-1"]
     gdb_test "run" "Starting program:.*$srcfile:$inside_kernel.*" \
 	"restart host inferior and hit kernel bp" \
 	{Start it from the beginning\? \(y or n\) } "y"
@@ -186,6 +204,48 @@ proc run_restart_scenario {non_stop_mode device} {
 	# We should now be able to run to the end.
 	continue_sycl_program_to_termination
     }
+}
+
+# Test detaching from the host while debugging a kernel.  
+# Run up to a BP, and switch to the host inferior.  Then detach from 
+# the host inferior to observe gt inferior is removed.  Do this
+# with non-stop mode set to either "on" or "off".
+
+proc run_detach_host_scenario {non_stop_mode device} {
+    global decimal
+
+    prepare_nonstop_test_scenario $non_stop_mode $device
+    # Host inferior is always the first one.
+    gdb_test "inferior 1" "Switching to inferior 1.*" "switch to host inferior"
+    # Obtain host proc pid.
+    set host_pid [get_host_pid]
+
+    # Detach host inferior and observe device inferior is removed.
+    gdb_test "detach inferiors 1" \
+	"intelgt\\\: inferior $decimal \\(gdbserver\\-(?:ze\|gt)\\) has been removed.*" \
+	"detaching host inferior"
+    # Detaching from the host program may leave it hanging if the
+    # kernel fails to resume/kill the context.  Make sure that it
+    # does not stay in the background.
+    remote_exec build "kill -9 ${host_pid}"
+}
+
+# Test killing the host while debugging a kernel.  
+# Run up to a BP, and switch to the host inferior.  Then kill 
+# the host inferior to observe gt inferior is removed.  Do this
+# with non-stop mode set to either "on" or "off".
+
+proc run_kill_host_scenario {non_stop_mode device} {
+    global decimal
+
+    prepare_nonstop_test_scenario $non_stop_mode $device
+    # Host inferior is always the first one.
+    gdb_test "inferior 1" "Switching to inferior 1.*" "switch to host inferior"
+
+    # Kill host inferior and observe device inferior is removed.
+    gdb_test "kill inferiors 1" \
+	"intelgt\\\: inferior $decimal \\(gdbserver\\-(?:ze\|gt)\\) has been removed.*" \
+	"killing host inferior"
 }
 
 foreach device $sycl_device_list {
@@ -213,7 +273,6 @@ foreach device $sycl_device_list {
 
 	# Re-run multiple times, where either the host or the gt inferior
 	# is killed/detached.
-
 	foreach_with_prefix which_bp {inside outside} {
 	    foreach_with_prefix scenario {kill_host detach_host detach_gt} {
 		clean_restart $binfile
@@ -223,11 +282,18 @@ foreach device $sycl_device_list {
 	    }
 	}
 
-	# Run the restart scenario for non-stop mode enabled and disabled.
+	# Run the restart, detach host and kill host scenarios
+	# for non-stop mode enabled and disabled.
 	foreach_with_prefix non_stop_mode {"off" "on"} {
 	    clean_restart $binfile
 	    with_test_prefix "restart_scenario" {
 		run_restart_scenario $non_stop_mode $device
+	    }
+	    with_test_prefix "detach_host_scenario" {
+		run_detach_host_scenario $non_stop_mode $device
+	    }
+	    with_test_prefix "kill_host_scenario" {
+		run_kill_host_scenario $non_stop_mode $device
 	    }
 	}
     }

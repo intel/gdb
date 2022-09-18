@@ -50,7 +50,11 @@ foreach extension $openmp_languages_list {
 	    gdb_test "next" "fourteen = .*" "next 2"
 	    gdb_test "next" "z = .*" "next 3"
 
-	    continue_openmp_program_to_termination
+	    set kfail ""
+	    if {[omp_is_level_zero_debug_api]} {
+		set kfail "JIRA XDEPS/5062"
+	    }
+	    continue_openmp_program_to_termination "" "${kfail}"
 	}
    }
 }

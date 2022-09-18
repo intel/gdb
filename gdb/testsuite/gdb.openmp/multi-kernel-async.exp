@@ -65,6 +65,9 @@ foreach extension $openmp_languages_list {
 	    set kernel2_hit 0
 	    set prop_bp_hit 0
 	    for {set i 1} {$i <= 5} {incr i} {
+		if {[omp_is_level_zero_debug_api]} {
+		    setup_kfail "JIRA XDEPS/5062" "*-*-*"
+		}
 		gdb_test_multiple "continue" "continue $i" {
 		    -re -wrap "Breakpoint .*$srcfile:$kernel_1.*" {
 			incr kernel1_hit

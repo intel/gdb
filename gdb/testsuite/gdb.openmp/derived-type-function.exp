@@ -50,11 +50,20 @@ foreach device_info "${device_list}" {
 	}
 
 	gdb_breakpoint [gdb_get_line_number "breakpt"]
+	if {[omp_is_level_zero_debug_api]} {
+	    setup_kfail "JIRA XDEPS/5062" "*-*-*"
+	}
 	gdb_continue_to_breakpoint "breakpt"
 
+	if {[omp_is_level_zero_debug_api]} {
+	    setup_kfail "JIRA XDEPS/5062" "*-*-*"
+	}
 	gdb_test "print aRec" "= \\( a = 2, b = 3 \\)" \
 	    "Print rectangle structure with members' name"
 
+	if {[omp_is_level_zero_debug_api]} {
+	    setup_kfail "JIRA XDEPS/5062" "*-*-*"
+	}
 	gdb_test "ptype aRec" \
 	    [multi_line \
 		"type \\= Type rectangle" \

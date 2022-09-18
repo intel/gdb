@@ -160,7 +160,7 @@ proc omp_is_gen12adl {} {
 
 # Issue a 'continue' command and expect to see program termination.
 
-proc continue_openmp_program_to_termination {{msg_suffix ""}} {
+proc continue_openmp_program_to_termination {{msg_suffix ""} {known_fail ""}} {
     global gdb_prompt inferior_exited_re
 
     set is_non_stop 0
@@ -172,6 +172,8 @@ proc continue_openmp_program_to_termination {{msg_suffix ""}} {
 	    set is_non_stop 1
 	}
     }
+
+    if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
 
     if {!$is_non_stop} {
 	gdb_test "continue" "$inferior_exited_re normally].*" \
@@ -352,4 +354,21 @@ proc is_omp_offload_supported_compiler {extension} {
 	return 1
     }
     return 0
+}
+
+# Return non-zero, if the Level-Zero Debug API is being used.
+
+proc omp_is_level_zero_debug_api {} {
+    global env
+
+    if {![info exists env(ZET_ENABLE_PROGRAM_DEBUGGING)]} {
+	return 0
+    }
+
+    set env_var $env(ZET_ENABLE_PROGRAM_DEBUGGING)
+    if {[string is integer $env_var]} {
+	return [expr $env_var ne "0"]
+    } else {
+	return 0
+    }
 }

@@ -53,7 +53,9 @@ foreach extension $openmp_languages_list {
 	    gdb_test "step" "first .* at .*" "step into function"
 
 	    set kfail ""
-	    if {${extension} eq "f90"} {
+	    if {[omp_is_level_zero_debug_api]} {
+		set kfail "JIRA XDEPS/5062"
+	    } elseif {${extension} eq "f90"} {
 		set kfail "JIRA CMPLRLLVM/40323"
 	    }
 	    continue_openmp_program_to_termination "" "${kfail}"

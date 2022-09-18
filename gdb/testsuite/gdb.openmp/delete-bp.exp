@@ -50,7 +50,11 @@ foreach extension $openmp_languages_list {
 	    # Delete and expect to run until completion.
 	    gdb_test_no_output "delete $bpnum"
 
-	    continue_openmp_program_to_termination
+	    set kfail ""
+	    if {[omp_is_level_zero_debug_api]} {
+		set kfail "JIRA XDEPS/5062"
+	    }
+	    continue_openmp_program_to_termination "" "${kfail}"
 	}
     }
 }

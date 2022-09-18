@@ -57,9 +57,14 @@ foreach extension $openmp_languages_list {
 	    gdb_continue_to_breakpoint "line before kernel" \
 		".*$srcfile:$line_number.*"
 
+	    set kfail ""
+	    if {[omp_is_level_zero_debug_api]} {
+		set kfail "JIRA XDEPS/5062"
+	    }
+
 	    # Now we should be able to run to the end without hitting
 	    # any other kernel/non-kernel breakpoints.
-	    continue_openmp_program_to_termination
+	    continue_openmp_program_to_termination "" "${kfail}"
 	}
     }
 }

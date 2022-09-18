@@ -51,6 +51,9 @@ foreach extension $openmp_languages_list {
 	    # Check that we stop inside the kernels, regardless of the submission
 	    # order, and finally the post-kernel line in the host.
 	    for {set i 1} {$i <= 4} {incr i} {
+		if {[omp_is_level_zero_debug_api]} {
+		    setup_kfail "JIRA XDEPS/5062" "*-*-*"
+		}
 		gdb_continue_to_breakpoint "hit the BP, occurrence $i" \
 		    ".*$srcfile:$kernel.*"
 	    }
@@ -61,6 +64,8 @@ foreach extension $openmp_languages_list {
 		with_test_prefix "iter $i" {
 		    if {( $i == 1 ) && ( [require_openmp_device "GPU"] )} {
 			setup_kfail "JIRA DOQG/314" "*-*-*"
+		    } elseif {[omp_is_level_zero_debug_api]} {
+			setup_kfail "JIRA XDEPS/5062" "*-*-*"
 		    }
 		    gdb_test_multiple "continue" "hit the BP post-kernel" {
 			-re -wrap ".*$srcfile.*$post_kernel.*" {
@@ -74,9 +79,15 @@ foreach extension $openmp_languages_list {
 		}
 	    }
 
+	    if {[omp_is_level_zero_debug_api]} {
+		setup_kfail "JIRA XDEPS/5062" "*-*-*"
+	    }
 	    gdb_continue_to_breakpoint "hit the BP at exit" \
 		".*$srcfile:$exit_line.*"
 
+	    if {[omp_is_level_zero_debug_api]} {
+		setup_kfail "JIRA XDEPS/5062" "*-*-*"
+	    }
 	    if {$extension eq "cpp"} {
 		gdb_test "print in_arr\[0\]" "= 101" "value set in 2nd section"
 	    } else {

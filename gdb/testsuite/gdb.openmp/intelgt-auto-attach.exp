@@ -41,15 +41,22 @@ proc run_end_to_end {has_kernel_bp has_outside_bp extension} {
 	gdb_continue_to_breakpoint "inside the kernel" \
 	    ".*$srcfile:$kernel_bp.*"
     }
+    set kfail ""
+    if {[omp_is_level_zero_debug_api]} {
+	set kfail "JIRA XDEPS/5062"
+    }
     if {$has_outside_bp} {
 	set end_bp [gdb_get_line_number "return-stmt"]
 	gdb_breakpoint $end_bp
 
+	if {[omp_is_level_zero_debug_api]} {
+	    setup_kfail $kfail "*-*-*"
+	}
 	gdb_continue_to_breakpoint "outside the kernel" \
 	    ".*$srcfile:$end_bp.*"
     }
 
-    continue_openmp_program_to_termination
+    continue_openmp_program_to_termination "" "${kfail}"
 }
 
 # Run up to a BP, then kill/detach an inferior.
@@ -74,6 +81,9 @@ proc run_to_bp {which_bp scenario iter extension} {
 	set end_bp [gdb_get_line_number "return-stmt"]
 	gdb_breakpoint $end_bp
 
+	if {[omp_is_level_zero_debug_api]} {
+	    setup_kfail "JIRA XDEPS/5062" "*-*-*"
+	}
 	gdb_continue_to_breakpoint "outside the kernel" \
 	    ".*$srcfile:$end_bp.*"
     }
@@ -138,8 +148,12 @@ proc run_restart_scenario {non_stop_mode extension} {
 	"restart host inferior and hit kernel bp" \
 	{Start it from the beginning\? \(y or n\) } "y"
 
+    set kfail ""
     # We should now be able to run to the end.
-    continue_openmp_program_to_termination
+    if {[omp_is_level_zero_debug_api]} {
+	set kfail "JIRA XDEPS/5062"
+    }
+    continue_openmp_program_to_termination "" "${kfail}"
 }
 
 foreach extension $openmp_languages_list {

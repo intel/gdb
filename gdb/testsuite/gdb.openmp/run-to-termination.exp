@@ -41,7 +41,11 @@ foreach extension $openmp_languages_list {
 		continue
 	    }
 
-	    continue_openmp_program_to_termination "1"
+	    set kfail ""
+	    if {[omp_is_level_zero_debug_api]} {
+		set kfail "JIRA XDEPS/5062"
+	    }
+	    continue_openmp_program_to_termination "1" "${kfail}"
 
 	    # Now test re-running.
 	    if {![openmp_run_to_main $extension]} {
@@ -50,7 +54,7 @@ foreach extension $openmp_languages_list {
 	    }
 
 	    # We should be able to run to the end.
-	    continue_openmp_program_to_termination "2"
+	    continue_openmp_program_to_termination "2" "${kfail}"
 	}
     }
 }

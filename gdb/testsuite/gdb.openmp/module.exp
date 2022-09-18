@@ -52,8 +52,17 @@ foreach device_info "${device_list}" {
 	}
 
 	gdb_breakpoint [gdb_get_line_number "locals-check"]
+	if {[omp_is_level_zero_debug_api]} {
+	    setup_kfail "JIRA XDEPS/5062" "*-*-*"
+	}
 	gdb_continue_to_breakpoint "locals-check" ".*locals-check.*"
+	if {[omp_is_level_zero_debug_api]} {
+	    setup_kfail "JIRA XDEPS/5062" "*-*-*"
+	}
 	gdb_test "print var_d" " = 11" "print var_d value 11"
+	if {[omp_is_level_zero_debug_api]} {
+	    setup_kfail "JIRA XDEPS/5062" "*-*-*"
+	}
 	gdb_test "print var_c" " = 12" "print var_c value 12"
 
 	set state 0
@@ -91,6 +100,9 @@ foreach device_info "${device_list}" {
 
 	gdb_breakpoint [gdb_get_line_number "args-check"]
 	with_test_prefix "call1" {
+	    if {[omp_is_level_zero_debug_api]} {
+		setup_kfail "JIRA XDEPS/5062" "*-*-*"
+	    }
 	    gdb_continue_to_breakpoint "args-check" ".*args-check.*"
 	    if {[require_openmp_device "GPU"]} {
 		setup_kfail "JIRA DOQG/2537" "*-*-*"
@@ -98,6 +110,9 @@ foreach device_info "${device_list}" {
 	    gdb_test "print val_a" " = 11" "print var_a value 11"
 	}
 	with_test_prefix "call2" {
+	    if {[omp_is_level_zero_debug_api]} {
+		setup_kfail "JIRA XDEPS/5062" "*-*-*"
+	    }
 	    gdb_continue_to_breakpoint "args-check" ".*args-check.*"
 	    if {[require_openmp_device "GPU"]} {
 		setup_kfail "JIRA DOQG/2537" "*-*-*"

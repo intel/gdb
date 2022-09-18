@@ -263,7 +263,11 @@ foreach extension $openmp_languages_list {
 		"#2.* $main_func_name.* at .*"] \
 		"backtrace, test 4"
 
-	    continue_openmp_program_to_termination
+	    set kfail ""
+	    if {[omp_is_level_zero_debug_api]} {
+		set kfail "JIRA XDEPS/5062"
+	    }
+	    continue_openmp_program_to_termination "" "${kfail}"
 	}
     }
 }

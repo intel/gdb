@@ -49,6 +49,17 @@ extern bool debug_threads;
 #define threads_debug_printf(fmt, ...) \
   debug_prefixed_printf_cond (debug_threads, "threads", fmt, ##__VA_ARGS__)
 
+/* The options for the "info threads" command.  */
+struct info_threads_opts
+{
+  /* For "-gid".  */
+  bool show_global_ids = false;
+  /* For "-stopped".  */
+  bool show_stopped_threads = false;
+  /* For MI only "--qid".  */
+  bool show_qualified_ids = false;
+};
+
 /* Frontend view of the thread state.  Possible extensions: stepping,
    finishing, until(ling),...
 
@@ -961,7 +972,7 @@ extern bool print_thread_events;
    the specified process.  Otherwise, an error is raised.  */
 extern void print_thread_info (struct ui_out *uiout,
 			       const char *requested_threads,
-			       int pid);
+			       int pid, info_threads_opts opts);
 
 /* Save/restore current inferior/thread/frame.  */
 

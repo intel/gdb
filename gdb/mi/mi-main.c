@@ -663,10 +663,41 @@ mi_cmd_thread_list_ids (const char *command, const char *const *argv, int argc)
 void
 mi_cmd_thread_info (const char *command, const char *const *argv, int argc)
 {
-  if (argc != 0 && argc != 1)
-    error (_("Invalid MI command"));
+  enum option
+    {
+      QID_OPT,
+    };
 
-  print_thread_info (current_uiout, argv[0], -1);
+  static const struct mi_opt opts[] =
+  {
+    {"-qid", QID_OPT, 0},
+    { 0, 0, 0 }
+  };
+
+  /* Parse arguments.  */
+  int oind = 0;
+  const char *oarg;
+  bool enable_qid = false;
+
+  while (true)
+    {
+      int opt = mi_getopt ("-thread-info", argc, argv, opts, &oind, &oarg);
+      if (opt < 0)
+	break;
+
+      switch (opt)
+	{
+	case QID_OPT:
+	  enable_qid = true;
+	  break;
+	}
+    }
+
+  if (argc - oind > 1)
+    error ("-thread-info: too many arguments");
+
+  info_threads_opts it_opts {false, false, enable_qid};
+  print_thread_info (current_uiout, argv[oind], -1, it_opts);
 }
 
 struct collect_cores_data
@@ -737,7 +768,10 @@ print_one_inferior (struct inferior *inferior, bool recurse,
 	}
 
       if (recurse)
-	print_thread_info (uiout, NULL, inferior->pid);
+	{
+	  info_threads_opts it_opts {false, false, false};
+	  print_thread_info (uiout, nullptr, inferior->pid, it_opts);
+	}
     }
 }
 
@@ -909,7 +943,8 @@ mi_cmd_list_thread_groups (const char *command, const char *const *argv,
       if (!inf)
 	error (_("Non-existent thread group id '%d'"), id);
 
-      print_thread_info (uiout, NULL, inf->pid);
+      info_threads_opts it_opts {false, false, false};
+      print_thread_info (uiout, nullptr, inf->pid, it_opts);
     }
   else
     {

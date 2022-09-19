@@ -108,6 +108,76 @@ foreach device $sycl_device_list {
 	    "\\^done,threads=\\\[\{id=\".*\",target-id=.*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",hit-lanes-mask=\"$hex\",thread-group=\"i$decimal\",state=\"stopped\"\}\\\]" \
 	    "Check execution mask and simd width for thread $thread_id at line $odd_branch_line"
 
+	# Test --qid argument with thread id
+	mi_gdb_test "-thread-info --qid $thread_id" \
+	    "\\^done,threads=\\\[\{id=\"$thread_id\",qualified-id=\".*\".*\}\\\]" \
+	    "Check that qualified-id is included"
+
+	# Test --qid argument with all threads
+	send_gdb "-thread-info --qid\n"
+
+	set test "Check that qualified-id is included for all threads"
+	gdb_expect {
+	    -re "\\^done,threads=\\\[" {
+		exp_continue
+	    }
+	    -re "\{id=\"$decimal\",qualified-id=\".*\".*(core=\"$decimal\"|state=\"stopped\")\}," {
+		# If the target has many threads, the buffer may become very long.
+		# Consume these lines to avoid problems about regexp matching
+		# or the internal buffer becoming full.
+		exp_continue
+	    }
+	    -re "\{id=\"$decimal\",target-id=.*(core=\"$decimal\"|state=\"stopped\")\}," {
+		verbose -log "Found a thread without qualified-id"
+		fail "$test"
+	    }
+	    -re ".*${mi_gdb_prompt}" {
+		pass "$test"
+	    }
+	    timeout {
+		fail "$test"
+	    }
+	}
+
+	# Test without --qid argument with all threads
+	send_gdb "-thread-info\n"
+
+	set test "Check that qualified-id is not included for all threads"
+	gdb_expect {
+	    -re "\\^done,threads=\\\[" {
+		exp_continue
+	    }
+	    -re "\{id=\"$decimal\",target-id=\".*\".*(core=\"$decimal\"|simd-width=\"$decimal\"|hit-lanes-mask=\"$hex\")\}," {
+		# If the target has many threads, the buffer may become very long.
+		# Consume these lines to avoid problems about regexp matching
+		# or the internal buffer becoming full.
+		exp_continue
+	    }
+	    -re "\{id=\"$decimal\",qualified-id=.*(core=\"$decimal\"|simd-width=\"$decimal\"|hit-lanes-mask=\"$hex\")\}," {
+		verbose -log "Found a thread with qualified-id"
+		fail "$test"
+	    }
+	    -re ".*${mi_gdb_prompt}" {
+		pass "$test"
+	    }
+	    timeout {
+		fail "$test"
+	    }
+	}
+
+	# Test with wrong arguments
+	mi_gdb_test "-thread-info --daa $thread_id" \
+	    "\\^error,msg=\"-thread-info: Unknown option ``-daa''\"" \
+	    "Check wrong argument 1"
+
+	mi_gdb_test "-thread-info --qid --daa" \
+	    "\\^error,msg=\"-thread-info: Unknown option ``-daa''\"" \
+	    "Check wrong argument 2"
+
+	mi_gdb_test "-thread-info -qid" \
+	    "\\^error,msg=\"-thread-info: Unknown option ``qid''\"" \
+	    "Check wrong argument 3"
+
 	# Test a host thread that it does not contain emask or simd width fields.
 	send_gdb "-thread-info 1\n"
 	gdb_expect 10 {
@@ -119,8 +189,5 @@ foreach device $sycl_device_list {
 
 	# Continue to end.
 	mi_send_resuming_command "exec-continue" "continuing to inferior exit"
-
-	# Expect normal exit.
-	mi_expect_stop "exited-normally" "" "" "" "" "" "exit normally"
     }
 }

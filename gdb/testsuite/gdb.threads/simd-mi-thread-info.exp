@@ -118,6 +118,56 @@ foreach device $sycl_device_list {
 	    "\\^done,threads=\\\[.*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",hit-lanes-mask=\"$hex\",.*,state=\"stopped\"\}\\\]" \
 	    "check execution mask and simd width at line $odd_branch_line"
 
+	# Test --qid argument with all threads.  We use gdb_expect
+	# instead of mi_gdb_test to avoid having to emit a pass/fail
+	# for each thread, because there can be thousands of them.
+	# We reduce the test result in a single boolean.
+	set qid "$decimal\.$decimal"
+	set thread_list [get_mi_thread_list "in check_mi_thread_command_set"]
+	set result 1
+	foreach_with_prefix tid $thread_list {
+	    send_gdb "-thread-info --qid $tid\n"
+	    gdb_expect {
+		-re "qualified-id=.*$mi_gdb_prompt$" {
+		    # OK.
+		}
+		-re "$mi_gdb_prompt$" {
+		    set result 0
+		    break
+		}
+	    }
+	}
+	gdb_assert {$result == 1} "qualified-id is included"
+
+	# Test without --qid argument with all threads.
+	set result 1
+	foreach_with_prefix tid $thread_list {
+	    send_gdb "-thread-info $tid\n"
+	    gdb_expect {
+		-re "qualified-id=.*$mi_gdb_prompt$" {
+		    set result 0
+		    break
+		}
+		-re "$mi_gdb_prompt$" {
+		    # OK.
+		}
+	    }
+	}
+	gdb_assert {$result == 1} "qualified-id is not included"
+
+	# Test with wrong arguments.
+	mi_gdb_test "-thread-info --daa $thread_id" \
+	    "\\^error,msg=\"-thread-info: Unknown option ``-daa''\"" \
+	    "wrong argument 1"
+
+	mi_gdb_test "-thread-info --qid --daa" \
+	    "\\^error,msg=\"-thread-info: Unknown option ``-daa''\"" \
+	    "wrong argument 2"
+
+	mi_gdb_test "-thread-info -qid" \
+	    "\\^error,msg=\"-thread-info: Unknown option ``qid''\"" \
+	    "wrong argument 3"
+
 	# Expect a hit-lane-mask of 0x8.
 	set stopped_threads [mi_stopped_thread_ids $srcfile $odd_branch_line]
 	set second_thread_id [lindex $stopped_threads 1]

@@ -1308,18 +1308,6 @@ pc_in_thread_step_range (CORE_ADDR pc, struct thread_info *thread)
 	  && pc < thread->control.step_range_end);
 }
 
-/* The options for the "info threads" command.  */
-
-struct info_threads_opts
-{
-  /* For "-gid".  */
-  bool show_global_ids = false;
-  /* For "-running".  */
-  bool show_running_threads = false;
-  /* For "-stopped".  */
-  bool show_stopped_threads = false;
-};
-
 static const gdb::option::option_def info_threads_option_defs[] = {
 
   gdb::option::flag_option_def<info_threads_opts> {
@@ -1451,6 +1439,15 @@ print_thread_row (ui_out *uiout, const info_threads_opts &opts,
 
   if (opts.show_global_ids || uiout->is_mi_like_p ())
     uiout->field_signed ("id", tp->global_num);
+
+  if (opts.show_qualified_ids)
+    {
+      if (show_inferior_qualified_tids ())
+	uiout->field_string ("qualified-id", std::to_string (tp->inf->num)
+	  + std::string (".") + std::to_string (tp->per_inf_num));
+      else
+	uiout->field_string ("qualified-id", std::to_string (tp->per_inf_num));
+    }
 
   /* For the CLI, we stuff everything into the target-id field.
      This is a gross hack to make the output come out looking
@@ -1712,9 +1709,8 @@ No selected thread.  See `help thread'.\n");
 
 void
 print_thread_info (struct ui_out *uiout, const char *requested_threads,
-		   int pid)
+		   int pid, info_threads_opts opts)
 {
-  info_threads_opts opts;
   print_thread_info_1 (uiout, requested_threads, opts, 1, pid);
 }
 

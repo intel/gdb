@@ -2804,6 +2804,10 @@ remote_target::remote_notice_new_inferior (ptid_t currthread, bool executing)
 	  bool fake_pid_p = !m_features.remote_multi_process_p (rs);
 
 	  inf = remote_add_inferior (fake_pid_p, pid, -1, 1);
+
+	  /* If the target can specify a description, read it.  */
+	  set_general_thread (currthread);
+	  target_find_description ();
 	}
 
       /* We may have received the event for a process in general.

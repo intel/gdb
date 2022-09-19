@@ -2939,6 +2939,10 @@ remote_target::remote_add_inferior (bool fake_pid_p, int pid, int attached,
 
       inf->push_target (this);
       inferior_appeared (inf, pid);
+
+      /* If the target can specify a description, read it.  */
+      set_general_thread (ptid_t (pid));
+      target_find_description ();
     }
 
   inf->attach_flag = attached;

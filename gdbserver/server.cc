@@ -36,6 +36,7 @@
 #include "dll.h"
 #include "hostio.h"
 #include <vector>
+#include <algorithm>
 #include <sstream>
 #include "gdbsupport/common-inferior.h"
 #include "gdbsupport/job-control.h"
@@ -320,11 +321,40 @@ attach_inferior (int pid)
   if (find_process_pid (pid) != nullptr)
     error ("Already attached to process %d\n", pid);
 
+  /* Attaching may add new processes to our internal list, but those
+     new processes not necessarily have PID as their process ids; the
+     target may interpret PID in its own way.  E.g. as the host
+     process id, for which the target attaches to devices.  Therefore,
+     we cannot rely on using PID after the target attaches.  Instead,
+     we find the first new process that is added to the list.  */
+  bool was_empty = all_processes.empty ();
+  process_info *last = nullptr;
+  if (!was_empty)
+    last = all_processes.back ();
+
   if (myattach (pid) != 0)
     return -1;
 
   fprintf (stderr, "Attached; pid = %d\n", pid);
   fflush (stderr);
+
+  /* Now find the first process that the target created and stick to
+     its pid.
+     FIXME: In principle we should not care and have the flexibility
+     to report an event about any new process, but GDB-gdbserver
+     communication is not ready for that.  */
+  process_info *first_attached_proc = all_processes.front ();
+  if (!was_empty)
+    {
+      auto it = std::find (all_processes.begin (),
+			   all_processes.end (),
+			   last);
+      it++;
+      first_attached_proc = *it;
+    }
+
+  if (pid != 0)
+    pid = first_attached_proc->pid;
 
   /* FIXME - It may be that we should get the SIGNAL_PID from the
      attach function, so that it can be the main thread instead of

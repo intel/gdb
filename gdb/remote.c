@@ -5253,6 +5253,11 @@ remote_target::start_remote_1 (int from_tty, int extended_p)
 	  target_find_description ();
 	}
 
+      /* While updating the thread list, we may have switched the
+	 remote context.  Set the general thread, so that we finish
+	 setting up the inferior in the right context.  */
+      set_general_thread (inferior_ptid);
+
       /* Use the previously fetched status.  */
       gdb_assert (wait_status != NULL);
       struct notif_event *reply

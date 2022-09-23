@@ -1148,6 +1148,10 @@ general_symbol_info::search_name () const
 {
   if (language () == language_ada)
     return linkage_name ();
+  else if (language () == language_fortran
+	   && strcmp_iw (natural_name (), "main") == 0
+	   && strcmp_iw (linkage_name (), "MAIN__") == 0)
+    return linkage_name ();
   else
     return natural_name ();
 }

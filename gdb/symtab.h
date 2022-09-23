@@ -488,8 +488,12 @@ struct general_symbol_info
   /* Returns the name to be used when sorting and searching symbols.
      In C++, we search for the demangled form of a name,
      and so sort symbols accordingly.  In Ada, however, we search by mangled
-     name.  If there is no distinct demangled name, then this
-     returns the same value (same pointer) as linkage_name ().  */
+     name.  In Fortran, we return the linkage_name () for programs named
+     "main".  In this special case, GDB uses the linkage name "MAIN__"
+     to set the objfiles main function.  A lookup of the "MAIN__" symbol fails
+     if search_name () returns the natural_name ().  If there is no distinct
+     demangled name, then this returns the same value (same pointer) as
+     linkage_name ().  */
   const char *search_name () const;
 
   /* Set just the linkage name of a symbol; do not try to demangle

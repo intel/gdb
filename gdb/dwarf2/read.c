@@ -7955,8 +7955,16 @@ add_partial_symbol (struct partial_die_info *pdi, struct dwarf2_cu *cu)
       psymbol.ginfo.set_section_index (SECT_OFF_TEXT (objfile));
       psymbol.ginfo.value.address = addr;
 
-      if (pdi->main_subprogram && actual_name != NULL)
-	set_objfile_main_name (objfile, actual_name, cu->per_cu->lang);
+      if (pdi->main_subprogram)
+	{
+	  /* Prefer the linkage main name over its raw name as it allows for
+	     a more precise symbol lookup if available.  */
+	  if (pdi->linkage_name != nullptr)
+	    set_objfile_main_name (objfile, pdi->linkage_name,
+				   cu->per_cu->lang);
+	  else if (actual_name != nullptr)
+	    set_objfile_main_name (objfile, actual_name, cu->per_cu->lang);
+	}
       break;
     case DW_TAG_constant:
       psymbol.domain = VAR_DOMAIN;

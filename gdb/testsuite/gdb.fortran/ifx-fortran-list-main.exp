@@ -1,0 +1,55 @@
+# Copyright 2024 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Testcase for the Intel® Fortran Compiler to test if a 'list' command
+# before the program start lists the program code around 'main'.  The
+# Intel® Fortran Compiler emits a DW_AT_linkage_name attribute along
+# the DW_AT_name:
+#
+# <1><2a>: Abbrev Number: 2 (DW_TAG_subprogram)
+#    <2b>   DW_AT_low_pc      : 0x4052e0
+#    <33>   DW_AT_high_pc     : 0x86c
+#    <37>   DW_AT_frame_base  : 1 byte block: 56         (DW_OP_reg6 (rbp))
+#    <39>   DW_AT_linkage_name: (indirect string, offset: 0x116): MAIN__
+#    <3d>   DW_AT_name        : (indirect string, offset: 0x11d): main
+#
+# When the 'list' command is used before the program start, GDB does a
+# lookup of main's name.  A lookup of of the 'MAIN__' symbol fails if
+# search_name () returns the natural name.  Test lookup of main by
+# checking if the 'list' command prints the lines around main.
+
+require allow_fortran_tests
+standard_testfile "intvar-array.f90"
+load_lib "fortran.exp"
+
+if {![test_compiler_info "ifx-*" f90]} {
+    unsupported "Test is aimed at Intel® Fortran Compiler only."
+    return -1
+}
+
+if { [prepare_for_testing ${testfile}.exp ${testfile} ${srcfile} \
+    {debug f90 quiet}] } {
+    return -1
+}
+
+set fill "${decimal}\[ \t\]+\[^\n\r\]*"
+
+gdb_test_no_output "set listsize 3"
+
+gdb_test "list" \
+    [multi_line \
+	 "${fill}" \
+	 "${decimal}\[ \t\]+program main" \
+	 "${fill}"]

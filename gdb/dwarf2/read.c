@@ -18544,10 +18544,6 @@ cooked_indexer::index_dies (cutu_reader *reader,
 
       if (linkage_name != nullptr)
 	{
-	  /* We only want this to be "main" if it has a linkage name
-	     but not an ordinary name.  */
-	  if (name != nullptr)
-	    flags = flags & ~IS_MAIN;
 	  /* Set the IS_LINKAGE on for everything except when functions
 	     have linkage name present but name is absent.  */
 	  if (name != nullptr

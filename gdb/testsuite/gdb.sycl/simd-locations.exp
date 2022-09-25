@@ -41,8 +41,16 @@ proc test_bp_1 {device} {
     set v2 [get_valueof "" "gid" "NONE"]
     gdb_assert {{$v1 eq $v2}} "pgid.operator() (wi) == gid"
 
-    gdb_test_expr_eq "ain\[gid\]" "in"
-    gdb_test_expr_eq "acs\[lid\].c" "cs"
+    set kfail ""
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	set kfail "JIRA IGDB/3364"
+	setup_kfail $kfail "*-*-*"
+    }
+    gdb_test_expr_eq "ain\[gid\]" "in" "" "${kfail}"
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	setup_kfail $kfail "*-*-*"
+    }
+    gdb_test_expr_eq "acs\[lid\].c" "cs" "" "${kfail}"
 
     # LCS may be implemented as reference.  Skip some output.
     if {[require_sycl_device "$device" "gpu" "Intel*"]} {

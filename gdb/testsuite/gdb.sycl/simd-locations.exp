@@ -30,8 +30,16 @@ proc test_bp_1 {} {
     set v2 [get_valueof "" "gid" "NONE"]
     gdb_assert {{$v1 eq $v2}} "pgid.operator() (wi) == gid"
 
-     gdb_test_expr_eq "ain\[gid\]" "in"
-     gdb_test_expr_eq "acs\[lid\].c" "cs"
+    set kfail ""
+    if {[require_sycl_device "gpu" "Intel*"]} {
+	set kfail "JIRA IGDB/3364"
+	setup_kfail $kfail "*-*-*"
+    }
+    gdb_test_expr_eq "ain\[gid\]" "in" "" "${kfail}"
+    if {[require_sycl_device "gpu" "Intel*"]} {
+	setup_kfail $kfail "*-*-*"
+    }
+    gdb_test_expr_eq "acs\[lid\].c" "cs" "" "${kfail}"
 
     # LCS may be implemented as reference.  Skip some output.
     if {[require_sycl_device "gpu" "Intel*"]} {
@@ -54,6 +62,8 @@ proc test_bp_2 { {lane 0} } {
     # Flaky test on Gen12.
     if {[is_level_zero_debug_api] || [is_gen12]} {
 	setup_kfail "JIRA DOQG/2081" "*-*-*"
+    } elseif {[is_gen9]} {
+	setup_kfail "JIRA IGDB/3364" "*-*-*"
     }
     set v1 [get_valueof "" "atmp\[gid\].a" "NONE"]
     set v2 [get_valueof "" "in" "NONE"]
@@ -62,7 +72,12 @@ proc test_bp_2 { {lane 0} } {
     }
     gdb_assert {{$v1 eq $v2}} "atmp\[gid\].a == in"
 
-    gdb_test_expr_eq "aout\[gid\]" "out"
+    set kfail ""
+    if {[require_sycl_device "gpu" "Intel*"]} {
+	set kfail "JIRA IGDB/3364"
+	setup_kfail $kfail "*-*-*"
+    }
+    gdb_test_expr_eq "aout\[gid\]" "out" "" "${kfail}"
 
     # LCS may be implemented as reference.  Skip some output.
     if {[require_sycl_device "gpu" "Intel*"]} {

@@ -54,10 +54,19 @@ foreach extension $openmp_languages_list {
 	    gdb_test_no_output "set scheduler-locking step"
 
 	    for {set j 1} {$j <= 5} {incr j} {
+		if {$j > 1 && [require_openmp_device "CPU"]} {
+		    setup_kfail "JIRA IGDB/3383" "*-*-*"
+		}
 		gdb_continue_to_breakpoint "hit the second line, occurrence $j" \
 		    ".*$srcfile:$second_line.*"
 
+		if {$j > 1 && [require_openmp_device "CPU"]} {
+		    setup_kfail "JIRA IGDB/3383" "*-*-*"
+		}
 		gdb_test "next" "in_elem3 = .*" "next, occurrence $j:1"
+		if {$j > 1 && [require_openmp_device "CPU"]} {
+		    setup_kfail "JIRA IGDB/3383" "*-*-*"
+		}
 		gdb_test "next" "out_arr.* = in_elem.*" "next, occurrence $j:2"
 	    }
 	}

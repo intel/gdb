@@ -53,6 +53,9 @@ foreach extension $openmp_languages_list {
 		gdb_continue_to_breakpoint "hit the last line occurrence $i" \
 		    ".*$srcfile:$last_line.*"
 
+		if {[omp_is_gen12]} {
+		    setup_kfail "JIRA IGDB/2981" "*-*-*"
+		}
 		gdb_test "print in_elem - (in_elem2 * 64 + in_elem3)" "123" \
 		    "thread invariant $i"
 	    }

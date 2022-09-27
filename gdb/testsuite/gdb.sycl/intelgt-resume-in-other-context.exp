@@ -76,6 +76,9 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
 
     # Now the symmetric case: switch to the kernel inferior and resume.
     gdb_test "inferior 2" "Switching to inferior 2.*" "third switch"
+    if {[is_level_zero_debug_api]} {
+	setup_kfail "JIRA IGDB/3111" "*-*-*"
+    }
     gdb_test "continue" \
 	[multi_line "Continuing." \
 	    "Result is 42" \

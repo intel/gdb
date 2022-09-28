@@ -1,0 +1,85 @@
+# Copyright 2019-2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDB's support for OpenMP; in particular, AOT compilation flags,
+# inserting and hitting breakpoints inside and outside a kernel.
+
+load_lib openmp.exp
+
+foreach extension $openmp_languages_list {
+    set device_list [omp_get_device_list $extension]
+    if {[llength $device_list] == 0} {
+	unsupported "target does not support OpenMP ${extension}"
+	continue
+    }
+
+    standard_testfile "local-vars.${extension}"
+    set exe "${binfile}_${extension}"
+
+    # xe: option creates AOT binary for xe and newer targets.
+    # :gen12lp option creates AOT binary for gen12 and older targets.
+    if {[omp_is_level_zero_debug_api]} {
+	set offload_device "-q -device xe:"
+    } else {
+	set offload_device "-q -device :gen12lp"
+    }
+
+    # LD and compile flags setting is needed for AOT testing.
+    set aot_opts [list "additional_flags=-fopenmp-targets=spir64_gen,spir64_x86_64" \
+		      "ldflags=-Xopenmp-target-backend=spir64_gen \"${offload_device}\""]
+
+    if {[prepare_openmp_for_testing ${exe} ${srcfile} $extension \
+	     "${aot_opts}"] == -1} {
+	untested "OpenMP: Fail to prepare the test for $extension"
+	continue
+    }
+
+    foreach device_info "${device_list}" {
+	with_test_prefix [init_openmp_device $device_info $extension] {
+
+	    if {![start_openmp_program $extension]} {
+		untested "Fail to start the program"
+		continue
+	    }
+
+	    # Set breakpoints inside and outside the kernel.
+	    array set bp_locations_kernel {}
+	    set num_kernel_locations 4
+
+	    gdb_breakpoint \
+		"$srcfile:[gdb_get_line_number line-after-kernel]" \
+		{message}
+
+	    for {set i 1} {$i <= $num_kernel_locations} {incr i} {
+		set bp_locations_kernel($i) \
+		    [gdb_get_line_number "kernel-line-$i"]
+		gdb_breakpoint "$srcfile:$bp_locations_kernel($i)" {message}
+	    }
+
+	    # Test that we actually hit the breakpoints.
+	    for {set i 1} {$i <= $num_kernel_locations} {incr i} {
+		gdb_continue_to_breakpoint "kernel line $i" \
+		    ".*$srcfile:$bp_locations_kernel($i).*"
+	    }
+
+	    gdb_continue_to_breakpoint "line after kernel" \
+		".*$srcfile:[gdb_get_line_number line-after-kernel].*"
+
+	    # Now we should be able to run to the end without hitting
+	    # any other kernel/non-kernel breakpoints.
+	    continue_openmp_program_to_termination
+	}
+    }
+}

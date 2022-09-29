@@ -232,10 +232,10 @@ thread_info::set_default_simd_lane ()
   if (has_simd_lanes ())
     {
       int lane = (simd_lane_num >= 0) ? simd_lane_num : 0;
+      unsigned int active_mask = active_simd_lanes_mask ();
 
-      if (!is_simd_lane_active (lane))
+      if (!::is_simd_lane_active (active_mask, lane))
 	{
-	  unsigned int active_mask = active_simd_lanes_mask ();
 	  lane = find_first_active_simd_lane (active_mask);
 	  if (lane < 0)
 	    lane = 0;
@@ -1609,7 +1609,8 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 		  selected_lane_mask = 0x1 << selected_lane;
 
 		  bool is_lane_active
-		    = tp->is_simd_lane_active (tp->current_simd_lane ());
+		    = ::is_simd_lane_active (active_lanes_mask,
+					     tp->current_simd_lane ());
 		  print_thread_row (uiout, tp, is_lane_active, true,
 				    selected_lane_mask, opts);
 

@@ -118,11 +118,25 @@ thread_info::has_simd_lanes ()
   if (gdbarch_active_lanes_mask_p (arch) != 0)
     return true;
 
-  const block * const blk = thread_get_current_block (this);
-  if (blk == nullptr)
+  /* While executing we don't know.  */
+  if (executing ())
     return false;
 
-  return (blk->simd_width () > 0);
+  /* We need to lookup the current location in the current frame.  For
+     traceframes, there may not be a current frame or at least it may not
+     have registers resulting in an error.  */
+  try
+    {
+      const block * const blk = thread_get_current_block (this);
+      if (blk == nullptr)
+	return false;
+
+      return (blk->simd_width () > 0);
+    }
+  catch (...)
+   {
+     return false;
+   }
 }
 
 /* See gdbthread.h.  */
@@ -131,6 +145,10 @@ unsigned int
 thread_info::active_simd_lanes_mask ()
 {
   gdb_assert (this->inf != nullptr);
+
+  /* While the thread is executing we don't know which lanes are active.  */
+  if (executing ())
+    return 0u;
 
   if (has_simd_lanes ())
     {

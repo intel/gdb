@@ -257,6 +257,25 @@ private:
 		       gdb_byte *buff_write, int len);
 };
 
+/* The encoding for XE version enumerates follows this pattern, which is
+   aligned with the IGA encoding.  */
+
+#define XE_VERSION(MAJ, MIN) (((MAJ) << 24) | (MIN))
+
+/* Supported GDB GEN platforms.  */
+
+enum xe_version
+{
+  XE_INVALID = 0,
+  XE_HP = XE_VERSION (1, 1),
+  XE_HPG = XE_VERSION (1, 2),
+  XE_HPC = XE_VERSION (1, 4),
+};
+
+/* Translate the DEVICE_ID to GDB Xe version.  */
+
+static xe_version get_xe_version (unsigned int device_id);
+
 /* Return the machine code of the current elf.  */
 
 static int
@@ -1888,6 +1907,92 @@ fe_stack_handle_small_struct (CORE_ADDR addr, type *valtype,
   return fe_addr;
 }
 
+static xe_version
+get_xe_version (unsigned int device_id)
+{
+  xe_version device_xe_version = XE_INVALID;
+  switch (device_id)
+    {
+      case 0x4F80:
+      case 0x4F81:
+      case 0x4F82:
+      case 0x4F83:
+      case 0x4F84:
+      case 0x4F85:
+      case 0x4F86:
+      case 0x4F87:
+      case 0x4F88:
+      case 0x5690:
+      case 0x5691:
+      case 0x5692:
+      case 0x5693:
+      case 0x5694:
+      case 0x5695:
+      case 0x5696:
+      case 0x5697:
+      case 0x5698:
+      case 0x56A0:
+      case 0x56A1:
+      case 0x56A2:
+      case 0x56A3:
+      case 0x56A4:
+      case 0x56A5:
+      case 0x56A6:
+      case 0x56A7:
+      case 0x56A8:
+      case 0x56A9:
+      case 0x56B0:
+      case 0x56B1:
+      case 0x56B2:
+      case 0x56B3:
+      case 0x56BA:
+      case 0x56BB:
+      case 0x56BC:
+      case 0x56BD:
+      case 0x56C0:
+      case 0x56C1:
+      case 0x56C2:
+      case 0x56CF:
+	device_xe_version = XE_HPG;
+	break;
+
+      case 0x0201:
+      case 0x0202:
+      case 0x0203:
+      case 0x0204:
+      case 0x0205:
+      case 0x0206:
+      case 0x0207:
+      case 0x0208:
+      case 0x0209:
+      case 0x020A:
+      case 0x020B:
+      case 0x020C:
+      case 0x020D:
+      case 0x020E:
+      case 0x020F:
+      case 0x0210:
+	device_xe_version = XE_HP;
+	break;
+
+      case 0x0BD0:
+      case 0x0BD4:
+      case 0x0BD5:
+      case 0x0BD6:
+      case 0x0BD7:
+      case 0x0BD8:
+      case 0x0BD9:
+      case 0x0BDA:
+      case 0x0BDB:
+      case 0x0B69:
+      case 0x0B6E:
+	device_xe_version = XE_HPC;
+	break;
+    }
+
+  return device_xe_version;
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -1899,51 +2004,42 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
     return arches->gdbarch;
 
   const target_desc *tdesc = info.target_desc;
-  gdbarch *gdbarch = gdbarch_alloc (&info, nullptr);
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
 
 #if defined (HAVE_LIBIGA64)
   iga_gen_t iga_version = IGA_GEN_INVALID;
 
   if (tdesc != nullptr)
     {
-      const std::string &tdesc_gen_major
-	= tdesc_find_device_info_attribute (tdesc, "gen_major");
-      const std::string &tdesc_gen_minor
-	= tdesc_find_device_info_attribute (tdesc, "gen_minor");
-      dprintf (_("device: Gen%s.%s"), tdesc_gen_major.c_str (),
-	       tdesc_gen_minor.c_str ());
-
-      if (tdesc_gen_major == "9")
-	iga_version = IGA_GEN9;
-      else if (tdesc_gen_major == "11")
-	iga_version = IGA_GEN11;
-      else if (tdesc_gen_major == "12")
+      const std::string &tdesc_vendor_id
+	= tdesc_find_device_info_attribute (tdesc, "vendor_id");
+      const std::string &tdesc_device_id
+	= tdesc_find_device_info_attribute (tdesc, "target_id");
+      if ((tdesc_vendor_id != "0x8086") || tdesc_device_id.empty ())
 	{
-	  if (!tdesc_gen_minor.empty ())
-	    {
-	      if (tdesc_gen_minor == "0")
-		iga_version = IGA_XE;
-	      else if (tdesc_gen_minor == "1")
-		iga_version = IGA_XE;
-	      else if (tdesc_gen_minor == "5")
-		iga_version = IGA_XE_HP;
-	      else if (tdesc_gen_minor == "71")
-		iga_version = IGA_XE_HPG;
-	      else if (tdesc_gen_minor == "72")
-		iga_version = IGA_XE_HPC;
-	    }
-	  else
-	    dprintf (_("Failed to read minor version from Gen12 device."));
+	  warning (_("Device not recognized: vendor id=%s, device id=%s"),
+		   tdesc_vendor_id.c_str (), tdesc_device_id.c_str ());
+	  return nullptr;
 	}
       else
-	dprintf (_("Unknown major version %s from device."),
-		 tdesc_gen_major.c_str ());
+	{
+	  iga_version = (iga_gen_t) get_xe_version (
+	    std::stoi (tdesc_device_id, nullptr, 16));
+
+	  if (iga_version == IGA_GEN_INVALID)
+	    warning (_("Intel GT device id is unrecognized: ID %s"),
+		     tdesc_device_id.c_str ());
+	}
     }
-  else
-    dprintf (_("Failed to read major version from device."));
 
+  /* Take the best guess in case IGA_VERSION is still invalid.  */
+  if (iga_version == IGA_GEN_INVALID)
+    iga_version = IGA_XE_HPC;
+#endif
 
+  gdbarch *gdbarch = gdbarch_alloc (&info, nullptr);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+#if defined (HAVE_LIBIGA64)
   const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);
   iga_context_create (&options, &data->iga_ctx);
 #endif

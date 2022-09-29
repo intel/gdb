@@ -480,6 +480,29 @@ get_intelgt_gdbarch_data (gdbarch *gdbarch)
   return result;
 }
 
+/* Per-inferior cached data for the Intelgt target.  */
+
+struct intelgt_inferior_data
+{
+  /* Device target id.  */
+  uint32_t device_id = 0u;
+};
+
+static const registry<inferior>::key<intelgt_inferior_data>
+  intelgt_inferior_data_handle;
+
+/* Fetch the per-inferior data.  */
+
+static intelgt_inferior_data *
+get_intelgt_inferior_data (inferior *inf)
+{
+  intelgt_inferior_data *inf_data = intelgt_inferior_data_handle.get (inf);
+  if (inf_data == nullptr)
+    inf_data = intelgt_inferior_data_handle.emplace (inf);
+
+  return inf_data;
+}
+
 /* The 'register_type' gdbarch method.  */
 
 static type *
@@ -1930,6 +1953,127 @@ fe_stack_handle_small_struct (CORE_ADDR addr, type *valtype,
   return fe_addr;
 }
 
+/* Helper function to return the device id using the inferior.  */
+
+[[maybe_unused]]
+static uint32_t
+get_device_id (inferior *inferior)
+{
+  intelgt_inferior_data *inf_data = get_intelgt_inferior_data (inferior);
+  if (inf_data->device_id == 0u)
+    inf_data->device_id = get_device_id (inferior->arch ());
+
+  return inf_data->device_id;
+}
+
+/* Helper function to return the device id using GDBARCH.  */
+
+static uint32_t
+get_device_id (gdbarch *gdbarch)
+{
+  const target_desc *tdesc = gdbarch_target_desc (gdbarch);
+  const tdesc_device *device_info = tdesc_device_info (tdesc);
+  if (!device_info->target_id.has_value ())
+    error (_("A target id for the device is required."));
+
+  return *device_info->target_id;
+}
+
+/* Helper function to translate the device id to a device version.  */
+
+[[maybe_unused]]
+static xe_version
+get_xe_version (unsigned int device_id)
+{
+  xe_version device_xe_version = XE_INVALID;
+  switch (device_id)
+    {
+      case 0x4F80:
+      case 0x4F81:
+      case 0x4F82:
+      case 0x4F83:
+      case 0x4F84:
+      case 0x4F85:
+      case 0x4F86:
+      case 0x4F87:
+      case 0x4F88:
+      case 0x5690:
+      case 0x5691:
+      case 0x5692:
+      case 0x5693:
+      case 0x5694:
+      case 0x5695:
+      case 0x5696:
+      case 0x5697:
+      case 0x5698:
+      case 0x56A0:
+      case 0x56A1:
+      case 0x56A2:
+      case 0x56A3:
+      case 0x56A4:
+      case 0x56A5:
+      case 0x56A6:
+      case 0x56A7:
+      case 0x56A8:
+      case 0x56A9:
+      case 0x56B0:
+      case 0x56B1:
+      case 0x56B2:
+      case 0x56B3:
+      case 0x56BA:
+      case 0x56BB:
+      case 0x56BC:
+      case 0x56BD:
+      case 0x56C0:
+      case 0x56C1:
+      case 0x56C2:
+      case 0x56CF:
+      case 0x7D40:
+      case 0x7D45:
+      case 0x7D67:
+      case 0x7D41:
+      case 0x7D55:
+      case 0x7DD5:
+	device_xe_version = XE_HPG;
+	break;
+
+      case 0x0201:
+      case 0x0202:
+      case 0x0203:
+      case 0x0204:
+      case 0x0205:
+      case 0x0206:
+      case 0x0207:
+      case 0x0208:
+      case 0x0209:
+      case 0x020A:
+      case 0x020B:
+      case 0x020C:
+      case 0x020D:
+      case 0x020E:
+      case 0x020F:
+      case 0x0210:
+	device_xe_version = XE_HP;
+	break;
+
+      case 0x0BD0:
+      case 0x0BD4:
+      case 0x0BD5:
+      case 0x0BD6:
+      case 0x0BD7:
+      case 0x0BD8:
+      case 0x0BD9:
+      case 0x0BDA:
+      case 0x0BDB:
+      case 0x0B69:
+      case 0x0B6E:
+	device_xe_version = XE_HPC;
+	break;
+    }
+
+  return device_xe_version;
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -1969,7 +2113,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 	}
       else
 	{
-	  iga_version = (iga_gen_t) IGA_XE_HPC;
+	  iga_version = (iga_gen_t) get_xe_version (device_id);
 	  if (iga_version == IGA_GEN_INVALID)
 	    warning (_("Intel GT device id is unrecognized: ID 0x%04x"),
 		     device_id);

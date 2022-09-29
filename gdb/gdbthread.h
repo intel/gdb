@@ -619,10 +619,13 @@ private:
   int simd_lane_num = 0;
 
 public:
-  /* Return true if this thread has SIMD lanes.  */
+  /* Return true if this thread has SIMD lanes.  For threads that are
+     currently executing or that do not have registers (e.g. tracepoints
+     without a traceframe), this may return false.  */
   bool has_simd_lanes ();
 
-  /* Return active lanes mask for this thread.  */
+  /* Return active lanes mask for this thread.  For threads that are
+     currently executing, returns zero.  */
   unsigned int active_simd_lanes_mask ();
 
   /* Return true if thread is unavailable.  */

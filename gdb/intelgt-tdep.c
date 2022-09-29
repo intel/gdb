@@ -479,6 +479,29 @@ get_intelgt_gdbarch_data (gdbarch *gdbarch)
   return result;
 }
 
+/* Per-inferior cached data for the Intelgt target.  */
+
+struct intelgt_inferior_data
+{
+  /* Device target id.  */
+  uint32_t device_id = 0u;
+};
+
+static const registry<inferior>::key<intelgt_inferior_data>
+  intelgt_inferior_data_handle;
+
+/* Fetch the per-inferior data.  */
+
+static intelgt_inferior_data *
+get_intelgt_inferior_data (inferior *inf)
+{
+  intelgt_inferior_data *inf_data = intelgt_inferior_data_handle.get (inf);
+  if (inf_data == nullptr)
+    inf_data = intelgt_inferior_data_handle.emplace (inf);
+
+  return inf_data;
+}
+
 /* The 'register_type' gdbarch method.  */
 
 static type *
@@ -1978,6 +2001,138 @@ fe_stack_handle_small_struct (CORE_ADDR addr, type *valtype,
   return fe_addr;
 }
 
+/* Helper function to return the device id using the inferior.  */
+
+static uint32_t
+get_device_id (inferior *inferior)
+{
+  intelgt_inferior_data *inf_data = get_intelgt_inferior_data (inferior);
+  if (inf_data->device_id == 0u)
+    inf_data->device_id = get_device_id (inferior->gdbarch);
+
+  return inf_data->device_id;
+}
+
+/* Helper function to return the device id using GDBARCH.  */
+
+static uint32_t
+get_device_id (gdbarch *gdbarch)
+{
+  try
+    {
+      const target_desc *tdesc = gdbarch_target_desc (gdbarch);
+      const std::string &tdesc_device_id
+	= tdesc_find_device_info_attribute (tdesc, "target_id");
+      if (tdesc_device_id.empty ())
+	error (_("Failed to read target id from device."));
+
+      unsigned long device_id = std::stoul (tdesc_device_id, nullptr, 16);
+      if (device_id > UINT32_MAX)
+	error (_("Unexpected out-of-bound device id 0x%lx"), device_id);
+
+      return (uint32_t) device_id;
+    }
+  catch (const gdb_exception &e)
+    {
+      exception_print (gdb_stderr, e);
+      return 0u;
+    }
+}
+
+/* Helper function to translate the device id to a device version.  */
+
+static xe_version
+get_xe_version (unsigned int device_id)
+{
+  xe_version device_xe_version = XE_INVALID;
+  switch (device_id)
+    {
+      case 0x4F80:
+      case 0x4F81:
+      case 0x4F82:
+      case 0x4F83:
+      case 0x4F84:
+      case 0x4F85:
+      case 0x4F86:
+      case 0x4F87:
+      case 0x4F88:
+      case 0x5690:
+      case 0x5691:
+      case 0x5692:
+      case 0x5693:
+      case 0x5694:
+      case 0x5695:
+      case 0x5696:
+      case 0x5697:
+      case 0x5698:
+      case 0x56A0:
+      case 0x56A1:
+      case 0x56A2:
+      case 0x56A3:
+      case 0x56A4:
+      case 0x56A5:
+      case 0x56A6:
+      case 0x56A7:
+      case 0x56A8:
+      case 0x56A9:
+      case 0x56B0:
+      case 0x56B1:
+      case 0x56B2:
+      case 0x56B3:
+      case 0x56BA:
+      case 0x56BB:
+      case 0x56BC:
+      case 0x56BD:
+      case 0x56C0:
+      case 0x56C1:
+      case 0x56C2:
+      case 0x56CF:
+      case 0x7D40:
+      case 0x7D45:
+      case 0x7D67:
+      case 0x7D41:
+      case 0x7D55:
+      case 0x7DD5:
+	device_xe_version = XE_HPG;
+	break;
+
+      case 0x0201:
+      case 0x0202:
+      case 0x0203:
+      case 0x0204:
+      case 0x0205:
+      case 0x0206:
+      case 0x0207:
+      case 0x0208:
+      case 0x0209:
+      case 0x020A:
+      case 0x020B:
+      case 0x020C:
+      case 0x020D:
+      case 0x020E:
+      case 0x020F:
+      case 0x0210:
+	device_xe_version = XE_HP;
+	break;
+
+      case 0x0BD0:
+      case 0x0BD4:
+      case 0x0BD5:
+      case 0x0BD6:
+      case 0x0BD7:
+      case 0x0BD8:
+      case 0x0BD9:
+      case 0x0BDA:
+      case 0x0BDB:
+      case 0x0B69:
+      case 0x0B6E:
+	device_xe_version = XE_HPC;
+	break;
+    }
+
+  return device_xe_version;
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -1997,42 +2152,29 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
   if (tdesc != nullptr)
     {
-      const std::string &tdesc_gen_major
-	= tdesc_find_device_info_attribute (tdesc, "gen_major");
-      const std::string &tdesc_gen_minor
-	= tdesc_find_device_info_attribute (tdesc, "gen_minor");
-      dprintf (_("device: Gen%s.%s"), tdesc_gen_major.c_str (),
-	       tdesc_gen_minor.c_str ());
-
-      if (tdesc_gen_major == "9")
-	iga_version = IGA_GEN9;
-      else if (tdesc_gen_major == "11")
-	iga_version = IGA_GEN11;
-      else if (tdesc_gen_major == "12")
+      const std::string &tdesc_vendor_id
+	= tdesc_find_device_info_attribute (tdesc, "vendor_id");
+      const std::string &tdesc_device_id
+	= tdesc_find_device_info_attribute (tdesc, "target_id");
+      if ((tdesc_vendor_id != "0x8086") || tdesc_device_id.empty ())
 	{
-	  if (!tdesc_gen_minor.empty ())
-	    {
-	      if (tdesc_gen_minor == "0")
-		iga_version = IGA_XE;
-	      else if (tdesc_gen_minor == "1")
-		iga_version = IGA_XE;
-	      else if (tdesc_gen_minor == "5")
-		iga_version = IGA_XE_HP;
-	      else if (tdesc_gen_minor == "71")
-		iga_version = IGA_XE_HPG;
-	      else if (tdesc_gen_minor == "72")
-		iga_version = IGA_XE_HPC;
-	    }
-	  else
-	    dprintf (_("Failed to read minor version from Gen12 device."));
+	  warning (_("Device not recognized: vendor id=%s, device id=%s"),
+		   tdesc_vendor_id.c_str (), tdesc_device_id.c_str ());
+	  gdbarch_free (gdbarch);
+	  return nullptr;
 	}
       else
-	dprintf (_("Unknown major version %s from device."),
-		 tdesc_gen_major.c_str ());
+	{
+	  iga_version = (iga_gen_t) get_xe_version (get_device_id (gdbarch));
+	  if (iga_version == IGA_GEN_INVALID)
+	    warning (_("Intel GT device id is unrecognized: ID %s"),
+		     tdesc_device_id.c_str ());
+	}
     }
-  else
-    dprintf (_("Failed to read major version from device."));
 
+  /* Take the best guess in case IGA_VERSION is still invalid.  */
+  if (iga_version == IGA_GEN_INVALID)
+    iga_version = IGA_XE_HPC;
 
   const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);
   iga_context_create (&options, &data->iga_ctx);

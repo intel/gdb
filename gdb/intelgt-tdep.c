@@ -349,6 +349,7 @@ struct intelgt_gdbarch_data
 #if defined (HAVE_LIBIGA64)
   /* libiga context for disassembly.  */
   iga_context_t iga_ctx = nullptr;
+  iga_gen_t iga_version = IGA_GEN_INVALID;
 #endif
 };
 
@@ -1910,6 +1911,86 @@ fe_stack_handle_small_struct (CORE_ADDR addr, type *valtype,
   return fe_addr;
 }
 
+#if defined (HAVE_LIBIGA64)
+/* Translate the DEVICE_ID to an IGA version.  */
+
+static iga_gen_t
+get_iga_version (unsigned int device_id)
+{
+  iga_gen_t device_iga_version = IGA_GEN_INVALID;
+  switch (device_id)
+    {
+      case 0x4F80:
+      case 0x4F81:
+      case 0x4F82:
+      case 0x4F83:
+      case 0x4F84:
+      case 0x4F85:
+      case 0x4F86:
+      case 0x4F87:
+      case 0x4F88:
+      case 0x5690:
+      case 0x5691:
+      case 0x5692:
+      case 0x5693:
+      case 0x5694:
+      case 0x5695:
+      case 0x5696:
+      case 0x5697:
+      case 0x5698:
+      case 0x56A0:
+      case 0x56A1:
+      case 0x56A2:
+      case 0x56A3:
+      case 0x56A4:
+      case 0x56A5:
+      case 0x56A6:
+      case 0x56A7:
+      case 0x56A8:
+      case 0x56A9:
+      case 0x56B0:
+      case 0x56B1:
+      case 0x56C0:
+      case 0x56C1:
+      case 0x56CF:
+	device_iga_version = IGA_XE_HPG;
+	break;
+
+      case 0x0201:
+      case 0x0202:
+      case 0x0203:
+      case 0x0204:
+      case 0x0205:
+      case 0x0206:
+      case 0x0207:
+      case 0x0208:
+      case 0x0209:
+      case 0x020A:
+      case 0x020B:
+      case 0x020C:
+      case 0x020D:
+      case 0x020E:
+      case 0x020F:
+      case 0x0210:
+	device_iga_version = IGA_XE_HP;
+	break;
+
+      case 0x0BD0:
+      case 0x0BD5:
+      case 0x0BD6:
+      case 0x0BD7:
+      case 0x0BD8:
+      case 0x0BD9:
+      case 0x0BDA:
+      case 0x0BDB:
+	device_iga_version = IGA_XE_HPC;
+	break;
+    }
+
+  return device_iga_version;
+}
+#endif /* defined (HAVE_LIBIGA64)  */
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -1929,43 +2010,24 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
   if (tdesc != nullptr)
     {
-      const std::string &tdesc_gen_major
-	= tdesc_find_device_info_attribute (tdesc, "gen_major");
-      const std::string &tdesc_gen_minor
-	= tdesc_find_device_info_attribute (tdesc, "gen_minor");
-      dprintf (_("device: Gen%s.%s"), tdesc_gen_major.c_str (),
-	       tdesc_gen_minor.c_str ());
-
-      if (tdesc_gen_major == "9")
-	iga_version = IGA_GEN9;
-      else if (tdesc_gen_major == "11")
-	iga_version = IGA_GEN11;
-      else if (tdesc_gen_major == "12")
-	{
-	  if (!tdesc_gen_minor.empty ())
-	    {
-	      if (tdesc_gen_minor == "0")
-		iga_version = IGA_XE;
-	      else if (tdesc_gen_minor == "1")
-		iga_version = IGA_XE;
-	      else if (tdesc_gen_minor == "5")
-		iga_version = IGA_XE_HP;
-	      else if (tdesc_gen_minor == "71")
-		iga_version = IGA_XE_HPG;
-	      else if (tdesc_gen_minor == "72")
-		iga_version = IGA_XE_HPC;
-	    }
-	  else
-	    dprintf (_("Failed to read minor version from Gen12 device."));
-	}
+      const std::string &tdesc_device_id
+	= tdesc_find_device_info_attribute (tdesc, "target_id");
+      if (tdesc_device_id.empty ())
+	warning (_("Failed to read target id from device."));
       else
-	dprintf (_("Unknown major version %s from device."),
-		 tdesc_gen_major.c_str ());
+	{
+	  iga_version
+	    = get_iga_version (std::stoi (tdesc_device_id, nullptr, 16));
+	  if (iga_version == IGA_GEN_INVALID)
+	    warning (_("Intel GT device id is unrecognized"));
+	}
     }
-  else
-    dprintf (_("Failed to read major version from device."));
 
+  /* Take the best guess in case IGA_VERSION is still invalid.  */
+  if (iga_version == IGA_GEN_INVALID)
+    iga_version = IGA_XE_HPC;
 
+  data->iga_version = iga_version;
   const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);
   iga_context_create (&options, &data->iga_ctx);
 #endif

@@ -1,0 +1,52 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDB's support for SYCL, for reading local variables in a loop.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set line [gdb_get_line_number "kernel-last-loop-line"]
+	gdb_breakpoint $srcfile:$line
+	for {set i 0} {$i < 3} {incr i} {
+	    with_test_prefix "iteration $i" {
+		gdb_continue_to_breakpoint "" ".*$srcfile:$line.*"
+		gdb_test "print b" "[expr $i + 100]"
+		gdb_test "print c" "[expr $i + 10]"
+	    }
+	}
+
+	continue_sycl_program_to_termination
+    }
+}

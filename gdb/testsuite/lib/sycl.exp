@@ -50,6 +50,9 @@ if {![info exists OFFLOAD_IGNORE_PREPARE_FOR_TESTING]} {
 if {![info exists OFFLOAD_PERF_AOT_TESTING]} {
     set OFFLOAD_PERF_AOT_TESTING "0"
 }
+if {![info exists OFFLOAD_BACKEND_GROUP]} {
+    set OFFLOAD_BACKEND_GROUP "level0,opencl,host"
+}
 
 # Start the process by passing the SYCL device type and a
 # substring of the device name as the command line arguments.
@@ -402,25 +405,36 @@ proc get_another_stopped_thread {srcfile line ids_to_ignore {msg ""}} {
 # and OFFLOAD_GPU_ID, 0 otherwise.
 
 proc is_sycl_device_filtered {device} {
-    global OFFLOAD_DEVICE_GROUP OFFLOAD_GPU_ID
+    global OFFLOAD_DEVICE_GROUP OFFLOAD_GPU_ID OFFLOAD_BACKEND_GROUP
 
     # Filter according to OFFLOAD_DEVICE_GROUP.
     set device_info [split "$device" ";"]
+    set backend [lindex $device_info 1]
     set device_type [lindex $device_info 3]
     set checking_gpu_device [string equal $device_type "gpu"]
     set checking_cpu_device [string equal $device_type "cpu"]
     set checking_fpga_device [string equal $device_type "accelerator"]
     set checking_host_device [string match -nocase "*Host*" $device]
 
+    if {[string match -nocase "*level*" $backend]} {
+	set backend "level"
+    } else {
+	set backend "opencl"
+    }
+
     if {![string match "" $OFFLOAD_DEVICE_GROUP]} {
 	if {($checking_cpu_device
-	     && ![string match -nocase "*cpu*" $OFFLOAD_DEVICE_GROUP)])
+	     && (![string match -nocase "*cpu*" $OFFLOAD_DEVICE_GROUP]
+		 || ![string match -nocase "*opencl*" $OFFLOAD_BACKEND_GROUP]))
 	    || ($checking_host_device
-		&& ![string match -nocase "*host*" $OFFLOAD_DEVICE_GROUP])
+		&& (![string match -nocase "*host*" $OFFLOAD_DEVICE_GROUP]
+		    || ![string match -nocase "*host*" $OFFLOAD_BACKEND_GROUP]))
 	    || ($checking_fpga_device
-		&& ![string match -nocase "*accelerator*" $OFFLOAD_DEVICE_GROUP])
+		&& (![string match -nocase "*accelerator*" $OFFLOAD_DEVICE_GROUP]
+		    || ![string match -nocase "*opencl*" $OFFLOAD_BACKEND_GROUP]))
 	    || ($checking_gpu_device
-		&& ![string match -nocase "*gpu*" $OFFLOAD_DEVICE_GROUP])} {
+		&& (![string match -nocase "*gpu*" $OFFLOAD_DEVICE_GROUP]
+		    || ![string match -nocase "*${backend}*" $OFFLOAD_BACKEND_GROUP]))} {
 	    return 0
 	}
     }

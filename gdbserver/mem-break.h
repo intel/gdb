@@ -277,4 +277,8 @@ int remove_memory_breakpoint (struct raw_breakpoint *bp);
 void clone_all_breakpoints (thread_info *child_thread,
 			    const thread_info *parent_thread);
 
+
+/* Returns TRUE if Z_TYPE is supported by the target.  */
+
+int z_type_supported (char z_type);
 #endif /* GDBSERVER_MEM_BREAK_H */

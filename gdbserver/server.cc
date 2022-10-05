@@ -2720,6 +2720,13 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
       strcat (own_buf, ";vAck:library+");
       strcat (own_buf, ";vAck:in-memory-library+");
 
+      /* Z points support.  */
+      strcat (own_buf, z_type_supported ('0') ? ";Z0+" : ";Z0-");
+      strcat (own_buf, z_type_supported ('1') ? ";Z1+" : ";Z1-");
+      strcat (own_buf, z_type_supported ('2') ? ";Z2+" : ";Z2-");
+      strcat (own_buf, z_type_supported ('3') ? ";Z3+" : ";Z3-");
+      strcat (own_buf, z_type_supported ('4') ? ";Z4+" : ";Z4-");
+
       /* Reinitialize components as needed for the new connection.  */
       hostio_handle_new_gdb_connection ();
       target_handle_new_gdb_connection ();

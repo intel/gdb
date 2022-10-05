@@ -697,6 +697,9 @@ public:
   int insert_watchpoint (CORE_ADDR, int, enum target_hw_bp_type,
 			 struct expression *) override;
 
+  /* Returns TRUE if GDB Z breakpoint type is supported, FALSE otherwise.  */
+  bool supports_z_point_type (int);
+
   int remove_watchpoint (CORE_ADDR, int, enum target_hw_bp_type,
 			 struct expression *) override;
 
@@ -5665,6 +5668,11 @@ static const struct protocol_feature remote_protocol_features[] = {
     PACKET_vAck_library },
   { "vAck:in-memory-library", PACKET_DISABLE, remote_supported_packet,
     PACKET_vAck_in_memory_library },
+  { "Z0", PACKET_SUPPORT_UNKNOWN, remote_supported_packet, PACKET_Z0 },
+  { "Z1", PACKET_SUPPORT_UNKNOWN, remote_supported_packet, PACKET_Z1 },
+  { "Z2", PACKET_SUPPORT_UNKNOWN, remote_supported_packet, PACKET_Z2 },
+  { "Z3", PACKET_SUPPORT_UNKNOWN, remote_supported_packet, PACKET_Z3 },
+  { "Z4", PACKET_SUPPORT_UNKNOWN, remote_supported_packet, PACKET_Z4 },
 };
 
 static char *remote_support_xml;
@@ -11039,6 +11047,13 @@ watchpoint_to_Z_packet (int type)
     default:
       internal_error (_("hw_bp_to_z: bad watchpoint type %d"), type);
     }
+}
+
+bool
+remote_target::supports_z_point_type (int type)
+{
+  Z_packet_type packet = watchpoint_to_Z_packet (type);
+  return (m_features.packet_support (PACKET_Z0 + packet) != PACKET_DISABLE);
 }
 
 int

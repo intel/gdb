@@ -987,7 +987,7 @@ find_gdb_breakpoint (char z_type, CORE_ADDR addr, int kind)
   return NULL;
 }
 
-static int
+int
 z_type_supported (char z_type)
 {
   return (z_type >= '0' && z_type <= '4'

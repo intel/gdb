@@ -23,6 +23,11 @@ standard_testfile parallel-for-1D.cpp
 proc "sycl_${gdb_test_file_name}_run_tests" {} {
     global srcfile decimal gdb_prompt
 
+    if {[require_sycl_device "host" "*"]} {
+	unsupported "test is not aimed at host-executed code"
+	return 0
+    }
+
     if {[start_sycl_program] < 0} {
 	return -1
     }
@@ -41,35 +46,17 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
 
     gdb_test_no_output "set scheduler-locking on"
 
-    set num_threads 0
-    gdb_test_multiple "info threads" "find num threads" {
-	-re "Id\[ \t\]+Target Id\[^\r\n\]+\[\r\n\]" {
-	    exp_continue
-	}
-	-re "$decimal\[ \t\]+Thread\[^\r\n\]+\[\r\n\]" {
-	    incr num_threads
-	    exp_continue
-	}
-	-re "$gdb_prompt $" {
-	    pass $gdb_test_name
-	}
-    }
-
-    # If this is a single-threaded program, thread id is not printed,
-    # and there is no point in testing which thread hits the BPs.
-    if {$num_threads > 1} {
-	# Resuming should make only the current thread move.
-	set current_thread [get_current_thread "line $first_line"]
-	gdb_test "continue" \
-	    "Thread $current_thread \[^\r\n\]+$srcfile:$second_line.*" \
-	    "hit the second line"
-	gdb_test "continue" \
-	    "Thread $current_thread \[^\r\n\]+$srcfile:$third_line.*" \
-	    "hit the third line"
-	gdb_test "continue" \
-	    "Thread $current_thread \[^\r\n\]+$srcfile:$fourth_line.*" \
-	    "hit the fourth line"
-    }
+    # Resuming should make only the current thread move.
+    set current_thread [get_current_thread "line $first_line"]
+    gdb_test "continue" \
+	"Thread $current_thread \[^\r\n\]+$srcfile:$second_line.*" \
+	"hit the second line"
+    gdb_test "continue" \
+	"Thread $current_thread \[^\r\n\]+$srcfile:$third_line.*" \
+	"hit the third line"
+    gdb_test "continue" \
+	"Thread $current_thread \[^\r\n\]+$srcfile:$fourth_line.*" \
+	"hit the fourth line"
 }
 
 test_initialize

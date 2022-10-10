@@ -51,6 +51,12 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
     gdb_continue_to_breakpoint "hit breakpoint at line 3 again" \
 	".*$srcfile:$inside_kernel_3.*"
 
+    setup_kfail "JIRA IGDB/3408" "*-*-*"
+    gdb_test "jump ${inside_kernel_2}" ".*Breakpoint.* $srcfile:$inside_kernel_2.*" \
+	"Jump to line 2 at BP"
+
+    delete_breakpoints
+
     # Continue until termination.
     continue_sycl_program_to_termination
 }

@@ -32,8 +32,8 @@
 #ifdef WINDOWS_NATIVE
 
 /* Don't assume that UNICODE is not defined.  */
-# undef LoadLibrary
-# define LoadLibrary LoadLibraryA
+# undef LoadLibraryEx
+# define LoadLibraryEx LoadLibraryExA
 
 # if !(_WIN32_WINNT >= _WIN32_WINNT_WIN8)
 
@@ -49,7 +49,8 @@ static BOOL initialized = FALSE;
 static void
 initialize (void)
 {
-  HMODULE kernel32 = LoadLibrary ("kernel32.dll");
+  HMODULE kernel32 = LoadLibraryEx ("kernel32.dll", NULL,
+				    LOAD_LIBRARY_SEARCH_SYSTEM32);
   if (kernel32 != NULL)
     {
       GetSystemTimePreciseAsFileTimeFunc =

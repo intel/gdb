@@ -52,8 +52,8 @@ extern NTSTATUS WINAPI BCryptGenRandom (BCRYPT_ALG_HANDLE, UCHAR *, ULONG, ULONG
 #if defined _WIN32 && ! defined __CYGWIN__
 
 /* Don't assume that UNICODE is not defined.  */
-# undef LoadLibrary
-# define LoadLibrary LoadLibraryA
+# undef LoadLibraryEx
+# define LoadLibraryEx LoadLibraryExA
 # undef CryptAcquireContext
 # define CryptAcquireContext CryptAcquireContextA
 
@@ -72,7 +72,8 @@ static BOOL initialized = FALSE;
 static void
 initialize (void)
 {
-  HMODULE bcrypt = LoadLibrary ("bcrypt.dll");
+  HMODULE bcrypt = LoadLibraryEx ("bcrypt.dll", NULL,
+				  LOAD_LIBRARY_SEARCH_SYSTEM32);
   if (bcrypt != NULL)
     {
       BCryptGenRandomFunc =

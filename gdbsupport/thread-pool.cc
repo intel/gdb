@@ -86,7 +86,8 @@ init_windows ()
 {
   initialized = true;
 
-  HMODULE hm = LoadLibrary (TEXT ("kernel32.dll"));
+  HMODULE hm = LoadLibraryEx (TEXT ("kernel32.dll"), NULL,
+			      LOAD_LIBRARY_SEARCH_SYSTEM32);
   if (hm)
     dyn_SetThreadDescription
       = (SetThreadDescription_ftype *) GetProcAddress (hm,
@@ -96,7 +97,8 @@ init_windows ()
      KernelBase.dll, not kernel32.dll.  */
   if (dyn_SetThreadDescription == nullptr)
     {
-      hm = LoadLibrary (TEXT ("KernelBase.dll"));
+      hm = LoadLibraryEx (TEXT ("KernelBase.dll"), NULL,
+			  LOAD_LIBRARY_SEARCH_SYSTEM32);
       if (hm)
 	dyn_SetThreadDescription
 	  = (SetThreadDescription_ftype *) GetProcAddress (hm,

@@ -949,7 +949,8 @@ initialize_loadable ()
 #define GPA(m, func)					\
   func = (func ## _ftype *) GetProcAddress (m, #func)
 
-  hm = LoadLibrary (TEXT ("kernel32.dll"));
+  hm = LoadLibraryEx (TEXT ("kernel32.dll"), NULL,
+		      LOAD_LIBRARY_SEARCH_SYSTEM32);
   if (hm)
     {
       GPA (hm, DebugActiveProcessStop);
@@ -988,7 +989,7 @@ initialize_loadable ()
 
   /* Load optional functions used for retrieving filename information
      associated with the currently debugged process or its dlls.  */
-  hm = LoadLibrary (TEXT ("psapi.dll"));
+  hm = LoadLibraryEx (TEXT ("psapi.dll"), NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
   if (hm)
     {
       GPA (hm, EnumProcessModules);
@@ -1013,7 +1014,8 @@ initialize_loadable ()
       result = false;
     }
 
-  hm = LoadLibrary (TEXT ("advapi32.dll"));
+  hm = LoadLibraryEx (TEXT ("advapi32.dll"), NULL,
+		      LOAD_LIBRARY_SEARCH_SYSTEM32);
   if (hm)
     {
       GPA (hm, OpenProcessToken);
@@ -1030,7 +1032,8 @@ initialize_loadable ()
      KernelBase.dll, not kernel32.dll.  */
   if (GetThreadDescription == nullptr)
     {
-      hm = LoadLibrary (TEXT ("KernelBase.dll"));
+      hm = LoadLibraryEx (TEXT ("KernelBase.dll"), NULL,
+			  LOAD_LIBRARY_SEARCH_SYSTEM32);
       if (hm)
 	GPA (hm, GetThreadDescription);
     }

@@ -1,0 +1,136 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test resuming a thread that is internally stopped by GDB because
+# of the all-stop mode.
+
+load_lib sycl.exp
+
+standard_testfile asymmetric.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+# Switch to a spinning thread, unset its spin flag, and test resuming it.
+proc test_spin_thread {spin_thread} {
+    global srcfile decimal
+
+    set bp_spin [gdb_get_line_number "busy-wait"]
+    set bp_else [gdb_get_line_number "else-branch"]
+
+    # Switch to a spinning thread and make sure to unset its spin flag.
+    gdb_test "thread $spin_thread" \
+	"Switching to thread $spin_thread.*$srcfile:$bp_spin.*"
+    gdb_test "thread apply :* print spin=false" ".*" "release the spin flag"
+    gdb_continue_to_breakpoint "spin thread hits the bp" \
+	".*$srcfile:$bp_else.*"
+
+    # Resuming the spin thread at this point would make it finish the
+    # kernel.  We would appear to hang because the other threads did not
+    # resume.  We should be able to interrupt and see that the current
+    # thread became unavailable.
+    gdb_test_multiple "continue" "resume spin thread until termination" {
+	-re "Continuing\." {
+	    pass $gdb_test_name
+	}
+    }
+    # Wait for the thread to finish its execution and then interrupt.
+    sleep 4
+    send_gdb "\003"
+    gdb_test_multiple "" "spin thread becomes unavailable" {
+	-re -wrap "Thread $spin_thread (\[^\r\n\]+) became unavailable." {
+	    pass $gdb_test_name
+	}
+    }
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![is_level_zero_debug_api]} {
+	    unsupported "test is aimed at the L0-based stack only"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set bp_then [gdb_get_line_number "then-branch"]
+	set bp_else [gdb_get_line_number "else-branch"]
+	set bp_spin [gdb_get_line_number "busy-wait"]
+	set bp_unleash [gdb_get_line_number "Unleash"]
+
+	gdb_breakpoint $bp_then
+	gdb_breakpoint $bp_else
+	gdb_breakpoint $bp_unleash
+
+	# Stop at the 'else' branch first to collect IDs of the spinning
+	# threads.
+	foreach_with_prefix spin_thread_id {1 2} {
+	    gdb_continue_to_breakpoint "hit the 'unleash' bp" \
+		".*$srcfile:$bp_unleash.*"
+	    set spin_thread($spin_thread_id) \
+		[get_current_thread "line $bp_unleash"]
+	}
+
+	# In the test scenario, one thread should take the then-branch and
+	# hit the BP inserted there while the other two are spinning at
+	# the busy-wait loop.  Those two threads would be stopped by the
+	# target internally.  We should be able to switch to them and
+	# resume them (after freeing the spin flag).
+
+	gdb_continue_to_breakpoint "hit the then branch" \
+	    ".*$srcfile:$bp_then.*"
+	set first_thread [get_current_thread "line $bp_then"]
+
+	gdb_test_no_output "set scheduler-locking on"
+
+	foreach_with_prefix spin_thread_id {1 2} {
+	    test_spin_thread $spin_thread($spin_thread_id)
+	}
+
+	set inf_id [get_integer_valueof "\$_inferior" 0 "get plain inferior id"]
+
+	# The first thread must be the only remaining device thread.
+	#
+	# Frame arguments are irrelevant.  Ignore them for faster results.
+	set wpfa "with print frame-arguments none -- "
+	gdb_test "${wpfa}info threads -stopped $inf_id.*" \
+	    [multi_line \
+		"Id\[^\r\n\]+Target Id\[^\r\n\]+Frame\[^\r\n\]*" \
+		"  $first_thread:\[^\r\n\]+$srcfile:$bp_then"] \
+	    "only the first thread remains"
+
+	# Finally, complete the program.
+	gdb_test_no_output "set scheduler-locking off"
+
+	continue_sycl_program_to_termination "run until end" "JIRA IGDB/3468"
+    }
+}

@@ -53,8 +53,8 @@
 #include "verify.h"
 
 /* Don't assume that UNICODE is not defined.  */
-#undef LoadLibrary
-#define LoadLibrary LoadLibraryA
+#undef LoadLibraryEx
+#define LoadLibraryEx LoadLibraryExA
 #undef GetFinalPathNameByHandle
 #define GetFinalPathNameByHandle GetFinalPathNameByHandleA
 
@@ -88,7 +88,8 @@ static BOOL initialized = FALSE;
 static void
 initialize (void)
 {
-  HMODULE kernel32 = LoadLibrary ("kernel32.dll");
+  HMODULE kernel32 = LoadLibraryEx ("kernel32.dll", NULL,
+				    LOAD_LIBRARY_SEARCH_SYSTEM32);
   if (kernel32 != NULL)
     {
 # if _GL_WINDOWS_STAT_INODES == 2

@@ -1,0 +1,169 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This test checks that GDB can handle some slightly wrong DWARF that is being
+# produces by icc/icpc/ifort for pointers and references.  Namely the DWARF
+# looks like
+#
+# <2><17d>: Abbrev Number: 22 (DW_TAG_variable)
+#    <17e>   DW_AT_decl_line : 41
+#    <17f>   DW_AT_decl_file : 1
+#    <180>   DW_AT_name      : (indirect string, offset: 0x1f1): vlaref
+#    <184>   DW_AT_type      : <0x214>
+#    <188>   DW_AT_location  : 2 byte block: 76 50
+#      (DW_OP_breg6 (rbp): -48)
+# ...
+# <1><214>: Abbrev Number: 12 (DW_TAG_reference/pointer_type)
+#    <215>   DW_AT_type      : <0x219>
+#    <216>   DW_AT_associated: ...     <- for Fortran pointers
+# <1><219>: Abbrev Number: 27 (DW_TAG_array_type)
+#    <21a>   DW_AT_type      : <0x10e>
+#    <21e>   DW_AT_data_location: 2 byte block: 97 6
+#      (DW_OP_push_object_address; DW_OP_deref)
+# <2><221>: Abbrev Number: 28 (DW_TAG_subrange_type)
+#    <222>   DW_AT_upper_bound : <0x154>
+# <2><226>: Abbrev Number: 0
+#
+# With a) DW_OP_push_object_address expecting the address of the
+# DW_TAG_variable used for its resolution instead of the address of the
+# underlying array and b) some Fortran pointers exhibiting the DW_AT_associated
+# attribute on DW_TAG_pointer_types.
+# To test a) this test constructs a pointer and a reference type to an array
+# with the above usage of DW_AT_data_location and DW_OP_push_object_address.
+# To test b) we simply create a pointer with the DW_AT_associated attribute
+# and check whether this is being resolved or not.
+
+load_lib dwarf.exp
+
+# This test can only be run on targets which support DWARF-2 and use gas.
+if {![dwarf2_support]} {
+    return 0
+}
+
+standard_testfile .c -dw.S
+
+if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile}] } {
+    return -1
+}
+
+# Make some DWARF for the test.
+set asm_file [standard_output_file $srcfile2]
+
+Dwarf::assemble $asm_file {
+    global srcfile
+    set int_size [get_sizeof "int" 4]
+    set voidp_size [get_sizeof "void *" 96]
+    declare_labels integer_label array_label pointer_label reference_label
+
+    cu {} {
+	compile_unit {
+	    {DW_AT_language @DW_LANG_Fortran90}
+	    {DW_AT_name $srcfile}
+	    {DW_AT_producer "Intel(R) compiler VERSION 123.456"}
+	    {DW_AT_comp_dir /tmp}
+	} {
+	    integer_label: DW_TAG_base_type {
+		{name "int"}
+		{byte_size $int_size sdata}
+		{encoding @DW_ATE_signed}
+	    }
+
+	    array_label: DW_TAG_array_type {
+		{DW_AT_type :$integer_label}
+		{DW_AT_data_location {
+		    DW_OP_push_object_address
+		    DW_OP_deref
+		} SPECIAL_expr}
+	    } {
+		DW_TAG_subrange_type {
+		    {DW_AT_type :$integer_label}
+		    {DW_AT_upper_bound {
+			DW_OP_push_object_address
+			DW_OP_plus_uconst $voidp_size
+			DW_OP_plus_uconst $voidp_size
+			DW_OP_deref
+			DW_OP_deref_size $int_size
+		     } SPECIAL_expr }
+		}
+	    }
+
+	    pointer_label: DW_TAG_pointer_type {
+		{DW_AT_type :$array_label}
+		{DW_AT_associated {
+		    DW_OP_push_object_address
+		    DW_OP_plus_uconst $voidp_size
+		    DW_OP_deref
+		    DW_OP_deref_size $int_size
+		    DW_OP_constu 0
+		    DW_OP_ne
+		} SPECIAL_expr }
+	    }
+
+	    reference_label: DW_TAG_reference_type {
+		{DW_AT_type :$array_label}
+	    }
+
+	    DW_TAG_variable {
+		{DW_AT_name "fp_associated"}
+		{DW_AT_type :$pointer_label}
+		{DW_AT_location {
+		    DW_OP_addr [gdb_target_symbol fp_associated]
+		} SPECIAL_expr}
+	    }
+
+	    DW_TAG_variable {
+		{DW_AT_name "fp_not_associated"}
+		{DW_AT_type :$pointer_label}
+		{DW_AT_location {
+		    DW_OP_addr [gdb_target_symbol fp_not_associated]
+		} SPECIAL_expr}
+	    }
+
+	    DW_TAG_variable {
+		{DW_AT_name "array_ref"}
+		{DW_AT_type :$reference_label}
+		{DW_AT_location {
+		    DW_OP_addr [gdb_target_symbol fp_associated]
+		} SPECIAL_expr}
+	    }
+	}
+    }
+}
+
+if { [prepare_for_testing "failed to prepare" ${testfile} \
+	  [list $srcfile $asm_file] {nodebug}] } {
+    return -1
+}
+
+if ![runto_main] {
+    return -1
+}
+
+# Test whether GDB can handle ifort's DWARF for Fortran pointers.
+gdb_test_no_output "set language fortran"
+gdb_test "p associated(fp_associated)" "\\.TRUE\\."
+gdb_test "p associated(fp_not_associated)" "\\.FALSE\\."
+gdb_test "p fp_not_associated" \
+    " = \\(PTR TO -> \\( int \\(:\\) \\)\\) <not associated>"
+gdb_test "p *fp_not_associated" "Location address is not set\."
+
+gdb_test "p fp_associated" "= \\(PTR TO -> \\( int \\(4\\) \\)\\) $hex <.*>"
+gdb_test "p *fp_associated" "= \\(11, 22, 33, 44\\)"
+
+# Test whether GDB can handle icc's DWARF for c++ references.
+gdb_test_no_output "set language c++"
+
+gdb_test "print array_ref" \
+    " = \\(int \\(&\\)\\\[4\\\]\\) @$hex: \\{11, 22, 33, 44\\}"

@@ -2958,4 +2958,9 @@ extern unsigned int overload_debug;
 
 extern bool is_nocall_function (const struct type *type);
 
+/* Check whether icc/ifort could have been the producers of the TYPE_CODE_REF
+   or TYPE_CODE_PTR type.  */
+
+extern bool icc_pointer_or_reference_type (const struct type *type);
+
 #endif /* GDBTYPES_H */

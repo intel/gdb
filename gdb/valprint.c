@@ -583,6 +583,40 @@ generic_val_print_ref (struct type *type,
 	  /* More complicated computed references are not supported.  */
 	  gdb_assert (embedded_offset == 0);
 	}
+      else if (icc_pointer_or_reference_type (type)
+	       && TYPE_DATA_LOCATION (type->target_type ()) != nullptr)
+	{
+	  /* Icc/ifort emit some wrong DWARF for pointers and references
+	     with underlying arrays.  They emit DWARF like
+
+	     <2><11>: Abbrev Number: 22 (DW_TAG_variable)
+		<12>   DW_AT_name      : ...
+		<13>   DW_AT_type      : <0x214>
+		<14>   DW_AT_location  : ...
+	     ...
+	     <1><111>: Abbrev Number: 12 (DW_TAG_reference_type)
+		<112>   DW_AT_type     : <0x219>
+	     <1><113>: Abbrev Number: 27 (DW_TAG_array_type)
+		<114>   DW_AT_type     : <0x10e>
+		<115>   DW_AT_data_location: 2 byte block: 97 6
+		(DW_OP_push_object_address; DW_OP_deref)
+	     <2><116>: Abbrev Number: 28 (DW_TAG_subrange_type)
+		<117>   DW_AT_upper_bound : <0x154>
+	     <2><118>: Abbrev Number: 0
+
+	     For icc/ifort the DW_AT_data_location requires the address
+	     of the original DW_TAG_variable for the evaluation of
+	     DW_OP_push_object_address instead of the address of
+	     the DW_TAG_array_type typically obtained by resolving
+	     dereferencing the DW_TAG_reference_type/DW_TAG_pointer_type
+	     once.  If icc/ifort are detected as producers here and if
+	     the type underlying the current pointer/reference variable
+	     has a DW_AT_data_location, we thus pass the address of
+	     the variable to resolve the target type instead of the
+	     dereferenced address of the pointer/reference.  */
+	  deref_val = value_at (type->target_type (),
+				original_value->address ());
+	}
       else
 	deref_val = value_at (type->target_type (),
 			      unpack_pointer (type, valaddr + embedded_offset));

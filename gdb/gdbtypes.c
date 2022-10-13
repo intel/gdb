@@ -45,6 +45,7 @@
 #include "gmp-utils.h"
 #include "rust-lang.h"
 #include "ada-lang.h"
+#include "producer.h"
 
 /* The value of an invalid conversion badness.  */
 #define INVALID_CONVERSION 100
@@ -2046,6 +2047,14 @@ is_dynamic_type_internal (struct type *type, int top_level)
   if (top_level
       && (type->code () == TYPE_CODE_REF || type->code () == TYPE_CODE_PTR))
     type = check_typedef (type->target_type ());
+  if (!top_level && icc_pointer_or_reference_type (type))
+    {
+      /* Icc/ifort emit the DW_AT_associated for pointers and references.  To
+	 not mark such types as dynamic further down, which would lead to
+	 infinite resolution loops for, e.g., cyclic dynamic pointers, we
+	 return here already.  */
+      return 0;
+    }
 
   /* Types that have a dynamic TYPE_DATA_LOCATION are considered
      dynamic, even if the type itself is statically defined.
@@ -2743,6 +2752,79 @@ resolve_dynamic_struct (struct type *type,
   return resolved_type;
 }
 
+/* See gdbtypes.h.  */
+
+bool
+icc_pointer_or_reference_type (const struct type *type)
+{
+  return (type->code () == TYPE_CODE_PTR || type->code () == TYPE_CODE_REF)
+	 && type->is_objfile_owned ()
+	 && std::any_of (type->objfile_owner ()->compunits ().begin (),
+			 type->objfile_owner ()->compunits ().end (),
+			 [] (const compunit_symtab *cu)
+			 {
+			   return producer_is_icc (cu->producer (), nullptr,
+						   nullptr);
+			 });
+}
+
+/* Resolve the special icc/icpc/ifort DWARF for pointers and references
+   and update resolved_type accordingly.  */
+
+static void
+resolve_dynamic_icc_pointer_or_reference (type *orig_type, type* resolved_type,
+					  property_addr_info *addr_stack,
+					  property_addr_info *pinfo,
+					  const frame_info_ptr &frame,
+					  int top_level)
+{
+  if (TYPE_DATA_LOCATION (orig_type->target_type ()) != nullptr)
+    {
+      /* Icc/ifort emit some wrong DWARF for pointers and references
+	 with underlying arrays.  They emit DWARF like
+	 <2><11>: Abbrev Number: 22 (DW_TAG_variable)
+	    <12>   DW_AT_name      : ...
+	    <13>   DW_AT_type      : <0x214>
+	    <14>   DW_AT_location  : ...
+	 ...
+	 <1><111>: Abbrev Number: 12 (DW_TAG_reference_type)
+	    <112>   DW_AT_type     : <0x219>
+	 <1><113>: Abbrev Number: 27 (DW_TAG_array_type)
+	    <114>   DW_AT_type     : <0x10e>
+	    <115>   DW_AT_data_location: 2 byte block: 97 6
+	(DW_OP_push_object_address; DW_OP_deref)
+	 <2><116>: Abbrev Number: 28 (DW_TAG_subrange_type)
+	    <117>   DW_AT_upper_bound : <0x154>
+	 <2><118>: Abbrev Number: 0
+
+	 For icc/ifort the DW_AT_data_location requires the address
+	 of the original DW_TAG_variable for the evaluation of
+	 DW_OP_push_object_address instead of the address of
+	 the DW_TAG_array_type typically obtained by resolving
+	 dereferencing the DW_TAG_reference_type/DW_TAG_pointer_type
+	 once.  If icc/ifort are detected as producers here and if
+	 the type underlying the current pointer/reference variable
+	 has a DW_AT_data_location, we thus pass the address of
+	 the variable to resolve the target type instead of the
+	 dereferenced address of the pointer/reference.  */
+      pinfo->addr = addr_stack->addr;
+    }
+
+    /* Another peculiarity of icc's/ifort's dwarf is the usage of
+       DW_AT_associated for pointers/references.  */
+    CORE_ADDR value;
+    dynamic_prop *prop = TYPE_ASSOCIATED_PROP (resolved_type);
+    if (prop != nullptr
+	&& dwarf2_evaluate_property (prop, nullptr, addr_stack, &value))
+    prop->set_const_val (value);
+
+    /* As we have the associated property here, we need to check it.  */
+    if (!type_not_associated (resolved_type))
+      resolved_type->set_target_type
+	(resolve_dynamic_type_internal (orig_type->target_type (), pinfo,
+					frame, top_level));
+}
+
 /* Worker for resolved_dynamic_type.  */
 
 static struct type *
@@ -2794,9 +2876,15 @@ resolve_dynamic_type_internal (struct type *type,
 	    pinfo.next = addr_stack;
 
 	    resolved_type = copy_type (type);
-	    resolved_type->set_target_type
-	      (resolve_dynamic_type_internal (type->target_type (),
-					      &pinfo, frame, top_level));
+
+	    if (icc_pointer_or_reference_type (type))
+	      resolve_dynamic_icc_pointer_or_reference (type, resolved_type,
+							addr_stack, &pinfo,
+							frame, top_level);
+	    else
+	      resolved_type->set_target_type
+		(resolve_dynamic_type_internal (type->target_type (),
+						&pinfo, frame, top_level));
 	    break;
 	  }
 

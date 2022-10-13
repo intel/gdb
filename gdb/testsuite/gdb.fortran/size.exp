@@ -137,7 +137,7 @@ foreach var {array_1d_p array_2d_p allocatable_array_1d \
 	    # Because of ifort's DWARF pointer representation we need to
 	    # aditionally de-reference Fortran pointers.
 	    gdb_test "p size (*$var)" \
-		"Attempt to take contents of a not associated pointer\."
+		"Location address is not set\."
 	    pass $gdb_test_name
 	}
     }

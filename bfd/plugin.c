@@ -45,7 +45,9 @@
 static void *
 dlopen (const char *file, int mode ATTRIBUTE_UNUSED)
 {
-  return LoadLibrary (file);
+  if (SetDllDirectoryA ("") != 0)
+    return (void *) LoadLibraryEx (file, NULL, 0);
+  return NULL;
 }
 
 static void *

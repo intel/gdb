@@ -60,11 +60,12 @@ is_dl_available (void)
 gdb_dlhandle_up
 gdb_dlopen (const char *filename)
 {
-  void *result;
+  void *result = NULL;
 #ifdef HAVE_DLFCN_H
   result = dlopen (filename, RTLD_NOW);
 #elif __MINGW32__
-  result = (void *) LoadLibrary (filename);
+  if (SetDllDirectoryA ("") != 0)
+    result = (void *) LoadLibraryEx (filename, NULL, 0);
 #endif
   if (result != NULL)
     return gdb_dlhandle_up (result);

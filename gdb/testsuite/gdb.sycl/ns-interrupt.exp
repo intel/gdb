@@ -24,11 +24,6 @@ standard_testfile parallel-for-branch.cpp
 proc "sycl_${gdb_test_file_name}_run_tests" {} {
     global srcfile decimal gdb_prompt binfile
 
-    # HOST is not interesting for this test.
-    if {[require_sycl_device "host" "*"]} {
-	return 0
-    }
-
     clean_restart ${binfile}
     gdb_test_no_output "set non-stop on"
 

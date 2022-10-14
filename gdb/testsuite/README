@@ -353,14 +353,13 @@ for compilation.
 
 OFFLOAD_BACKEND_GROUP
 
-By default, it is set to "opencl,level0,host".  This option can be used in the
+By default, it is set to "opencl,level0".  This option can be used in the
 "make check" command to filter the required backend by using comma-separated
 values.
 
-For example, this make check command runs offload tests for level0 and opencl
-only.
+For example, this make check command runs offload tests for level0 only.
 
-	make check RUNTESTFLAGS='OFFLOAD_BACKEND_GROUP="level0,opencl"'
+	make check RUNTESTFLAGS='OFFLOAD_BACKEND_GROUP="level0"'
 
 OPENMP_LANG_GROUP
 

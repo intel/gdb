@@ -152,9 +152,6 @@ switch -glob $env(appdbg_boardfile) {
 	sycl-cpu-intel {
 		load_board_description "sycl-cpu-intel"
 	}
-	sycl-host {
-		load_board_description "sycl-host"
-	}
 	openmp-cpu-cpp {
 		load_board_description "openmp-cpu-cpp"
 	}

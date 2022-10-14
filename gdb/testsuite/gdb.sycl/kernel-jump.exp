@@ -26,11 +26,6 @@ standard_testfile single-task.cpp
 proc "sycl_${gdb_test_file_name}_run_tests" {} {
     global srcfile
 
-    if {[require_sycl_device "host" "*"]} {
-	kfail "JIRA DOQG/2529" "jump does not work on HOST"
-	return 0
-    }
-
     if {[start_sycl_program] < 0} {
 	return -1
     }

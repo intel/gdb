@@ -24,11 +24,6 @@ standard_testfile parallel-for-1D.cpp
 proc "sycl_${gdb_test_file_name}_run_tests" {} {
     global srcfile
 
-    # HOST is not interesting for this test.
-    if {[require_sycl_device "host" "*"]} {
-	return 0
-    }
-
     gdb_test_no_output "set non-stop on"
 
     if {[start_sycl_program] < 0} {

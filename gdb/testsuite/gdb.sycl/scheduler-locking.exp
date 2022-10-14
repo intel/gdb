@@ -23,11 +23,6 @@ standard_testfile parallel-for-1D.cpp
 proc "sycl_${gdb_test_file_name}_run_tests" {} {
     global srcfile decimal gdb_prompt
 
-    if {[require_sycl_device "host" "*"]} {
-	unsupported "test is not aimed at host-executed code"
-	return 0
-    }
-
     if {[start_sycl_program] < 0} {
 	return -1
     }

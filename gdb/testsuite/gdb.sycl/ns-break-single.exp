@@ -84,11 +84,6 @@ proc test {location dim0val {condition ""}} {
 proc "sycl_${gdb_test_file_name}_run_tests" {} {
     global srcfile
 
-    # HOST is not interesting for this test.
-    if {[require_sycl_device "host" "*"]} {
-	return 0
-    }
-
     with_test_prefix "guarded stmt" {
 	test "kernel-condition" "37"
     }

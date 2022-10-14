@@ -495,7 +495,6 @@ proc is_sycl_device_filtered {device} {
 	set checking_cpu_device 1
     }
     set checking_fpga_device [string match -nocase "*FPGA*" $device]
-    set checking_host_device [string match -nocase "*Host*" $device]
     set backend "opencl"
     if {[string match -nocase "*level*" $device]} {
 	set backend "level"
@@ -505,9 +504,6 @@ proc is_sycl_device_filtered {device} {
 	if {($checking_cpu_device
 	     && (![string match -nocase "*cpu*" $OFFLOAD_DEVICE_GROUP]
 		 || ![string match -nocase "*opencl*" $OFFLOAD_BACKEND_GROUP]))
-	    || ($checking_host_device
-		&& (![string match -nocase "*host*" $OFFLOAD_DEVICE_GROUP]
-		    || ![string match -nocase "*host*" $OFFLOAD_BACKEND_GROUP]))
 	    || ($checking_fpga_device
 		&& (![string match -nocase "*accelerator*" $OFFLOAD_DEVICE_GROUP]
 		    || ![string match -nocase "*opencl*" $OFFLOAD_BACKEND_GROUP]))

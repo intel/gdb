@@ -49,9 +49,8 @@ static sycl::backend
 get_backendtype (std::string backend_arg)
 {
   sycl::backend backend;
-  if (backend_arg.compare ("host") == 0)
-    backend = sycl::backend::host;
-  else if (backend_arg.compare ("opencl") == 0)
+
+  if (backend_arg.compare ("opencl") == 0)
     backend = sycl::backend::opencl;
   else if (backend_arg.compare ("ext_oneapi_level_zero") == 0
 	   || backend_arg.compare ("level_zero") == 0)
@@ -74,7 +73,7 @@ get_sycl_devices (int argc, char *argv[])
       std::cout << "Usage: " << argv[0]
 		<< " <host|cpu|gpu|accelerator>"
 		<< " <device name substring>"
-		<< " <backend name host|opencl|level_zero>" << std::endl;
+		<< " <backend name opencl|level_zero>" << std::endl;
       exit (1);
     }
 

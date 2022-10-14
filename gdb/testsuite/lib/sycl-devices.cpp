@@ -25,9 +25,7 @@ get_backendname (sycl::backend backend_arg)
 {
   std::string backend_name;
 
-  if (backend_arg == sycl::backend::host)
-    backend_name = "host";
-  else if (backend_arg == sycl::backend::opencl)
+  if (backend_arg == sycl::backend::opencl)
     backend_name = "opencl";
   else if (backend_arg ==  sycl::backend::ext_oneapi_level_zero)
     backend_name = "ext_oneapi_level_zero";

@@ -78,6 +78,17 @@ foreach device $sycl_device_list {
 
 	    gdb_continue_to_breakpoint "$srcfile:$bp1.*"
 	    gdb_test_no_output "disable $first_line_bp_num"
+
+	    # Reset the spin-flag for all lanes to bring the threads to a
+	    # fair state to compete with each other.  This makes the test
+	    # scenario more interesting.
+	    #
+	    # This can take a long time, because there are potentially
+	    # several thousands of lanes.  Use a timeout factor.
+	    with_timeout_factor 2 {
+		gdb_test "thread apply all-lanes -s print spin=false" ".*"
+	    }
+
 	    gdb_continue_to_breakpoint "$srcfile:$bp2.*"
 	    gdb_test_no_output "disable $last_line_bp_num"
 

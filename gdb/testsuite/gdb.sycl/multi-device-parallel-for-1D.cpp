@@ -90,6 +90,12 @@ main (int argc, char *argv[])
 
 	    cgh.parallel_for (data_range, [=] (id<1> wiID)
 	      {
+		/* Run a sufficiently long work to give each device a
+		   chance to have been submitted a kernel before we
+		   reach the first bp hit.  */
+		long long count = 1e8;
+		while (count > 0) count--; /* busy-wait */
+
 		int in_elem = accessorIn[wiID]; /* kernel-first-line */
 		accessorOut[wiID]
 		  = get_transformed (in_elem, dev_idx); /* kernel-last-line */

@@ -92,6 +92,21 @@ foreach device $sycl_device_list {
 		set bp2_hit($i) 0
 	    }
 
+	    # We should hit bp1 first.  The order thereafter is not fixed.
+	    gdb_continue_to_breakpoint "kernel bp1 first hit" "$srcfile:$bp1.*"
+	    set device [get_device]
+	    incr bp1_hit($device)
+	    # Reset the spin-flag for all lanes to bring the threads to a
+	    # fair state to compete with each other.  This makes the test
+	    # scenario more interesting.
+	    #
+	    # This can take a long time, because there are potentially
+	    # several thousands of lanes.  Use a timeout factor.
+	    with_timeout_factor 2 {
+		gdb_test "thread apply all-lanes -s print spin=false" ".*"
+	    }
+
+
 	    set trip 1
 	    while {$trip > 0} {
 		with_test_prefix "trip $trip" {
@@ -116,6 +131,9 @@ foreach device $sycl_device_list {
 		    }
 		}
 	    }
+
+	    # For logging purposes.
+	    gdb_test "info break"
 
 	    for {set i 0} {$i < $num_devices} {incr i} {
 		gdb_assert {$bp1_hit($i) == $bp2_hit($i)} "device $i hit both"

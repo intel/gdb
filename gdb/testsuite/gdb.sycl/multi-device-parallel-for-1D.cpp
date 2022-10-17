@@ -90,6 +90,19 @@ main (int argc, char *argv[])
 
 	    cgh.parallel_for (data_range, [=] (id<1> wiID)
 	      {
+		/* Run a sufficiently long work to give each device a
+		   chance to have been submitted a kernel before we
+		   reach the first bp hit.
+
+		   The counter ensures this does not run infinitely.  The
+		   boolean flag is set from inside the debugger to stop
+		   spinning.  We do not use the counter for that purpose,
+		   because there can be a write-after-write race between the
+		   debugger and the program itself.  */
+		long long count = 1e8;
+		bool spin = true;
+		while (count > 0 && spin) count--; /* busy-wait */
+
 		int in_elem = accessorIn[wiID]; /* kernel-first-line */
 		accessorOut[wiID]
 		  = get_transformed (in_elem, dev_idx); /* kernel-last-line */

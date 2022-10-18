@@ -553,7 +553,7 @@ intelgt_ze_target::is_at_breakpoint (thread_info *tp)
   CORE_ADDR pc = read_pc (regcache);
 
   gdb_byte inst[intelgt::MAX_INST_LENGTH];
-  int status = read_memory (pc, inst, intelgt::MAX_INST_LENGTH);
+  int status = read_memory (tp, pc, inst, intelgt::MAX_INST_LENGTH);
   if (status != 0)
     return false;
 
@@ -567,7 +567,7 @@ intelgt_ze_target::is_at_eot (thread_info *tp)
   CORE_ADDR pc = read_pc (regcache);
 
   gdb_byte inst[intelgt::MAX_INST_LENGTH];
-  int status = read_memory (pc, inst, intelgt::MAX_INST_LENGTH);
+  int status = read_memory (tp, pc, inst, intelgt::MAX_INST_LENGTH);
   if (status != 0)
     {
       ze_device_thread_t zeid = ze_thread_id (tp);

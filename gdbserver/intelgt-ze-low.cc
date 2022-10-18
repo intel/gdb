@@ -498,9 +498,18 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
     intelgt_read_cr0 (tp, 2)
   };
 
-  dprintf ("thread %d.%ld (%s) stopped, cr0.0=%" PRIx32 " .1=%" PRIx32
-	   " .2=%" PRIx32 ".", tp->id.pid (), tp->id.lwp (),
-	   ze_thread_id_str (thread).c_str (), cr0[0], cr0[1], cr0[2]);
+  dprintf ("thread %s (%s) stopped, cr0.0=%" PRIx32 ", .1=%" PRIx32
+	   " [ %s%s%s%s], .2=%" PRIx32 ".", tp->id.to_string ().c_str (),
+	   ze_thread_id_str (thread).c_str (), cr0[0], cr0[1],
+	   (((cr0[1] & (1 << intelgt_cr0_1_breakpoint_status)) != 0)
+	    ? "bp " : ""),
+	   (((cr0[1] & (1 << intelgt_cr0_1_illegal_opcode_status)) != 0)
+	    ? "ill " : ""),
+	   (((cr0[1] & (1 << intelgt_cr0_1_force_exception_status)) != 0)
+	    ? "fe " : ""),
+	   (((cr0[1] & (1 << intelgt_cr0_1_external_halt_status)) != 0)
+	    ? "eh " : ""),
+	   cr0[2]);
 
   if ((cr0[1] & (1 << intelgt_cr0_1_breakpoint_status)) != 0)
     {

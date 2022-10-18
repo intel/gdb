@@ -676,6 +676,12 @@ ze_has_priority_waitstatus (const thread_info *tp)
     case TARGET_WAITKIND_UNAVAILABLE:
       return false;
 
+    case TARGET_WAITKIND_STOPPED:
+      /* If this thread was stopped internally by GDB,
+	 it is not an interesting case.  */
+      return !((zetp->stop_reason == TARGET_STOPPED_BY_NO_REASON)
+	       && (zetp->waitstatus.sig () == GDB_SIGNAL_INT));
+
     default:
       return true;
     }
@@ -1965,8 +1971,12 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 	  return ptid_t (pid_of (process));
 	}
 
-      /* We defer reporting THREAD_UNAVAILABLE events until there are no
-	 other events to report on the target.
+      /* We now look for a thread preferably with a priority stop
+	 event.  If we cannot find such an event, we look for an
+	 interrupt-related stop event, e.g.  a stop because of an
+	 external Ctrl-C or an internal pause_all request.  We defer
+	 reporting THREAD_UNAVAILABLE events until there are no other
+	 events to report on the target.
 
 	 In all-stop mode, we will ignore unavailable threads when
 	 resuming the target.  So, unless we explicitly try to interact
@@ -1975,33 +1985,29 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 
 	 In non-stop mode, we give more time for unavailable threads to
 	 become available and report an event.  */
-      thread_info *thread
-	= find_thread_in_random ([ptid, this] (thread_info *tp)
-	  {
-	    if (!tp->id.matches (ptid))
-	      return false;
+      thread_info *thread = nullptr;
+      for (thread_info *tp : all_threads)
+	{
+	  if (!tp->id.matches (ptid))
+	    continue;
 
-	    /* Only consider threads that were resumed.  */
-	    ze_thread_resume_state_t state = ze_resume_state (tp);
-	    if (state == ze_thread_resume_none)
-	      return false;
+	  /* Only consider threads that were resumed.  */
+	  ze_thread_resume_state_t state = ze_resume_state (tp);
+	  if (state == ze_thread_resume_none)
+	    continue;
 
-	    return ze_has_priority_waitstatus (tp);
-	  });
+	  if (ze_has_priority_waitstatus (tp))
+	    {
+	      thread = tp;
+	      break;
+	    }
 
-      if (thread == nullptr)
-	thread = find_thread_in_random ([ptid, this] (thread_info *tp)
-	  {
-	    if (!tp->id.matches (ptid))
-	      return false;
-
-	    /* Only consider threads that were resumed.  */
-	    ze_thread_resume_state_t state = ze_resume_state (tp);
-	    if (state == ze_thread_resume_none)
-	      return false;
-
-	    return ze_has_waitstatus (tp);
-	  });
+	  if (ze_thread (tp)->waitstatus.kind ()
+	      == TARGET_WAITKIND_STOPPED)
+	    thread = tp;
+	  else if ((thread == nullptr) && ze_has_waitstatus (tp))
+	    thread = tp;
+	}
 
       if (thread != nullptr)
 	{

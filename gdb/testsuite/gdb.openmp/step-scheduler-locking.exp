@@ -49,7 +49,9 @@ foreach device_info "${device_list}" {
 	gdb_test_no_output "set scheduler-locking step" "enable scheduler locking"
 
 	gdb_test "next" ".*kernel-single-pragma-entry.*" "next 1"
+	setup_xfail "JIRA IGDB/3392" "*-*-*"
 	gdb_test "next" ".*kernel-single-pragma-line-1.*" "first next inside single pragma"
+	setup_xfail "JIRA IGDB/3392" "*-*-*"
 	gdb_test "next" ".*kernel-last.*" "second next inside single pragma"
     }
 }

@@ -1804,6 +1804,30 @@ ze_target::mark_eventing_threads (ptid_t resume_ptid, resume_kind rkind)
       if (!ze_has_priority_waitstatus (tp))
 	return;
 
+      ze_thread_info *zetp = ze_thread (tp);
+      gdb_assert (zetp != nullptr);
+
+      /* TP may have stopped at a breakpoint that is already deleted
+	 by GDB.  Consider TP as an eventing thread only if the BP is
+	 still there.  Because we are inside the 'resume' request, if
+	 the BP is valid, GDB must have already re-inserted it.
+
+	 FIXME: Keep track of the stop_pc and compare it with the
+	 current (i.e. to-be-resumed) pc.  */
+      if ((zetp->exec_state == ze_thread_state_stopped)
+	  && (zetp->stop_reason == TARGET_STOPPED_BY_SW_BREAKPOINT)
+	  && !is_at_breakpoint (tp))
+	{
+	  /* The BP is gone.  Clear the waitstatus, too.  */
+	  target_waitstatus waitstatus = ze_move_waitstatus (tp);
+	  if (waitstatus.kind () != TARGET_WAITKIND_STOPPED)
+	    warning (_("thread %d.%ld has waitstatus %s, "
+		       "expected 'STOPPED'."),
+		     tp->id.pid (), tp->id.lwp (),
+		     waitstatus.to_string ().c_str ());
+	  return;
+	}
+
       /* Recover the resume state so that the thread can be picked up
 	 by 'wait'.  */
       ze_set_resume_state (tp, rkind);

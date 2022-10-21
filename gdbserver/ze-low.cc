@@ -2072,7 +2072,8 @@ ze_memory_access_context (thread_info *thread, unsigned int addr_space)
 }
 
 int
-ze_target::read_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len,
+ze_target::read_memory (thread_info *tp, CORE_ADDR memaddr,
+			unsigned char *myaddr, int len,
 			unsigned int addr_space)
 {
   zet_debug_memory_space_desc_t desc
@@ -2081,7 +2082,7 @@ ze_target::read_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len,
   desc.address = (uint64_t) memaddr;
 
   std::pair<ze_device_thread_t, ze_device_info *> context
-    = ze_memory_access_context (current_thread, addr_space);
+    = ze_memory_access_context (tp, addr_space);
   ze_device_thread_t thread = context.first;
   ze_device_info *device = context.second;
   gdb_assert (device != nullptr);
@@ -2103,8 +2104,16 @@ ze_target::read_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len,
 }
 
 int
-ze_target::write_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
-			 int len, unsigned int addr_space)
+ze_target::read_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len,
+			unsigned int addr_space)
+{
+  return read_memory (current_thread, memaddr, myaddr, len, addr_space);
+}
+
+int
+ze_target::write_memory (thread_info *tp, CORE_ADDR memaddr,
+			 const unsigned char *myaddr, int len,
+			 unsigned int addr_space)
 {
   zet_debug_memory_space_desc_t desc
     = { ZET_STRUCTURE_TYPE_DEBUG_MEMORY_SPACE_DESC };
@@ -2112,7 +2121,7 @@ ze_target::write_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
   desc.address = (uint64_t) memaddr;
 
   std::pair<ze_device_thread_t, ze_device_info *> context
-    = ze_memory_access_context (current_thread, addr_space);
+    = ze_memory_access_context (tp, addr_space);
   ze_device_thread_t thread = context.first;
   ze_device_info *device = context.second;
   gdb_assert (device != nullptr);
@@ -2135,6 +2144,13 @@ ze_target::write_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
 
       return EIO;
     }
+}
+
+int
+ze_target::write_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
+			 int len, unsigned int addr_space)
+{
+  return write_memory (current_thread, memaddr, myaddr, len, addr_space);
 }
 
 bool

@@ -405,6 +405,9 @@ protected:
      const ze_pci_ext_properties_t &,
      ze_regset_info_t &, expedite_t &) = 0;
 
+  /* Return whether TP is at a breakpoint.  */
+  virtual bool is_at_breakpoint (thread_info *tp) = 0;
+
   /* TP stopped.  Find out why and return the stop reason.  Optionally
      fill in SIGNAL.  */
   virtual target_stop_reason get_stop_reason (thread_info *tp,

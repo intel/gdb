@@ -414,6 +414,16 @@ protected:
    This sets the ze execution state, typically to running.  */
   virtual void prepare_thread_resume (thread_info *tp,
 				      enum resume_kind rkind) = 0;
+
+  /* Read the memory in the context of thread TP.  */
+  int read_memory (thread_info *tp, CORE_ADDR memaddr,
+		   unsigned char *myaddr, int len,
+		   unsigned int addr_space = 0);
+
+  /* Write the memory in the context of thread TP.  */
+  int write_memory (thread_info *tp, CORE_ADDR memaddr,
+		    const unsigned char *myaddr, int len,
+		    unsigned int addr_space = 0);
 };
 
 #endif /* GDBSERVER_LEVEL_ZERO_LOW_H */

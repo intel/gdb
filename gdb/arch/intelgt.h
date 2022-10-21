@@ -56,6 +56,7 @@ constexpr const char* feature_acc = "org.gnu.gdb.intelgt.acc";
 constexpr const char* feature_mme = "org.gnu.gdb.intelgt.mme";
 constexpr const char *feature_sp = "org.gnu.gdb.intelgt.sp";
 constexpr const char* feature_sba = "org.gnu.gdb.intelgt.sba";
+constexpr const char *feature_dbg = "org.gnu.gdb.intelgt.dbg";
 
 /* Register sets/groups needed for DWARF mapping.  Used for
    declaring static arrays for various mapping tables.  */

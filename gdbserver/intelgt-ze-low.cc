@@ -832,6 +832,14 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 			  intelgt_uint_reg_type (regprop.bitSize));
       break;
 
+    case ZET_DEBUG_REGSET_TYPE_FC_INTEL_GPU:
+      feature = tdesc_create_feature (tdesc, intelgt::feature_fc);
+
+      intelgt_add_regset (feature, regnum, "fc", regprop.count, "FC",
+			  regprop.bitSize,
+			  intelgt_uint_reg_type (regprop.bitSize));
+      break;
+
     case ZET_DEBUG_REGSET_TYPE_INVALID_INTEL_GPU:
     case ZET_DEBUG_REGSET_TYPE_FORCE_UINT32:
       break;

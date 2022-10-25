@@ -463,6 +463,8 @@ ze_detach (ze_device_info *device)
   if (session == nullptr)
     error (_("Already detached from %s."), device->properties.name);
 
+  dprintf ("device %lu=%s", device->ordinal, device->properties.name);
+
   ze_result_t status  = zetDebugDetach (session);
   switch (status)
     {
@@ -1591,7 +1593,27 @@ ze_target::detach (process_info *proc)
 
   ze_device_info *device = priv->device;
   if (device != nullptr)
-    ze_detach (device);
+    {
+      /* Resume all the threads on the device.  GDB must have already
+	 removed all the breakpoints.  */
+      try
+	{
+	  /* Clear all the pending events first.  */
+	  for_each_thread (pid_of (proc), [] (thread_info *tp)
+	    {
+	      (void) ze_move_waitstatus (tp);
+	    });
+
+	  resume (*device, resume_continue);
+	}
+      catch (const gdb_exception_error &except)
+	{
+	  /* Swallow the error.  We are detaching anyway.  */
+	  dprintf ("%s", except.what ());
+	}
+
+      ze_detach (device);
+    }
 
   mourn (proc);
   return 0;

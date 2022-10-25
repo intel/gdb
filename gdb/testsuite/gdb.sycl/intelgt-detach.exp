@@ -1,0 +1,67 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test that the Intel GT target resumes GPU threads before detaching.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-1D.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+# Enable the internal debug logs of the GT target.  Without those
+# logs, we cannot see whether the GPU threads were resumed.
+save_vars { env(INTELGT_AUTO_ATTACH_GDBSERVER_ARGS) } {
+    set env(INTELGT_AUTO_ATTACH_GDBSERVER_ARGS) "--debug"
+
+    foreach device $sycl_device_list {
+	clean_restart "${binfile}"
+	with_test_prefix [sycl_get_device_prefix $device] {
+	    if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+		unsupported "test is aimed at Intel GPUs only"
+		continue
+	    }
+
+	    if {![is_level_zero_debug_api]} {
+		unsupported "test is aimed at the L0-based stack only"
+		continue
+	    }
+
+	    if {![runto_main [sycl_get_device_args $device]]} {
+		continue
+	    }
+
+	    set kernel_line [gdb_get_line_number "kernel-first-line"]
+	    gdb_breakpoint "$kernel_line"
+
+	    gdb_continue_to_breakpoint "kernel bp" \
+		".*$srcfile:$kernel_line.*"
+
+	    # Detaching from the host app causes a detach from the device.
+	    # The GT target should resume threads before detaching.
+	    gdb_test "detach inferior 1" \
+		"prepare_thread_resume.*ze_resume.*ze_detach.*"
+	}
+    }
+}

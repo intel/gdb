@@ -1681,4 +1681,46 @@ monitor_output (const char *msg)
   free (buf);
 }
 
+/* See remote-utils.h.  */
+
+void
+critical_error (int code, const char *format, ...)
+{
+  va_list arg;
+  va_start (arg, format);
+  char buf[400];
+  char *p = buf;
+  p += sprintf (p, "E%02X", code);
+  vsnprintf (p, 400 - (p - buf), format, arg);
+
+  /* Write packet only when the connection to GDB is ready.  */
+  if (gdb_connected () )
+    putpkt (buf);
+
+  verror (format, arg);
+  va_end (arg);
+}
+
+/* See remote-utils.h.  */
+
+void
+non_critical_error (const char *format, ...)
+{
+  va_list arg;
+  va_start (arg, format);
+  char buf[400];
+  buf[0] = 'E';
+  buf[1] = '0';
+  buf[2] = '1';
+  char *p = buf + 3;
+  vsnprintf (p, 400 - (p - buf), format, arg);
+
+  /* Write packet only when the connection to GDB is ready.  */
+  if (gdb_connected ())
+    putpkt (buf);
+
+  fprintf (stderr, "%s", &buf[3]);
+  va_end (arg);
+}
+
 #endif

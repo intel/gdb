@@ -392,9 +392,10 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
             self.host_inf_for_auto_remove = host_inf
             self.remove_gt_inf_if_stored_for_removal()
 
-    @DebugLogger.log_call
-    def handle_error(self, inf):
+    def handle_error(self, inf, details=None):
         """Remove the inferior and clean-up dict in case of error."""
+        if details is not None:
+            print(details)
         print(f"""\
 intelgt: {self.gdbserver_gt_binary} failed to start.  The environment variable
 INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
@@ -611,8 +612,10 @@ intelgt: the igfxdcd module (i.e. the debug driver) is not loaded.""")
                 if not self.is_nonstop:
                     gdb.execute("set schedule-multiple on")
             # Fix ctrl-c while attaching to gt inferior.
-            except (KeyboardInterrupt, gdb.error):
+            except KeyboardInterrupt:
                 self.handle_error(host_inf)
+            except gdb.error as ex:
+                self.handle_error(host_inf, details=str(ex))
 
             gt_inf = gdb.inferiors()[-1]
             # For the --attach scenario we use gt_inf; for the

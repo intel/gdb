@@ -81,4 +81,14 @@ int relocate_instruction (CORE_ADDR *to, CORE_ADDR oldloc);
 
 void monitor_output (const char *msg);
 
+/* Given an error message described by FORMAT and printf-style argument list.
+   Generate, send E01 text packet and print the message without 0x01 code to
+   stdout.  */
+void non_critical_error (const char *format, ...);
+
+/* Given an error message described by CODE, FORMAT and printf-style
+   argument list.  Generate and send an E NN text packet using CODE for NN
+   and exit.  */
+void critical_error (int code, const char *format, ...);
+
 #endif /* GDBSERVER_REMOTE_UTILS_H */

@@ -1557,15 +1557,15 @@ int
 ze_target::attach (int pid)
 {
   if (!devices.empty ())
-    error (_("Already attached."));
+    critical_error (0x02, _("Already attached."));
 
   uint32_t hostpid = (uint32_t) pid;
   if ((int) hostpid != pid)
-    error (_("Host process id is not supported."));
+    critical_error (0x02, _("Host process id is not supported."));
 
   int ndevices = attach_to_devices (hostpid);
   if (ndevices == 0)
-    error (_("No supported devices found."));
+    critical_error (0x02, _("No supported devices found."));
 
   /* Let's check if we were able to attach to at least one device.  */
   int nattached = 0;
@@ -1585,7 +1585,7 @@ ze_target::attach (int pid)
     }
 
   if (nattached == 0)
-    error (_("Failed to attach to any device."));
+    critical_error (0x02, _("Failed to attach to any device."));
 
   /* Return the ID of the last device we attached to.  */
   int device_pid = ze_device_pid (*(devices.back ()));

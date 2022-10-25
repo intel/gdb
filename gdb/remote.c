@@ -490,6 +490,35 @@ struct remote_arch_state
   long remote_packet_size;
 };
 
+/* An error received from remote.  */
+struct error_message
+{
+  error_message ();
+
+  /* Sets error code to 0 (Success).  */
+  void reset ();
+
+  /* Return true if remote specified error text.  */
+  bool has_message () const;
+
+  /* Get human-readable message, or "Unknown error".  */
+  const char* message () const;
+
+  int code;
+  gdb::char_vector buf;
+};
+
+/* Callback function to be called when "Enn" or "Ennmsg" has been received
+   from a remote.  Return true if error can be resetted.  */
+
+typedef bool (*rmt_err_msg_handler) (const error_message &message);
+
+/* Default handler for an error MESSAGE recevied from a remote.  By default
+   this handler will just print error code and message.  Returns true
+   if received error is on "E01" error.  */
+
+static bool default_err_msg_handler (const error_message& message);
+
 /* Description of the remote protocol state for the currently
    connected target.  This is per-target state, and independent of the
    selected architecture.  */
@@ -556,6 +585,9 @@ public: /* data */
      REMOTE_PACKET_SIZE should be used to limit the length of outgoing
      packets.  */
   gdb::char_vector buf;
+
+  /* Last error received from the remote.  */
+  error_message last_error;
 
   /* True if we're going through initial connection setup (finding out
      about the remote side's threads, relocating symbols, etc.).  */
@@ -1418,6 +1450,12 @@ public: /* Remote specific methods.  */
 
   bool vcont_r_supported ();
 
+  /* Update last error and call installed handler.  */
+  void set_last_error (const error_message& message);
+
+  /* Handler of errors from remote.  */
+  rmt_err_msg_handler error_message_handler = &default_err_msg_handler;
+
   remote_features m_features;
 
 private:
@@ -1682,6 +1720,30 @@ private:
   /* Extra info used if the thread is in the RESUMED_PENDING_VCONT state.  */
   struct resumed_pending_vcont_info m_resumed_pending_vcont_info;
 };
+
+error_message::error_message ()
+  : code (0), buf (400)
+{
+}
+
+void
+error_message::reset ()
+{
+  code = 0;
+  buf[0] = '\0';
+}
+
+bool
+error_message::has_message () const
+{
+  return buf[0] != '\0';
+}
+
+const char*
+error_message::message () const
+{
+  return has_message () ? buf.data () :  "Unknown error";
+}
 
 remote_state::remote_state ()
   : buf (400)
@@ -2547,7 +2609,7 @@ packet_check_result (const char *buf, bool accept_msg)
 	 operation succeeded.  */
       if (buf[0] == 'E'
 	  && isxdigit (buf[1]) && isxdigit (buf[2])
-	  && buf[3] == '\0')
+	  && (buf[3] == '\0' || isalnum (buf[3])))
 	/* "Enn"  - definitely an error.  */
 	return packet_result::make_numeric_error (buf + 1);
 
@@ -2636,6 +2698,37 @@ packet_result
 remote_features::packet_ok (const gdb::char_vector &buf, const int which_packet)
 {
   return packet_ok (buf.data (), which_packet);
+}
+
+static error_message
+parse_error_message (const char *buf)
+{
+  error_message msg;
+  packet_result result = packet_check_result (buf, true);
+  if (result.status () == PACKET_ERROR)
+  {
+     ++buf; /* Skip 'E'.  */
+     if (*buf == '.')
+       {
+	 ++buf;
+	 msg.code = 1;
+       }
+     else
+       {
+	 msg.code = fromhex ((int) *buf) * 16;
+	 ++buf;
+	 msg.code += fromhex ((int) *buf);
+	 buf += 1;
+       }
+     msg.buf.assign (buf, buf + strlen (buf) + 1);
+  }
+  return msg;
+}
+
+static error_message
+parse_error_message (const gdb::char_vector &buf)
+{
+  return parse_error_message (buf.data ());
 }
 
 /* Returns whether a given packet or feature is supported.  This takes
@@ -2827,7 +2920,6 @@ remote_target::remote_query_attached (int pid)
 	return 1;
       break;
     case PACKET_ERROR:
-      warning (_("Remote failure reply: %s"), result.err_msg ());
       break;
     case PACKET_UNKNOWN:
       break;
@@ -4502,8 +4594,6 @@ remote_target::static_tracepoint_marker_at (CORE_ADDR addr,
   getpkt (&rs->buf);
   p = rs->buf.data ();
 
-  if (*p == 'E')
-    error (_("Remote failure reply: %s"), p);
 
   if (*p++ == 'm')
     {
@@ -6053,7 +6143,6 @@ remote_target::remote_query_supported ()
       packet_result result = m_features.packet_ok (rs->buf, PACKET_qSupported);
       if (result.status () == PACKET_ERROR)
 	{
-	  warning (_("Remote failure reply: %s"), result.err_msg ());
 	  rs->buf[0] = 0;
 	}
     }
@@ -6246,6 +6335,14 @@ remote_unpush_and_throw (remote_target *target)
 {
   remote_unpush_target (target);
   throw_error (TARGET_CLOSE_ERROR, _("Disconnected from target."));
+}
+
+static bool
+default_err_msg_handler (const error_message& message)
+{
+  if (message.code > 1) /* Consider E01 as error, but not critical one.  */
+    error (_("Remote failure 0x%.2X: %s"), message.code, message.message ());
+  return message.code < 2;
 }
 
 void
@@ -8829,7 +8926,6 @@ remote_target::wait_as (ptid_t ptid, target_waitstatus *status,
 	     not?  Not is more likely, so report a stop.  */
 	  rs->waiting_for_stop_reply = 0;
 
-	  warning (_("Remote failure reply: %s"), buf);
 	  status->set_stopped (GDB_SIGNAL_0);
 	  break;
 	case 'F':		/* File-I/O request.  */
@@ -9740,7 +9836,8 @@ remote_target::remote_write_bytes_aux (const char *header, CORE_ADDR memaddr,
   putpkt_binary (rs->buf.data (), (int) (p - rs->buf.data ()));
   getpkt (&rs->buf);
 
-  if (rs->buf[0] == 'E')
+  packet_result result = packet_check_result (rs->buf, false);
+  if (result.status () == PACKET_ERROR)
     return TARGET_XFER_E_IO;
 
   /* Return UNITS_WRITTEN, not TODO_UNITS, in case escape chars caused us to
@@ -10374,6 +10471,7 @@ void
 remote_target::skip_frame ()
 {
   int c;
+  gdb::char_vector buf;
 
   while (1)
     {
@@ -10395,6 +10493,13 @@ remote_target::skip_frame ()
 	  c = readchar (remote_timeout);
 	  if (c < 0)
 	    return;
+	  break;
+	case 'E':		/* Looks like this is an error packet.  */
+	  buf.resize (3); /* Resize to fit at least E NN packet.  */
+	  if (read_frame (&buf))
+	    buf.insert (buf.begin (), 'E');
+	  if (packet_check_result (buf, false).status () == PACKET_ERROR)
+	    set_last_error (parse_error_message (buf));
 	  break;
 	default:
 	  /* A regular character.  */
@@ -10655,6 +10760,9 @@ remote_target::getpkt (gdb::char_vector *buf, bool forever, bool *is_notif)
 					    str.c_str ());
 	    }
 
+	  error_message error = parse_error_message (*buf);
+	  if (error.code)
+	    set_last_error (error);
 	  /* Skip the ack char if we're in no-ack mode.  */
 	  if (!rs->noack_mode)
 	    remote_serial_write ("+", 1);
@@ -15776,6 +15884,16 @@ remote_target::vcont_r_supported ()
 }
 
 void
+remote_target::set_last_error (const error_message& message)
+{
+  struct remote_state *rs = get_remote_state ();
+  rs->last_error = message;
+  if (error_message_handler != nullptr
+      && (*error_message_handler) (rs->last_error))
+    rs->last_error.reset ();
+}
+
+void
 remote_target::ack_library (const char *name)
 {
   struct remote_state *rs = get_remote_state ();
@@ -16221,7 +16339,7 @@ test_packet_check_result ()
 
   SELF_CHECK (packet_check_result ("E1", true).status () == PACKET_OK);
 
-  SELF_CHECK (packet_check_result ("E000", true).status () == PACKET_OK);
+  SELF_CHECK (packet_check_result ("E000", true).status () == PACKET_ERROR);
 
   result = packet_check_result ("E.", true);
   SELF_CHECK (result.status () == PACKET_ERROR);

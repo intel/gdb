@@ -4946,6 +4946,36 @@ proc skip_libstdcxx_probe_tests {} {
     return [skip_libstdcxx_probe_tests_prompt "$gdb_prompt $"]
 }
 
+# Returns 1 if TBB tests should be skipped, 0 otherwise.
+
+gdb_caching_proc skip_tbb_tests {} {
+    global objdir srcdir inferior_exited_re gdb_prompt
+
+    # Set up, compile, and execute a tbb program.
+    set exe "$objdir/tbb-parallel"
+    set src { int main() { return 0; } }
+
+    if {![gdb_simple_compile "tbb_program_compilation_failed" \
+	    ${src} executable {debug c++ libs=-ltbb}]} {
+	return 0
+    }
+
+    clean_restart $obj
+
+    set result 1
+    gdb_run_cmd
+    gdb_expect {
+	-re "$inferior_exited_re normally].*$gdb_prompt $" {
+	    set result 0
+	}
+	-re "$inferior_exited_re with code.*$gdb_prompt $" {
+	    verbose "TBB program failed to run"
+	    set result 1
+	}
+    }
+    return $result
+}
+
 # Helper for gdb_is_target_* procs.  TARGET_NAME is the name of the target
 # we're looking for (used to build the test name).  TARGET_STACK_REGEXP
 # is a regexp that will match the output of "maint print target-stack" if

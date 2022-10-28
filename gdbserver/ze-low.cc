@@ -1644,10 +1644,8 @@ ze_target::resume (const ze_device_info &device, enum resume_kind rkind)
 		  }
 
 	      case ze_thread_state_unavailable:
-		/* Clear any previous unavailable status.
-
-		   The thread is still running for all we know.  */
-		(void) ze_move_waitstatus (tp);
+		/* The thread is still running for all we know.  */
+		gdb_assert (!ze_has_waitstatus (tp));
 		return;
 
 	      case ze_thread_state_running:
@@ -2009,11 +2007,16 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 	{
 	  /* Stop all other threads.
 
-	     Do this before moving THREAD's waitstatus in case it throws.  */
+	     Save the waitstatus before, because pause_all clears all
+	     low-priority events.  */
+	  *status = ze_thread (thread)->waitstatus;
+
 	  if (!non_stop)
 	    pause_all (false);
 
-	  *status = ze_move_waitstatus (thread);
+	  /* Now also clear the thread's event, regardless of its
+	     priority.  */
+	  (void) ze_move_waitstatus (thread);
 
 	  /* FIXME: switch_to_thread
 
@@ -2288,6 +2291,15 @@ ze_target::pause_all (bool freeze)
 			state);
       });
   } while (thread != nullptr);
+
+  /* Fetching events may have set some pending events.  Clear all
+     low-priority events.  We do not intend 'wait' to pick them
+     later.  */
+  for_each_thread ([] (thread_info *tp)
+    {
+      if (!ze_has_priority_waitstatus (tp))
+	(void) ze_move_waitstatus (tp);
+    });
 }
 
 void
@@ -2321,6 +2333,15 @@ ze_target::unpause_all (bool unfreeze)
       gdb_assert (device != nullptr);
       fetch_events (*device);
     }
+
+  /* Fetching events may have set some pending events.  Clear all
+     low-priority events.  We do not intend 'wait' to pick them
+     later.  */
+  for_each_thread ([] (thread_info *tp)
+    {
+      if (!ze_has_priority_waitstatus (tp))
+	(void) ze_move_waitstatus (tp);
+    });
 
   if (non_stop)
     {

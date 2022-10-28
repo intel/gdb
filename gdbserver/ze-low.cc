@@ -1640,10 +1640,8 @@ ze_target::resume (ze_device_info &device, enum resume_kind rkind)
 		return;
 
 	      case ze_thread_state_unavailable:
-		/* Clear any previous unavailable status.
-
-		   The thread is still running for all we know.  */
-		(void) ze_move_waitstatus (tp);
+		/* The thread is still running for all we know.  */
+		gdb_assert (!ze_has_waitstatus (tp));
 		return;
 
 	      case ze_thread_state_running:
@@ -1989,11 +1987,16 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 	{
 	  /* Stop all other threads.
 
-	     Do this before moving THREAD's waitstatus in case it throws.  */
+	     Save the waitstatus before, because pause_all clears all
+	     low-priority events.  */
+	  *status = ze_thread (thread)->waitstatus;
+
 	  if (!non_stop)
 	    pause_all (false);
 
-	  *status = ze_move_waitstatus (thread);
+	  /* Now also clear the thread's event, regardless of its
+	     priority.  */
+	  (void) ze_move_waitstatus (thread);
 
 	  /* FIXME: switch_to_thread
 
@@ -2267,6 +2270,15 @@ ze_target::pause_all (bool freeze)
 	internal_error (_("bad execution state: %d."), state);
       });
   } while (thread != nullptr);
+
+  /* Fetching events may have set some pending events.  Clear all
+     low-priority events.  We do not intend 'wait' to pick them
+     later.  */
+  for_each_thread ([] (thread_info *tp)
+    {
+      if (!ze_has_priority_waitstatus (tp))
+	(void) ze_move_waitstatus (tp);
+    });
 }
 
 void
@@ -2300,6 +2312,21 @@ ze_target::unpause_all (bool unfreeze)
       gdb_assert (device != nullptr);
       fetch_events (*device);
     }
+
+  /* We do not expect to see any low priority pending event.  Do a
+     sanity check.  */
+  for_each_thread ([] (thread_info *tp)
+    {
+      if (ze_has_waitstatus (tp) && !ze_has_priority_waitstatus (tp))
+	{
+	  ze_device_thread_t ze_id = ze_thread_id (tp);
+	  target_waitkind wkind = ze_thread (tp)->waitstatus.kind ();
+	  warning (_("thread %s (%s) has unexpected waitstatus %s."),
+		   tp->id.to_string ().c_str (),
+		   ze_thread_id_str (ze_id).c_str (),
+		   target_waitkind_str (wkind));
+	}
+    });
 
   if (non_stop)
     {

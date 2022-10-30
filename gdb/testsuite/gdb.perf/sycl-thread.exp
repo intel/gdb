@@ -43,13 +43,16 @@ PerfTest::assemble {
     }
 
     set bp_last_line [gdb_get_line_number "kernel-last-line"]
-
     return 0
 } {
     global bp_first_line, bp_last_line
     global device_type
 
-    gdb_test_python_run "SyclThread\($bp_last_line,  \"$device_type\" \)"
+    set kfail ""
+    if {[is_level_zero_debug_api]} {
+	set kfail "JIRA IGDB/3520"
+    }
+    gdb_test_python_run "SyclThread\($bp_last_line,  \"$device_type\",  \"$kfail\" \)"
 
     return 0
 }

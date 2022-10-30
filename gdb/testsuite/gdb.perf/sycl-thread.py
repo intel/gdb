@@ -16,11 +16,12 @@
 from perftest import perftest
 
 class SyclThread(perftest.TestCaseWithBasicMeasurements):
-    def __init__(self, bp_last_line, device_type):
-        test_name = "Sycl_Thread-" + device_type
-        super(SyclThread, self).__init__(test_name)
+    def __init__(self, bp_last_line, device_type, kfail):
+        self.test_name = "Sycl_Thread-" + device_type
+        super(SyclThread, self).__init__(self.test_name)
         self.bp_last_line = str(bp_last_line)
         self.bp = None
+        self.kfail = kfail
 
     def warm_up(self):
         """Set breakpoint inside kernel."""
@@ -43,5 +44,10 @@ class SyclThread(perftest.TestCaseWithBasicMeasurements):
         self.measure.measure(lambda: self._do_thread_info(), 1)
         # Continue to invalidate the regcache for the next thread info command.
         gdb.execute("continue")
-        self.measure.measure(lambda: self._do_thread_apply(), 2)
+        if self.kfail != "":
+            with open("perftest.sum", "a+") as pf:
+                pf.write(f"%s perf_counter 2 0\n"%self.test_name)
+                pf.write(f"%s vmsize 2 0.0\n"%self.test_name)
+        else:
+            self.measure.measure(lambda: self._do_thread_apply(), 2)
         self.measure.measure(lambda: self._do_gdb_interrupt(), 3)

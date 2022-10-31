@@ -5003,12 +5003,7 @@ mark_non_executing_threads (process_stratum_target *target,
   else
     mark_ptid = event_ptid;
 
-  /* Unavailable threads are still executing.
-
-     They were idle when we tried to stop them but they may start
-     executing work at any time.  */
-  if (ws.kind () != TARGET_WAITKIND_UNAVAILABLE)
-    set_executing (target, mark_ptid, false);
+  set_executing (target, mark_ptid, false);
 
   /* Likewise the resumed flag.  */
   set_resumed (target, mark_ptid, false);

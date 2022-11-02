@@ -71,6 +71,10 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
 
     if {[require_sycl_device "gpu" "Intel*"]} {
 	# On GPU.
+	if {[is_level_zero_debug_api]} {
+	    setup_kfail "JIRA DOQG/3501" "*-*-*"
+	}
+
 	test_table_n_entries "info devices" "info devices in kernel" \
 	    "${table_header}" "${table_body}" "1"
     } else {

@@ -44,6 +44,11 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
 	return 0
     }
 
+    if {[is_level_zero_debug_api]} {
+	kfail "JIRA DOQG/3501" "test needs to be revised for L0"
+	return 0
+    }
+
     if {[start_sycl_program] < 0} {
 	return -1
     }

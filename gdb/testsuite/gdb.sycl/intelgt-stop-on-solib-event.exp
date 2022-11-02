@@ -53,6 +53,9 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
     set num_solib_event 0
 
     set test_name "shared library loaded"
+    if {[is_level_zero_debug_api]} {
+	setup_kfail "JIRA DOQG/3264" "*-*-*"
+    }
     gdb_test_multiple "continue" $test_name {
 	-re -wrap "Inferior loaded (in-memory-$hex-$hex)" {
 	    incr num_solib_event

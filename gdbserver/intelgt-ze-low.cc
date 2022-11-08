@@ -579,7 +579,9 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 	      dprintf ("applying #18020355813 workaround for thread "
 		       "%s (%s)", tp->id.to_string ().c_str (),
 		       ze_thread_id_str (zeid).c_str ());
-	      break;
+
+	      signal = GDB_SIGNAL_0;
+	      return TARGET_STOPPED_BY_NO_REASON;
 	    }
 
 	  /* Fall through.  */
@@ -730,20 +732,51 @@ intelgt_ze_target::erratum_18020355813 (thread_info *tp)
   /* The erratum only applies to a range of devices.  */
   switch (device->properties.deviceId)
     {
+    case 0x4f80:
+    case 0x4f81:
+    case 0x4f82:
+    case 0x4f83:
+    case 0x4f84:
+    case 0x4f85:
+    case 0x4f86:
+    case 0x4f87:
+    case 0x4f88:
     case 0x56a0:
     case 0x56a1:
+    case 0x56a2:
     case 0x5690:
     case 0x5691:
     case 0x5692:
+    case 0x56c0:
+    case 0x56c1:
+    case 0x56a3:
+    case 0x56a4:
     case 0x56a5:
     case 0x56a6:
     case 0x5693:
     case 0x5694:
+    case 0x5695:
+    case 0x5696:
+    case 0x5697:
     case 0x56b0:
     case 0x56b1:
+    case 0x56b2:
+    case 0x56b3:
+    case 0x56ba:
+    case 0x56bb:
+    case 0x56bc:
+    case 0x56bd:
 
+    case 0x0bd0:
     case 0x0bd5:
     case 0x0bd6:
+    case 0x0bd7:
+    case 0x0bd8:
+    case 0x0bd9:
+    case 0x0bda:
+    case 0x0bdb:
+    case 0x0b69:
+    case 0x0b6e:
       break;
 
     default:

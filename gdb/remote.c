@@ -11031,7 +11031,7 @@ remote_target::remove_breakpoint (struct gdbarch *gdbarch,
 }
 
 static enum Z_packet_type
-watchpoint_to_Z_packet (int type)
+hw_bp_to_Z_packet (int type)
 {
   switch (type)
     {
@@ -11044,6 +11044,9 @@ watchpoint_to_Z_packet (int type)
     case hw_access:
       return Z_PACKET_ACCESS_WP;
       break;
+    case hw_execute:
+      return Z_PACKET_HARDWARE_BP;
+      break;
     default:
       internal_error (_("hw_bp_to_z: bad watchpoint type %d"), type);
     }
@@ -11052,7 +11055,7 @@ watchpoint_to_Z_packet (int type)
 bool
 remote_target::supports_z_point_type (int type)
 {
-  Z_packet_type packet = watchpoint_to_Z_packet (type);
+  Z_packet_type packet = hw_bp_to_Z_packet (type);
   return (m_features.packet_support (PACKET_Z0 + packet) != PACKET_DISABLE);
 }
 
@@ -11063,7 +11066,7 @@ remote_target::insert_watchpoint (CORE_ADDR addr, int len,
   struct remote_state *rs = get_remote_state ();
   char *endbuf = rs->buf.data () + get_remote_packet_size ();
   char *p;
-  enum Z_packet_type packet = watchpoint_to_Z_packet (type);
+  enum Z_packet_type packet = hw_bp_to_Z_packet (type);
 
   if (m_features.packet_support (PACKET_Z0 + packet) == PACKET_DISABLE)
     return 1;
@@ -11112,7 +11115,7 @@ remote_target::remove_watchpoint (CORE_ADDR addr, int len,
   struct remote_state *rs = get_remote_state ();
   char *endbuf = rs->buf.data () + get_remote_packet_size ();
   char *p;
-  enum Z_packet_type packet = watchpoint_to_Z_packet (type);
+  enum Z_packet_type packet = hw_bp_to_Z_packet (type);
 
   if (m_features.packet_support (PACKET_Z0 + packet) == PACKET_DISABLE)
     return -1;
@@ -11165,6 +11168,11 @@ remote_target::can_use_hw_breakpoint (enum bptype type, int cnt, int ot)
 {
   if (type == bp_hardware_breakpoint)
     {
+      /* Check if the target supports hardware-assisted breakpoints.
+	 Return 0 if not.  */
+      if (!supports_z_point_type (bptype_to_target_hw_bp_type (type)))
+	return 0;
+
       if (remote_hw_breakpoint_limit == 0)
 	return 0;
       else if (remote_hw_breakpoint_limit < 0)
@@ -11174,6 +11182,18 @@ remote_target::can_use_hw_breakpoint (enum bptype type, int cnt, int ot)
     }
   else
     {
+      /* Check if the target supports the hardware watchpoint type.
+	 Return 0 if not.  */
+      if (!supports_z_point_type (bptype_to_target_hw_bp_type (type)))
+	{
+	  /* If hw read watchpoints are not supported while hw access are,
+	     GDB will try to insert the watchpoint as hw access.  */
+	  bool access_support = supports_z_point_type (
+	    bptype_to_target_hw_bp_type (bp_access_watchpoint));
+	  if (!(type == bp_read_watchpoint && access_support))
+	    return 0;
+	}
+
       if (remote_hw_watchpoint_limit == 0)
 	return 0;
       else if (remote_hw_watchpoint_limit < 0)

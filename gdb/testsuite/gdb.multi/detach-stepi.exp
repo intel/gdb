@@ -1,0 +1,66 @@
+# This testcase is part of GDB, the GNU debugger.
+
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test detaching from an inferior after a thread in another inferior
+# completes a stepi.  This is a regression test for a bug that was
+# causing an inadvertent resume of the just-stepped thread.
+
+standard_testfile
+
+if {[use_gdb_stub]} {
+    untested "using gdb stub"
+    return 0
+}
+
+if {[prepare_for_testing "failed to prepare" $testfile $srcfile]} {
+    return -1
+}
+
+if {![runto_main]} {
+    return -1
+}
+
+delete_breakpoints
+
+# Setup inferior 2.
+gdb_test "add-inferior" "Added inferior .*" \
+    "add empty inferior"
+gdb_test "inferior 2" "Switching to inferior .*" \
+    "switch to inferior"
+
+gdb_load $binfile
+runto "a_function"
+gdb_test "info inferiors"
+
+# The bug for which this regression test is written appears in
+# schedule-multi mode.
+gdb_test_no_output "set schedule-multiple on"
+
+# Single-step the thread in Inferior 2, then detach Inferior 1.
+gdb_test "info threads" ".*" "threads before stepi"
+gdb_test "stepi"
+gdb_test "info threads" ".*" "threads after stepi"
+
+gdb_test "set debug infrun on"
+gdb_test_multiple "detach inferior 1" "" {
+    -re "resuming previously stepped thread.*$gdb_prompt" {
+	fail $gdb_test_name
+    }
+    -re "$gdb_prompt $" {
+	pass $gdb_test_name
+    }
+}

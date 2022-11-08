@@ -8922,6 +8922,9 @@ static void
 end_stepping_range (struct execution_control_state *ecs)
 {
   ecs->event_thread->control.stop_step = 1;
+  ecs->event_thread->control.trap_expected = 0;
+  ecs->event_thread->control.step_range_start = 0;
+  ecs->event_thread->control.step_range_end = 0;
   stop_waiting (ecs);
 }
 

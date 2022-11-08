@@ -1422,9 +1422,7 @@ ze_target::fetch_events (ze_device_info &device)
 	    process_info *process = device.process;
 	    gdb_assert (process != nullptr);
 
-	    /* A thread event turns a process visible.  */
-	    ze_show_process (process);
-
+	    uint32_t nstopped = 0;
 	    for_each_thread (device, tid, [&] (thread_info *tp)
 	      {
 		/* Ignore threads we know to be stopped.
@@ -1460,7 +1458,22 @@ ze_target::fetch_events (ze_device_info &device)
 		      zetp->exec_state = ze_thread_state_stopped;
 
 		    zetp->stop_reason = reason;
+
+		    /* Resume any thread we didn't want stopped.  */
+		    if ((reason == TARGET_STOPPED_BY_NO_REASON)
+			&& (signal == GDB_SIGNAL_0))
+		      {
+			dprintf ("silently resuming thread %s (%s)",
+				 tp->id.to_string ().c_str (),
+				 ze_thread_id_str (zetp->id).c_str ());
+
+			zetp->waitstatus.set_ignore ();
+			resume (tp, resume_continue);
+			return;
+		      }
+
 		    zetp->waitstatus.set_stopped (signal);
+		    nstopped += 1;
 		  }
 		/* FIXME: exceptions
 
@@ -1487,6 +1500,10 @@ ze_target::fetch_events (ze_device_info &device)
 		  warning (_("ignoring spurious stop-all event on "
 			     "device %lu"), device.ordinal);
 	      }
+
+	    /* A thread event turns a process visible.  */
+	    if (nstopped > 0)
+	      ze_show_process (process);
 	  }
 	  continue;
 

@@ -276,6 +276,8 @@ protected:
   bool is_at_breakpoint (thread_info *tp) override;
   bool is_at_eot (thread_info *tp);
 
+  bool erratum_18020355813 (thread_info *tp);
+
 private:
   /* Add a register set for REGPROP on DEVICE to REGSETS and increment REGNUM
      accordingly.
@@ -530,10 +532,32 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
       const ze_thread_info *zetp = ze_thread (tp);
       gdb_assert (zetp != nullptr);
 
-      signal = GDB_SIGNAL_TRAP;
-      return ((zetp->resume_state == ze_thread_resume_step)
-	      ? TARGET_STOPPED_BY_SINGLE_STEP
-	      : TARGET_STOPPED_BY_SW_BREAKPOINT);
+      switch (zetp->resume_state)
+	{
+	case ze_thread_resume_step:
+	  signal = GDB_SIGNAL_TRAP;
+	  return TARGET_STOPPED_BY_SINGLE_STEP;
+
+	case ze_thread_resume_run:
+	case ze_thread_resume_none:
+	  /* On some devices, we may get spurious breakpoint exceptions.  */
+	  if (erratum_18020355813 (tp))
+	    {
+	      ze_device_thread_t zeid = ze_thread_id (tp);
+
+	      dprintf ("applying #18020355813 workaround for thread "
+		       "%s (%s)", tp->id.to_string ().c_str (),
+		       ze_thread_id_str (zeid).c_str ());
+
+	      signal = GDB_SIGNAL_0;
+	      return TARGET_STOPPED_BY_NO_REASON;
+	    }
+
+	  /* Fall through.  */
+	case ze_thread_resume_stop:
+	  signal = GDB_SIGNAL_TRAP;
+	  return TARGET_STOPPED_BY_SW_BREAKPOINT;
+	}
     }
 
   if ((cr0[1] & (1 << intelgt_cr0_1_illegal_opcode_status)) != 0)
@@ -623,6 +647,109 @@ intelgt_ze_target::is_at_eot (thread_info *tp)
     default:
       return false;
     }
+}
+
+/* Return whether erratum #18020355813 applies.  */
+
+bool
+intelgt_ze_target::erratum_18020355813 (thread_info *tp)
+{
+  const process_info *process = get_thread_process (tp);
+  if (process == nullptr)
+    {
+      ze_device_thread_t zeid = ze_thread_id (tp);
+
+      warning (_("error getting process for thread %s (%s)"),
+	       tp->id.to_string ().c_str (),
+	       ze_thread_id_str (zeid).c_str ());
+      return false;
+    }
+
+  process_info_private *zeinfo = process->priv;
+  gdb_assert (zeinfo != nullptr);
+
+  /* We may not have a device if we got detached.  */
+  ze_device_info *device = zeinfo->device;
+  if (device == nullptr)
+    return false;
+
+  /* The erratum only applies to Intel devices.  */
+  if (device->properties.vendorId != 0x8086)
+    return false;
+
+  /* The erratum only applies to a range of devices.  */
+  switch (device->properties.deviceId)
+    {
+    case 0x4f80:
+    case 0x4f81:
+    case 0x4f82:
+    case 0x4f83:
+    case 0x4f84:
+    case 0x4f85:
+    case 0x4f86:
+    case 0x4f87:
+    case 0x4f88:
+    case 0x56a0:
+    case 0x56a1:
+    case 0x56a2:
+    case 0x5690:
+    case 0x5691:
+    case 0x5692:
+    case 0x56c0:
+    case 0x56c1:
+    case 0x56c2:
+    case 0x56a3:
+    case 0x56a4:
+    case 0x56a5:
+    case 0x56a6:
+    case 0x5693:
+    case 0x5694:
+    case 0x5695:
+    case 0x5696:
+    case 0x5697:
+    case 0x56b0:
+    case 0x56b1:
+    case 0x56b2:
+    case 0x56b3:
+    case 0x56ba:
+    case 0x56bb:
+    case 0x56bc:
+    case 0x56bd:
+
+    case 0x0bd0:
+    case 0x0bd4:
+    case 0x0bd5:
+    case 0x0bd6:
+    case 0x0bd7:
+    case 0x0bd8:
+    case 0x0bd9:
+    case 0x0bda:
+    case 0x0bdb:
+    case 0x0b69:
+    case 0x0b6e:
+      break;
+
+    default:
+      return false;
+    }
+
+  regcache *regcache = get_thread_regcache (tp, /* fetch = */ false);
+  CORE_ADDR pc = read_pc (regcache);
+
+  gdb_byte inst[intelgt::MAX_INST_LENGTH];
+  int status = read_inst (tp, pc, inst);
+  if (status < 0)
+    {
+      ze_device_thread_t zeid = ze_thread_id (tp);
+
+      warning (_("error reading memory for thread %s (%s) at 0x%"
+		 PRIx64), tp->id.to_string ().c_str (),
+	       ze_thread_id_str (zeid).c_str (), pc);
+      return false;
+    }
+
+  /* The erratum applies to instructions without breakpoint control.  */
+  return !intelgt::has_breakpoint (inst);
 }
 
 void

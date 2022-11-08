@@ -13072,7 +13072,7 @@ delete_breakpoint (struct breakpoint *bpt)
      of breakpoints gets resolved.  */
   if (bpt->related_breakpoint != bpt)
     {
-      struct breakpoint *related;
+      struct breakpoint *related_1, *related_2;
       struct watchpoint *w;
 
       if (bpt->type == bp_watchpoint_scope)
@@ -13084,10 +13084,17 @@ delete_breakpoint (struct breakpoint *bpt)
       if (w != NULL)
 	watchpoint_del_at_next_stop (w);
 
-      /* Unlink bpt from the bpt->related_breakpoint ring.  */
-      for (related = bpt; related->related_breakpoint != bpt;
-	   related = related->related_breakpoint);
-      related->related_breakpoint = bpt->related_breakpoint;
+      /* Unlink bpt from the bpt->related_breakpoint ring,
+	 while avoiding infinite loops.  */
+      related_1 = bpt;
+      related_2 = bpt->related_breakpoint;
+      while (related_2->related_breakpoint != bpt && related_1 != related_2)
+	{
+	  related_2 = related_1;
+	  related_1 = related_1->related_breakpoint;
+	}
+
+      related_2->related_breakpoint = bpt->related_breakpoint;
       bpt->related_breakpoint = bpt;
     }
 

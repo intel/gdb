@@ -211,6 +211,7 @@ enum
     /* Selected instruction opcodes.  */
     intelgt_opc_send = 0x31,
     intelgt_opc_sendc = 0x32,
+    intelgt_opc_join = 0x2f,
   };
 
 /* Selected instruction control bit positions.  */
@@ -258,6 +259,8 @@ protected:
 
   bool is_at_breakpoint (thread_info *tp) override;
   bool is_at_eot (thread_info *tp);
+
+  bool erratum_18020355813 (thread_info *tp);
 
 private:
   /* Add a register set for REGPROP on DEVICE to REGSETS and increment REGNUM
@@ -507,10 +510,31 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
       const ze_thread_info *zetp = ze_thread (tp);
       gdb_assert (zetp != nullptr);
 
-      signal = GDB_SIGNAL_TRAP;
-      return ((zetp->resume_state == ze_thread_resume_step)
-	      ? TARGET_STOPPED_BY_SINGLE_STEP
-	      : TARGET_STOPPED_BY_SW_BREAKPOINT);
+      switch (zetp->resume_state)
+	{
+	case ze_thread_resume_step:
+	  signal = GDB_SIGNAL_TRAP;
+	  return TARGET_STOPPED_BY_SINGLE_STEP;
+
+	case ze_thread_resume_run:
+	case ze_thread_resume_none:
+	  /* On some devices, we may get spurious breakoint exceptions at
+	     JOIN instructions.  */
+	  if (erratum_18020355813 (tp))
+	    {
+	      ze_device_thread_t zeid = ze_thread_id (tp);
+
+	      dprintf ("applying #18020355813 workaround for thread "
+		       "%d.%ld (%s)", tp->id.pid (), tp->id.lwp (),
+		       ze_thread_id_str (zeid).c_str ());
+	      break;
+	    }
+
+	  /* Fall through.  */
+	case ze_thread_resume_stop:
+	  signal = GDB_SIGNAL_TRAP;
+	  return TARGET_STOPPED_BY_SW_BREAKPOINT;
+	}
     }
 
   if ((cr0[1] & (1 << intelgt_cr0_1_illegal_opcode_status)) != 0)
@@ -595,6 +619,84 @@ intelgt_ze_target::is_at_eot (thread_info *tp)
     case intelgt_opc_send:
     case intelgt_opc_sendc:
       return intelgt::get_inst_bit (inst, intelgt_ctrl_eot);
+
+    default:
+      return false;
+    }
+}
+
+/* Return whether erratum #18020355813 applies.  */
+
+bool
+intelgt_ze_target::erratum_18020355813 (thread_info *tp)
+{
+  const process_info *process = get_thread_process (tp);
+  if (process == nullptr)
+    {
+      ze_device_thread_t zeid = ze_thread_id (tp);
+
+      warning (_("error getting process for thread %d.%ld (%s)"),
+	       tp->id.pid (), tp->id.lwp (),
+	       ze_thread_id_str (zeid).c_str ());
+      return false;
+    }
+
+  process_info_private *zeinfo = process->priv;
+  gdb_assert (zeinfo != nullptr);
+
+  /* We may not have a device if we got detached.  */
+  ze_device_info *device = zeinfo->device;
+  if (device == nullptr)
+    return false;
+
+  /* The erratum only applies to Intel devices.  */
+  if (device->properties.vendorId != 0x8086)
+    return false;
+
+  /* The erratum only applies to a range of devices.  */
+  switch (device->properties.deviceId)
+    {
+    case 0x56a0:
+    case 0x56a1:
+    case 0x5690:
+    case 0x5691:
+    case 0x5692:
+    case 0x56a5:
+    case 0x56a6:
+    case 0x5693:
+    case 0x5694:
+    case 0x56b0:
+    case 0x56b1:
+
+    case 0x0bd5:
+    case 0x0bd6:
+      break;
+
+    default:
+      return false;
+    }
+
+  regcache *regcache = get_thread_regcache (tp, /* fetch = */ false);
+  CORE_ADDR pc = read_pc (regcache);
+
+  gdb_byte inst[intelgt::MAX_INST_LENGTH];
+  int status = read_inst (tp, pc, inst);
+  if (status < 0)
+    {
+      ze_device_thread_t zeid = ze_thread_id (tp);
+
+      warning (_("error reading memory for thread %d.%ld (%s) at 0x%"
+		 PRIx64), tp->id.pid (), tp->id.lwp (),
+	       ze_thread_id_str (zeid).c_str (), pc);
+      return false;
+    }
+
+  /* The erratum applies to JOIN instructions without breakpoint control.  */
+  uint8_t opc = inst[0] & intelgt_opc_mask;
+  switch (opc)
+    {
+    case intelgt_opc_join:
+      return !intelgt::has_breakpoint (inst);
 
     default:
       return false;

@@ -1948,4 +1948,7 @@ extern void describe_other_breakpoints (struct gdbarch *,
 
 extern void enable_disable_bp_location (bp_location *loc, bool enable);
 
+/* Translate BPTYPE to TARGET_HW_BP_TYPE.  */
+
+extern target_hw_bp_type bptype_to_target_hw_bp_type (bptype type);
 #endif /* !defined (BREAKPOINT_H) */

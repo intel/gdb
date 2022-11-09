@@ -9842,6 +9842,26 @@ break_range_command (const char *arg, int from_tty)
   install_breakpoint (false, std::move (br), true);
 }
 
+/* See breakpoint.h.  */
+
+target_hw_bp_type
+bptype_to_target_hw_bp_type (bptype type)
+{
+  switch (type)
+    {
+    case bp_hardware_watchpoint:
+      return hw_write;
+    case bp_read_watchpoint:
+      return hw_read;
+    case bp_access_watchpoint:
+      return hw_access;
+    case bp_hardware_breakpoint:
+      return hw_execute;
+    default:
+      error (_ ("Bad breakpoint type: bptype %d."), type);
+    }
+}
+
 /*  Return non-zero if EXP is verified as constant.  Returned zero
     means EXP is variable.  Also the constant detection may fail for
     some constant expressions and in such case still falsely return

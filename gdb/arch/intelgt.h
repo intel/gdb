@@ -31,9 +31,10 @@ enum breakpoint_kind
     BP_INSTRUCTION = 1,
   };
 
-/* The maximum length of an IntelGT instruction in bytes.  */
+/* The length of a full and compact IntelGT instruction in bytes.  */
 
 constexpr int MAX_INST_LENGTH = 16;
+constexpr int COMPACT_INST_LENGTH = 8;
 
 /* Feature names.
 
@@ -151,13 +152,13 @@ has_breakpoint (const gdb_byte inst[])
 static inline unsigned int
 inst_length_compacted ()
 {
-  return 8;
+  return COMPACT_INST_LENGTH;
 }
 
 static inline unsigned int
 inst_length_full ()
 {
-  return 16;
+  return MAX_INST_LENGTH;
 }
 
 static inline unsigned int

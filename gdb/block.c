@@ -832,3 +832,15 @@ make_blockranges (struct objfile *objfile,
   return blr;
 }
 
+/*  See block.h.  */
+
+unsigned int
+get_simd_width_for_pc (CORE_ADDR pc)
+{
+  const block *const blk = block_for_pc (pc);
+  if (blk != nullptr)
+    return blk->simd_width ();
+
+  return 1;
+}
+

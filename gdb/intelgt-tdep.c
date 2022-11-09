@@ -107,14 +107,16 @@ static unsigned int get_field_total_memory (type *struct_type,
 
 static CORE_ADDR fe_stack_handle_vector (CORE_ADDR addr, type *valtype,
 					 const gdb_byte *buff_read,
-					 gdb_byte *buff_write);
+					 gdb_byte *buff_write,
+					 const unsigned int simd_width);
 
 /* Read vector from the stack into BUFF.  */
 
 static CORE_ADDR
-fe_stack_read_vector (CORE_ADDR addr, type *valtype, gdb_byte *buff)
+fe_stack_read_vector (CORE_ADDR addr, type *valtype, gdb_byte *buff,
+		      const unsigned int simd_width)
 {
-  return fe_stack_handle_vector (addr, valtype, nullptr, buff);
+  return fe_stack_handle_vector (addr, valtype, nullptr, buff, simd_width);
 }
 
 /* Inferior calls is still not fully supported on Windows.  */
@@ -123,9 +125,10 @@ fe_stack_read_vector (CORE_ADDR addr, type *valtype, gdb_byte *buff)
 /* Write vector from BUFF into the stack.  */
 
 static CORE_ADDR
-fe_stack_write_vector (CORE_ADDR addr, type *valtype, const gdb_byte *buff)
+fe_stack_write_vector (CORE_ADDR addr, type *valtype, const gdb_byte *buff,
+		       const unsigned int simd_width)
 {
-  return fe_stack_handle_vector (addr, valtype, buff, nullptr);
+  return fe_stack_handle_vector (addr, valtype, buff, nullptr, simd_width);
 }
 #endif /* not USE_WIN32API */
 
@@ -144,14 +147,17 @@ fe_stack_write_vector (CORE_ADDR addr, type *valtype, const gdb_byte *buff)
 
 static CORE_ADDR fe_stack_handle_small_struct (CORE_ADDR addr, type *valtype,
 					       const gdb_byte *buff_read,
-					       gdb_byte *buff_write);
+					       gdb_byte *buff_write,
+					       const unsigned int simd_width);
 
 /* Read small structure from the stack into BUFF.  */
 
 static CORE_ADDR
-fe_stack_read_small_struct (CORE_ADDR addr, type *valtype, gdb_byte *buff)
+fe_stack_read_small_struct (CORE_ADDR addr, type *valtype, gdb_byte *buff,
+			    const unsigned int simd_width)
 {
-  return fe_stack_handle_small_struct (addr, valtype, nullptr, buff);
+  return fe_stack_handle_small_struct (addr, valtype, nullptr, buff,
+				       simd_width);
 }
 
 /* Inferior calls is still not fully supported on Windows.  */
@@ -161,9 +167,11 @@ fe_stack_read_small_struct (CORE_ADDR addr, type *valtype, gdb_byte *buff)
 
 static CORE_ADDR
 fe_stack_write_small_struct (CORE_ADDR addr, type *valtype,
-			     const gdb_byte *buff)
+			     const gdb_byte *buff,
+			     const unsigned int simd_width)
 {
-  return fe_stack_handle_small_struct (addr, valtype, buff, nullptr);
+  return fe_stack_handle_small_struct (addr, valtype, buff, nullptr,
+				       simd_width);
 }
 #endif /* not USE_WIN32API */
 
@@ -182,14 +190,16 @@ fe_stack_write_small_struct (CORE_ADDR addr, type *valtype,
 
 static CORE_ADDR fe_stack_handle_primitive (CORE_ADDR addr, int len,
 					    const gdb_byte *buff_read,
-					    gdb_byte *buff_write);
+					    gdb_byte *buff_write,
+					    const unsigned int simd_width);
 
 /* Read up to 8 bytes from the stack into BUFF.  */
 
 static CORE_ADDR
-fe_stack_read_primitive (CORE_ADDR addr, int len, gdb_byte *buff)
+fe_stack_read_primitive (CORE_ADDR addr, int len, gdb_byte *buff,
+			 const unsigned int simd_width)
 {
-  return fe_stack_handle_primitive (addr, len, nullptr, buff);
+  return fe_stack_handle_primitive (addr, len, nullptr, buff, simd_width);
 }
 
 /* Inferior calls is still not fully supported on Windows.  */
@@ -198,9 +208,10 @@ fe_stack_read_primitive (CORE_ADDR addr, int len, gdb_byte *buff)
 /* Write up to 8 bytes from BUFF into the stack.  */
 
 static CORE_ADDR
-fe_stack_write_primitive (CORE_ADDR addr, int len, const gdb_byte *buff)
+fe_stack_write_primitive (CORE_ADDR addr, int len, const gdb_byte *buff,
+			  const unsigned int simd_width)
 {
-  return fe_stack_handle_primitive (addr, len, buff, nullptr);
+  return fe_stack_handle_primitive (addr, len, buff, nullptr, simd_width);
 }
 #endif /* not USE_WIN32API */
 
@@ -210,8 +221,8 @@ fe_stack_write_primitive (CORE_ADDR addr, int len, const gdb_byte *buff)
 struct grf_handler
 {
 public:
-  grf_handler (uint32_t reg_size, regcache * regcache)
-      : m_reg_size (reg_size), m_regcache (regcache)
+  grf_handler (uint32_t reg_size, regcache * regcache, unsigned int simd_width)
+      : m_reg_size (reg_size), m_regcache (regcache), m_simd_width (simd_width)
   {
   }
 
@@ -236,6 +247,7 @@ public:
 private:
   uint32_t m_reg_size;
   regcache *m_regcache;
+  const unsigned int m_simd_width;
 
   /* Read and write small structures to GRF registers while considering
      the SIMD vectorization.
@@ -527,14 +539,15 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
   gdb_assert (inferior_ptid != null_ptid);
 
   int address_size_byte = gdbarch_addr_bit (gdbarch) / 8;
-  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
+  CORE_ADDR function_pc = value_address (function);
+  const unsigned int simd_width = get_simd_width_for_pc (function_pc);
   constexpr int max_primitive_size = 8;
 
   /* The vectorized return value is stored at this register and onwards.  */
   int retval_regnum = get_intelgt_gdbarch_data (gdbarch)->retval_regnum;
   unsigned int retval_size = register_size (gdbarch, retval_regnum);
   int type_length = valtype->length ();
-  auto grf = grf_handler (retval_size, regcache);
+  auto grf = grf_handler (retval_size, regcache, simd_width);
   bool is_promotable_struct
     = is_a_promotable_small_struct (valtype, PROMOTABLE_STRUCT_MAX_SIZE);
 
@@ -603,11 +616,11 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
 
       /* Read the returned value from the stack.  */
       if (is_promotable_struct)
-	fe_stack_read_small_struct (addr, valtype, readbuf);
+	fe_stack_read_small_struct (addr, valtype, readbuf, simd_width);
       else if (valtype->is_vector ())
-	fe_stack_read_vector (addr, valtype, readbuf);
+	fe_stack_read_vector (addr, valtype, readbuf, simd_width);
       else if (type_length <= max_primitive_size)
-	fe_stack_read_primitive (addr, type_length, readbuf);
+	fe_stack_read_primitive (addr, type_length, readbuf, simd_width);
 
       return RETURN_VALUE_ABI_RETURNS_ADDRESS;
     }
@@ -1408,7 +1421,8 @@ intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
 			 function_call_return_method return_method,
 			 CORE_ADDR struct_addr)
 {
-  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
+  CORE_ADDR function_pc = value_address (function);
+  const unsigned int simd_width = get_simd_width_for_pc (function_pc);
   const int current_lane = inferior_thread ()->current_simd_lane ();
   /* The retval register (r26) is the first GRF register to be used
      for passing arguments.  */
@@ -1470,7 +1484,7 @@ intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
      onwards.  The rest of the arguments are pushed to the FE stack.  */
   int obj_index = 0;
   int regnum = retval_regnum;
-  auto grf = grf_handler (retval_regsize, regcache);
+  auto grf = grf_handler (retval_regsize, regcache, simd_width);
 
   for (int argnum = 0; argnum < nargs; ++argnum)
     {
@@ -1521,20 +1535,22 @@ intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
 
 	  if (is_a_promotable_small_struct (arg_type,
 					    PROMOTABLE_STRUCT_MAX_SIZE))
-	    fe_sp = fe_stack_write_small_struct (fe_sp, arg_type, val);
+	    fe_sp = fe_stack_write_small_struct (fe_sp, arg_type, val,
+						 simd_width);
 	  else if (class_or_union_p (arg_type))
 	    {
 	      /* The object has been previously pushed to the stack, now push
 		 its saved address to be aligned with the rest of the
 		 arguments in the stack.  */
 	      gdb_byte *obj_addr = (gdb_byte *) &obj_addrs[obj_index++];
-	      fe_sp = fe_stack_write_primitive (fe_sp, address_size, obj_addr);
+	      fe_sp = fe_stack_write_primitive (fe_sp, address_size, obj_addr,
+						simd_width);
 	    }
 	  else if (arg_type->is_vector ())
-	    fe_sp = fe_stack_write_vector (fe_sp, arg_type, val);
+	    fe_sp = fe_stack_write_vector (fe_sp, arg_type, val, simd_width);
 
 	  else if (len <= 8)
-	    fe_sp = fe_stack_write_primitive (fe_sp, len, val);
+	    fe_sp = fe_stack_write_primitive (fe_sp, len, val, simd_width);
 
 	  else
 	    error ("unexpected type %s of arg %d", arg_type->name (), argnum);
@@ -1643,7 +1659,6 @@ grf_handler::handle_small_struct (int regnum, const gdb_byte *buff_read,
 {
   /* The vectorized return value is stored at this register and onwards.  */
   const int simd_lane = inferior_thread ()->current_simd_lane ();
-  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
 
   /* Small structures are stored in the GRF registers with SoA
      layout.  Example:
@@ -1667,7 +1682,7 @@ grf_handler::handle_small_struct (int regnum, const gdb_byte *buff_read,
       int field_len = field_type->length ();
 
       /* Total field size after SIMD vectorization.  */
-      int mem_occupation = simd_width * get_field_total_memory (
+      int mem_occupation = m_simd_width * get_field_total_memory (
 	valtype, field_idx);
 
       int lane_offset = simd_lane * field_len;
@@ -1703,7 +1718,6 @@ grf_handler::handle_vector (int regnum, const gdb_byte *buff_read,
 			    gdb_byte *buff_write, type *valtype)
 {
   const int current_lane = inferior_thread ()->current_simd_lane ();
-  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
   int target_regnum = regnum;
 
   /* Vectors are stored in GRFs with the Structure of Arrays (SoA) layout.  */
@@ -1718,7 +1732,7 @@ grf_handler::handle_vector (int regnum, const gdb_byte *buff_read,
     {
       int lane_offset = current_lane * element_len;
       int total_offset
-	  = lane_offset + element_idx * element_len * simd_width;
+	  = lane_offset + element_idx * element_len * m_simd_width;
       int reg_offset = total_offset % m_reg_size;
 
       /* Move to read / write on the right register.  */
@@ -1760,7 +1774,8 @@ grf_handler::handle_primitive (int regnum, const gdb_byte *buff_read,
 
 static CORE_ADDR
 fe_stack_handle_vector (CORE_ADDR addr, type *valtype,
-			const gdb_byte *buff_read, gdb_byte *buff_write)
+			const gdb_byte *buff_read, gdb_byte *buff_write,
+			const unsigned int simd_width)
 {
   gdb_assert (valtype->is_vector ());
   gdb_assert ((buff_read == nullptr) != (buff_write == nullptr));
@@ -1768,7 +1783,6 @@ fe_stack_handle_vector (CORE_ADDR addr, type *valtype,
   /* Vectors are copied to stack with the SoA layout.  */
 
   const int current_lane = inferior_thread ()->current_simd_lane ();
-  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
   int len = valtype->length ();
   CORE_ADDR fe_addr = addr;
 
@@ -1817,13 +1831,13 @@ fe_stack_handle_vector (CORE_ADDR addr, type *valtype,
 
 static CORE_ADDR
 fe_stack_handle_primitive (CORE_ADDR addr, int len, const gdb_byte *buff_read,
-			   gdb_byte *buff_write)
+			   gdb_byte *buff_write,
+			   const unsigned int simd_width)
 {
   gdb_assert (len <= 8);
   gdb_assert ((buff_read == nullptr) != (buff_write == nullptr));
 
   const int current_lane = inferior_thread ()->current_simd_lane ();
-  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
   CORE_ADDR fe_addr = addr;
 
   if (buff_read != nullptr)
@@ -1850,7 +1864,8 @@ fe_stack_handle_primitive (CORE_ADDR addr, int len, const gdb_byte *buff_read,
 
 static CORE_ADDR
 fe_stack_handle_small_struct (CORE_ADDR addr, type *valtype,
-			      const gdb_byte *buff_read, gdb_byte *buff_write)
+			      const gdb_byte *buff_read, gdb_byte *buff_write,
+			      const unsigned int simd_width)
 {
   gdb_assert (is_a_promotable_small_struct (valtype,
 					    PROMOTABLE_STRUCT_MAX_SIZE));
@@ -1861,7 +1876,6 @@ fe_stack_handle_small_struct (CORE_ADDR addr, type *valtype,
      s.a s.a... s.a  s.b s.b... s.b  s.c s.c... s.c.  */
 
   const int current_lane = inferior_thread ()->current_simd_lane ();
-  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
 
   int n_fields = valtype->num_fields ();
   field *fields = valtype->fields ();

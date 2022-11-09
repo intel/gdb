@@ -604,4 +604,7 @@ extern struct symbol *block_find_symbol (const struct block *block,
 struct blockranges *make_blockranges (struct objfile *objfile,
 				      const std::vector<blockrange> &rangevec);
 
+/* Return the SIMD width for the given PC.  */
+unsigned int get_simd_width_for_pc (CORE_ADDR pc);
+
 #endif /* BLOCK_H */

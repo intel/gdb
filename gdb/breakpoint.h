@@ -1811,4 +1811,8 @@ extern void catch_exception_event (enum exception_event_kind ex_event,
 				   const char *regex, bool tempflag,
 				   int from_tty);
 
+
+/* Translate BPTYPE to TARGET_HW_BP_TYPE.  */
+
+extern target_hw_bp_type bptype_to_target_hw_bp_type (bptype type);
 #endif /* !defined (BREAKPOINT_H) */

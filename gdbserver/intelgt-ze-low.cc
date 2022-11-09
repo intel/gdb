@@ -250,6 +250,12 @@ protected:
   void prepare_thread_resume (thread_info *tp,
 			      enum resume_kind rkind) override;
 
+  /* Read one instruction from memory at PC into BUFFER and return the
+     number of bytes read on success or a negative errno error code.
+
+     BUFFER must be intelgt::MAX_INST_LENGTH bytes long.  */
+  int read_inst (thread_info *tp, CORE_ADDR pc, unsigned char *buffer);
+
   bool is_at_breakpoint (thread_info *tp) override;
   bool is_at_eot (thread_info *tp);
 
@@ -530,6 +536,27 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
   return TARGET_STOPPED_BY_NO_REASON;
 }
 
+int
+intelgt_ze_target::read_inst (thread_info *tp, CORE_ADDR pc,
+			      unsigned char *buffer)
+{
+  int status = read_memory (tp, pc, buffer, intelgt::MAX_INST_LENGTH);
+  if (status == 0)
+    return intelgt::MAX_INST_LENGTH;
+
+  status = read_memory (tp, pc, buffer, intelgt::COMPACT_INST_LENGTH);
+  if (status > 0)
+    return status;
+
+  if (!intelgt::is_compacted_inst (buffer))
+    return -EIO;
+
+  memset (buffer + intelgt::COMPACT_INST_LENGTH, 0,
+	  intelgt::MAX_INST_LENGTH - intelgt::COMPACT_INST_LENGTH);
+
+  return intelgt::COMPACT_INST_LENGTH;
+}
+
 bool
 intelgt_ze_target::is_at_breakpoint (thread_info *tp)
 {
@@ -537,8 +564,8 @@ intelgt_ze_target::is_at_breakpoint (thread_info *tp)
   CORE_ADDR pc = read_pc (regcache);
 
   gdb_byte inst[intelgt::MAX_INST_LENGTH];
-  int status = read_memory (tp, pc, inst, intelgt::MAX_INST_LENGTH);
-  if (status != 0)
+  int status = read_inst (tp, pc, inst);
+  if (status < 0)
     return false;
 
   return intelgt::has_breakpoint (inst);
@@ -551,8 +578,8 @@ intelgt_ze_target::is_at_eot (thread_info *tp)
   CORE_ADDR pc = read_pc (regcache);
 
   gdb_byte inst[intelgt::MAX_INST_LENGTH];
-  int status = read_memory (tp, pc, inst, intelgt::MAX_INST_LENGTH);
-  if (status != 0)
+  int status = read_inst (tp, pc, inst);
+  if (status < 0)
     {
       ze_device_thread_t zeid = ze_thread_id (tp);
 

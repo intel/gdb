@@ -28,7 +28,7 @@ if {![target_supports_btrace]} {
 }
 
 if [build_executable "failed to prepare" $testfile $srcfile \
-	{c++ debug ldflags=-Wl,-z,lazy}] {
+	{debug ldflags=-Wl,-z,lazy}] {
     return -1
 }
 

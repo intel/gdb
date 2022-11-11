@@ -1,0 +1,111 @@
+# Copyright 2021-2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests debugging kernels running asynchronously on subdevices
+# obtained by partitioning root devices.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "*"]} {
+	    unsupported "test is aimed at GPUs only"
+	    continue
+	}
+
+	gdb_test "set env ZE_FLAT_DEVICE_HIERARCHY=COMPOSITE"
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set num_devices_check [gdb_get_line_number "num-devices-check"]
+	gdb_breakpoint $num_devices_check {temporary}
+	gdb_continue_to_breakpoint "num devices check" \
+	    ".*$srcfile:$num_devices_check.*"
+
+	set num_devices [get_integer_valueof "num_devices" 0]
+	if {$num_devices < 1} {
+	    unsupported "test is aimed at systems with subdevices"
+	    continue
+	}
+
+	set bp1 [gdb_get_line_number "kernel-line-1"]
+	gdb_breakpoint $bp1
+	set bp2 [gdb_get_line_number "kernel-line-2"]
+	gdb_breakpoint $bp2
+	set end_bp [gdb_get_line_number "end-marker"]
+	gdb_breakpoint $end_bp
+
+	# We should now hit each kernel BP once on each device.
+	set bp1_hit 0
+	set bp2_hit 0
+
+	# Two hits per device, per thread is expected.
+	set num_threads_per_device 2
+	set num_threads [expr $num_devices * $num_threads_per_device]
+	set num_trips [expr $num_threads * 2]
+
+	# We should hit bp1 first.  The order thereafter is not fixed.
+	gdb_continue_to_breakpoint "kernel bp1 first hit" "$srcfile:$bp1.*"
+	incr bp1_hit
+
+	# Reset the spin-flag for all lanes to bring the threads to a
+	# fair state to compete with each other.  This makes the test
+	# scenario more interesting.
+	#
+	# This can take a long time, because there are potentially
+	# several thousands of lanes.  Use a timeout factor.
+	with_timeout_factor 2 {
+	    gdb_test "thread apply all-lanes -s print spin=false" ".*"
+	}
+
+	for {set trip 2} {$trip <= $num_trips} {incr trip} {
+	    with_test_prefix "trip $trip" {
+		gdb_test_multiple "continue" "resume and hit a bp" {
+		    -re -wrap ".*$srcfile:$bp1.*" {
+			incr bp1_hit
+			pass $gdb_test_name
+		    }
+		    -re -wrap ".*$srcfile:$bp2.*" {
+			incr bp2_hit
+			pass $gdb_test_name
+		    }
+		}
+	    }
+	}
+
+	gdb_continue_to_breakpoint "post-kernel bp" ".*$srcfile:$end_bp.*"
+
+	gdb_assert {$bp1_hit == $num_threads}
+	gdb_assert {$bp2_hit == $num_threads}
+
+	continue_sycl_program_to_termination
+    }
+}

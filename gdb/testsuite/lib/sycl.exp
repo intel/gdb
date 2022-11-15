@@ -455,7 +455,9 @@ proc current_thread_has_simd_lanes {} {
 # (<inferior number>.<thread number>) and SIMD lane information is omitted.
 # For thread 2.3:0 returns "2.3".
 # Returns "invalid" if no thread ID is found with given parameters.
-proc get_another_stopped_thread {srcfile line ids_to_ignore {msg ""}} {
+# Assert if there are not matched thread, or add a kfail if there is a
+# known fail.
+proc get_another_stopped_thread {srcfile line ids_to_ignore {msg ""} {kfail ""}} {
     global gdb_prompt decimal
 
     if [string match "" $msg] {
@@ -474,6 +476,9 @@ proc get_another_stopped_thread {srcfile line ids_to_ignore {msg ""}} {
 	    exp_continue
 	}
 	-re "$gdb_prompt $" {
+	    if ![string match "" $kfail] {
+		setup_kfail $kfail "*-*-*"
+    	    }
 	    gdb_assert { { $another_stopped_thread ne "invalid" } } $gdb_test_name
 	}
     }

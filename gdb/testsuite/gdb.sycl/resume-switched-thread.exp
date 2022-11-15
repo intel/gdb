@@ -44,16 +44,26 @@ proc test_resume {delete_bp} {
     # report the pending hit for the first breakpoint, if not deleted.
     set current_thread [get_current_thread "line $bp1"]
     set another_thread \
-	[get_another_stopped_thread $srcfile $bp1 $current_thread]
+	[get_another_stopped_thread $srcfile $bp1 \
+	    $current_thread "" "JIRA IGDB/3532"]
 
+    if {[require_sycl_device "cpu" "Intel*"]} {
+	setup_kfail "JIRA IGDB/3532" "*-*-*"
+    }
     gdb_test "thread ${another_thread}" \
 	"Switching to thread ${another_thread}.*"
 
     if {$delete_bp} {
 	gdb_test_no_output "delete $bp1_num"
     } else {
+	if {[require_sycl_device "cpu" "Intel*"]} {
+	    setup_kfail "JIRA IGDB/3532" "*-*-*"
+	}
 	gdb_continue_to_breakpoint "another thread hits the first bp" \
 	    ".*$srcfile:$bp1.*"
+    }
+    if {[require_sycl_device "cpu" "Intel*"]} {
+	setup_kfail "JIRA IGDB/3532" "*-*-*"
     }
     gdb_test "continue" \
 	"Thread ${another_thread} \[^\r\n\]+$srcfile:$bp2.*" \

@@ -3059,8 +3059,15 @@ ada_value_ptr_subscript (struct value *arr, int arity, struct value **ind)
 
       if (type->code () != TYPE_CODE_ARRAY)
 	error (_("too many subscripts (%d expected)"), k);
-      arr = value_cast (lookup_pointer_type (TYPE_TARGET_TYPE (type)),
-			value_copy (arr));
+
+      /* As value_ind might dynamically resolve e.g. variable records in the
+	 target type of arr and update arr's targe type, which is still a
+	 pointer to some target type of the original arr argument, we have to
+	 copy the type here to avoid resolving the variable records of the
+	 original array (as these depend on the index as well).  */
+      arr = value_cast
+	      (lookup_pointer_type (copy_type (TYPE_TARGET_TYPE (type))),
+	       value_copy (arr));
       get_discrete_bounds (type->index_type (), &lwb, &upb);
       arr = value_ptradd (arr, pos_atr (ind[k]) - lwb);
       type = TYPE_TARGET_TYPE (type);

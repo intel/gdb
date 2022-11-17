@@ -417,9 +417,9 @@ ze_attach (ze_device_info *device)
   if (device->session != nullptr)
     error (_("Already attached to %s."), device->properties.name);
 
-  ze_result_t status = zetDebugAttach (device->handle, &device->config,
-				       &device->session);
-  switch (status)
+  device->debug_attach_state = zetDebugAttach (device->handle, &device->config,
+					       &device->session);
+  switch (device->debug_attach_state)
     {
     case ZE_RESULT_SUCCESS:
       if (device->session == nullptr)
@@ -447,7 +447,7 @@ ze_attach (ze_device_info *device)
 
     default:
       error (_("Failed to attach to %s (%x)."), device->properties.name,
-	     status);
+	     device->debug_attach_state);
     }
 }
 
@@ -1562,22 +1562,62 @@ ze_target::attach (unsigned long pid)
 
   /* Let's check if we were able to attach to at least one device.  */
   int nattached = 0;
+  std::stringstream sstream;
+  sstream << "Failed to attach to any device.";
   for (ze_device_info *device : devices)
     {
       gdb_assert (device != nullptr);
-      if (device->session == nullptr)
-	continue;
+      switch (device->debug_attach_state)
+	{
+	case ZE_RESULT_SUCCESS:
+	  if (device->session == nullptr)
+	    {
+		sstream << "\nDevice " << device->ordinal << " ["
+			<< device->properties.name << "] : "
+			<< "failed to initialize debug session";
+		continue;
+	    }
 
-      /* GDB (and higher layers of gdbserver) expects threads stopped on
-	 attach in all-stop mode.  */
-      if (!non_stop)
-	resume (*device, resume_stop);
+	  /* GDB (and higher layers of gdbserver) expects threads stopped on
+	     attach in all-stop mode.  */
+	  if (!non_stop)
+	    resume (*device, resume_stop);
 
-      nattached += 1;
+	  nattached += 1;
+	  break;
+	case ZE_RESULT_NOT_READY:
+	  sstream << "\nDevice " << device->ordinal << " ["
+		  << device->properties.name << "] : "
+		  << "attempting to attach too early";
+	  break;
+	case ZE_RESULT_ERROR_UNSUPPORTED_FEATURE:
+	  sstream << "\nDevice " << device->ordinal << " ["
+		  << device->properties.name << "] : "
+		  << "attaching is not supported";
+	  break;
+	case ZE_RESULT_ERROR_INSUFFICIENT_PERMISSIONS:
+	  sstream << "\nDevice " << device->ordinal << " ["
+		  << device->properties.name << "] : "
+		  << "attaching is not permitted";
+	  break;
+	case ZE_RESULT_ERROR_NOT_AVAILABLE:
+	  sstream << "\nDevice " << device->ordinal << " ["
+		  << device->properties.name << "] : "
+		  << "a debugger is already attached";
+	  break;
+	default:
+	  sstream << "\nDevice " << device->ordinal << " ["
+		  << device->properties.name << "] : "
+		  << "failed to attach with error code '"
+		  << std::hex << device->debug_attach_state
+		  << std::resetiosflags (std::ios::basefield)
+		  << "'";
+	  break;
+	}
     }
 
   if (nattached == 0)
-    critical_error (0x02, _("Failed to attach to any device."));
+    critical_error (0x02, sstream.str ().c_str ());
 
   return 0;
 }

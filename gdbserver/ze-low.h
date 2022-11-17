@@ -87,6 +87,14 @@ struct ze_device_info
      This is nullptr if we are not currently attached.  */
   zet_debug_session_handle_t session = nullptr;
 
+  /* The state for debug attach attempt.
+
+     This is complementary information for debug session handle.  The
+     debug session handle is null, when debug attach attempt fails.
+     In this case, debug attach state contains more information on
+     the last error.  */
+  ze_result_t debug_attach_state;
+
   /* The target description for this device.  */
   target_desc_up tdesc;
 

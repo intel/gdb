@@ -1,0 +1,93 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Regression test for a bug in which some threads' backtrace is broken
+# with an error message of "PC not saved".
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-1D.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![is_level_zero_debug_api]} {
+	    unsupported "test is aimed at the L0-based stack only"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set end_marker [gdb_get_line_number "end-marker"]
+	gdb_breakpoint $end_marker
+	set last_line [gdb_get_line_number "kernel-last-line"]
+	gdb_breakpoint $last_line
+	gdb_continue_to_breakpoint "kernel bp" ".*$srcfile:$last_line.*"
+
+	# Display the backtrace for all threads, until we terminate.
+	# In the buggy case, some threads had a broken call stack.
+	# Therefore, check the backtrace for all threads.
+	set keep_going 1
+	set broken_backtrace 0
+	set trip 1
+	while {$keep_going} {
+	    with_test_prefix "trip $trip" {
+		# Conservatively clear the flag to avoid infinite looping
+		# just in case.
+		set keep_going 0
+
+		gdb_test_multiple "backtrace" "" {
+		    -re -wrap "PC not saved" {
+			set broken_backtrace 1
+		    }
+		    -re -wrap ".*" {
+			# Do nothing; will keep testing.
+		    }
+		}
+
+		gdb_test_multiple "continue" "" {
+		    -re -wrap "Breakpoint .*$srcfile:$last_line.*" {
+			set keep_going 1
+		    }
+		    -re -wrap "Breakpoint .*$srcfile:$end_marker.*" {
+			set keep_going 0
+		    }
+		}
+		incr trip
+	    }
+	}
+
+	gdb_assert {$broken_backtrace == 0} "no broken backtrace found"
+    }
+}

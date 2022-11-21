@@ -177,7 +177,7 @@ proc get_sycl_supported_devices {sycl_device_list} {
 proc sycl_start {device} {
     set args ""
     foreach arg [sycl_get_device_args $device] {
-	append args "'$arg' "
+	append args "\"$arg\" "
     }
     gdb_test_no_output "set args $args"
 

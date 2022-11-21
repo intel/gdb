@@ -2476,6 +2476,9 @@ proc gdb_reinitialize_dir { subdir } {
     if [is_remote host] {
 	return ""
     }
+
+    set subdir [host_file_normalize $subdir]
+
     send_gdb "dir\n"
     gdb_expect 60 {
 	-re "Reinitialize source path to empty.*y or n.(\\\s.answered Y; input not from terminal.)?" {
@@ -6571,6 +6574,17 @@ proc gdb_compile {source dest type options} {
 	    lappend new_options "additional_flags=-diag-disable=10441"
 	}
 
+	# Make icx/icpx produce DWARF on Windows.
+	if {[istarget "*-*-mingw*"]
+	    && ([test_compiler_info "icx-*" c++]
+		|| [test_compiler_info "icx-*" c])} {
+	    lappend new_options {additional_flags=-gdwarf -O0}
+	    lappend new_options {additional_flags=-fuse-ld=lld}
+	    lappend new_options {additional_flags=-Xlinker /ignore:longsections}
+	    lappend new_options {additional_flags=-Wno-unused-command-line-argument}
+	    lappend new_options {additional_flags=-D_MBCS}
+	}
+
 	# icpx/icx give the following warning if '-g' is used without '-O'.
 	#
 	#   icpx: remark: Note that use of '-g' without any
@@ -7310,6 +7324,9 @@ proc gdb_compile_openmp {source dest type options} {
 	    || [test_compiler_info {dpcpp-*} c++])} {
 	set new_options {additional_flags=-qopenmp}
 	lappend new_options {libs=-lstdc++}
+	if {![ishost *-*-mingw*]} {
+	    lappend new_options {libs=-lstdc++}
+	}
 	if {![string match *fopenmp-targets* $options]} {
 	    lappend new_options {additional_flags=-fopenmp-targets=spir64}
 	}

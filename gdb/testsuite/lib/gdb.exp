@@ -808,7 +808,7 @@ proc runto_main { {args_list {}} } {
     if {[llength $args_list] > 0} {
 	set args ""
 	foreach arg $args_list {
-	    append args "'$arg' "
+	    append args "\"$arg\" "
 	}
 	gdb_test_no_output "set args $args"
     }
@@ -2014,11 +2014,34 @@ proc gdb_assert { condition {message ""} } {
     return $res
 }
 
+# Convert /c/foo to c:/foo and vice versa for Windows.
+# OUTFILE input file path is converted to UNIX or WINDOWS
+# format depending on TO_WIN option.
+
+proc canoncialize_windows_dir {outfile {to_win 1}} {
+    set is_win_path [string first / $outfile]
+
+    if {$to_win && !$is_win_path} {
+	regsub {/} $outfile {} outfile
+	regsub {/} $outfile {:/} outfile
+    } else {
+	if {!$to_win && $is_win_path > 0} {
+	    regsub -all {\\} $outfile {/} outfile
+	    regsub -all {:} $outfile {/} outfile
+	    set outfile "/$outfile"
+	}
+    }
+    return $outfile
+}
+
 proc gdb_reinitialize_dir { subdir } {
     global gdb_prompt
 
     if [is_remote host] {
 	return ""
+    }
+    if {[ishost *-*-mingw*]} {
+	set subdir [canoncialize_windows_dir ${subdir}]
     }
     send_gdb "dir\n"
     gdb_expect 60 {
@@ -5176,6 +5199,16 @@ proc gdb_compile {source dest type options} {
 	    lappend new_options "additional_flags=-diag-disable=10441"
 	}
 
+	# Make icx/icpx produce DWARF on Windows.
+	if {[istarget "*-*-mingw*"]
+	    && ([test_compiler_info "icx-*" c++]
+		|| [test_compiler_info "icx-*" c])} {
+	    lappend new_options {additional_flags=-gdwarf -O0}
+	    lappend new_options {additional_flags=-fuse-ld=lld}
+	    lappend new_options {additional_flags=-Xlinker /ignore:longsections}
+	    lappend new_options {additional_flags=-Wno-unused-command-line-argument}
+	}
+
 	# icpx/icx give the following warning if '-g' is used without '-O'.
 	#
 	#   icpx: remark: Note that use of '-g' without any
@@ -5818,7 +5851,9 @@ proc gdb_compile_openmp {source dest type options} {
 	&& ([test_compiler_info {icx-*} c++]
 	    || [test_compiler_info {dpcpp-*} c++])} {
 	set new_options {additional_flags=-qopenmp}
-	lappend new_options {libs=-lstdc++}
+	if {![ishost *-*-mingw*]} {
+	    lappend new_options {libs=-lstdc++}
+	}
 	if {![string match *fopenmp-targets* $options]} {
 	    lappend new_options {additional_flags=-fopenmp-targets=spir64}
 	}
@@ -6767,13 +6802,18 @@ proc make_gdb_parallel_path { args } {
 proc standard_output_file {basename} {
     global objdir subdir gdb_test_file_name
 
+    if {[ishost *-*-mingw*]} {
+	# File join only works for UNIX path but this function might already
+	# be called by standard_test_file function for basename input.
+	set basename [canoncialize_windows_dir ${basename} 0]
+    }
     set dir [make_gdb_parallel_path outputs $subdir $gdb_test_file_name]
     file mkdir $dir
-    # If running on MinGW, replace /c/foo with c:/foo
-    if { [ishost *-*-mingw*] } {
-        set dir [exec sh -c "cd ${dir} && pwd -W"]
+    set outfile [file join $dir $basename]
+    if {[ishost *-*-mingw*]} {
+	set outfile [canoncialize_windows_dir ${outfile}]
     }
-    return [file join $dir $basename]
+    return ${outfile}
 }
 
 # Turn BASENAME into a full file name in the standard output directory.  If

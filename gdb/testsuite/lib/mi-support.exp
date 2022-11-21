@@ -390,6 +390,8 @@ proc mi_gdb_reinitialize_dir { subdir } {
 	return ""
     }
 
+    set subdir [host_file_normalize $subdir]
+
     send_gdb "104-environment-directory -r\n"
     gdb_expect 60 {
 	-re "104\\\^done,source-path=.*\r\n$mi_gdb_prompt$" {}

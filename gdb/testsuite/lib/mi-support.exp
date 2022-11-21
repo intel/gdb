@@ -398,6 +398,9 @@ proc mi_gdb_reinitialize_dir { subdir } {
     if [is_remote host] {
 	return ""
     }
+    if {[ishost *-*-mingw*]} {
+	set subdir [canoncialize_windows_dir ${subdir}]
+    }
 
     if { $MIFLAGS == "-i=mi1" } {
       send_gdb "104-environment-directory\n"
@@ -1149,7 +1152,7 @@ proc mi_runto_main {{args_list {}}} {
     if {[llength $args_list] > 0} {
 	set args ""
 	foreach arg $args_list {
-	    append args "'$arg' "
+	    append args "\"$arg\" "
 	}
 	# Because we're doing an internal setup, use send_gdb and gdb_expect
 	# instead of mi_gdb_test to not include this as a pass.

@@ -55,11 +55,13 @@ foreach extension $openmp_languages_list {
 	    }
 	    gdb_test "step" "first .* at .*" "step into function"
 
-	    set kfail ""
 	    if {${extension} eq "f90"} {
-		set kfail "JIRA CMPLRLLVM/40323"
+		setup_kfail "JIRA CMPLRLLVM/40323" "*-*-*"
 	    }
-	    continue_openmp_program_to_termination "" "${kfail}"
+	    if {${extension} eq "cpp" && [omp_is_level_zero_debug_api]} {
+		setup_kfail "JIRA DOQG/3397" "*-*-*"
+	    }
+	    continue_openmp_program_to_termination ""
 	}
     }
 }

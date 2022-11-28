@@ -20,18 +20,17 @@ load_lib numba.exp
 
 standard_testfile dppy-func.py
 
-if {[skip_numba_dppy_tests]} {
-    unsupported "target does not support NUMBA-DPPy"
+set numba_device_list [init_numba_dppy_devices_list]
+if {[llength $numba_device_list] == 0} {
     return 0
 }
 
-
 proc test_call_stack {} {
-    global srcfile inferior_exited_re gdb_prompt
+    global srcfile
 
     set kernel_line [gdb_get_line_number "numba-kernel-breakpoint"]
     set func_line [gdb_get_line_number "func_line_1"]
-    set kernel_calling_func_sum [gdb_get_line_number "kernel_line_2"]
+    set func_call [gdb_get_line_number "kernel_line_2"]
 
     # Ignore all but the first frame.
     gdb_test "backtrace 1" \
@@ -46,27 +45,36 @@ proc test_call_stack {} {
     # Ignore all but the first two frames.
     gdb_test "backtrace 2" [multi_line \
 	     "\#0 .*func_sum.* \\\(\\\) at ${srcfile}:${func_line}" \
-	     "\#1 .*kernel_sum.* \\\(\\\) at ${srcfile}:${kernel_calling_func_sum}.*"] \
+	     "\#1 .*kernel_sum.* \\\(\\\) at ${srcfile}:${func_call}.*"] \
 	     "backtrace at function entry"
 }
 
+foreach device $numba_device_list {
 
-with_test_prefix "FunctionControl=0" {
-    setenv IGC_FunctionControl "0"
-    if {![start_numba_script]} {
-	return -1
-    }
-    # Run the test.
-    test_call_stack
-}
-
-if {[string match "*:gpu:*" [dppy_device]]} {
-    with_test_prefix "FunctionControl=3" {
-	terminate_current_numba_run
-	setenv IGC_FunctionControl "3"
-	if {![start_numba_script]} {
-	    return -1
+    with_test_prefix "FunctionControl=0" {
+	setenv IGC_FunctionControl "0"
+	set test_prefix [numba_init_device $device]
+	if {[string match "" $test_prefix]} {
+	    verbose "NUMBA: Ignoring unknown device name $device" 0
+	    continue
 	}
-	test_call_stack
+	with_test_prefix "$test_prefix" {
+	    # Run the test.
+	    test_call_stack
+	}
+    }
+    if {[string match "*:gpu:*" [numba_device_filter]]} {
+	with_test_prefix "FunctionControl=3" {
+	    terminate_current_numba_run
+	    setenv IGC_FunctionControl "3"
+	    set filter_str [numba_init_device $device]
+	    if {![string match $test_prefix $filter_str]} {
+		verbose "NUMBA: Unexpected filter : $filter_str" 0
+		return -1
+	    }
+	    with_test_prefix "$test_prefix" {
+		test_call_stack
+	    }
+	}
     }
 }

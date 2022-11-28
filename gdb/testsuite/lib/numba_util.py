@@ -16,7 +16,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
+#
 # Utility file for NUMBA test programs to enable explicit selection of
 # the device.
 
@@ -32,22 +32,14 @@ def select_dppy_device(argv, func, func_args):
     :return: Return value of the func, or -1 if failed to schedule.
     """
 
-    device = None
     if 1 < len(argv):
-        if argv[1] == "cpu":
-            device = dpctl.select_cpu_device()
-        elif argv[1] == "gpu":
-            device = dpctl.select_gpu_device()
-        elif argv[1] == "accelerator":
-            device = dpctl.select_accelerator_device()
-
-    if device is not None:
-        print("Target device ...")
-        device.print_device_info()
-        with dpctl.device_context(device):
+        # device_filter must be in format <backend>:<type>:<index>.
+        device_filter = argv[1]
+        print("Using device_filter", device_filter )
+        with dpctl.device_context(device_filter):
             return func(func_args)
         print("Failed to schedule")
     else:
-        print(f"Usage: python {argv[0]} <cpu|gpu|accelerator>")
+        print(f"Usage: python {argv[0]} <opencl|level_zero|cuda>:<cpu|gpu>:<0|1|...>")
 
     return -1

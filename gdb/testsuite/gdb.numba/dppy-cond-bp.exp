@@ -19,32 +19,37 @@ load_lib numba.exp
 
 standard_testfile dppy-cond-bp.py
 
-if {[skip_numba_dppy_tests]} {
-    unsupported "target does not support NUMBA-DPPy"
+set numba_device_list [init_numba_dppy_devices_list]
+if {[llength $numba_device_list] == 0} {
     return 0
-}
-
-if {![start_numba_script]} {
-    return -1
 }
 
 set func_line [gdb_get_line_number "func_line_1"]
 set func_call_line [gdb_get_line_number "kernel_line_3"]
 
-gdb_test "break $func_call_line if a == 5" \
-    ".*${srcfile}.*line ${func_call_line}.*" \
-    "Conditional bp on local"
-gdb_continue_to_breakpoint "line ${func_call_line}" \
-    ".*${srcfile}:${func_call_line}.*"
-gdb_test "print a" " = 5"
+foreach device $numba_device_list {
+    set test_prefix [numba_init_device $device]
+    if {[string match "" $test_prefix]} {
+	verbose "NUMBA: Ignoring unknown device name $device" 0
+	continue
+    }
+    with_test_prefix "$test_prefix" {
+	gdb_test "break $func_call_line if a == 5" \
+	    ".*${srcfile}.*line ${func_call_line}.*" \
+	    "Conditional bp on local"
+	gdb_continue_to_breakpoint "line ${func_call_line}" \
+	    ".*${srcfile}:${func_call_line}.*"
+	gdb_test "print a" " = 5"
 
-gdb_test "break func_sum if a_in_func == 5" \
-    ".*${srcfile}.*line ${func_line}.*" \
-    "Conditional bp on function argument"
-setup_kfail "JIRA SAT/4449" "*-*-*"
-gdb_continue_to_breakpoint "line ${func_line}" \
-    ".*${srcfile}:${func_call_line}.*"
-setup_kfail "JIRA SAT/4449" "*-*-*"
-gdb_test "print a_in_func" " = 5"
+	gdb_test "break func_sum if a_in_func == 5" \
+	    ".*${srcfile}.*line ${func_line}.*" \
+	    "Conditional bp on function argument"
+	setup_kfail "JIRA SAT/4449" "*-*-*"
+	gdb_continue_to_breakpoint "line ${func_line}" \
+	    ".*${srcfile}:${func_call_line}.*"
+	setup_kfail "JIRA SAT/4449" "*-*-*"
+	gdb_test "print a_in_func" " = 5"
 
-continue_numba_to_termination
+	continue_numba_to_termination
+    }
+}

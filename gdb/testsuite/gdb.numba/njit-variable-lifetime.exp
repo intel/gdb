@@ -19,27 +19,32 @@ load_lib numba.exp
 
 standard_testfile njit-func.py
 
-if {[skip_numba_njit_tests]} {
-    unsupported "target does not support vanilla NUMBA"
+set numba_device_list [init_numba_njit_devices_list]
+if {[llength $numba_device_list] == 0} {
     return 0
 }
 
-if {![start_numba_script]} {
-    return -1
-}
-
-
 set func_line_2 [gdb_get_line_number "func_line_2"]
 
-# See how a variable keeps its value until the end of the function.
-# Numba incorrectly changes the value of a variable to zero, after its last use.
-gdb_breakpoint "${func_line_2}"
-gdb_continue_to_breakpoint "line ${func_line_2}" \
-    ".*${srcfile}:${func_line_2}.*"
-gdb_test "print a_in_func" " = 1234.5" \
-    "At the middle of the function"
+foreach device $numba_device_list {
+    set test_prefix [numba_init_device $device]
+    if {[string match "" $test_prefix]} {
+	verbose "NUMBA: Ignoring unknown device name $device" 0
+	continue
+    }
+    with_test_prefix "$test_prefix" {
+	# See how a variable keeps its value until the end of the function.
+	# Numba incorrectly changes the value of a variable to zero,
+	# after its last use.
+	gdb_breakpoint "${func_line_2}"
+	gdb_continue_to_breakpoint "line ${func_line_2}" \
+	    ".*${srcfile}:${func_line_2}.*"
+	gdb_test "print a_in_func" " = 1234.5" \
+	    "At the middle of the function"
 
-gdb_test "next"
-setup_kfail "NUMBA PR/7177" "*-*-*"
-gdb_test "print a_in_func" " = 1234.5" \
-    "At the end of the function"
+	gdb_test "next"
+	setup_kfail "NUMBA PR/7177" "*-*-*"
+	gdb_test "print a_in_func" " = 1234.5" \
+	    "At the end of the function"
+    }
+}

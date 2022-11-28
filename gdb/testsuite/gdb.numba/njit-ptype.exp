@@ -19,16 +19,22 @@ load_lib numba.exp
 
 standard_testfile njit-func.py
 
-if {[skip_numba_njit_tests]} {
-    unsupported "target does not support vanilla NUMBA"
+set numba_device_list [init_numba_njit_devices_list]
+if {[llength $numba_device_list] == 0} {
     return 0
 }
 
-if {![start_numba_script]} {
-    return -1
+foreach device $numba_device_list {
+    set test_prefix [numba_init_device $device]
+    if {[string match "" $test_prefix]} {
+	verbose "NUMBA: Ignoring unknown device name $device" 0
+	continue
+    }
+    with_test_prefix "$test_prefix" {
+	gdb_test "ptype size" "i64"
+	setup_kfail "NUMBA PR/7177" "*-*-*"
+	gdb_test "ptype a_in_kernel" \
+	    "type = struct array" \
+	    "ptype numpy array"
+    }
 }
-
-
-gdb_test "ptype size" "i64"
-setup_kfail "NUMBA PR/7177" "*-*-*"
-gdb_test "ptype a_in_kernel" "type = struct array" "ptype numpy array"

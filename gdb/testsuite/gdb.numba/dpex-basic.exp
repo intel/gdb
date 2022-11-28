@@ -13,14 +13,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Tests GDBs support for the NUMBA-DPPy: basic commands like
+# Tests GDBs support for the NUMBA-DPEX: basic commands like
 # stepping, frames and info locals.
 
 load_lib numba.exp
 
-standard_testfile dppy-func.py
+standard_testfile dpex-func.py
 
-set numba_device_list [init_numba_dppy_devices_list]
+set numba_device_list [init_numba_dpex_devices_list]
 if {[llength $numba_device_list] == 0} {
     return 0
 }

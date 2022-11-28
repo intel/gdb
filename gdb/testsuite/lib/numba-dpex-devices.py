@@ -17,13 +17,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Utility file for NUMBA-DPPy test programs to get list of available
+# Utility file for NUMBA-DPEX test programs to get list of available
 # devices.
 
 try:
     import dpctl
 except ModuleNotFoundError:
-    print ("DPCTL module not found")
+    print ("NUMBA: Python exception ModuleNotFoundError detected!")
     quit ()
 
 def list_devices():

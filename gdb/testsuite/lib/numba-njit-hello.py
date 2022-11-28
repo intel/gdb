@@ -19,15 +19,11 @@
 
 try:
     import numpy as np
-except ModuleNotFoundError:
-    print ("NUMPY module not found")
-    quit ()
-try:
     import numba
+    from numba import njit
 except ModuleNotFoundError:
-    print ("NUMBA module not found")
+    print ("NUMBA: Python exception ModuleNotFoundError detected!")
     quit ()
-from numba import njit
 
 
 @njit

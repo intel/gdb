@@ -18,26 +18,26 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
-import numba_dppy as dppy
+import numba_dpex as dpex
 import dpctl
 
 
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'lib'))
-from numba_util import select_dppy_device
+from numba_util import select_dpex_device
 
 
-@dppy.func(debug=True)
+@dpex.func(debug=True)
 def func_sum(a_in_func, b_in_func):
     result = a_in_func                                        # func_line_1
     result = result + b_in_func                               # func_line_2
     return result                                             # func_line_3
 
 
-@dppy.kernel(debug=True)
+@dpex.kernel(debug=True)
 def kernel_sum(a_in_kernel, b_in_kernel, c_in_kernel):
-    i = dppy.get_global_id(0)                                 # numba-kernel-breakpoint
+    i = dpex.get_global_id(0)                                 # numba-kernel-breakpoint
     a = a_in_kernel[i]                                        # kernel_line_2
     c_in_kernel[i] = func_sum(a, b_in_kernel[i])              # kernel_line_3
 
@@ -47,7 +47,7 @@ def driver(args):
     b = args[1]
     c = args[2]
     global_size = args[3]
-    kernel_sum[global_size, dppy.DEFAULT_LOCAL_SIZE](a, b, c)
+    kernel_sum[global_size, dpex.DEFAULT_LOCAL_SIZE](a, b, c)
 
 
 def main():
@@ -58,7 +58,7 @@ def main():
 
     # Schedule on the queue requested at the command line.
     args = [a, b, c, global_size]
-    select_dppy_device(sys.argv, driver, args)
+    select_dpex_device(sys.argv, driver, args)
 
 
 if __name__ == "__main__":

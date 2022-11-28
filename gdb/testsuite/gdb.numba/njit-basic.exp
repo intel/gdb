@@ -41,6 +41,7 @@ foreach device $numba_device_list {
 	gdb_test "info line" "Line ${kernel_entry} of \"${srcfile}.*" \
 	    "info line kernel_entry (${kernel_entry})"
 
+	setup_kfail "JIRA SAT/5180" "*-*-*"
 	gdb_test "next" "${kernel_line_2}.*kernel_line_2"
 
 	gdb_breakpoint "${func_line_3}"
@@ -58,6 +59,7 @@ foreach device $numba_device_list {
 
 	# 'info locals' shall show all local variables
 	# but no other variables.
+	setup_kfail "JIRA SAT/4968 and JIRA SAT/4969" "*-*-*"
 	gdb_test "info locals" "result = 0"
 
 	gdb_test "frame 1" "func_sum.*kernel_line_3"

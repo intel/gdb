@@ -61,6 +61,12 @@ foreach device $numba_device_list {
 
 	# 'info locals' shall show all local variables
 	# but no other variables.
+	setup_kfail "JIRA SAT/4968 and JIRA SAT/4969" "*-*-*"
+	gdb_test "info locals" "result = 0"
+
+	if {[string match "*level_zero:*" [numba_device_filter]]} {
+	    setup_kfail "JIRA SAT/5450" "*-*-*"
+	}
 	gdb_test "frame 1" "func_sum.*kernel_line_2"
 
 	gdb_test "set scheduler-locking off"

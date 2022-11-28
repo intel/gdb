@@ -42,6 +42,14 @@ foreach device $numba_device_list {
 	gdb_test "print a" " = 5"
 
 	gdb_test "break func_sum if a_in_func == 5"
+	if {[string match "*:cpu:*" [numba_device_filter]]} {
+	    # CPU hits at the function definition line,
+	    # before arguments are initialized.
+	    setup_kfail "JIRA SAT/5181" "*-*-*"
+	} elseif {[string match "*:gpu:*" [numba_device_filter]]} {
+	    # GPU hits at the function second line.
+	    setup_kfail "JIRA SAT/5146" "*-*-*"
+	}
 	gdb_test_multiple "continue" "hit a function breakpoint" {
 	    -re ".*${srcfile}:${func_line}.*" {
 		pass $gdb_test_name

@@ -41,6 +41,12 @@ foreach device $numba_device_list {
 	    "At the middle of the function"
 
 	gdb_test "next"
+	# Variables keep their values only if env.variale
+	# NUMBA_EXTEND_VARIABLE_LIFETIMES is set.
+	if {![info exists env(NUMBA_EXTEND_VARIABLE_LIFETIMES)]
+	    || $::env(NUMBA_EXTEND_VARIABLE_LIFETIMES) == "0" } {
+	    setup_kfail "NUMBA ISSUES/7420" "*-*-*"
+	}
 	gdb_test "print a_in_func" " = 1234.5" \
 	    "At the end of the function"
     }

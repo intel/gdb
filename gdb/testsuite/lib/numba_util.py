@@ -20,10 +20,13 @@
 # Utility file for NUMBA test programs to enable explicit selection of
 # the device.
 
-import dpctl
+try:
+    import dpctl
+except ModuleNotFoundError:
+    print ("NUMBA: Python exception ModuleNotFoundError detected!")
+    quit ()
 
-
-def select_dppy_device(argv, func, func_args):
+def select_dpex_device(argv, func, func_args):
     """Schedules the given function in the given queue.
 
     :param argv: Command line arguments (sys.argv)

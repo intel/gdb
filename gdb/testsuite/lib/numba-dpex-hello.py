@@ -2,7 +2,7 @@
 #
 # This testcase is part of GDB, the GNU debugger.
 #
-# Copyright 2022 Free Software Foundation, Inc.
+# Copyright 2021 Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,28 +17,25 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import numpy as np
-import numba_dppy as dppy
-import dpctl
-
+try:
+    import numpy as np
+    import numba_dpex as dpex
+    import numba
+    import dpctl
+except ModuleNotFoundError:
+    print ("NUMBA: Python exception ModuleNotFoundError detected!")
+    quit ()
 
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'lib'))
-from numba_util import select_dppy_device
+from numba_util import select_dpex_device
 
 
-@dppy.func(debug=True)
-def func_sum(a_in_func, b_in_func):
-    result = 0                                                # func_line_1
-    result = a_in_func + b_in_func                            # func_line_2
-    return result                                             # func_line_3
-
-
-@dppy.kernel(debug=True)
-def kernel_sum(a_in_kernel, b_in_kernel, c_in_kernel):
-    i = dppy.get_global_id(0)                                 # numba-kernel-breakpoint
-    c_in_kernel[i] = func_sum(a_in_kernel[i], b_in_kernel[i]) # kernel_line_2
+@dpex.kernel
+def data_parallel_sum(a, b, c):
+    i = dpex.get_global_id(0)
+    c[i] = a[i] + b[i]
 
 
 def driver(args):
@@ -46,19 +43,30 @@ def driver(args):
     b = args[1]
     c = args[2]
     global_size = args[3]
-    kernel_sum[global_size, dppy.DEFAULT_LOCAL_SIZE](a, b, c)
+    data_parallel_sum[global_size, dpex.DEFAULT_LOCAL_SIZE](a, b, c)
+    if a[0] + b[0] == c[0]:
+        print("Hello, NUMBA-DPEX!")
 
 
 def main():
-    a = np.array([1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5])
-    b = np.array([9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5])
-    global_size = np.size(a)
+    print("njit:", numba.__version__)
+    print("numpy:", np.__version__)
+    print("dpex:", dpex.__version__)
+    print("dpctl:", dpctl.__version__)
+
+    global_size = 1
+    N = global_size
+
+    a = np.array(np.random.random(N), dtype=np.float32)
+    b = np.array(np.random.random(N), dtype=np.float32)
     c = np.ones_like(a)
 
     # Schedule on the queue requested at the command line.
     args = [a, b, c, global_size]
-    select_dppy_device(sys.argv, driver, args)
+    select_dpex_device(sys.argv, driver, args)
+
+    print("Done...")
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

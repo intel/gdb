@@ -34,7 +34,7 @@ proc test_call_stack {} {
 
     # Ignore all but the first frame.
     gdb_test "backtrace 1" \
-	"0.*kernel_sum.* \\\(\\\) at ${srcfile}:${kernel_line}.*" \
+	"0.*kernel_sum.* \\\(.*\\\) at ${srcfile}:${kernel_line}.*" \
 	"backtrace at kernel entry"
 
     # Set and hit a breakpoint at the entry of the function 'func_sum'.
@@ -44,8 +44,8 @@ proc test_call_stack {} {
 
     # Ignore all but the first two frames.
     gdb_test "backtrace 2" [multi_line \
-	     "\#0 .*func_sum.* \\\(\\\) at ${srcfile}:${func_line}" \
-	     "\#1 .*kernel_sum.* \\\(\\\) at ${srcfile}:${func_call}.*"] \
+	     "\#0 .*func_sum.* \\\(.*\\\) at ${srcfile}:${func_line}\r\n" \
+	     "\#1 .*kernel_sum.* \\\(.*\\\) at ${srcfile}:${func_call}.*"] \
 	     "backtrace at function entry"
 }
 

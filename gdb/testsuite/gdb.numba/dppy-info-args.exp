@@ -33,11 +33,9 @@ foreach device $numba_device_list {
 	continue
     }
     with_test_prefix "$test_prefix" {
-	gdb_breakpoint "func_sum"
-	gdb_continue_to_breakpoint "break_at_func_sum" \
-	    ".*${srcfile}:${func_line}.*"
+	gdb_breakpoint "${func_line}"
+	gdb_test "continue"
 
-	setup_kfail "JIRA SAT/4462" "*-*-*"
 	gdb_test "info args" [multi_line \
 	    "a_in_func = 1234.5" \
 	    "b_in_func = 9876.5"]

@@ -14,7 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # Tests GDBs support for the NUMBA-DPPy: basic commands like
-# backtrace, stepping, frames and info locals.
+# stepping, frames and info locals.
 
 load_lib numba.exp
 
@@ -41,11 +41,6 @@ foreach device $numba_device_list {
 	# Set scheduler locking on so we won't be switching threads.
 	gdb_test "set scheduler-locking on"
 
-	# Ignore all but the first frame.
-	gdb_test "backtrace 1" \
-	    "0.*kernel_sum.* \\\(\\\) at ${srcfile}:${kernel_entry}.*" \
-	    "backtrace at kernel entry"
-
 	gdb_test "info line" "Line ${kernel_entry} of .${srcfile}.*" \
 	    "info line kernel_entry (${kernel_entry})"
 
@@ -55,13 +50,9 @@ foreach device $numba_device_list {
 	gdb_continue_to_breakpoint "line ${func_line_3}" \
 	    ".*${srcfile}:${func_line_3}.*"
 
-	# Jump to the first line, execution continues
-	# until we hit a breakpoint.
-	delete_breakpoints
-	gdb_breakpoint "$srcfile:${func_line_2}"
-	gdb_test "jump ${func_line_1}" \
-	    "Breakpoint ${decimal}, .*${srcfile}:${func_line_2}.*" \
-	    "jump func_line_1 (${func_line_1})"
+	# Jump backwards, execution continues until we hit a breakpoint.
+	gdb_test "jump ${func_line_2}" \
+	    "Breakpoint ${decimal}, .*${srcfile}:${func_line_3}.*"
 
 	gdb_test "list" [multi_line \
 	    "${func_line_1}.*func_line_1" \
@@ -70,13 +61,10 @@ foreach device $numba_device_list {
 
 	# 'info locals' shall show all local variables
 	# but no other variables.
-	global gdb_prompt
-	setup_kfail "JIRA SAT/4968 and JIRA SAT/4969" "*-*-*"
-	gdb_test "info locals" [multi_line \
-	    "a_in_func = 1234.5" \
-	    "b_in_func = 9876.5" \
-	    "result = 0"]
-
 	gdb_test "frame 1" "func_sum.*kernel_line_2"
+
+	gdb_test "set scheduler-locking off"
+	delete_breakpoints
+	continue_numba_to_termination
     }
 }

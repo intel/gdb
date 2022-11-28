@@ -31,10 +31,9 @@ foreach device $numba_device_list {
 	continue
     }
     with_test_prefix "$test_prefix" {
-	gdb_test "ptype i" "i64"
-	setup_kfail "NUMBA PR/7177" "*-*-*"
+	gdb_test "ptype i" "int64"
 	gdb_test "ptype a_in_kernel" \
-	    "type = struct array" \
+	    "type = struct array.*" \
 	    "ptype numpy array"
     }
 }

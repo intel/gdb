@@ -34,8 +34,6 @@ foreach device $numba_device_list {
     }
     with_test_prefix "$test_prefix" {
 	# See how a variable keeps its value until the end of the function.
-	# Numba incorrectly changes the value of a variable to zero,
-	# after its last use.
 	gdb_breakpoint "${func_line_2}"
 	gdb_continue_to_breakpoint "line ${func_line_2}" \
 	    ".*${srcfile}:${func_line_2}.*"
@@ -43,7 +41,6 @@ foreach device $numba_device_list {
 	    "At the middle of the function"
 
 	gdb_test "next"
-	setup_kfail "NUMBA PR/7177" "*-*-*"
 	gdb_test "print a_in_func" " = 1234.5" \
 	    "At the end of the function"
     }

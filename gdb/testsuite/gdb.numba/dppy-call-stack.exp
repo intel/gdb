@@ -39,10 +39,25 @@ proc test_call_stack {} {
 
     # Set and hit a breakpoint at the entry of the function 'func_sum'.
     gdb_breakpoint "func_sum"
-    gdb_continue_to_breakpoint "break_at_func_sum" \
-	".*${srcfile}:${func_line}.*"
+    if {[string match "*:cpu:*" [numba_device_filter]]} {
+	# CPU hits at the function definition line.
+	setup_kfail "JIRA SAT/5181" "*-*-*"
+    } elseif {[string match "*:gpu:*" [numba_device_filter]]} {
+	# GPU hits at the function second line.
+	setup_kfail "JIRA SAT/5146" "*-*-*"
+    }
+    gdb_test "continue" \
+	".*${srcfile}:${func_line}.*" \
+	"hit a function breakpoint"
 
     # Ignore all but the first two frames.
+    if {[string match "*level_zero:*" [numba_device_filter]]} {
+	setup_kfail "JIRA SAT/5450" "*-*-*"
+    } elseif {[string match "*:cpu:*" [numba_device_filter]]} {
+	setup_kfail "JIRA SAT/5181" "*-*-*"
+    } elseif {[string match "*:gpu:*" [numba_device_filter]]} {
+	setup_kfail "JIRA SAT/5146" "*-*-*"
+    }
     gdb_test "backtrace 2" [multi_line \
 	     "\#0 .*func_sum.* \\\(.*\\\) at ${srcfile}:${func_line}\r\n" \
 	     "\#1 .*kernel_sum.* \\\(.*\\\) at ${srcfile}:${func_call}.*"] \

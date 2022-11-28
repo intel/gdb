@@ -41,13 +41,20 @@ foreach device $numba_device_list {
 	    ".*${srcfile}:${func_call_line}.*"
 	gdb_test "print a" " = 5"
 
-	gdb_test "break func_sum if a_in_func == 5" \
-	    ".*${srcfile}.*line ${func_line}.*" \
-	    "Conditional bp on function argument"
-	setup_kfail "JIRA SAT/4449" "*-*-*"
-	gdb_continue_to_breakpoint "line ${func_line}" \
-	    ".*${srcfile}:${func_call_line}.*"
-	setup_kfail "JIRA SAT/4449" "*-*-*"
+	gdb_test "break func_sum if a_in_func == 5"
+	gdb_test_multiple "continue" "hit a function breakpoint" {
+	    -re ".*${srcfile}:${func_line}.*" {
+		pass $gdb_test_name
+	    }
+	    -re -wrap "${inferior_exited_re}.*" {
+		fail $gdb_test_name
+		# Inferior has exited, cannot run more tests.
+		return
+	    }
+	    default {
+		fail $gdb_test_name
+	    }
+	}
 	gdb_test "print a_in_func" " = 5"
 
 	continue_numba_to_termination

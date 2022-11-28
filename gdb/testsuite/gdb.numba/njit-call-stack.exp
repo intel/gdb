@@ -20,39 +20,36 @@ load_lib numba.exp
 
 standard_testfile njit-func.py
 
-if {[skip_numba_njit_tests]} {
-    unsupported "target does not support vanilla NUMBA"
+set numba_device_list [init_numba_njit_devices_list]
+if {[llength $numba_device_list] == 0} {
     return 0
 }
 
-if {![start_numba_script]} {
-    return -1
+set kernel_entry [gdb_get_line_number "numba-kernel-breakpoint"]
+set func_line [gdb_get_line_number "func_line_1"]
+set func_call [gdb_get_line_number "kernel_line_3"]
+
+foreach device $numba_device_list {
+    set test_prefix [numba_init_device $device]
+    if {[string match "" $test_prefix]} {
+	verbose "NUMBA: Ignoring unknown device name $device" 0
+	continue
+    }
+    with_test_prefix "$test_prefix" {
+	# Ignore all but the first frame.
+	gdb_test "backtrace 1" \
+	    "0.*kernel_sum.* \\\(.*\\\) at ${srcfile}:${kernel_entry}.*" \
+	    "backtrace at kernel entry"
+
+	# Set and hit a breakpoint at the entry of the function 'func_sum'.
+	gdb_breakpoint "${func_line}"
+	gdb_continue_to_breakpoint "line ${func_line}" \
+	    ".*${srcfile}:${func_line}.*"
+
+	# Ignore all but the first two frames.
+	gdb_test "backtrace 2" [multi_line \
+	    "\#0 .*func_sum.* \\\(.*\\\) at ${srcfile}:${func_line}" \
+	    "\#1 .*kernel_sum.* \\\(.*\\\) at ${srcfile}:${func_call}.*"] \
+	    "backtrace at function entry"
+    }
 }
-
-
-proc test_call_stack {} {
-    global srcfile inferior_exited_re gdb_prompt
-
-    set kernel_line [gdb_get_line_number "numba-kernel-breakpoint"]
-    set func_line [gdb_get_line_number "func_line_1"]
-    set kernel_calling_func_sum [gdb_get_line_number "kernel_line_3"]
-
-    # Ignore all but the first frame.
-    gdb_test "backtrace 1" \
-	"0.*kernel_sum.* \\\(.*\\\) at ${srcfile}:${kernel_line}.*" \
-	"backtrace at kernel entry"
-
-    # Set and hit a breakpoint at the entry of the function 'func_sum'.
-    gdb_breakpoint "${func_line}"
-    gdb_continue_to_breakpoint "line ${func_line}" \
-	".*${srcfile}:${func_line}.*"
-
-    # Ignore all but the first two frames.
-    gdb_test "backtrace 2" [multi_line \
-	     "\#0 .*func_sum.* \\\(.*\\\) at ${srcfile}:${func_line}" \
-	     "\#1 .*kernel_sum.* \\\(.*\\\) at ${srcfile}:${kernel_calling_func_sum}.*"] \
-	     "backtrace at function entry"
-}
-
-
-test_call_stack

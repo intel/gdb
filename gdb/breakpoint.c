@@ -2774,8 +2774,9 @@ insert_bp_location (struct bp_location *bl,
     {
       std::string stb = breakpoint_location_to_buffer (bl);
       gdb_printf (gdb_stdlog,
-		  "breakpoints: insert_bp_location (%s) %s\n",
-		  host_address_to_string (bl), stb.c_str ());
+		  "breakpoints: insert_bp_location (%s) at address %s"
+		  " %s\n", host_address_to_string (bl),
+		  paddress (bl->gdbarch, bl->address), stb.c_str ());
     }
 
   /* Note we don't initialize bl->target_info, as that wipes out
@@ -3991,11 +3992,11 @@ remove_breakpoint_1 (struct bp_location *bl, enum remove_bp_reason reason)
   if (debug_breakpoints)
     {
       std::string stb = breakpoint_location_to_buffer (bl);
-      gdb_printf (gdb_stdlog,
-		  "breakpoints: remove_breakpoint_1 (%s, %s) %s\n",
-		  host_address_to_string (bl),
-		  reason == REMOVE_BREAKPOINT ? "remove" : "detach",
-		  stb.c_str ());
+      gdb_printf (
+	  gdb_stdlog, "breakpoints: remove_breakpoint_1 (%s, %s) at address %s"
+	  " %s \n", host_address_to_string (bl),
+	  reason == REMOVE_BREAKPOINT ? "remove" : "detach",
+	  paddress (bl->gdbarch, bl->address), stb.c_str ());
     }
 
   int val;

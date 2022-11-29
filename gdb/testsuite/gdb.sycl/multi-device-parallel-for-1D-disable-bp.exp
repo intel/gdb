@@ -20,13 +20,11 @@ load_lib sycl.exp
 
 standard_testfile multi-device-parallel-for-1D.cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
+set devices_count 0
 
-    if {[start_sycl_program] < 0} {
-        return -1
-    }
+# Run all tests
+proc test_multi_device {} {
+    global srcfile devices_count
 
     set num_devices_check [gdb_get_line_number "num-devices-check"]
     set devices_driver_check [gdb_get_line_number "devices-driver-check"]
@@ -36,6 +34,12 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
 	".*$srcfile:$num_devices_check.*"
 
     set num_devices [get_integer_valueof "num_devices" 0]
+
+    # No need to run the tests twice with the same DEVICES_COUNT.
+    if {$num_devices == $devices_count} {
+	return 0
+    }
+    set devices_count $num_devices
 
     if {$num_devices < 2} {
 	unsupported "test is aimed at multi-device machines"
@@ -80,6 +84,20 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
     gdb_continue_to_breakpoint "$srcfile:$end_bp.*"
 
     continue_sycl_program_to_termination
+}
+
+# A generic function name is used to call it from the SYCL library.
+proc "sycl_${gdb_test_file_name}_run_tests" {} {
+    global binfile
+
+    foreach_with_prefix ReturnSubDevicesAsApiDevices {0 1} {
+	clean_restart $binfile
+	gdb_test "set env ReturnSubDevicesAsApiDevices=$ReturnSubDevicesAsApiDevices"
+	if {[start_sycl_program] < 0} {
+	    return -1
+	}
+	test_multi_device
+    }
 }
 
 test_initialize

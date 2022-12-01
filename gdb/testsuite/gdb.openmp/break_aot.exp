@@ -52,9 +52,7 @@ foreach extension ${openmp_languages_list} {
 	    if {[build_executable "failed to compile $srcfile" \
 		"${exe}" $srcfile \
 		[concat openmp $language debug "${aot_opts}"]]} {
-		if {[require_openmp_device "GPU"]} {
-		    kfail "JIRA GSD/3754" "${extension}: Offline compiler does not accept range of devices input for all targets."
-		} else {
+		if {[require_openmp_device "CPU"]} {
 		    kfail "JIRA CMPLRLLVM/51578" "${extension}: AOT compilation fails for IFX."
 		}
 		untested "OpenMP: Fail to prepare the test for ${extension}"

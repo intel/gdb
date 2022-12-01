@@ -52,9 +52,6 @@ foreach extension ${openmp_languages_list} {
 	    if {[build_executable "failed to compile $srcfile" \
 		"${exe}" $srcfile \
 		[concat openmp $language debug "${aot_opts}"]]} {
-		if {[require_openmp_device "GPU"]} {
-		    kfail "JIRA GSD/3754" "${extension}: Offline compiler does not accept range of devices input for all targets."
-		}
 		untested "OpenMP: Fail to prepare the test for ${extension}"
 		continue
 	    }

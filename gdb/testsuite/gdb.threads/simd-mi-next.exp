@@ -42,6 +42,7 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
 
     # Test next command and expect the response to contain
     # reason="end-stepping-range",execution-mask="$hex",simd-width="$decimal".
+    setup_kfail "IGDB/3580" "*-*-*"
     mi_next_extra ",execution-mask=\"$hex\",simd-width=\"$decimal\"" "next to next line"
 
     # Continue to end.

@@ -20,30 +20,39 @@ load_lib sycl.exp
 
 standard_testfile single-task.cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile decimal
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    # Set a breakpoint inside the kernel.  Expect to hit a kernel line.
-    # Since the kernel is optimized, we may not hit the exact line for
-    # which we defined the BP, and that's ok.
-    gdb_breakpoint "$srcfile:[gdb_get_line_number kernel-line-2]" {message}
-    gdb_continue_to_breakpoint "kernel line" \
-	".* kernel-line-$decimal .*"
-
-    # For local variables, if the compiler was able to maintain their
-    # location information, we would get actual values.  Otherwise we
-    # should see "<optimized out>".  In either case, the variables should
-    # exist.
-    gdb_test "info locals ten" "ten = (10|<optimized out>)"
-    # FOURTEEN may not be initialized yet because of the BP location.
-    set uninitialized "-?$decimal"
-    gdb_test "info locals fourteen" "fourteen = ($uninitialized|<optimized out>)"
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
 # Set the -O2 flag explicitly.
-test_initialize "optimize=-O2"
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug "optimize=-O2"}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	# Set a breakpoint inside the kernel.  Expect to hit a kernel line.
+	# Since the kernel is optimized, we may not hit the exact line for
+	# which we defined the BP, and that's ok.
+	gdb_breakpoint "$srcfile:[gdb_get_line_number kernel-line-2]" {message}
+	gdb_continue_to_breakpoint "kernel line" \
+	    ".* kernel-line-$decimal .*"
+
+	# For local variables, if the compiler was able to maintain their
+	# location information, we would get actual values.  Otherwise we
+	# should see "<optimized out>".  In either case, the variables should
+	# exist.
+	gdb_test "info locals ten" "ten = (10|<optimized out>)"
+	# FOURTEEN may not be initialized yet because of the BP location.
+	set uninitialized "-?$decimal"
+	gdb_test "info locals fourteen" "fourteen = ($uninitialized|<optimized out>)"
+    }
+}

@@ -24,12 +24,21 @@ load_lib sycl.exp
 
 standard_testfile spinning-kernel.cpp
 
-proc spawn_and_attach_sycl_proc {executable} {
-    global gdb_prompt device_type device_name sycl_driver_platform
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
 
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+proc spawn_and_attach_sycl_proc {executable device} {
     # Spawn a sycl proc and wait for a few seconds.
     set spawn_id [spawn_wait_for_attach [list \
-	"${executable} ${device_type} \{${device_name}\} ${sycl_driver_platform}"]]
+	"${executable} [sycl_get_device_args $device]"]]
     # Try to attach if spawn id is valid.
     if {$spawn_id != -1} {
 	# Obtain PID to attach.
@@ -40,65 +49,64 @@ proc spawn_and_attach_sycl_proc {executable} {
     return $spawn_id
 }
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile binfile
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
 
-    if {![require_sycl_device "gpu" "Intel*"]} {
-        unsupported "test is aimed at Intel GPUs only"
-        return 0
-    }
-
-    if {![is_level_zero_debug_api]} {
-	unsupported "test is aimed at Level-Zero Debug API only"
-	return 0
-    }
-
-    # Spawn sycl proc and attach.
-    set test_spawn_id [spawn_and_attach_sycl_proc $binfile]
-
-    # Return early if it is failed to spawn a sycl proc.
-    if {$test_spawn_id == -1} {
-	fail "failed to spawn a sycl proc to attach"
-	return -1
-    }
-
-    # Get the spinning kernel line.
-    set spinning_line [gdb_get_line_number "spinning-line"]
-
-    # Find all spinning threads.  It is expected to find 4 threads exactly,
-    # as the input data size is 64 and subgroup size is 16.  These values
-    # can be controlled with DATA_SIZE (64 by default) and SUB_GROUP_SIZE
-    # (16 by default) flags, if needed.
-    set num_spinning_threads 4
-    set spinning_threads ""
-    for {set i 1} {$i <= $num_spinning_threads} {incr i} {
-	set spinning_thread($i) [get_another_stopped_thread \
-	    $srcfile $spinning_line "$spinning_threads" "find spin thread $i"]
-	append spinning_threads " $spinning_thread($i)"
-    }
-    verbose -log "spinning threads: $spinning_threads"
-    gdb_assert { [llength $spinning_threads] == $num_spinning_threads } \
-	"expecting $num_spinning_threads spinning threads"
-
-    # For each spinning thread, check the backtrace and break the loop.
-    foreach thread $spinning_threads {
-	with_test_prefix "testing spinning thread $thread" {
-	    gdb_test "thread $thread" ".*$thread.*" \
-		"switching to $thread"
-	    gdb_test "bt" [multi_line \
-		"#0.*main.*$srcfile:$spinning_line.*" \
-		"#1.*" ]
-	    gdb_test "thread apply $thread:* -q -s p spin = 0" \
-		" = 0" "break the loop at $thread"
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
 	}
+
+	if {![is_level_zero_debug_api]} {
+	    unsupported "test is aimed at Level-Zero Debug API only"
+	    continue
+	}
+
+	# Spawn sycl proc and attach.
+	set test_spawn_id [spawn_and_attach_sycl_proc $binfile $device]
+
+	# Return early if it is failed to spawn a sycl proc.
+	if {$test_spawn_id == -1} {
+	    fail "failed to spawn a sycl proc to attach"
+	    continue
+	}
+
+	# Get the spinning kernel line.
+	set spinning_line [gdb_get_line_number "spinning-line"]
+
+	# Find all spinning threads.  It is expected to find 4 threads exactly,
+	# as the input data size is 64 and subgroup size is 16.  These values
+	# can be controlled with DATA_SIZE (64 by default) and SUB_GROUP_SIZE
+	# (16 by default) flags, if needed.
+	set num_spinning_threads 4
+	set spinning_threads ""
+	for {set i 1} {$i <= $num_spinning_threads} {incr i} {
+	    set spinning_thread($i) [get_another_stopped_thread \
+		$srcfile $spinning_line "$spinning_threads" "find spin thread $i"]
+	    append spinning_threads " $spinning_thread($i)"
+	}
+	verbose -log "spinning threads: $spinning_threads"
+	gdb_assert { [llength $spinning_threads] == $num_spinning_threads } \
+	    "expecting $num_spinning_threads spinning threads"
+
+	# For each spinning thread, check the backtrace and break the loop.
+	foreach thread $spinning_threads {
+	    with_test_prefix "testing spinning thread $thread" {
+		gdb_test "thread $thread" ".*$thread.*" \
+		    "switching to $thread"
+		gdb_test "bt" [multi_line \
+		    "#0.*main.*$srcfile:$spinning_line.*" \
+		    "#1.*" ]
+		gdb_test "thread apply $thread:* -q -s p spin = 0" \
+		    " = 0" "break the loop at $thread"
+	    }
+	}
+
+	# Continue to termination.
+	continue_sycl_program_to_termination
+
+	# Should make sure process is killed just in case.
+	kill_wait_spawned_process $test_spawn_id
     }
-
-    # Continue to termination.
-    continue_sycl_program_to_termination
-
-    # Should make sure process is killed just in case.
-    kill_wait_spawned_process $test_spawn_id
 }
-
-test_initialize

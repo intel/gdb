@@ -29,7 +29,10 @@ if [skip_perf_tests] {
 }
 
 PerfTest::assemble {
-    if {![sycl_perftest_initialize]} {
+    global device
+
+    set device [sycl_perftest_initialize]
+    if {[string match "" $device]} {
 	unsupported "Test initializaton is failed"
 	return -1
     }
@@ -38,7 +41,7 @@ PerfTest::assemble {
 } {
     global bp_last_line device
 
-    if {[start_sycl_program] < 0} {
+    if {![runto_main [sycl_get_device_args $device]]} {
 	return -1
     }
 

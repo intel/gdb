@@ -20,21 +20,31 @@ load_lib sycl.exp
 
 standard_testfile parallel-for-1D.cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
-
-    gdb_test_no_output "set non-stop on"
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    gdb_test_multiple "continue -a" "continue to end" {
-	-re "$inferior_exited_re normally].*$gdb_prompt.*" {
-	    pass $gdb_test_name
-    	}
-    }
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	gdb_test_no_output "set non-stop on"
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	gdb_test_multiple "continue -a" "continue to end" {
+	    -re "$inferior_exited_re normally].*$gdb_prompt.*" {
+		pass $gdb_test_name
+	    }
+	}
+    }
+}

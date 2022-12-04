@@ -21,11 +21,22 @@ load_lib sycl.exp
 # dispatched by the time we hit the breakpoint.
 standard_testfile barrier.cpp
 
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
 # The actual test procedure.
-proc test_resume {delete_bp} {
+proc test_resume {delete_bp device} {
     global srcfile decimal gdb_prompt
 
-    if {[start_sycl_program] < 0} {
+    if {![runto_main [sycl_get_device_args $device]]} {
 	return -1
     }
 
@@ -60,24 +71,27 @@ proc test_resume {delete_bp} {
 	"another thread hits bp2"
 }
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global binfile
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
 
-    if {![require_sycl_device "gpu" "Intel*"]} {
-	unsupported "test is aimed at Intel GPUs only"
-	return 0
-    }
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
 
-    if {![is_level_zero_debug_api]} {
-	unsupported "test is aimed at the L0-based stack only"
-	return 0
-    }
+	if {![is_level_zero_debug_api]} {
+	    unsupported "test is aimed at the L0-based stack only"
+	    continue
+	}
 
-    foreach_with_prefix delete_bp {0 1} {
-	clean_restart $binfile
-	test_resume $delete_bp
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	foreach_with_prefix delete_bp {0 1} {
+	    clean_restart $binfile
+	    test_resume $delete_bp $device
+	}
     }
 }
-
-test_initialize

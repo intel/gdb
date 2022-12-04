@@ -19,35 +19,44 @@ load_lib sycl.exp
 
 standard_testfile .cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    set kernel_1 [gdb_get_line_number "kernel-1-line"]
-    set kernel_2 [gdb_get_line_number "kernel-2-line"]
-    set inbetween [gdb_get_line_number "in-between-kernels"]
-    set post_kernel [gdb_get_line_number "line-after-kernel"]
-    gdb_breakpoint $kernel_1 {temporary}
-    gdb_breakpoint $kernel_2 {temporary}
-    gdb_breakpoint $inbetween {temporary}
-    gdb_breakpoint $post_kernel
-
-    # Check that we stop at each breakpoint in order.
-    gdb_continue_to_breakpoint "hit the BP in kernel 1" \
-	".*$srcfile:$kernel_1.*"
-
-    gdb_continue_to_breakpoint "hit the BP in-between kernels" \
-	".*$srcfile:$inbetween.*"
-
-    gdb_continue_to_breakpoint "hit the BP in kernel 2" \
-	".*$srcfile:$kernel_2.*"
-
-    gdb_continue_to_breakpoint "hit the BP post-kernel" \
-	".*$srcfile:$post_kernel.*"
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set kernel_1 [gdb_get_line_number "kernel-1-line"]
+	set kernel_2 [gdb_get_line_number "kernel-2-line"]
+	set inbetween [gdb_get_line_number "in-between-kernels"]
+	set post_kernel [gdb_get_line_number "line-after-kernel"]
+	gdb_breakpoint $kernel_1 {temporary}
+	gdb_breakpoint $kernel_2 {temporary}
+	gdb_breakpoint $inbetween {temporary}
+	gdb_breakpoint $post_kernel
+
+	# Check that we stop at each breakpoint in order.
+	gdb_continue_to_breakpoint "hit the BP in kernel 1" \
+	    ".*$srcfile:$kernel_1.*"
+
+	gdb_continue_to_breakpoint "hit the BP in-between kernels" \
+	    ".*$srcfile:$inbetween.*"
+
+	gdb_continue_to_breakpoint "hit the BP in kernel 2" \
+	    ".*$srcfile:$kernel_2.*"
+
+	gdb_continue_to_breakpoint "hit the BP post-kernel" \
+	    ".*$srcfile:$post_kernel.*"
+    }
+}

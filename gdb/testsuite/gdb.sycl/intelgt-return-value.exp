@@ -19,6 +19,18 @@ load_lib sycl.exp
 
 standard_testfile .cpp
 
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+# Set -mavx512f flag to avoid compiler warnings.
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug "additional_flags=\"-mavx512f\""}]} {
+    return -1
+}
+
 set fill "\[^\r\n\]*"
 
 # Helper function to test "finish" command.
@@ -242,34 +254,32 @@ proc test_call_stack {call_stack_supported} {
     check_hit "hit tail_call_inner_int" ${hit_tail_call_inner_int}
 }
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global binfile
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
 
-    if {![require_sycl_device "gpu" "Intel*"]} {
-	unsupported "test is aimed at Intel GPUs only"
-	return 0
-    }
-
-    with_test_prefix "FunctionControl=0" {
-	gdb_test "set env IGC_FunctionControl=0"
-	if {[start_sycl_program] < 0} {
-	    return -1
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
 	}
-	test_call_stack false
-    }
 
-    clean_restart $binfile
-    # TEMP set IGC flags for the call stack.
-    gdb_test "set env IGC_FunctionControl=3"
-    gdb_test "set env IGC_ForceInlineStackCallWithImplArg=1"
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-    with_test_prefix "FunctionControl=3" {
-	test_call_stack true
+	with_test_prefix "FunctionControl=0" {
+	    gdb_test "set env IGC_FunctionControl=0"
+	    if {![runto_main [sycl_get_device_args $device]]} {
+		continue
+	    }
+	    test_call_stack false
+	}
+
+	clean_restart $binfile
+	# TEMP set IGC flags for the call stack.
+	gdb_test "set env IGC_FunctionControl=3"
+	gdb_test "set env IGC_ForceInlineStackCallWithImplArg=1"
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+	with_test_prefix "FunctionControl=3" {
+	    test_call_stack true
+	}
     }
 }
-
-# Set -mavx512f flag to avoid compiler warnings.
-test_initialize "additional_flags=\"-mavx512f\""

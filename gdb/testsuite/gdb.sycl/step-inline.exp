@@ -19,55 +19,64 @@ load_lib sycl.exp
 
 standard_testfile step-inline.cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile gdb_prompt
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
 
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
 
-    # CPU threads hit just one branch, while GPU threads hit both branches.
-    set number_branches_to_hit 2
-    if {![require_sycl_device "gpu" "Intel*"]} {
-	set number_branches_to_hit 1
-    }
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
 
-    set breakpoint_line [gdb_get_line_number "breakpoint-here"]
-    set before_branch_line [gdb_get_line_number "before-branch"]
-    set condition_line [gdb_get_line_number "condition"]
-    set then_branch_line [gdb_get_line_number "then-branch"]
-    set else_branch_line [gdb_get_line_number "else-branch"]
-    gdb_breakpoint $breakpoint_line {temporary}
+	# CPU threads hit just one branch, while GPU threads hit both branches.
+	set number_branches_to_hit 2
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    set number_branches_to_hit 1
+	}
 
-    gdb_continue_to_breakpoint "before inlined calls" \
-	".*$srcfile:$breakpoint_line.*"
+	set breakpoint_line [gdb_get_line_number "breakpoint-here"]
+	set before_branch_line [gdb_get_line_number "before-branch"]
+	set condition_line [gdb_get_line_number "condition"]
+	set then_branch_line [gdb_get_line_number "then-branch"]
+	set else_branch_line [gdb_get_line_number "else-branch"]
+	gdb_breakpoint $breakpoint_line {temporary}
 
-    # Set scheduler locking to step so we can step w/o switching threads.
-    gdb_test "set scheduler-locking step"
+	gdb_continue_to_breakpoint "before inlined calls" \
+	    ".*$srcfile:$breakpoint_line.*"
 
-    # Step through the program.
+	# Set scheduler locking to step so we can step w/o switching threads.
+	gdb_test "set scheduler-locking step"
 
-    gdb_test "next" "before-branch.*" "step to \"before-branch\""
-    gdb_test "next" "condition.*" "step to \"condition\""
+	# Step through the program.
 
-    set i 0
-    while { $i < $number_branches_to_hit } {
-	with_test_prefix "through branch iteration $i" {
-	    incr i
-	    gdb_test_multiple "next" "step into branch" {
-		-re "then-branch.*$gdb_prompt" {
-		    pass "$gdb_test_name then"
-		}
-		-re "else-branch.*$gdb_prompt" {
-		    pass "$gdb_test_name else"
-		}
-		-re "$gdb_prompt" {
-		    fail "$gdb_test_name"
+	gdb_test "next" "before-branch.*" "step to \"before-branch\""
+	gdb_test "next" "condition.*" "step to \"condition\""
+
+	set i 0
+	while { $i < $number_branches_to_hit } {
+	    with_test_prefix "through branch iteration $i" {
+		incr i
+		gdb_test_multiple "next" "step into branch" {
+		    -re "then-branch.*$gdb_prompt" {
+			pass "$gdb_test_name then"
+		    }
+		    -re "else-branch.*$gdb_prompt" {
+			pass "$gdb_test_name else"
+		    }
+		    -re "$gdb_prompt" {
+			fail "$gdb_test_name"
+		    }
 		}
 	    }
 	}
     }
 }
-
-test_initialize

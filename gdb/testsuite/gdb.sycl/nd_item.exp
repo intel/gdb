@@ -19,31 +19,40 @@ load_lib sycl.exp
 
 standard_testfile .cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
-
-    if {[require_sycl_device "gpu" "Intel*"]} {
-	unsupported "test is not supported on Intel GPUs"
-	return 0
-    }
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    set last_line [gdb_get_line_number "kernel-last-line"]
-    gdb_breakpoint $last_line
-
-    # Check a kernel invariant for a thread.
-    gdb_continue_to_breakpoint "kernel" ".*$srcfile:$last_line.*"
-
-    gdb_test "print gid0 == item.get_global_id()\[0\]" "true" \
-	"thread invariant for gid0"
-    gdb_test "print gid1 == item.get_global_id()\[1\]" "true" \
-	"thread invariant for gid1"
-    gdb_test "print gid2 == item.get_global_id()\[2\]" "true" \
-	"thread invariant for gid2"
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is not supported on Intel GPUs"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set last_line [gdb_get_line_number "kernel-last-line"]
+	gdb_breakpoint $last_line
+
+	# Check a kernel invariant for a thread.
+	gdb_continue_to_breakpoint "kernel" ".*$srcfile:$last_line.*"
+
+	gdb_test "print gid0 == item.get_global_id()\[0\]" "true" \
+	    "thread invariant for gid0"
+	gdb_test "print gid1 == item.get_global_id()\[1\]" "true" \
+	    "thread invariant for gid1"
+	gdb_test "print gid2 == item.get_global_id()\[2\]" "true" \
+	    "thread invariant for gid2"
+    }
+}

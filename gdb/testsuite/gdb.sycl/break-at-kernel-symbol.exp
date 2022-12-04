@@ -19,67 +19,81 @@ load_lib sycl.exp
 
 standard_testfile single-task.cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile binfile
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    # Find out the symbol for the kernel.
-    set inside_kernel_1 [gdb_get_line_number "kernel-line-1"]
-    gdb_breakpoint "$srcfile:$inside_kernel_1" {temporary}
-    gdb_continue_to_breakpoint "kernel line 1" ".*$srcfile:$inside_kernel_1.*"
-
-    gdb_test_no_output "set print demangle off"
-    set kernel_symbol ""
-    gdb_test_multiple "backtrace 1" "find kernel symbol" {
-	-re -wrap "#0  (\[A-Za-z0-9_\]+) \\(.*" {
-	    set kernel_symbol $expect_out(1,string)
-	    pass $gdb_test_name
-	}
-    }
-
-    verbose -log "Kernel symbol: $kernel_symbol" 2
-    if {$kernel_symbol eq ""} {
-	return -1
-    }
-
-    # Now restart with a pending BP defined on the kernel symbol.
-    clean_restart $binfile
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    # On GPU, stop at the solib load event to insert the BP.
-    if {[require_sycl_device "gpu" "Intel*"]} {
-	set before_kernel [gdb_get_line_number "line-before-kernel"]
-	gdb_breakpoint "$srcfile:$before_kernel" {temporary}
-	gdb_continue_to_breakpoint "before kernel" ".*$srcfile:$before_kernel.*"
-	gdb_test_no_output "set stop-on-solib-events 1"
-	if {[is_level_zero_debug_api]} {
-	    kfail "JIRA DOQG/2748" "stop-on-solib-events hangs"
-	    return
-	}
-	gdb_test "continue" "Stopped due to shared library event.*" \
-	    "continue until solib load"
-	kfail "JIRA DOQG/2492" "stop-on-solib-events needed for kernel symbol BP"
-    }
-
-    gdb_breakpoint $kernel_symbol {allow-pending}
-    set bpnum [get_integer_valueof "\$bpnum" 0 "get bpnum"]
-
-    gdb_test_no_output "set print demangle off" "no demangling"
-    if {[is_level_zero_debug_api]} {
-	setup_kfail "JIRA DOQG/2748" "*-*-*"
-    }
-    gdb_test "continue" ".*reakpoint ${bpnum}.* ${kernel_symbol} .*"
-
-    set kfail ""
-
-    # The BP should be hit once only.
-    continue_sycl_program_to_termination
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	with_test_prefix "first" {
+	    if {![runto_main [sycl_get_device_args $device]]} {
+		continue
+	    }
+	}
+
+	# Find out the symbol for the kernel.
+	set inside_kernel_1 [gdb_get_line_number "kernel-line-1"]
+	gdb_breakpoint "$srcfile:$inside_kernel_1" {temporary}
+	gdb_continue_to_breakpoint "kernel line 1" \
+	    ".*$srcfile:$inside_kernel_1.*"
+
+	gdb_test_no_output "set print demangle off"
+	set kernel_symbol ""
+	gdb_test_multiple "backtrace 1" "find kernel symbol" {
+	    -re -wrap "#0  (\[A-Za-z0-9_\]+) \\(.*" {
+		set kernel_symbol $expect_out(1,string)
+		pass $gdb_test_name
+	    }
+	}
+
+	verbose -log "Kernel symbol: $kernel_symbol" 2
+	if {$kernel_symbol eq ""} {
+	    continue
+	}
+
+	# Now restart with a pending BP defined on the kernel symbol.
+	clean_restart $binfile
+	with_test_prefix "second" {
+	    if {![runto_main [sycl_get_device_args $device]]} {
+		continue
+	    }
+	}
+
+	# On GPU, stop at the solib load event to insert the BP.
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    set before_kernel [gdb_get_line_number "line-before-kernel"]
+	    gdb_breakpoint "$srcfile:$before_kernel" {temporary}
+	    gdb_continue_to_breakpoint "before kernel" \
+		".*$srcfile:$before_kernel.*"
+	    gdb_test_no_output "set stop-on-solib-events 1"
+	    if {[is_level_zero_debug_api]} {
+		kfail "JIRA DOQG/2748" "stop-on-solib-events hangs"
+		continue
+	    }
+	    gdb_test "continue" "Stopped due to shared library event.*" \
+		"continue until solib load"
+	    kfail "JIRA DOQG/2492" \
+		"stop-on-solib-events needed for kernel symbol BP"
+	}
+
+	gdb_breakpoint $kernel_symbol {allow-pending}
+	set bpnum [get_integer_valueof "\$bpnum" 0 "get bpnum"]
+
+	gdb_test_no_output "set print demangle off" "no demangling"
+	if {[is_level_zero_debug_api]} {
+	    setup_kfail "JIRA DOQG/2748" "*-*-*"
+	}
+	gdb_test "continue" ".*reakpoint ${bpnum}.* ${kernel_symbol} .*"
+
+	# The BP should be hit once only.
+	continue_sycl_program_to_termination
+    }
+}

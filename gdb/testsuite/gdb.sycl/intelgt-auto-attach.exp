@@ -20,6 +20,17 @@ load_lib sycl.exp
 
 standard_testfile single-task.cpp
 
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug "additional_flags=-DOMIT_REPORT"}]} {
+    return -1
+}
+
 # Get host pid.
 
 proc get_host_pid {} {
@@ -56,12 +67,12 @@ proc total_inferiors {} {
 
 # Prepare for restart, kill-host and detach-host scenarios.
 
-proc prepare_nonstop_test_scenario {non_stop_mode} {
+proc prepare_nonstop_test_scenario {non_stop_mode device} {
     global srcfile
 
     gdb_test_no_output "set non-stop $non_stop_mode"
 
-    if {[start_sycl_program] < 0} {
+    if {![runto_main [sycl_get_device_args $device]]} {
 	fail "run the program"
     } else {
 	pass "run the program"
@@ -79,10 +90,10 @@ proc prepare_nonstop_test_scenario {non_stop_mode} {
 
 # Run until the end, potentially with BPs inside and outside the kernel.
 
-proc run_end_to_end {has_kernel_bp has_outside_bp} {
+proc run_end_to_end {has_kernel_bp has_outside_bp device} {
     global srcfile
 
-    if {[start_sycl_program] < 0} {
+    if {![runto_main [sycl_get_device_args $device]]} {
 	fail "run the program"
     } else {
 	pass "run the program"
@@ -108,10 +119,10 @@ proc run_end_to_end {has_kernel_bp has_outside_bp} {
 
 # Run up to a BP, then kill/detach an inferior.
 
-proc run_to_bp {which_bp scenario iter} {
+proc run_to_bp {which_bp scenario iter device} {
     global srcfile
 
-    if {[start_sycl_program] < 0} {
+    if {![runto_main [sycl_get_device_args $device]]} {
 	fail "run the program"
     } else {
 	pass "run the program"
@@ -159,10 +170,10 @@ proc run_to_bp {which_bp scenario iter} {
 # switch to the host inferior and restart execution.  Do this with non-stop
 # mode set to either "on" or "off".
 
-proc run_restart_scenario {non_stop_mode} {
+proc run_restart_scenario {non_stop_mode device} {
     global srcfile inferior_exited_re gdb_prompt
 
-    prepare_nonstop_test_scenario $non_stop_mode
+    prepare_nonstop_test_scenario $non_stop_mode $device
 
     if {$non_stop_mode eq "on"} {
 	# In non-stop mode we should still sit at the host inferior.
@@ -200,10 +211,10 @@ proc run_restart_scenario {non_stop_mode} {
 # the host inferior to observe gt inferior is removed.  Do this
 # with non-stop mode set to either "on" or "off".
 
-proc run_detach_host_scenario {non_stop_mode} {
+proc run_detach_host_scenario {non_stop_mode device} {
     global decimal
 
-    prepare_nonstop_test_scenario $non_stop_mode
+    prepare_nonstop_test_scenario $non_stop_mode $device
     # Host inferior is always the first one.
     gdb_test "inferior 1" "Switching to inferior 1.*" "switch to host inferior"
     # Obtain host proc pid.
@@ -224,10 +235,10 @@ proc run_detach_host_scenario {non_stop_mode} {
 # the host inferior to observe gt inferior is removed.  Do this
 # with non-stop mode set to either "on" or "off".
 
-proc run_kill_host_scenario {non_stop_mode} {
+proc run_kill_host_scenario {non_stop_mode device} {
     global decimal
 
-    prepare_nonstop_test_scenario $non_stop_mode
+    prepare_nonstop_test_scenario $non_stop_mode $device
     # Host inferior is always the first one.
     gdb_test "inferior 1" "Switching to inferior 1.*" "switch to host inferior"
 
@@ -237,51 +248,53 @@ proc run_kill_host_scenario {non_stop_mode} {
 	"killing host inferior"
 }
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global binfile
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
 
-    if {![require_sycl_device "gpu" "Intel*"]} {
-	unsupported "test is aimed at Intel GPUs only"
-	return 0
-    }
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
 
-    # Re-run multiple times until termination, with and without
-    # inside/outside BPs.
-    foreach_with_prefix has_kernel_bp {0 1} {
-	foreach_with_prefix has_outside_bp {0 1} {
-	    clean_restart $binfile
-	    foreach_with_prefix iter {1 2 3} {
-		run_end_to_end $has_kernel_bp $has_outside_bp
+	# Re-run multiple times until termination, with and without
+	# inside/outside BPs.
+	foreach_with_prefix has_kernel_bp {0 1} {
+	    foreach_with_prefix has_outside_bp {0 1} {
+		clean_restart $binfile
+		foreach_with_prefix iter {1 2 3} {
+		    run_end_to_end $has_kernel_bp $has_outside_bp $device
+		}
 	    }
 	}
-    }
 
-    # Re-run multiple times, where either the host or the gt inferior
-    # is killed/detached.
-    foreach_with_prefix which_bp {inside outside} {
-	foreach_with_prefix scenario {kill_host detach_host detach_gt} {
-	    clean_restart $binfile
-	    foreach_with_prefix iter {1 2 3} {
-		run_to_bp $which_bp $scenario $iter
+	# Re-run multiple times, where either the host or the gt inferior
+	# is killed/detached.
+	foreach_with_prefix which_bp {inside outside} {
+	    foreach_with_prefix scenario {kill_host detach_host detach_gt} {
+		clean_restart $binfile
+		foreach_with_prefix iter {1 2 3} {
+		    run_to_bp $which_bp $scenario $iter $device
+		}
 	    }
 	}
-    }
 
-    # Run the restart, detach host and kill host scenarios
-    # for non-stop mode enabled and disabled.
-    foreach_with_prefix non_stop_mode {"off" "on"} {
-	clean_restart $binfile
-	with_test_prefix "restart_scenario" {
-	    run_restart_scenario $non_stop_mode
-	}
-	with_test_prefix "detach_host_scenario" {
-	    run_detach_host_scenario $non_stop_mode
-	}
-	with_test_prefix "kill_host_scenario" {
-	    run_kill_host_scenario $non_stop_mode
+	# Run the restart, detach host and kill host scenarios
+	# for non-stop mode enabled and disabled.
+	foreach_with_prefix non_stop_mode {"off" "on"} {
+	    clean_restart $binfile
+	    with_test_prefix "restart_scenario" {
+		run_restart_scenario $non_stop_mode $device
+	    }
+	    with_test_prefix "detach_host_scenario" {
+		run_detach_host_scenario $non_stop_mode $device
+	    }
+	    with_test_prefix "kill_host_scenario" {
+		run_kill_host_scenario $non_stop_mode $device
+	    }
 	}
     }
 }
-
-test_initialize "additional_flags=-DOMIT_REPORT"

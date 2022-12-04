@@ -20,31 +20,40 @@ load_lib sycl.exp
 
 standard_testfile parallel-for-1D.cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
-
-    if {[require_sycl_device "gpu" "Intel*"]} {
-	unsupported "test is not supported on Intel GPUs"
-	return 0
-    }
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    set last_line [gdb_get_line_number "kernel-last-line"]
-    gdb_breakpoint $last_line
-
-    # Check that we can make an infcall from different threads.
-
-    for {set i 1} {$i <= 4} {incr i} {
-	gdb_continue_to_breakpoint "hit the last line, trip $i" \
-	    ".*$srcfile:$last_line.*"
-
-	gdb_test "print get_dim\(wiID, 0\) == dim0" "true" \
-	    "thread invariant, trip $i"
-    }
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is not supported on Intel GPUs"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set last_line [gdb_get_line_number "kernel-last-line"]
+	gdb_breakpoint $last_line
+
+	# Check that we can make an infcall from different threads.
+
+	for {set i 1} {$i <= 4} {incr i} {
+	    gdb_continue_to_breakpoint "hit the last line, trip $i" \
+		".*$srcfile:$last_line.*"
+
+	    gdb_test "print get_dim\(wiID, 0\) == dim0" "true" \
+		"thread invariant, trip $i"
+	}
+    }
+}

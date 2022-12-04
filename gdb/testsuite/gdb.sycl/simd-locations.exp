@@ -19,7 +19,18 @@ load_lib sycl.exp
 
 standard_testfile .cpp
 
-proc test_bp_1 {} {
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+proc test_bp_1 {device} {
     global decimal
 
     gdb_test "print wi" " = .*"
@@ -31,24 +42,24 @@ proc test_bp_1 {} {
     gdb_assert {{$v1 eq $v2}} "pgid.operator() (wi) == gid"
 
     set kfail ""
-    if {[require_sycl_device "gpu" "Intel*"]} {
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
 	set kfail "JIRA IGDB/3364"
 	setup_kfail $kfail "*-*-*"
     }
     gdb_test_expr_eq "ain\[gid\]" "in" "" "${kfail}"
-    if {[require_sycl_device "gpu" "Intel*"]} {
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
 	setup_kfail $kfail "*-*-*"
     }
     gdb_test_expr_eq "acs\[lid\].c" "cs" "" "${kfail}"
 
     # LCS may be implemented as reference.  Skip some output.
-    if {[require_sycl_device "gpu" "Intel*"]} {
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
 	setup_kfail "JIRA DOQG/2081" "*-*-*"
     }
     gdb_test "print lcs" " = .* 4"
 }
 
-proc test_bp_2 { {lane 0} } {
+proc test_bp_2 {device {lane 0} } {
     global decimal
 
     gdb_test "print wi" " = .*"
@@ -65,72 +76,70 @@ proc test_bp_2 { {lane 0} } {
     }
     set v1 [get_valueof "" "atmp\[gid\].a" "NONE"]
     set v2 [get_valueof "" "in" "NONE"]
-    if {[require_sycl_device "gpu" "Intel*"]} {
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
 	setup_kfail "JIRA DOQG/2081" "*-*-*"
     }
     gdb_assert {{$v1 eq $v2}} "atmp\[gid\].a == in"
 
     set kfail ""
-    if {[require_sycl_device "gpu" "Intel*"]} {
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
 	set kfail "JIRA IGDB/3364"
 	setup_kfail $kfail "*-*-*"
     }
     gdb_test_expr_eq "aout\[gid\]" "out" "" "${kfail}"
 
     # LCS may be implemented as reference.  Skip some output.
-    if {[require_sycl_device "gpu" "Intel*"]} {
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
 	setup_kfail "JIRA DOQG/2081" "*-*-*"
     }
     gdb_test "print lcs" " = .* 4"
     gdb_test "print cs" " = 4"
 }
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
-
-    if {[start_sycl_program] < 0} {
-        return -1
-    }
-
-    set l1 [gdb_get_line_number "bp\.1"]
-    set l2 [gdb_get_line_number "bp\.2"]
-
-    gdb_breakpoint $l1
-    gdb_continue_to_breakpoint "bp.1" ".*$srcfile:$l1.*"
-
-    with_test_prefix "bp.1" {
-	if { [current_thread_has_simd_lanes] } {
-	    for {set i 0} {$i < 8} {set i [expr $i+4]} {
-		with_test_prefix "lane $i" {
-		    gdb_test "thread :$i" "Switching to thread .*:$i.*"
-
-		    test_bp_1
-		}
-	    }
-	} else {
-	    test_bp_1
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
 	}
-    }
 
-    # Make sure we're not stuck on bp.1.
-    delete_breakpoints
-    gdb_breakpoint $l2
-    gdb_continue_to_breakpoint "bp.2" ".*$srcfile:$l2.*"
+	set l1 [gdb_get_line_number "bp\.1"]
+	set l2 [gdb_get_line_number "bp\.2"]
 
-    with_test_prefix "bp.2" {
-	if { [current_thread_has_simd_lanes] } {
-	    for {set i 0} {$i < 8} {set i [expr $i+4]} {
-		with_test_prefix "lane $i" {
-		    gdb_test "thread :$i" "Switching to thread .*:$i.*"
+	gdb_breakpoint $l1
+	gdb_continue_to_breakpoint "bp.1" ".*$srcfile:$l1.*"
 
-		    test_bp_2 $i
+	with_test_prefix "bp.1" {
+	    if { [current_thread_has_simd_lanes] } {
+		for {set i 0} {$i < 8} {set i [expr $i+4]} {
+		    with_test_prefix "lane $i" {
+			gdb_test "thread :$i" "Switching to thread .*:$i.*"
+
+			test_bp_1 "$device"
+		    }
 		}
+	    } else {
+		test_bp_1 "$device"
 	    }
-	} else {
-	    test_bp_2
+	}
+
+	# Make sure we're not stuck on bp.1.
+	delete_breakpoints
+	gdb_breakpoint $l2
+	gdb_continue_to_breakpoint "bp.2" ".*$srcfile:$l2.*"
+
+	with_test_prefix "bp.2" {
+	    if { [current_thread_has_simd_lanes] } {
+		for {set i 0} {$i < 8} {set i [expr $i+4]} {
+		    with_test_prefix "lane $i" {
+			gdb_test "thread :$i" "Switching to thread .*:$i.*"
+
+			test_bp_2 "$device" $i
+		    }
+		}
+	    } else {
+		test_bp_2 "$device"
+	    }
 	}
     }
 }
-
-test_initialize

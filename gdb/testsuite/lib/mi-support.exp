@@ -1140,8 +1140,24 @@ proc mi_runto {func args} {
 }
 
 # Just like runto_main but works with the MI interface.
+# args_list is optional input, in case it exists then
+# arguments are set before running to the main
 
-proc mi_runto_main {} {
+proc mi_runto_main {{args_list {}}} {
+    global mi_gdb_prompt
+
+    if {[llength $args_list] > 0} {
+	set args ""
+	foreach arg $args_list {
+	    append args "'$arg' "
+	}
+	# Because we're doing an internal setup, use send_gdb and gdb_expect
+	# instead of mi_gdb_test to not include this as a pass.
+	send_gdb "-gdb-set args $args \n"
+	gdb_expect 10 {
+	    -re "\\^done.*$mi_gdb_prompt$" { }
+	}
+    }
     return [mi_runto_helper "main" "run" -qualified]
 }
 

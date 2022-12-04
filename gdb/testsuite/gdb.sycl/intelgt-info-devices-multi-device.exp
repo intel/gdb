@@ -19,6 +19,17 @@ load_lib sycl.exp
 
 standard_testfile multi-device-single-task.cpp
 
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
 # Helper joining all ARGS with WS inbetween and at the end.
 proc wrap_regex_with_spaces_and_tabs { args } {
     set ws "\[ \\t\]+"
@@ -49,103 +60,105 @@ proc get_active_device { info_devices_output } {
     return $dev_id
 }
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile hex decimal
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
 
-    if {![require_sycl_device "gpu" "Intel*"]} {
-	unsupported "test is aimed at Intel GPUs only"
-	return 0
-    }
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
 
-    if {![is_level_zero_debug_api]} {
-	unsupported "test is aimed at Level-Zero Debug API only"
-	return 0
-    }
+	if {![is_level_zero_debug_api]} {
+	    unsupported "test is aimed at Level-Zero Debug API only"
+	    continue
+	}
 
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
 
-    set num_devices_check [gdb_get_line_number "num-devices-check"]
-    set devices_driver_check [gdb_get_line_number "devices-driver-check"]
-    gdb_breakpoint $num_devices_check {temporary}
-    gdb_breakpoint $devices_driver_check {temporary}
-    gdb_continue_to_breakpoint "num devices check" \
-	".*$srcfile:$num_devices_check.*"
+	set num_devices_check [gdb_get_line_number "num-devices-check"]
+	set devices_driver_check [gdb_get_line_number "devices-driver-check"]
+	gdb_breakpoint $num_devices_check {temporary}
+	gdb_breakpoint $devices_driver_check {temporary}
+	gdb_continue_to_breakpoint "num devices check" \
+	    ".*$srcfile:$num_devices_check.*"
 
-    set num_devices [get_integer_valueof "num_devices" 0]
-    if {$num_devices < 2} {
-	unsupported "test is aimed at multi-device machines"
-	return 0
-    }
+	set num_devices [get_integer_valueof "num_devices" 0]
+	if {$num_devices < 2} {
+	    unsupported "test is aimed at multi-device machines"
+	    continue
+	}
 
-    gdb_continue_to_breakpoint "devices driver check" \
-	".*$srcfile:$devices_driver_check.*"
-    set devices_same_driver [get_integer_valueof "devices_same_driver" 0]
-    if {$devices_same_driver == 0} {
-	unsupported "test needs to be run using devices via one driver only"
-	return 0
-    }
+	gdb_continue_to_breakpoint "devices driver check" \
+	    ".*$srcfile:$devices_driver_check.*"
+	set devices_same_driver [get_integer_valueof "devices_same_driver" 0]
+	if {$devices_same_driver == 0} {
+	    unsupported "test needs to be run using devices via one driver only"
+	    continue
+	}
 
-    set bp [gdb_get_line_number "kernel-line-1"]
-    gdb_breakpoint $bp
-    set end_bp [gdb_get_line_number "end-marker"]
-    gdb_breakpoint $end_bp
+	set bp [gdb_get_line_number "kernel-line-1"]
+	gdb_breakpoint $bp
+	set end_bp [gdb_get_line_number "end-marker"]
+	gdb_breakpoint $end_bp
 
-    gdb_test "info devices" "No devices\." "info devices pre-kernel"
+	gdb_test "info devices" "No devices\." "info devices pre-kernel"
 
-    # For each device one bp should be hit and each call to continue should lead
-    # to one more inferior and one more device being displayed.
-    # Check the info devices command output - there should be one now if on GPU.
-    #   Location   Sub-device   Vendor Id   Target Id   Cores   Device Name
-    # * [00:02.0]  -            0x8086      0x56c1      128     Intel(R) Data Center GPU Flex Series 140 [0x56c1]
-    #   [00:09.0]  -            0x8086      0x56c1      128     Intel(R) Data Center GPU Flex Series 140 [0x56c1]
+	# For each device one bp should be hit and each call to continue should lead
+	# to one more inferior and one more device being displayed.
+	# Check the info devices command output - there should be one now if on GPU.
+	#   Location   Sub-device   Vendor Id   Target Id   Cores   Device Name
+	# * [00:02.0]  -            0x8086      0x56c1      128     Intel(R) Data Center GPU Flex Series 140 [0x56c1]
+	#   [00:09.0]  -            0x8086      0x56c1      128     Intel(R) Data Center GPU Flex Series 140 [0x56c1]
 
-    set any_location "\\\[\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
-    set any_name "\[^\r\n\]+"
-    set table_header [wrap_regex_with_spaces_and_tabs " " "Location" "Sub-device" \
-	"Vendor Id" "Target Id" "Cores" "Device Name"]
-    set table_body [wrap_regex_with_spaces_and_tabs "." "${any_location}" \
-	"(${decimal}|-)" "${hex}" "${hex}" "${decimal}" "${any_name}"]
+	set any_location "\\\[\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
+	set any_name "\[^\r\n\]+"
+	set table_header [wrap_regex_with_spaces_and_tabs " " "Location" "Sub-device" \
+	    "Vendor Id" "Target Id" "Cores" "Device Name"]
+	set table_body [wrap_regex_with_spaces_and_tabs "." "${any_location}" \
+	    "(${decimal}|-)" "${hex}" "${hex}" "${decimal}" "${any_name}"]
 
-    set devices_hit {}
-    for {set trip 1} {$trip <= $num_devices} {incr trip} {
-	with_test_prefix "trip $trip" {
-	    gdb_continue_to_breakpoint "resume" \
-		".*$srcfile:$bp.*"
+	set devices_hit {}
+	for {set trip 1} {$trip <= $num_devices} {incr trip} {
+	    with_test_prefix "trip $trip" {
+		gdb_continue_to_breakpoint "resume" \
+		    ".*$srcfile:$bp.*"
 
-	    # We might have more than NUM_DEVICES lines if there are sub-devices.
-	    gdb_test_multiple "info devices" "info devices in kernel for trip ${trip}" {
-		-re -wrap "${table_header}\r\n((${table_body}(\r\n)?){$num_devices,})" {
-		    set devices $expect_out(1,string)
-		    set active_dev [get_active_device $devices]
+		# We might have more than NUM_DEVICES lines if there are sub-devices.
+		gdb_test_multiple "info devices" "info devices in kernel for trip ${trip}" {
+		    -re -wrap "${table_header}\r\n((${table_body}(\r\n)?){$num_devices,})" {
+			set devices $expect_out(1,string)
+			set active_dev [get_active_device $devices]
 
-		    # Make sure that the device hits the breakpoint for the first time.
-		    gdb_assert {[lsearch -exact $devices_hit $active_dev] == -1} "device hits for the first time"
-		    lappend devices_hit $active_dev
+			# Make sure that the device hits the breakpoint for the first time.
+			gdb_assert \
+			    {[lsearch -exact $devices_hit $active_dev] == -1} \
+			    "device hits for the first time"
+			lappend devices_hit $active_dev
+		    }
 		}
 	    }
 	}
+
+	gdb_assert {[llength $devices_hit] == $num_devices} \
+	    "bp has been hit by all devices"
+
+	# Here no active device inferior should be detected.
+	gdb_continue_to_breakpoint "post-kernel bp" ".*$srcfile:$end_bp.*"
+
+	gdb_test_multiple "info devices" "info inferiors at post kernel bp" {
+	    -re -wrap "${table_header}\r\n((${table_body}(\r\n)?){$num_devices,})" {
+		set devices $expect_out(1,string)
+		set active_dev [get_active_device $devices]
+
+		# No active device should be found.
+		gdb_assert {$active_dev == -1} "No active devices at this point"
+	    }
+	}
+
+	continue_sycl_program_to_termination
+	gdb_test "info devices" "No devices\." "info devices post-sycl"
     }
-
-    gdb_assert {[llength $devices_hit] == $num_devices} "bp has been hit by all devices"
-
-    # Here no active device inferior should be detected.
-    gdb_continue_to_breakpoint "post-kernel bp" ".*$srcfile:$end_bp.*"
-
-    gdb_test_multiple "info devices" "info inferiors at post kernel bp" {
-	-re -wrap "${table_header}\r\n((${table_body}(\r\n)?){$num_devices,})" {
-            set devices $expect_out(1,string)
-            set active_dev [get_active_device $devices]
-
-            # No active device should be found.
-            gdb_assert {$active_dev == -1} "No active devices at this point"
-        }
-    }
-
-    continue_sycl_program_to_termination
-    gdb_test "info devices" "No devices\." "info devices post-sycl"
 }
-
-test_initialize

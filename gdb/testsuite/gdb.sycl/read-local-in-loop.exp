@@ -19,25 +19,34 @@ load_lib sycl.exp
 
 standard_testfile .cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    set line [gdb_get_line_number "kernel-last-loop-line"]
-    gdb_breakpoint $srcfile:$line
-    for {set i 0} {$i < 3} {incr i} {
-	with_test_prefix "iteration $i" {
-	    gdb_continue_to_breakpoint "" ".*$srcfile:$line.*"
-	    gdb_test "print b" "[expr $i + 100]"
-	    gdb_test "print c" "[expr $i + 10]"
-	}
-    }
-
-    continue_sycl_program_to_termination
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set line [gdb_get_line_number "kernel-last-loop-line"]
+	gdb_breakpoint $srcfile:$line
+	for {set i 0} {$i < 3} {incr i} {
+	    with_test_prefix "iteration $i" {
+		gdb_continue_to_breakpoint "" ".*$srcfile:$line.*"
+		gdb_test "print b" "[expr $i + 100]"
+		gdb_test "print c" "[expr $i + 10]"
+	    }
+	}
+
+	continue_sycl_program_to_termination
+    }
+}

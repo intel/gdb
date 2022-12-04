@@ -38,146 +38,156 @@ proc expect_breakpoint_hit {line test} {
 
 standard_testfile simd.cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global binfile srcfile expect_out hex mi_gdb_prompt decimal hex
-
-    if {![require_sycl_device "gpu" "Intel*"]} {
-	unsupported "test is aimed at Intel GPUs only"
-	return 0
-    }
-
-    mi_clean_restart $binfile
-
-    if {[mi_start_sycl_program] < 0} {
-	return -1
-    }
-
-    set kernel_dim0_line [gdb_get_line_number "kernel-dim0-defined"]
-    set odd_branch_line [gdb_get_line_number "kernel-odd-branch"]
-
-    # Set temporary breakpoint to line $kernel_dim0_line and continue.
-    mi_tbreak $kernel_dim0_line
-    mi_send_resuming_command "exec-continue" "run to $kernel_dim0_line (exec-continue)"
-
-    # Expect breakpoint-hit stop event and get the id of the stopped thread.
-    set thread_id [expect_breakpoint_hit $kernel_dim0_line "expect breakpoint-hit event at line $kernel_dim0_line"]
-
-    # First get _simd_width convenience variable value to compare correctness of
-    # the MI command output.
-    mi_gdb_test "-data-evaluate-expression \$_simd_width" \
-	"\\^done,value=\".*\"" \
-	"Get \$_simd_width value"
-
-    set output $expect_out(buffer)
-    regexp {value=\"(.*)\"} $output -> simd_width
-
-    # Calculate the expected emask.
-    set mask 0xffffffff
-    set emask_int [expr $mask & int(pow(2, $simd_width) - 1)]
-    set emask_hex [format 0x%x $emask_int]
-
-    mi_gdb_test "-thread-info $thread_id" \
-    	"\\^done,threads=\\\[\{id=\".*\",target-id=.*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",hit-lanes-mask=\"$hex\",thread-group=\"i$decimal\",state=\"stopped\"\}\\\]" \
-	"Check execution mask and simd width for thread $thread_id at line $kernel_dim0_line"
-
-    # Set temporary breakpoint to line $odd_branch_line and continue.
-    mi_tbreak $odd_branch_line
-    mi_send_resuming_command "exec-continue" "run to $odd_branch_line (exec-continue)"
-
-    # Expect breakpoint-hit stop event and get the id of the stopped thread.
-    set thread_id [expect_breakpoint_hit $odd_branch_line "expect breakpoint-hit event at line $odd_branch_line"]
-
-    # Calculate the expected emask.
-    set mask 0xaaaaaaaa
-    set emask_int [expr $mask & int(pow(2, $simd_width) - 1)]
-    set emask_hex [format 0x%x $emask_int]
-
-    mi_gdb_test "-thread-info $thread_id" \
-    	"\\^done,threads=\\\[\{id=\".*\",target-id=.*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",hit-lanes-mask=\"$hex\",thread-group=\"i$decimal\",state=\"stopped\"\}\\\]" \
-	"Check execution mask and simd width for thread $thread_id at line $odd_branch_line"
-
-    # Test --qid argument with thread id
-    mi_gdb_test "-thread-info --qid $thread_id" \
-	"\\^done,threads=\\\[\{id=\"$thread_id\",qualified-id=\".*\".*\}\\\]" \
-	"Check that qualified-id is included"
-
-    # Test --qid argument with all threads
-    send_gdb "-thread-info --qid\n"
-
-    set test "Check that qualified-id is included for all threads"
-    gdb_expect {
-	-re "\\^done,threads=\\\[" {
-	    exp_continue
-	}
-	-re "\{id=\"$decimal\",qualified-id=\".*\".*(core=\"$decimal\"|state=\"stopped\")\}," {
-	    # If the target has many threads, the buffer may become very long.
-	    # Consume these lines to avoid problems about regexp matching
-	    # or the internal buffer becoming full.
-	    exp_continue
-	}
-	-re "\{id=\"$decimal\",target-id=.*(core=\"$decimal\"|state=\"stopped\")\}," {
-	    verbose -log "Found a thread without qualified-id"
-	    fail "$test"
-	}
-	-re ".*${mi_gdb_prompt}" {
-	    pass "$test"
-	}
-	timeout {
-	    fail "$test"
-	}
-    }
-
-    # Test without --qid argument with all threads
-    send_gdb "-thread-info\n"
-
-    set test "Check that qualified-id is not included for all threads"
-    gdb_expect {
-	-re "\\^done,threads=\\\[" {
-	    exp_continue
-	}
-	-re "\{id=\"$decimal\",target-id=\".*\".*(core=\"$decimal\"|simd-width=\"$decimal\"|hit-lanes-mask=\"$hex\")\}," {
-	    # If the target has many threads, the buffer may become very long.
-	    # Consume these lines to avoid problems about regexp matching
-	    # or the internal buffer becoming full.
-	    exp_continue
-	}
-	-re "\{id=\"$decimal\",qualified-id=.*(core=\"$decimal\"|simd-width=\"$decimal\"|hit-lanes-mask=\"$hex\")\}," {
-	    verbose -log "Found a thread with qualified-id"
-	    fail "$test"
-	}
-	-re ".*${mi_gdb_prompt}" {
-	    pass "$test"
-	}
-	timeout {
-	    fail "$test"
-	}
-    }
-
-    # Test with wrong arguments
-    mi_gdb_test "-thread-info --daa $thread_id" \
-	"\\^error,msg=\"-thread-info: Unknown option ``-daa''\"" \
-	"Check wrong argument 1"
-
-    mi_gdb_test "-thread-info --qid --daa" \
-	"\\^error,msg=\"-thread-info: Unknown option ``-daa''\"" \
-	"Check wrong argument 2"
-
-    mi_gdb_test "-thread-info -qid" \
-	"\\^error,msg=\"-thread-info: Unknown option ``qid''\"" \
-	"Check wrong argument 3"
-
-    # Test a host thread that it does not contain emask or simd width fields.
-    send_gdb "-thread-info 1\n"
-    gdb_expect 10 {
-	-re "execution-mask" { fail "host thread has no execution mask output"}
-	-re "simd-width" { fail "host thread has no simd-width output"}
-	-re "\\^done.*$mi_gdb_prompt$" { pass "no SIMD output" }
-	timeout { fail "(timeout) -thread-info 1" }
-    }
-
-    # Continue to end.
-    mi_send_resuming_command "exec-continue" "continuing to inferior exit"
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	mi_clean_restart $binfile
+
+	if {![mi_runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set kernel_dim0_line [gdb_get_line_number "kernel-dim0-defined"]
+	set odd_branch_line [gdb_get_line_number "kernel-odd-branch"]
+
+	# Set temporary breakpoint to line $kernel_dim0_line and continue.
+	mi_tbreak $kernel_dim0_line
+	mi_send_resuming_command "exec-continue" "run to $kernel_dim0_line (exec-continue)"
+
+	# Expect breakpoint-hit stop event and get the id of the stopped thread.
+	set thread_id [expect_breakpoint_hit $kernel_dim0_line "expect breakpoint-hit event at line $kernel_dim0_line"]
+
+	# First get _simd_width convenience variable value to compare correctness of
+	# the MI command output.
+	mi_gdb_test "-data-evaluate-expression \$_simd_width" \
+	    "\\^done,value=\".*\"" \
+	    "Get \$_simd_width value"
+
+	set output $expect_out(buffer)
+	regexp {value=\"(.*)\"} $output -> simd_width
+
+	# Calculate the expected emask.
+	set mask 0xffffffff
+	set emask_int [expr $mask & int(pow(2, $simd_width) - 1)]
+	set emask_hex [format 0x%x $emask_int]
+
+	mi_gdb_test "-thread-info $thread_id" \
+	    "\\^done,threads=\\\[\{id=\".*\",target-id=.*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",hit-lanes-mask=\"$hex\",thread-group=\"i$decimal\",state=\"stopped\"\}\\\]" \
+	    "Check execution mask and simd width for thread $thread_id at line $kernel_dim0_line"
+
+	# Set temporary breakpoint to line $odd_branch_line and continue.
+	mi_tbreak $odd_branch_line
+	mi_send_resuming_command "exec-continue" "run to $odd_branch_line (exec-continue)"
+
+	# Expect breakpoint-hit stop event and get the id of the stopped thread.
+	set thread_id [expect_breakpoint_hit $odd_branch_line "expect breakpoint-hit event at line $odd_branch_line"]
+
+	# Calculate the expected emask.
+	set mask 0xaaaaaaaa
+	set emask_int [expr $mask & int(pow(2, $simd_width) - 1)]
+	set emask_hex [format 0x%x $emask_int]
+
+	mi_gdb_test "-thread-info $thread_id" \
+	    "\\^done,threads=\\\[\{id=\".*\",target-id=.*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",hit-lanes-mask=\"$hex\",thread-group=\"i$decimal\",state=\"stopped\"\}\\\]" \
+	    "Check execution mask and simd width for thread $thread_id at line $odd_branch_line"
+
+	# Test --qid argument with thread id
+	mi_gdb_test "-thread-info --qid $thread_id" \
+	    "\\^done,threads=\\\[\{id=\"$thread_id\",qualified-id=\".*\".*\}\\\]" \
+	    "Check that qualified-id is included"
+
+	# Test --qid argument with all threads
+	send_gdb "-thread-info --qid\n"
+
+	set test "Check that qualified-id is included for all threads"
+	gdb_expect {
+	    -re "\\^done,threads=\\\[" {
+		exp_continue
+	    }
+	    -re "\{id=\"$decimal\",qualified-id=\".*\".*(core=\"$decimal\"|state=\"stopped\")\}," {
+		# If the target has many threads, the buffer may become very long.
+		# Consume these lines to avoid problems about regexp matching
+		# or the internal buffer becoming full.
+		exp_continue
+	    }
+	    -re "\{id=\"$decimal\",target-id=.*(core=\"$decimal\"|state=\"stopped\")\}," {
+		verbose -log "Found a thread without qualified-id"
+		fail "$test"
+	    }
+	    -re ".*${mi_gdb_prompt}" {
+		pass "$test"
+	    }
+	    timeout {
+		fail "$test"
+	    }
+	}
+
+	# Test without --qid argument with all threads
+	send_gdb "-thread-info\n"
+
+	set test "Check that qualified-id is not included for all threads"
+	gdb_expect {
+	    -re "\\^done,threads=\\\[" {
+		exp_continue
+	    }
+	    -re "\{id=\"$decimal\",target-id=\".*\".*(core=\"$decimal\"|simd-width=\"$decimal\"|hit-lanes-mask=\"$hex\")\}," {
+		# If the target has many threads, the buffer may become very long.
+		# Consume these lines to avoid problems about regexp matching
+		# or the internal buffer becoming full.
+		exp_continue
+	    }
+	    -re "\{id=\"$decimal\",qualified-id=.*(core=\"$decimal\"|simd-width=\"$decimal\"|hit-lanes-mask=\"$hex\")\}," {
+		verbose -log "Found a thread with qualified-id"
+		fail "$test"
+	    }
+	    -re ".*${mi_gdb_prompt}" {
+		pass "$test"
+	    }
+	    timeout {
+		fail "$test"
+	    }
+	}
+
+	# Test with wrong arguments
+	mi_gdb_test "-thread-info --daa $thread_id" \
+	    "\\^error,msg=\"-thread-info: Unknown option ``-daa''\"" \
+	    "Check wrong argument 1"
+
+	mi_gdb_test "-thread-info --qid --daa" \
+	    "\\^error,msg=\"-thread-info: Unknown option ``-daa''\"" \
+	    "Check wrong argument 2"
+
+	mi_gdb_test "-thread-info -qid" \
+	    "\\^error,msg=\"-thread-info: Unknown option ``qid''\"" \
+	    "Check wrong argument 3"
+
+	# Test a host thread that it does not contain emask or simd width fields.
+	send_gdb "-thread-info 1\n"
+	gdb_expect 10 {
+	    -re "execution-mask" { fail "host thread has no execution mask output"}
+	    -re "simd-width" { fail "host thread has no simd-width output"}
+	    -re "\\^done.*$mi_gdb_prompt$" { pass "no SIMD output" }
+	    timeout { fail "(timeout) -thread-info 1" }
+	}
+
+	# Continue to end.
+	mi_send_resuming_command "exec-continue" "continuing to inferior exit"
+    }
+}

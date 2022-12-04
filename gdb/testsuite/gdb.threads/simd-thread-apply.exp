@@ -23,6 +23,17 @@ load_lib sycl.exp
 
 standard_testfile simd-thread-apply.cpp
 
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
 # Execute a "thread apply ... print ..." command and check the output
 # according to the given arguments.
 #
@@ -192,331 +203,330 @@ proc check_lanes {where inf t_1 t_2 t_3 t_4} {
 	"thread $inf.$t_1 $where"
 }
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile decimal hex gdb_prompt
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
 
-    if {![require_sycl_device "gpu" "Intel*"]} {
-	unsupported "test is aimed at Intel GPUs only"
-	return 0
-    }
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
 
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
 
-    set first_line [gdb_get_line_number "kernel-first-line"]
-    set even_branch [gdb_get_line_number "kernel-even-branch"]
+	set first_line [gdb_get_line_number "kernel-first-line"]
+	set even_branch [gdb_get_line_number "kernel-even-branch"]
 
-    gdb_breakpoint "$first_line" {temporary}
-    gdb_continue_to_breakpoint "hit the first BP" ".*$srcfile:$first_line.*"
+	gdb_breakpoint "$first_line" {temporary}
+	gdb_continue_to_breakpoint "hit the first BP" ".*$srcfile:$first_line.*"
 
-    set cur_thread [get_current_thread "after first BP hit"]
-    verbose -log "current thread: $cur_thread"
-    set inf [get_integer_valueof "\$_inferior" 0]
+	set cur_thread [get_current_thread "after first BP hit"]
+	verbose -log "current thread: $cur_thread"
+	set inf [get_integer_valueof "\$_inferior" 0]
 
-    set num_lanes [get_integer_valueof "\$_simd_width" 0]
-    verbose -log "num_lanes: $num_lanes"
-    gdb_assert {"$num_lanes" >= 8}
+	set num_lanes [get_integer_valueof "\$_simd_width" 0]
+	verbose -log "num_lanes: $num_lanes"
+	gdb_assert {"$num_lanes" >= 8}
 
-    # Switching to non-zero SIMD lane.
-    gdb_test "thread :6" "Switching to thread $cur_thread:6.*"
+	# Switching to non-zero SIMD lane.
+	gdb_test "thread :6" "Switching to thread $cur_thread:6.*"
 
-    # Check error handling
-    gdb_test "p \$one = 1" " = 1"
-    gdb_test "p \$minus_one = -1" " = -1"
-    gdb_test "p \$two = 2" " = 2"
-    gdb_test "p \$three = 3" " = 3"
-    foreach prefix {"" "2" "\$one" "2-3" "2.2" "\$one.\$two-3"} {
-	thread_apply_invalid "$prefix:-"
-	thread_apply_error "$prefix:-1" "negative value"
-	thread_apply_error "$prefix:\$minus_one" "Incorrect SIMD lane number: -1."
-	thread_apply_invalid "$prefix:-*"
-	thread_apply_invalid "$prefix:*-"
-	thread_apply_invalid "$prefix:*-1"
-	thread_apply_invalid "$prefix:1*"
-	thread_apply_invalid "$prefix:1-"
-	thread_apply_invalid "$prefix:1-*"
-	thread_apply_invalid "$prefix:1-2-3"
-	thread_apply_invalid "$prefix:1-*-3"
-	thread_apply_invalid "$prefix:1-2-*"
-	thread_apply_invalid "$prefix:1:2"
-	thread_apply_invalid "$prefix:1:2-3"
-	thread_apply_invalid "$prefix:1-3:2"
-	thread_apply_error "$prefix:3-\$one" "inverted range"
-	thread_apply_error "$prefix:128" "Incorrect SIMD lane number: 128."
-    }
+	# Check error handling
+	gdb_test "p \$one = 1" " = 1"
+	gdb_test "p \$minus_one = -1" " = -1"
+	gdb_test "p \$two = 2" " = 2"
+	gdb_test "p \$three = 3" " = 3"
+	foreach prefix {"" "2" "\$one" "2-3" "2.2" "\$one.\$two-3"} {
+	    thread_apply_invalid "$prefix:-"
+	    thread_apply_error "$prefix:-1" "negative value"
+	    thread_apply_error "$prefix:\$minus_one" "Incorrect SIMD lane number: -1."
+	    thread_apply_invalid "$prefix:-*"
+	    thread_apply_invalid "$prefix:*-"
+	    thread_apply_invalid "$prefix:*-1"
+	    thread_apply_invalid "$prefix:1*"
+	    thread_apply_invalid "$prefix:1-"
+	    thread_apply_invalid "$prefix:1-*"
+	    thread_apply_invalid "$prefix:1-2-3"
+	    thread_apply_invalid "$prefix:1-*-3"
+	    thread_apply_invalid "$prefix:1-2-*"
+	    thread_apply_invalid "$prefix:1:2"
+	    thread_apply_invalid "$prefix:1:2-3"
+	    thread_apply_invalid "$prefix:1-3:2"
+	    thread_apply_error "$prefix:3-\$one" "inverted range"
+	    thread_apply_error "$prefix:128" "Incorrect SIMD lane number: 128."
+	}
 
-    # Point goes after the colon.
-    thread_apply_invalid "3:2.1"
+	# Point goes after the colon.
+	thread_apply_invalid "3:2.1"
 
-    # Default thread
-    thread_apply ":3" "$cur_thread:3"
-    thread_apply "$cur_thread" "$cur_thread:6"
-    thread_apply ":3-5" "$cur_thread:3 $cur_thread:4 $cur_thread:5"
-    thread_apply ":*" "[all_lanes_of $num_lanes $cur_thread]"
+	# Default thread
+	thread_apply ":3" "$cur_thread:3"
+	thread_apply "$cur_thread" "$cur_thread:6"
+	thread_apply ":3-5" "$cur_thread:3 $cur_thread:4 $cur_thread:5"
+	thread_apply ":*" "[all_lanes_of $num_lanes $cur_thread]"
 
-    # Find 4 threads that are active.  Do a linear search.  This makes
-    # sure that t_1 < t_2 < t_3 < t_4.  But note that the ids are not
-    # necessarily consecutive.
-    set t_1 [get_another_stopped_thread $srcfile $first_line \
-		[list] "get t_1"]
-    set t_2 [get_another_stopped_thread $srcfile $first_line \
-		[list "$t_1"] "get t_2"]
-    set t_3 [get_another_stopped_thread $srcfile $first_line \
-		[list "$t_1" "$t_2"] "get t_3"]
-    set t_4 [get_another_stopped_thread $srcfile $first_line \
-		[list "$t_1" "$t_2" "$t_3"] "get t_4"]
+	# Find 4 threads that are active.  Do a linear search.  This makes
+	# sure that t_1 < t_2 < t_3 < t_4.  But note that the ids are not
+	# necessarily consecutive.
+	set t_1 [get_another_stopped_thread $srcfile $first_line \
+		    [list] "get t_1"]
+	set t_2 [get_another_stopped_thread $srcfile $first_line \
+		    [list "$t_1"] "get t_2"]
+	set t_3 [get_another_stopped_thread $srcfile $first_line \
+		    [list "$t_1" "$t_2"] "get t_3"]
+	set t_4 [get_another_stopped_thread $srcfile $first_line \
+		    [list "$t_1" "$t_2" "$t_3"] "get t_4"]
 
-    # Trim the inferior number from thread ids.
-    regexp "$inf\.($decimal)" $t_1 ignore t_1
-    regexp "$inf\.($decimal)" $t_2 ignore t_2
-    regexp "$inf\.($decimal)" $t_3 ignore t_3
-    regexp "$inf\.($decimal)" $t_4 ignore t_4
+	# Trim the inferior number from thread ids.
+	regexp "$inf\.($decimal)" $t_1 ignore t_1
+	regexp "$inf\.($decimal)" $t_2 ignore t_2
+	regexp "$inf\.($decimal)" $t_3 ignore t_3
+	regexp "$inf\.($decimal)" $t_4 ignore t_4
 
-    verbose -log "t_1: $t_1"
-    verbose -log "t_2: $t_2"
-    verbose -log "t_3: $t_3"
-    verbose -log "t_4: $t_4"
+	verbose -log "t_1: $t_1"
+	verbose -log "t_2: $t_2"
+	verbose -log "t_3: $t_3"
+	verbose -log "t_4: $t_4"
 
-    # Switch the threads to non-zero SIMD lanes.
-    gdb_test "thread $inf.$t_1:2" "Switching to thread $inf.$t_1:2.*"
-    gdb_test "thread $inf.$t_2:3" "Switching to thread $inf.$t_2:3.*"
-    gdb_test "thread $inf.$t_3:4" "Switching to thread $inf.$t_3:4.*"
-    gdb_test "thread $inf.$t_4:5" "Switching to thread $inf.$t_4:5.*"
+	# Switch the threads to non-zero SIMD lanes.
+	gdb_test "thread $inf.$t_1:2" "Switching to thread $inf.$t_1:2.*"
+	gdb_test "thread $inf.$t_2:3" "Switching to thread $inf.$t_2:3.*"
+	gdb_test "thread $inf.$t_3:4" "Switching to thread $inf.$t_3:4.*"
+	gdb_test "thread $inf.$t_4:5" "Switching to thread $inf.$t_4:5.*"
 
-    # Define an internal variable.
-    gdb_test "p \$thread_3 = $t_3" " = $t_3"
+	# Define an internal variable.
+	gdb_test "p \$thread_3 = $t_3" " = $t_3"
 
-    # Prepare some long contexts for reuse.
-    set all_lanes_1 [all_lanes_of $num_lanes "$inf.$t_1"]
-    set all_lanes_2 [all_lanes_of $num_lanes "$inf.$t_2"]
-    set all_lanes_3 [all_lanes_of $num_lanes "$inf.$t_3"]
-    set all_lanes_4 [all_lanes_of $num_lanes "$inf.$t_4"]
+	# Prepare some long contexts for reuse.
+	set all_lanes_1 [all_lanes_of $num_lanes "$inf.$t_1"]
+	set all_lanes_2 [all_lanes_of $num_lanes "$inf.$t_2"]
+	set all_lanes_3 [all_lanes_of $num_lanes "$inf.$t_3"]
+	set all_lanes_4 [all_lanes_of $num_lanes "$inf.$t_4"]
 
-    set msg " before branch "
-    foreach prefix [list "" "${inf}."] {
-	# Thread ID.
-	thread_apply "${prefix}${t_1}" "$inf.$t_1:2" $msg
-	thread_apply "${prefix}${t_1}:3" "$inf.$t_1:3" $msg
-	thread_apply "${prefix}${t_1}:3-5" [lanes_of "$inf.$t_1" "3 4 5"] $msg
-	thread_apply "${prefix}${t_1}:*" "$all_lanes_1" $msg
+	set msg " before branch "
+	foreach prefix [list "" "${inf}."] {
+	    # Thread ID.
+	    thread_apply "${prefix}${t_1}" "$inf.$t_1:2" $msg
+	    thread_apply "${prefix}${t_1}:3" "$inf.$t_1:3" $msg
+	    thread_apply "${prefix}${t_1}:3-5" [lanes_of "$inf.$t_1" "3 4 5"] $msg
+	    thread_apply "${prefix}${t_1}:*" "$all_lanes_1" $msg
 
-	# Thread range.
-	set range_to_ignore_1_2 "[range_re $t_1 $t_2]"
-	set range_to_ignore_2_3 "[range_re $t_2 $t_3]"
-	thread_apply "${prefix}${t_1}-${t_2}" "$inf.$t_1:2 $inf.$t_2:3" \
-	    $msg "$inf\.($range_to_ignore_1_2)"
-	thread_apply "${prefix}${t_1}-${t_3}" \
-	    "$inf.$t_1:2 $inf.$t_2:3 $inf.$t_3:4" \
-	    $msg "$inf\.($range_to_ignore_1_2|$range_to_ignore_2_3)"
-	thread_apply "${prefix}${t_1}-${t_2}:4" "$inf.$t_1:4 $inf.$t_2:4" \
-	    $msg "none" "$inf\.($range_to_ignore_1_2):4"
-	thread_apply "${prefix}${t_1}-${t_3}:4" "$inf.$t_1:4 $inf.$t_2:4 $inf.$t_3:4" \
-	    $msg "none" "$inf\.($range_to_ignore_1_2|$range_to_ignore_2_3):4"
-	thread_apply "${prefix}${t_1}-\$thread_3:3-4" \
-	    "$inf.$t_1:3 $inf.$t_1:4 $inf.$t_2:3 $inf.$t_2:4 $inf.$t_3:3 $inf.$t_3:4" \
-	    $msg "none" "$inf\.($range_to_ignore_1_2|$range_to_ignore_2_3):(3|4)"
-	thread_apply "${prefix}${t_1}-${t_3}:*" \
-	    "$all_lanes_1 $all_lanes_2 $all_lanes_3" \
-	    $msg "none" "none"
+	    # Thread range.
+	    set range_to_ignore_1_2 "[range_re $t_1 $t_2]"
+	    set range_to_ignore_2_3 "[range_re $t_2 $t_3]"
+	    thread_apply "${prefix}${t_1}-${t_2}" "$inf.$t_1:2 $inf.$t_2:3" \
+		$msg "$inf\.($range_to_ignore_1_2)"
+	    thread_apply "${prefix}${t_1}-${t_3}" \
+		"$inf.$t_1:2 $inf.$t_2:3 $inf.$t_3:4" \
+		$msg "$inf\.($range_to_ignore_1_2|$range_to_ignore_2_3)"
+	    thread_apply "${prefix}${t_1}-${t_2}:4" "$inf.$t_1:4 $inf.$t_2:4" \
+		$msg "none" "$inf\.($range_to_ignore_1_2):4"
+	    thread_apply "${prefix}${t_1}-${t_3}:4" "$inf.$t_1:4 $inf.$t_2:4 $inf.$t_3:4" \
+		$msg "none" "$inf\.($range_to_ignore_1_2|$range_to_ignore_2_3):4"
+	    thread_apply "${prefix}${t_1}-\$thread_3:3-4" \
+		"$inf.$t_1:3 $inf.$t_1:4 $inf.$t_2:3 $inf.$t_2:4 $inf.$t_3:3 $inf.$t_3:4" \
+		$msg "none" "$inf\.($range_to_ignore_1_2|$range_to_ignore_2_3):(3|4)"
+	    thread_apply "${prefix}${t_1}-${t_3}:*" \
+		"$all_lanes_1 $all_lanes_2 $all_lanes_3" \
+		$msg "none" "none"
 
-	# Wildcard thread range.
-	thread_apply "${prefix}*" \
-	    "$inf.$t_1:2 $inf.$t_2:3 $inf.$t_3:4 $inf.$t_4:5" \
-	    $msg "$inf\.${decimal}(:$decimal)?"
-	thread_apply "${prefix}*:3" \
-	    "$inf.$t_1:3 $inf.$t_2:3 $inf.$t_3:3 $inf.$t_4:3" \
-	    $msg "$inf\.$decimal:3" "$inf\.$decimal:3"
-	thread_apply "${prefix}*:\$three-5" \
-	    [string cat \
-		[lanes_of "$inf.$t_1" "3 4 5"] " " \
-		[lanes_of "$inf.$t_2" "3 4 5"] " " \
-		[lanes_of "$inf.$t_3" "3 4 5"] " " \
-		[lanes_of "$inf.$t_4" "3 4 5"]] \
-	    $msg "$inf\.$decimal:(3|4|5)" "$inf\.$decimal:(3|4|5)"
-	thread_apply "${prefix}*:*" \
+	    # Wildcard thread range.
+	    thread_apply "${prefix}*" \
+		"$inf.$t_1:2 $inf.$t_2:3 $inf.$t_3:4 $inf.$t_4:5" \
+		$msg "$inf\.${decimal}(:$decimal)?"
+	    thread_apply "${prefix}*:3" \
+		"$inf.$t_1:3 $inf.$t_2:3 $inf.$t_3:3 $inf.$t_4:3" \
+		$msg "$inf\.$decimal:3" "$inf\.$decimal:3"
+	    thread_apply "${prefix}*:\$three-5" \
+		[string cat \
+		    [lanes_of "$inf.$t_1" "3 4 5"] " " \
+		    [lanes_of "$inf.$t_2" "3 4 5"] " " \
+		    [lanes_of "$inf.$t_3" "3 4 5"] " " \
+		    [lanes_of "$inf.$t_4" "3 4 5"]] \
+		$msg "$inf\.$decimal:(3|4|5)" "$inf\.$decimal:(3|4|5)"
+	    thread_apply "${prefix}*:*" \
+		"$all_lanes_1 $all_lanes_2 $all_lanes_3 $all_lanes_4" \
+		$msg "$inf\.${decimal}(:$decimal)?" "none"
+	}
+
+	check_lanes "after first apply group" $inf $t_1 $t_2 $t_3 $t_4
+
+	# Check thread apply all.
+	thread_apply "all" "$inf.$t_4:5 $inf.$t_3:4 $inf.$t_2:3 $inf.$t_1:2" \
+	    "" "$decimal\.${decimal}(:$decimal)?"
+
+	check_lanes "after apply all" $inf $t_1 $t_2 $t_3 $t_4
+
+	thread_apply "all-lanes" \
+	    [lreverse "$all_lanes_1 $all_lanes_2 $all_lanes_3 $all_lanes_4"] \
+	    "all-lanes" "$decimal\.${decimal}(:$decimal)?"
+
+	thread_apply "all-lanes -ascending" \
 	    "$all_lanes_1 $all_lanes_2 $all_lanes_3 $all_lanes_4" \
-	    $msg "$inf\.${decimal}(:$decimal)?" "none"
-    }
+	    "all-lanes" "$decimal\.${decimal}(:$decimal)?"
 
-    check_lanes "after first apply group" $inf $t_1 $t_2 $t_3 $t_4
+	check_lanes "after apply all-lanes" $inf $t_1 $t_2 $t_3 $t_4
 
-    # Check thread apply all.
-    thread_apply "all" "$inf.$t_4:5 $inf.$t_3:4 $inf.$t_2:3 $inf.$t_1:2" \
-	"" "$decimal\.${decimal}(:$decimal)?"
-
-    check_lanes "after apply all" $inf $t_1 $t_2 $t_3 $t_4
-
-    thread_apply "all-lanes" \
-	[lreverse "$all_lanes_1 $all_lanes_2 $all_lanes_3 $all_lanes_4"] \
-	"all-lanes" "$decimal\.${decimal}(:$decimal)?"
-
-    thread_apply "all-lanes -ascending" \
-	"$all_lanes_1 $all_lanes_2 $all_lanes_3 $all_lanes_4" \
-	"all-lanes" "$decimal\.${decimal}(:$decimal)?"
-
-    check_lanes "after apply all-lanes" $inf $t_1 $t_2 $t_3 $t_4
-
-    # Check that several intervals are parsed correctly.
-    # The set of combinations is incomplete.
-    set msg " combinations "
-    foreach prefix [list "" "$t_1" "$inf.$t_1"] {
-	set end "$inf.$t_1:2"
-	if {$prefix eq ""} {
-	    set end ""
-	}
-
-	thread_apply "$t_1:* ${prefix}" "$all_lanes_1 $end" $msg
-	thread_apply "$t_1 ${prefix}:3" "$inf.$t_1:2 $inf.$t_1:3" $msg
-	thread_apply "$t_1-$t_2:3-4 ${prefix}:3-5 $t_1" \
-	    [string cat \
-		"$inf.$t_1:3 $inf.$t_1:4 $inf.$t_2:3 $inf.$t_2:4 " \
-		[lanes_of "$inf.$t_1" "3 4 5"] " " \
-		"$inf.$t_1:2"] \
-	    $msg "none" "$inf\.$decimal:$decimal"
-
-	thread_apply "*:3 ${prefix}:* :*" \
-	    [string cat \
-		"$inf.$t_1:3 $inf.$t_2:3 $inf.$t_3:3 $inf.$t_4:3 " \
-		$all_lanes_1 " " \
-		$all_lanes_1] \
-	    $msg "$inf\.$decimal:3" "$inf\.$decimal:3"
-	thread_apply "*:3 ${prefix}:* :2-3" \
-	    [string cat \
-		"$inf.$t_1:3 $inf.$t_2:3 $inf.$t_3:3 $inf.$t_4:3 " \
-		$all_lanes_1 " " \
-		"$inf.$t_1:2 $inf.$t_1:3"] \
-	    $msg "$inf\.$decimal:(2|3)" "$inf\.$decimal:(2|3)"
-    }
-
-    # At even branch, lanes [0 2 4 6] are active.
-    gdb_breakpoint "$even_branch" {temporary}
-    gdb_continue_to_breakpoint "hit the BP at even branch " \
-	".*$srcfile:$even_branch.*"
-    set cur_thread [get_current_thread "after second BP hit"]
-
-    # Only even lanes are active.
-    thread_apply_error ":1" \
-	"warning: SIMD lane 1 is inactive in thread $cur_thread"
-    thread_apply_error ":3" \
-	"warning: SIMD lane 3 is inactive in thread $cur_thread."
-
-    set msg " at even branch "
-    thread_apply ":4" "$cur_thread:4" $msg
-    thread_apply ":*" [all_even_lanes_of $num_lanes $cur_thread] $msg
-
-    # Set thread t_2 to active lane.
-    gdb_test "thread $inf.$t_2:2" "Switching to thread $inf\.$t_2:2.*" \
-	"Switch to thread $inf.$t_2:2 at even branch"
-    # Set current thread to t_1.
-    gdb_test "thread $inf.$t_1:2" "Switching to thread $inf.$t_1:2.*" \
-	"Switch to thread $inf.$t_1:2 at even branch"
-
-    foreach prefix [list "" "$inf."] {
-	# Thread ID
-	thread_apply "${prefix}$t_1" "$inf.$t_1:2" $msg
-	thread_apply "${prefix}$t_1:4" "$inf.$t_1:4" $msg
-	thread_apply "${prefix}$t_1:*" [all_even_lanes_of $num_lanes "$inf.$t_1"] $msg
-
-	# Thread range
-	thread_apply "${prefix}$t_1-$t_2" "$inf.$t_1:2 $inf.$t_2:2" \
-	    $msg "$inf\.($range_to_ignore_1_2)" "none"
-	thread_apply "${prefix}$t_1-$t_2:4" "$inf.$t_1:4 $inf.$t_2:4" \
-	    $msg "none" "$inf\.($range_to_ignore_1_2):4"
-	thread_apply "${prefix}$t_1-$t_2:*" \
-	    [string cat \
-		[all_even_lanes_of $num_lanes "$inf.$t_1"] " " \
-		[all_even_lanes_of $num_lanes "$inf.$t_2"]] \
-	    $msg "none" "none"
-
-	# Wildcard thread range
-	thread_apply "${prefix}*" \
-	    "$inf.$t_1:2 $inf.$t_2:2 $inf.$t_3:4 $inf.$t_4:0" \
-	    $msg "$inf\.$decimal" "$inf\.$decimal:0"
-	thread_apply "${prefix}*:4" \
-	    "$inf.$t_1:4 $inf.$t_2:4 $inf.$t_3:4 $inf.$t_4:4" \
-	    $msg "$inf\.$decimal:4" "$inf\.$decimal:4"
-	thread_apply "${prefix}*:*" \
-	    [string cat \
-		[all_even_lanes_of $num_lanes "$inf.$t_1"] " " \
-		[all_even_lanes_of $num_lanes "$inf.$t_2"] " " \
-		[all_even_lanes_of $num_lanes "$inf.$t_3"] " " \
-		[all_even_lanes_of $num_lanes "$inf.$t_4"]] \
-	$msg "$inf\.$decimal:$decimal" "none"
-    }
-
-    # Test that we switch to the thread for the 'thread apply all-lanes'
-    # command.  To test this, for each lane of each thread, we print the
-    # context and then change the context to t_2:6 in the executed
-    # command.  The command should not impact the context of the next
-    # execution.
-    #
-    # First define the command that is to be executed by each lane.
-    gdb_test_multiline "define lane command" \
-	"define lane_cmd" "" \
-	"  printf \"CTX1= %d:%d\\n\", \$_thread, \$_simd_lane" "" \
-	"  thread $inf.$t_2:6" "" \
-	"  printf \"CTX2= %d:%d\\n\", \$_thread, \$_simd_lane" "" \
-	"end" ""
-
-    set cmd "thread apply all-lanes lane_cmd"
-    set test "thread switch before executing thr_try_catch_cmd for all-lanes"
-    set any "\[^\r\n\]*"
-    set thread_switches 0
-
-    set thread_ctx "Thread (${decimal}\.${decimal}(:$decimal)?) $any:\r\n"
-    set output_1 "CTX1= ($decimal:$decimal)\r\n"
-    set output_2 "CTX2= ($decimal:$decimal)\r\n"
-
-    # Initial values are deliberately different.
-    set the_ctx "invalid"
-    set ctx_1 "not-valid"
-
-    # The output may be very long.  Consume it line by line.
-    gdb_test_multiple "$cmd" "$test" {
-	-re "^$cmd\r\n" {
-	    # Trim the expect buffer.
-	    exp_continue
-	}
-	-re "^${thread_ctx}" {
-	    set the_ctx $expect_out(1,string)
-	    exp_continue
-	}
-	-re "^${output_1}" {
-	    set ctx_1 $expect_out(1,string)
-	    exp_continue
-	}
-	-re "^${output_2}" {
-	    set ctx_2 $expect_out(1,string)
-
-	    if {"$the_ctx" eq "invalid"} {
-		fail "$gdb_test_name: the_ctx is invalid"
+	# Check that several intervals are parsed correctly.
+	# The set of combinations is incomplete.
+	set msg " combinations "
+	foreach prefix [list "" "$t_1" "$inf.$t_1"] {
+	    set end "$inf.$t_1:2"
+	    if {$prefix eq ""} {
+		set end ""
 	    }
-	    if {"$ctx_1" eq "not-valid"} {
-		fail "$gdb_test_name: ctx_1 is invalid"
-	    }
-	    # Counting the occurrences only for a fixed thread is
-	    # sufficient.  Use t_1 for this purpose.
-	    if {[regexp "$inf\.$t_1:$decimal" "$the_ctx"]} {
-		gdb_assert {{"$the_ctx" eq "$inf.$ctx_1"}} \
-		    "$gdb_test_name: $the_ctx matches $ctx_1"
-		gdb_assert {{"$ctx_2" eq "$t_2:6"}} \
-		    "$gdb_test_name: $ctx_2 matches $t_2:6 in $the_ctx"
-		incr thread_switches
-	    }
-	    set the_ctx "invalid"
-	    set ctx_1 "not-valid"
-	    exp_continue
+
+	    thread_apply "$t_1:* ${prefix}" "$all_lanes_1 $end" $msg
+	    thread_apply "$t_1 ${prefix}:3" "$inf.$t_1:2 $inf.$t_1:3" $msg
+	    thread_apply "$t_1-$t_2:3-4 ${prefix}:3-5 $t_1" \
+		[string cat \
+		    "$inf.$t_1:3 $inf.$t_1:4 $inf.$t_2:3 $inf.$t_2:4 " \
+		    [lanes_of "$inf.$t_1" "3 4 5"] " " \
+		    "$inf.$t_1:2"] \
+		$msg "none" "$inf\.$decimal:$decimal"
+
+	    thread_apply "*:3 ${prefix}:* :*" \
+		[string cat \
+		    "$inf.$t_1:3 $inf.$t_2:3 $inf.$t_3:3 $inf.$t_4:3 " \
+		    $all_lanes_1 " " \
+		    $all_lanes_1] \
+		$msg "$inf\.$decimal:3" "$inf\.$decimal:3"
+	    thread_apply "*:3 ${prefix}:* :2-3" \
+		[string cat \
+		    "$inf.$t_1:3 $inf.$t_2:3 $inf.$t_3:3 $inf.$t_4:3 " \
+		    $all_lanes_1 " " \
+		    "$inf.$t_1:2 $inf.$t_1:3"] \
+		$msg "$inf\.$decimal:(2|3)" "$inf\.$decimal:(2|3)"
 	}
-	-re "^$gdb_prompt $" {
-	    set num_even_lanes [expr $num_lanes / 2]
-	    gdb_assert {$thread_switches == $num_even_lanes} $gdb_test_name
+
+	# At even branch, lanes [0 2 4 6] are active.
+	gdb_breakpoint "$even_branch" {temporary}
+	gdb_continue_to_breakpoint "hit the BP at even branch " \
+	    ".*$srcfile:$even_branch.*"
+	set cur_thread [get_current_thread "after second BP hit"]
+
+	# Only even lanes are active.
+	thread_apply_error ":1" \
+	    "warning: SIMD lane 1 is inactive in thread $cur_thread"
+	thread_apply_error ":3" \
+	    "warning: SIMD lane 3 is inactive in thread $cur_thread."
+
+	set msg " at even branch "
+	thread_apply ":4" "$cur_thread:4" $msg
+	thread_apply ":*" [all_even_lanes_of $num_lanes $cur_thread] $msg
+
+	# Set thread t_2 to active lane.
+	gdb_test "thread $inf.$t_2:2" "Switching to thread $inf\.$t_2:2.*" \
+	    "Switch to thread $inf.$t_2:2 at even branch"
+	# Set current thread to t_1.
+	gdb_test "thread $inf.$t_1:2" "Switching to thread $inf.$t_1:2.*" \
+	    "Switch to thread $inf.$t_1:2 at even branch"
+
+	foreach prefix [list "" "$inf."] {
+	    # Thread ID
+	    thread_apply "${prefix}$t_1" "$inf.$t_1:2" $msg
+	    thread_apply "${prefix}$t_1:4" "$inf.$t_1:4" $msg
+	    thread_apply "${prefix}$t_1:*" [all_even_lanes_of $num_lanes "$inf.$t_1"] $msg
+
+	    # Thread range
+	    thread_apply "${prefix}$t_1-$t_2" "$inf.$t_1:2 $inf.$t_2:2" \
+		$msg "$inf\.($range_to_ignore_1_2)" "none"
+	    thread_apply "${prefix}$t_1-$t_2:4" "$inf.$t_1:4 $inf.$t_2:4" \
+		$msg "none" "$inf\.($range_to_ignore_1_2):4"
+	    thread_apply "${prefix}$t_1-$t_2:*" \
+		[string cat \
+		    [all_even_lanes_of $num_lanes "$inf.$t_1"] " " \
+		    [all_even_lanes_of $num_lanes "$inf.$t_2"]] \
+		$msg "none" "none"
+
+	    # Wildcard thread range
+	    thread_apply "${prefix}*" \
+		"$inf.$t_1:2 $inf.$t_2:2 $inf.$t_3:4 $inf.$t_4:0" \
+		$msg "$inf\.$decimal" "$inf\.$decimal:0"
+	    thread_apply "${prefix}*:4" \
+		"$inf.$t_1:4 $inf.$t_2:4 $inf.$t_3:4 $inf.$t_4:4" \
+		$msg "$inf\.$decimal:4" "$inf\.$decimal:4"
+	    thread_apply "${prefix}*:*" \
+		[string cat \
+		    [all_even_lanes_of $num_lanes "$inf.$t_1"] " " \
+		    [all_even_lanes_of $num_lanes "$inf.$t_2"] " " \
+		    [all_even_lanes_of $num_lanes "$inf.$t_3"] " " \
+		    [all_even_lanes_of $num_lanes "$inf.$t_4"]] \
+	    $msg "$inf\.$decimal:$decimal" "none"
 	}
-	-re "^$any\r\n" {
-	    exp_continue
+
+	# Test that we switch to the thread for the 'thread apply all-lanes'
+	# command.  To test this, for each lane of each thread, we print the
+	# context and then change the context to t_2:6 in the executed
+	# command.  The command should not impact the context of the next
+	# execution.
+	#
+	# First define the command that is to be executed by each lane.
+	gdb_test_multiline "define lane command" \
+	    "define lane_cmd" "" \
+	    "  printf \"CTX1= %d:%d\\n\", \$_thread, \$_simd_lane" "" \
+	    "  thread $inf.$t_2:6" "" \
+	    "  printf \"CTX2= %d:%d\\n\", \$_thread, \$_simd_lane" "" \
+	    "end" ""
+
+	set cmd "thread apply all-lanes lane_cmd"
+	set test "thread switch before executing thr_try_catch_cmd for all-lanes"
+	set any "\[^\r\n\]*"
+	set thread_switches 0
+
+	set thread_ctx "Thread (${decimal}\.${decimal}(:$decimal)?) $any:\r\n"
+	set output_1 "CTX1= ($decimal:$decimal)\r\n"
+	set output_2 "CTX2= ($decimal:$decimal)\r\n"
+
+	# Initial values are deliberately different.
+	set the_ctx "invalid"
+	set ctx_1 "not-valid"
+
+	# The output may be very long.  Consume it line by line.
+	gdb_test_multiple "$cmd" "$test" {
+	    -re "^$cmd\r\n" {
+		# Trim the expect buffer.
+		exp_continue
+	    }
+	    -re "^${thread_ctx}" {
+		set the_ctx $expect_out(1,string)
+		exp_continue
+	    }
+	    -re "^${output_1}" {
+		set ctx_1 $expect_out(1,string)
+		exp_continue
+	    }
+	    -re "^${output_2}" {
+		set ctx_2 $expect_out(1,string)
+
+		if {"$the_ctx" eq "invalid"} {
+		    fail "$gdb_test_name: the_ctx is invalid"
+		}
+		if {"$ctx_1" eq "not-valid"} {
+		    fail "$gdb_test_name: ctx_1 is invalid"
+		}
+		# Counting the occurrences only for a fixed thread is
+		# sufficient.  Use t_1 for this purpose.
+		if {[regexp "$inf\.$t_1:$decimal" "$the_ctx"]} {
+		    gdb_assert {{"$the_ctx" eq "$inf.$ctx_1"}} \
+			"$gdb_test_name: $the_ctx matches $ctx_1"
+		    gdb_assert {{"$ctx_2" eq "$t_2:6"}} \
+			"$gdb_test_name: $ctx_2 matches $t_2:6 in $the_ctx"
+		    incr thread_switches
+		}
+		set the_ctx "invalid"
+		set ctx_1 "not-valid"
+		exp_continue
+	    }
+	    -re "^$gdb_prompt $" {
+		set num_even_lanes [expr $num_lanes / 2]
+		gdb_assert {$thread_switches == $num_even_lanes} $gdb_test_name
+	    }
+	    -re "^$any\r\n" {
+		exp_continue
+	    }
 	}
     }
 }
-
-test_initialize

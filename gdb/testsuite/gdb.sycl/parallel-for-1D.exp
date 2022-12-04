@@ -19,30 +19,39 @@ load_lib sycl.exp
 
 standard_testfile .cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    set last_line [gdb_get_line_number "kernel-last-line"]
-    gdb_breakpoint $last_line
-
-    # Check that we hit the BP for a number of elements.  We do not check
-    # for each element because the number of hits received may depend on
-    # whether the kernel was vectorized, and if so, the width of vectors.
-    # Since the data array in the test program is large, having a small
-    # number of trips here should be safe.
-
-    for {set i 1} {$i <= 5} {incr i} { with_test_prefix "trip $i" {
-	gdb_continue_to_breakpoint "hit the last line" \
-	    ".*$srcfile:$last_line.*"
-
-	gdb_test "print \(in_elem - dim0\)" "= 123"\
-	    "thread invariant"
-    }}
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set last_line [gdb_get_line_number "kernel-last-line"]
+	gdb_breakpoint $last_line
+
+	# Check that we hit the BP for a number of elements.  We do not check
+	# for each element because the number of hits received may depend on
+	# whether the kernel was vectorized, and if so, the width of vectors.
+	# Since the data array in the test program is large, having a small
+	# number of trips here should be safe.
+
+	for {set i 1} {$i <= 5} {incr i} { with_test_prefix "trip $i" {
+	    gdb_continue_to_breakpoint "hit the last line" \
+		".*$srcfile:$last_line.*"
+
+	    gdb_test "print \(in_elem - dim0\)" "= 123"\
+		"thread invariant"
+	}}
+    }
+}

@@ -20,25 +20,34 @@ load_lib sycl.exp
 
 standard_testfile .cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    set line1 [gdb_get_line_number "inside-kernel1"]
-    gdb_breakpoint $line1
-    # In case of GPU offload breakpoint is not hitting at line1.
-    gdb_continue_to_breakpoint "kernel1" ".*$srcfile:$line1.*"
-
-    set line2 [gdb_get_line_number "inside-kernel2"]
-    gdb_breakpoint $line2
-    # In case of GPU offload breakpoint is not hitting at line2.
-    gdb_continue_to_breakpoint "kernel2" ".*$srcfile:$line2.*"
-
-    continue_sycl_program_to_termination
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set line1 [gdb_get_line_number "inside-kernel1"]
+	gdb_breakpoint $line1
+	# In case of GPU offload breakpoint is not hitting at line1.
+	gdb_continue_to_breakpoint "kernel1" ".*$srcfile:$line1.*"
+
+	set line2 [gdb_get_line_number "inside-kernel2"]
+	gdb_breakpoint $line2
+	# In case of GPU offload breakpoint is not hitting at line2.
+	gdb_continue_to_breakpoint "kernel2" ".*$srcfile:$line2.*"
+
+	continue_sycl_program_to_termination
+    }
+}

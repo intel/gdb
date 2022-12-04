@@ -20,30 +20,39 @@ load_lib sycl.exp
 
 standard_testfile .cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    set kernel [gdb_get_line_number "kernel-line"]
-    set post_kernel [gdb_get_line_number "line-after-kernel"]
-    gdb_breakpoint $kernel
-    gdb_breakpoint $post_kernel
-
-    set length 4
-
-    # Check that we stop inside the kernels, regardless of the submission
-    # order, and finally the post-kernel line in the host.
-    for {set i 1} {$i <= $length} {incr i} {
-	gdb_continue_to_breakpoint "hit the BP, occurrence $i" \
-	    ".*$srcfile:$kernel.*"
-    }
-
-    gdb_continue_to_breakpoint "hit the BP post-kernel" \
-	".*$srcfile:$post_kernel.*"
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set kernel [gdb_get_line_number "kernel-line"]
+	set post_kernel [gdb_get_line_number "line-after-kernel"]
+	gdb_breakpoint $kernel
+	gdb_breakpoint $post_kernel
+
+	set length 4
+
+	# Check that we stop inside the kernels, regardless of the submission
+	# order, and finally the post-kernel line in the host.
+	for {set i 1} {$i <= $length} {incr i} {
+	    gdb_continue_to_breakpoint "hit the BP, occurrence $i" \
+		".*$srcfile:$kernel.*"
+	}
+
+	gdb_continue_to_breakpoint "hit the BP post-kernel" \
+	    ".*$srcfile:$post_kernel.*"
+    }
+}

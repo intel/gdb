@@ -20,24 +20,33 @@ load_lib sycl.exp
 
 standard_testfile single-task.cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    set line_number [gdb_get_line_number line-before-kernel]
-    gdb_breakpoint "$srcfile:$line_number if \$_inferior == 1" {message}
-
-    # Test that we actually hit the breakpoint.
-    gdb_continue_to_breakpoint "line before kernel" \
-	".*$srcfile:$line_number.*"
-
-    # Now we should be able to run to the end without hitting
-    # any other kernel/non-kernel breakpoints.
-    continue_sycl_program_to_termination
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set line_number [gdb_get_line_number line-before-kernel]
+	gdb_breakpoint "$srcfile:$line_number if \$_inferior == 1" {message}
+
+	# Test that we actually hit the breakpoint.
+	gdb_continue_to_breakpoint "line before kernel" \
+	    ".*$srcfile:$line_number.*"
+
+	# Now we should be able to run to the end without hitting
+	# any other kernel/non-kernel breakpoints.
+	continue_sycl_program_to_termination
+    }
+}

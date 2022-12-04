@@ -23,34 +23,43 @@ load_lib sycl.exp
 
 standard_testfile single-task.cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    # Set breakpoints inside and outside the kernel.
-    set after_kernel [gdb_get_line_number "line-after-kernel"]
-    set inside_kernel_1 [gdb_get_line_number "kernel-line-1"]
-    set inside_kernel_2 [gdb_get_line_number "kernel-line-2"]
-    set inside_kernel_3 [gdb_get_line_number "kernel-line-3"]
-    set inside_kernel_4 [gdb_get_line_number "kernel-line-4"]
-
-    gdb_breakpoint $inside_kernel_2 {message}
-    gdb_continue_to_breakpoint "kernel line 2" \
-	".*$srcfile:$inside_kernel_2.*"
-
-    # Now we are inside the kernel and defining a kernel breakpoint.
-    gdb_breakpoint $inside_kernel_4 {message}
-    gdb_continue_to_breakpoint "kernel line 4" \
-	".*$srcfile:$inside_kernel_4.*"
-
-    # We are still inside the kernel and defining a host breakpoint.
-    gdb_breakpoint $after_kernel {message}
-    gdb_continue_to_breakpoint "line after kernel" \
-	".*$srcfile:$after_kernel.*"
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	# Set breakpoints inside and outside the kernel.
+	set after_kernel [gdb_get_line_number "line-after-kernel"]
+	set inside_kernel_1 [gdb_get_line_number "kernel-line-1"]
+	set inside_kernel_2 [gdb_get_line_number "kernel-line-2"]
+	set inside_kernel_3 [gdb_get_line_number "kernel-line-3"]
+	set inside_kernel_4 [gdb_get_line_number "kernel-line-4"]
+
+	gdb_breakpoint $inside_kernel_2 {message}
+	gdb_continue_to_breakpoint "kernel line 2" \
+	    ".*$srcfile:$inside_kernel_2.*"
+
+	# Now we are inside the kernel and defining a kernel breakpoint.
+	gdb_breakpoint $inside_kernel_4 {message}
+	gdb_continue_to_breakpoint "kernel line 4" \
+	    ".*$srcfile:$inside_kernel_4.*"
+
+	# We are still inside the kernel and defining a host breakpoint.
+	gdb_breakpoint $after_kernel {message}
+	gdb_continue_to_breakpoint "line after kernel" \
+	    ".*$srcfile:$after_kernel.*"
+    }
+}

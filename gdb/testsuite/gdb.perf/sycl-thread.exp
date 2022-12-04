@@ -29,16 +29,19 @@ if [skip_perf_tests] {
 }
 
 PerfTest::assemble {
-    if {![sycl_perftest_initialize]} {
+    global device
+
+    set device [sycl_perftest_initialize]
+    if {[string match "" $device]} {
 	unsupported "Test initializaton is failed"
 	return -1
     }
 
     return 0
 } {
-    global bp_first_line, bp_last_line
+    global bp_first_line bp_last_line
 
-    if {[start_sycl_program] < 0} {
+    if {![runto_main [sycl_get_device_args $device]]} {
 	return -1
     }
 
@@ -46,8 +49,10 @@ PerfTest::assemble {
 
     return 0
 } {
-    global bp_first_line, bp_last_line
-    global device_type
+    global bp_first_line bp_last_line device
+
+    set args_list [sycl_get_device_args $device]
+    set device_type [lindex $args_list 0]
 
     gdb_test_python_run "SyclThread\($bp_last_line,  \"$device_type\" \)"
 

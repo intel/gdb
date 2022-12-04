@@ -29,15 +29,6 @@
 
 load_lib mi-support.exp
 
-if {![info exists sycl_driver_version]} {
-    set sycl_driver_version ""
-}
-if {![info exists sycl_driver_platform]} {
-    set sycl_driver_platform ""
-}
-if {![info exists sycl_selected_device]} {
-    set sycl_selected_device ""
-}
 if {![info exists OFFLOAD_GPU_ID]} {
     set OFFLOAD_GPU_ID ""
 }
@@ -54,78 +45,20 @@ if {![info exists OFFLOAD_BACKEND_GROUP]} {
     set OFFLOAD_BACKEND_GROUP "level0,opencl,host"
 }
 
-# Start the process by passing the SYCL device type and a
-# substring of the device name as the command line arguments.
-
-proc start_sycl_program {} {
-    global device_type device_name sycl_driver_platform
-    global gdb_prompt
-
-    if {![info exists device_type] || ![info exists device_name]
-	|| ![info exists sycl_driver_platform]} {
-	verbose "SYCL: test parameters not set" 0
-	return -1
-    }
-
-    # Because we're doing an internal setup, use gdb_test_multiple
-    # instead of gdb_test to not include this as a pass.
-    set set_args_cmd "set args '$device_type' '$device_name' '$sycl_driver_platform'"
-    gdb_test_multiple $set_args_cmd $set_args_cmd {
-	-re "$gdb_prompt $" { }
-    }
-
-    if {![runto_main]} {
-	untested "failed to run to main"
-	return -1
-    }
-
-    return 0
-}
-
-# Start SYCL program using MI commands.
-
-proc mi_start_sycl_program {{known_fail "" }} {
-    global device_type device_name sycl_driver_platform
-    global mi_gdb_prompt
-
-    if {![info exists device_type] || ![info exists device_name]
-	|| ![info exists sycl_driver_platform]} {
-	verbose "SYCL: test parameters not set" 0
-	return -1
-    }
-
-    # Because we're doing an internal setup, use send_gdb and gdb_expect
-    # instead of mi_gdb_test to not include this as a pass.
-    send_gdb "-gdb-set args '$device_type' '$device_name' '$sycl_driver_platform'\n"
-    gdb_expect 10 {
-	-re "\\^done.*$mi_gdb_prompt$" { }
-    }
-
-    if {[mi_runto_main $known_fail] == -1} {
-	untested "failed to run to main"
-	return -1
-    }
-
-    return 0
-}
-
 # Return true if the SYCL device selected via the board file
 # matches the arguments.  Otherwise return false.
-# For the device type, exact match is used.  For the device name,
-# pattern-matching is used.
+# Input arg DEVICE contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version.
+# See an example in init_sycl_devices_list.
 
-proc require_sycl_device {type name} {
-    global device_type sycl_driver_platform
-    global device_name
-
-    if {![info exists device_type] || ![info exists device_name]
-	|| ![info exists sycl_driver_platform]} {
-	verbose "SYCL: test parameters not set" 0
-	return 0
+proc require_sycl_device {device type name} {
+    set args_list [sycl_get_device_args $device]
+    if {[llength $args_list] <= 2} {
+        return 0
     }
 
-    set type_match [expr {$device_type eq $type}]
-    set name_match [string match $name $device_name]
+    set type_match [expr {[lindex $args_list 0] eq $type}]
+    set name_match [string match $name [lindex $args_list 1]]
 
     return [expr $type_match && $name_match]
 }
@@ -160,14 +93,9 @@ proc get_sycl_supported_devices {sycl_device_list} {
 	    continue
 	}
 
-	set test_prefix [sycl_init_device "$device"]
-	if {[string match "" $test_prefix]} {
-	    continue
-	}
-
 	clean_restart "${exe}"
 
-	if {[start_sycl_program] < 0} {
+	if {![runto_main [sycl_get_device_args $device]]} {
 	    continue
 	}
 
@@ -195,7 +123,11 @@ proc get_sycl_supported_devices {sycl_device_list} {
 }
 
 # Get list of devices and return 0 if device list is non-empty else
-# return 1.
+# return 1.  Each device entry of this list contains ";" separated
+# following information:
+# Device name;Backend Type;Backend Platform version.
+# e.g.
+# Intel(R) Iris(R) Plus Graphics 655 [0x3ea5];ext_oneapi_level_zero;1.3.24347
 
 gdb_caching_proc init_sycl_devices_list {
     global srcdir objdir subdir gdb_prompt
@@ -261,17 +193,21 @@ gdb_caching_proc init_sycl_devices_list {
 }
 
 # Return non-zero, if we are runing at Level-Zero.
+# device contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version.
+# See an example in init_sycl_devices_list.
 
-proc is_level_zero {} {
-    global sycl_driver_platform
-    return [regexp {.*(Level-Zero)} $sycl_driver_platform]
+proc is_level_zero {device} {
+    return [regexp {.*(Level-Zero)} $device]
 }
 
 # Return non-zero, if we are runing on OpenCL.
+# device contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version.
+# See an example in init_sycl_devices_list.
 
-proc is_opencl {} {
-    global sycl_driver_platform
-    return [regexp {.*(OpenCL)} $sycl_driver_platform]
+proc is_opencl {device} {
+    return [regexp {.*(OpenCL)} $device]
 }
 
 # Return non-zero, if the Level-Zero Debug API is being used.
@@ -403,6 +339,9 @@ proc get_another_stopped_thread {srcfile line ids_to_ignore {msg ""}} {
 
 # Returns 1 if the target device is selected via OFFLOAD_DEVICE_GROUP
 # and OFFLOAD_GPU_ID, 0 otherwise.
+# device contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version.
+# See an example in init_sycl_devices_list.
 
 proc is_sycl_device_filtered {device} {
     global OFFLOAD_DEVICE_GROUP OFFLOAD_GPU_ID OFFLOAD_BACKEND_GROUP
@@ -446,77 +385,65 @@ proc is_sycl_device_filtered {device} {
     return 1
 }
 
-# Sets the global variables required for the arguments of SYCL tests and
-# returns the test prefix which is used to identify the test for each device.
+# Gets the list of args required for running the SYCL tests, where input device
+# contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version;Device Type.
+# See an example in init_sycl_devices_list.
 
-proc sycl_init_device {device} {
-    global device_type device_name hex sycl_selected_device
-    global sycl_driver_platform sycl_driver_version
+proc sycl_get_device_args {device} {
+    global hex
 
     set device_info [split "$device" ";"]
     set sycl_driver_platform [lindex $device_info 1]
     set sycl_driver_version [lindex $device_info 2]
+    set device_type [lindex $device_info 3]
     set device_name ""
+    set args_list {}
 
-    if {[string match -nocase "*Graphics*" $device]
-	|| [string match -nocase "*GPU*" $device]} {
-	set device_type "gpu"
-	set device_name [lindex $device_info 0]
-	set sycl_selected_device [lindex $device_info 0]
-	return "$device_type:$sycl_driver_platform:{[regexp -all -inline $hex $device_name]}"
-    } elseif {[string match -nocase "*CPU*" $device]
-	      || [string match -nocase "*CORE*" $device]} {
-	set device_type "cpu"
+    if {$device_type == "gpu"} {
+	lappend args_list "gpu"
+	lappend args_list [lindex $device_info 0]
+    } elseif {$device_type == "cpu"} {
+	lappend args_list "cpu"
 	if {[string match "*Intel*" $device]} {
-	    set device_name "Intel"
+	    lappend args_list "Intel"
 	}
-	return "$device_type:$sycl_driver_platform:cpp"
-    } elseif {[string match -nocase "*FPGA*" $device]} {
-	set device_type "accelerator"
+    } elseif {$device_type == "accelerator"} {
+	lappend args_list "accelerator"
 	if {[string match "*Intel*" $device]} {
-	    set device_name "Intel"
+	    lappend args_list "Intel"
 	}
-	return "$device_type:$sycl_driver_platform:cpp"
-    } elseif {[string match -nocase "*Host*" $device]} {
-	set device_type "host"
-	return "$device_type:$sycl_driver_platform:cpp"
+    } elseif {$device_type == "host"} {
+	lappend args_list "host"
+	lappend args_list "host"
     }
-
-    verbose "SYCL: Couldn't initialize device $device" 0
-    return ""
+    lappend args_list $sycl_driver_platform
+    lappend args_list $sycl_driver_version
+    return $args_list
 }
 
-# Iterate through available SYCL devices and call the run_tests
-# function for each device.
+# Gets the prefix string required for the SYCL tests.
+# DEVICE contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version;Device type.
+# e.g.
+# Intel(R) Iris(R) Plus Graphics 655 [0x3ea5];ext_oneapi_level_zero;1.3.24347;gpu
+# Function returns ":" separated test prefix which has following info:
+# In case of non GPU device: Device type:Backend type:cpp
+# and in case of GPU: Device type GPU: Backend type: Graphics device ID
+# e.g. gpu:opencl:{0x3ea5}
 
-proc test_initialize {{option ""}} {
-    global binfile srcfile testfile OFFLOAD_IGNORE_PREPARE_FOR_TESTING
+proc sycl_get_device_prefix {device} {
+    global hex
+    set args_list [sycl_get_device_args $device]
 
-    set sycl_device_list [init_sycl_devices_list]
-    if {[llength $sycl_device_list] == 0} {
-	unsupported "target does not support SYCL"
-	return 0
+    if {[string match -nocase "*Graphics*" $device]
+	 || [string match -nocase "*GPU*" $device]} {
+	    # In case of GPU device, add device ID to the prefix to get a unique
+	    # test name for multi GPU test machines.
+	    return "[lindex $args_list 0]:[lindex $args_list 2]:\
+		    {[regexp -all -inline $hex [lindex $args_list 1]]}"
     }
-
-    if {$OFFLOAD_IGNORE_PREPARE_FOR_TESTING != "1"} {
-	if {[build_executable "failed to compile $srcfile" \
-			    "${binfile}" $srcfile [concat sycl debug $option]]} {
-	    return -1
-	}
-    }
-
-    foreach device $sycl_device_list {
-	set test_prefix [sycl_init_device "$device"]
-	if {[string match "" $test_prefix]} {
-	    verbose "SYCL: Ignoring unknown device name $device" 0
-	    continue
-	}
-
-	clean_restart "${binfile}"
-	with_test_prefix "$test_prefix" {
-	    sycl_${testfile}_run_tests
-	}
-    }
+    return "[lindex $args_list 0]:[lindex $args_list 2]:cpp"
 }
 
 # Get compiler info and return 1 if the compiler is icpx, otherwise
@@ -556,7 +483,7 @@ proc sycl_perftest_initialize {} {
     set sycl_device_list [init_sycl_devices_list]
     if {[llength $sycl_device_list] == 0} {
 	unsupported "target does not support SYCL"
-	return 0
+	return ""
     }
 
     set option ""
@@ -568,17 +495,18 @@ proc sycl_perftest_initialize {} {
 
     if {[build_executable "failed to compile $srcfile" \
 	    "${binfile}" $srcfile [concat sycl debug $option]]} {
-	return 0
+	return ""
     }
 
+    # SYCL performance tests will run on the first available device, so make
+    # sure to set the device filter properly for the required device.
     foreach device $sycl_device_list {
-	set test_prefix [sycl_init_device "$device"]
-	if {![string match "" $test_prefix]} {
+	with_test_prefix [sycl_get_device_prefix $device] {
 	    verbose "SYCL: Initalized the device $device" 0
 	    clean_restart "${binfile}"
-	    return 1
+	    return $device
 	}
     }
 
-    return 0
+    return ""
 }

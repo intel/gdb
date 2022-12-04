@@ -20,24 +20,33 @@ load_lib sycl.exp
 
 standard_testfile .cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    set fill "\[^\r\n\]*"
-    set inner_loc [gdb_get_line_number "work-item-location"]
-    gdb_breakpoint "$srcfile:$inner_loc"
-    gdb_continue_to_breakpoint "work-item-location" ".*$srcfile:$inner_loc.*"
-    gdb_test "backtrace 4" [multi_line \
-			    "#0${fill}main${fill}operator\\(\\)${fill} at ${fill}" \
-			    "#1${fill} at ${fill}" \
-			    "#2${fill} at ${fill}" \
-			    "#3${fill}(\r\n\\(More stack frames follow\\.\\.\\.\\))?${fill}"] \
-    "backtrace in parallel_for_work_item"
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set fill "\[^\r\n\]*"
+	set inner_loc [gdb_get_line_number "work-item-location"]
+	gdb_breakpoint "$srcfile:$inner_loc"
+	gdb_continue_to_breakpoint "work-item-location" ".*$srcfile:$inner_loc.*"
+	gdb_test "backtrace 4" [multi_line \
+				"#0${fill}main${fill}operator\\(\\)${fill} at ${fill}" \
+				"#1${fill} at ${fill}" \
+				"#2${fill} at ${fill}" \
+				"#3${fill}(\r\n\\(More stack frames follow\\.\\.\\.\\))?${fill}"] \
+	"backtrace in parallel_for_work_item"
+    }
+}

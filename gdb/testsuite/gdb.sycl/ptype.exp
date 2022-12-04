@@ -20,6 +20,17 @@ load_lib "cp-support.exp"
 
 standard_testfile .cpp
 
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
 # ##############################################
 proc check_outer_struct { objname } {
     cp_test_ptype_class "$objname" "" "struct" "outer_struct" {
@@ -101,28 +112,27 @@ proc check_all_types { context struct_obj class_obj } {
     }
 }
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
 
-    if {[start_sycl_program] < 0} {
-	return -1
+
+	# Break in the kernel, and try ptype for structure and classobjects.
+	set kernel_line [gdb_get_line_number "kernel-line"]
+	gdb_breakpoint $kernel_line
+	gdb_continue_to_breakpoint "kernel line" ".*$srcfile:$kernel_line.*"
+
+	check_all_types "kernel" "sObj" "cObj"
+
+
+	# Break in the host, and try ptype for structure and classobjects.
+	set host_line [gdb_get_line_number "host-line"]
+	gdb_breakpoint $host_line
+	gdb_continue_to_breakpoint "host line" ".*$srcfile:$host_line.*"
+
+	check_all_types "host" "sObj" "cObj"
     }
-
-    # Break in the kernel, and try ptype for structure and classobjects.
-    set kernel_line [gdb_get_line_number "kernel-line"]
-    gdb_breakpoint $kernel_line
-    gdb_continue_to_breakpoint "kernel line" ".*$srcfile:$kernel_line.*"
-
-    check_all_types "kernel" "sObj" "cObj"
-
-
-    # Break in the host, and try ptype for structure and classobjects.
-    set host_line [gdb_get_line_number "host-line"]
-    gdb_breakpoint $host_line
-    gdb_continue_to_breakpoint "host line" ".*$srcfile:$host_line.*"
-
-    check_all_types "host" "sObj" "cObj"
 }
-
-test_initialize

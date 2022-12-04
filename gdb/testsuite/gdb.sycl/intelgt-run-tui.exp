@@ -21,28 +21,42 @@ load_lib tuiterm.exp
 
 standard_testfile single-task.cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile testfile device_type device_name sycl_driver_platform
-
-   if {![require_sycl_device "gpu" "Intel*"]} {
-	unsupported "test is aimed at Intel GPUs only"
-	return 0
-    }
-
-    Term::clean_restart 200 180 $testfile
-    if {![Term::enter_tui]} {
-	unsupported "TUI not supported"
-    }
-
-    # Run until the end.  This used to crash GDB.
-    Term::command "set args '$device_type' '$device_name' '$sycl_driver_platform'"
-    send_gdb "run\n"
-    if {[Term::wait_for "Result is 42"]} {
-	pass "did not crash"
-    } else {
-	fail "did not crash"
-    }
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	Term::clean_restart 200 180 $testfile
+	if {![Term::enter_tui]} {
+	    unsupported "TUI not supported"
+	}
+
+	set args_list [sycl_get_device_args $device]
+	foreach arg $args_list {
+	    append args "'$arg' "
+	}
+	# Run until the end.  This used to crash GDB.
+	Term::command "set args $args"
+	send_gdb "run\n"
+	if {[Term::wait_for "Result is 42"]} {
+	    pass "did not crash"
+	} else {
+	    fail "did not crash"
+	}
+    }
+}

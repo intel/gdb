@@ -25,151 +25,161 @@ proc wrap_regex_with_spaces_and_tabs { args } {
     return "[join ${args} ${ws}]${ws}"
 }
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile hex decimal
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
 
-    if {![require_sycl_device "gpu" "Intel*"]} {
-	unsupported "test is aimed at Intel GPUs only"
-	return 0
-    }
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
 
-    if {![is_level_zero_debug_api]} {
-	unsupported "test is aimed at Level-Zero Debug API only"
-	return 0
-    }
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
 
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
 
-    set num_devices_check [gdb_get_line_number "num-devices-check"]
-    set devices_driver_check [gdb_get_line_number "devices-driver-check"]
-    gdb_breakpoint $num_devices_check {temporary}
-    gdb_breakpoint $devices_driver_check {temporary}
-    gdb_continue_to_breakpoint "num devices check" \
-	".*$srcfile:$num_devices_check.*"
+	if {![is_level_zero_debug_api]} {
+	    unsupported "test is aimed at Level-Zero Debug API only"
+	    continue
+	}
 
-    set num_devices [get_integer_valueof "num_devices" 0]
-    if {$num_devices < 2} {
-	unsupported "test is aimed at multi-device machines"
-	return 0
-    }
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
 
-    gdb_continue_to_breakpoint "devices driver check" \
-	".*$srcfile:$devices_driver_check.*"
-    set devices_same_driver [get_integer_valueof "devices_same_driver" 0]
-    if {$devices_same_driver == 0} {
-	unsupported "test needs to be run using devices via one driver only"
-	return 0
-    }
+	set num_devices_check [gdb_get_line_number "num-devices-check"]
+	set devices_driver_check [gdb_get_line_number "devices-driver-check"]
+	gdb_breakpoint $num_devices_check {temporary}
+	gdb_breakpoint $devices_driver_check {temporary}
+	gdb_continue_to_breakpoint "num devices check" \
+	    ".*$srcfile:$num_devices_check.*"
 
-    set bp [gdb_get_line_number "kernel-line-1"]
-    gdb_breakpoint $bp
-    set end_bp [gdb_get_line_number "end-marker"]
-    gdb_breakpoint $end_bp
+	set num_devices [get_integer_valueof "num_devices" 0]
+	if {$num_devices < 2} {
+	    unsupported "test is aimed at multi-device machines"
+	    continue
+	}
 
-    set any_name "\[^\r\n\]+"
-    set any_path "\(?:\/${any_name}\)+"
-    set any_location "\\\[\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
+	gdb_continue_to_breakpoint "devices driver check" \
+	    ".*$srcfile:$devices_driver_check.*"
+	set devices_same_driver [get_integer_valueof "devices_same_driver" 0]
+	if {$devices_same_driver == 0} {
+	    unsupported "test needs to be run using devices via one driver only"
+	    continue
+	}
 
-    set table_header_line [wrap_regex_with_spaces_and_tabs " " "Num" \
-	"Description" "Connection" "Executable"]
-    set table_empty_inferior_line [wrap_regex_with_spaces_and_tabs "." "1" \
-	"<null>" "${any_path}"]
-    set table_inferior_line [wrap_regex_with_spaces_and_tabs "." "1" \
-	"process ${decimal}" "1 \\(native\\)" "${any_path}"]
-    set device_line [wrap_regex_with_spaces_and_tabs \
-	"${decimal}" "device ${any_location}(\.${decimal})?" \
-	"2 \\(.*remote \\| gdbserver.*\\)"]
-    set table_device_line [wrap_regex_with_spaces_and_tabs "." $device_line]
-    set table_active_device_line [wrap_regex_with_spaces_and_tabs "\\*" $device_line]
-    set table_info_devices_hint_line \
-	"Type \"info devices\" to see details of the devices\."
+	set bp [gdb_get_line_number "kernel-line-1"]
+	gdb_breakpoint $bp
+	set end_bp [gdb_get_line_number "end-marker"]
+	gdb_breakpoint $end_bp
 
-    # Example of multi-tile output:
-    #
-    # info inferiors
-    #   Num  Description              Connection                                  Executable
-    #   1    process 764868           1 (native)                                  /XXX/XXX/XXX/XXX
-    # * 2    device [3a:00.0].0       2 (...remote | gdbserver...)
-    #   3    device [3a:00.0].1       2 (...remote | gdbserver...)
-    #   4    device [9a:00.0].0       2 (...remote | gdbserver...)
-    #   5    device [9a:00.0].1       2 (...remote | gdbserver...)
-    # Type "info devices" to see details of the devices.
-    #
-    # Example of a single-tile output:
-    #
-    # info inferiors
-    #   Num  Description              Connection                                  Executable
-    #   1    process 764868           1 (native)                                  /XXX/XXX/XXX/XXX
-    # * 2    device [37:00.0]         2 (...remote | gdbserver...)
-    #   3    device [3b:00.0]         2 (...remote | gdbserver...)
+	set any_name "\[^\r\n\]+"
+	set any_path "\(?:\/${any_name}\)+"
+	set any_location "\\\[\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
 
-    gdb_test "info devices" "No devices\." "info devices pre-kernel"
+	set table_header_line [wrap_regex_with_spaces_and_tabs " " "Num" \
+	    "Description" "Connection" "Executable"]
+	set table_empty_inferior_line [wrap_regex_with_spaces_and_tabs "." "1" \
+	    "<null>" "${any_path}"]
+	set table_inferior_line [wrap_regex_with_spaces_and_tabs "." "1" \
+	    "process ${decimal}" "1 \\(native\\)" "${any_path}"]
+	set device_line [wrap_regex_with_spaces_and_tabs \
+	    "${decimal}" "device ${any_location}(\.${decimal})?" \
+	    "2 \\(.*remote \\| gdbserver.*\\)"]
+	set table_device_line [wrap_regex_with_spaces_and_tabs "." $device_line]
+	set table_active_device_line [wrap_regex_with_spaces_and_tabs "\\*" $device_line]
+	set table_info_devices_hint_line \
+	    "Type \"info devices\" to see details of the devices\."
 
-    # For each device one bp should be hit and each call to continue
-    # should lead to switching to a different device inferior.
+	# Example of multi-tile output:
+	#
+	# info inferiors
+	#   Num  Description              Connection                                  Executable
+	#   1    process 764868           1 (native)                                  /XXX/XXX/XXX/XXX
+	# * 2    device [3a:00.0].0       2 (...remote | gdbserver...)
+	#   3    device [3a:00.0].1       2 (...remote | gdbserver...)
+	#   4    device [9a:00.0].0       2 (...remote | gdbserver...)
+	#   5    device [9a:00.0].1       2 (...remote | gdbserver...)
+	# Type "info devices" to see details of the devices.
+	#
+	# Example of a single-tile output:
+	#
+	# info inferiors
+	#   Num  Description              Connection                                  Executable
+	#   1    process 764868           1 (native)                                  /XXX/XXX/XXX/XXX
+	# * 2    device [37:00.0]         2 (...remote | gdbserver...)
+	#   3    device [3b:00.0]         2 (...remote | gdbserver...)
 
-    set table_header_extended_info_line \
-	"${table_header_line}\r\n${table_inferior_line}"
+	gdb_test "info devices" "No devices\." "info devices pre-kernel"
 
-    set subdevices 0
-    for {set trip 0} {$trip < $num_devices} {incr trip} {
-	with_test_prefix "trip $trip" {
-	    gdb_test_multiple "continue" "resume" {
-		-re -wrap ".*$srcfile:$bp.*" {
+	# For each device one bp should be hit and each call to continue
+	# should lead to switching to a different device inferior.
 
-		    set lines_list [list \
-			"${table_header_line}" \
-			"${table_active_device_line}" \
-			"${table_info_devices_hint_line}"]
+	set table_header_extended_info_line \
+	    "${table_header_line}\r\n${table_inferior_line}"
 
-		    # Get the number of sub-devices.
-		    set subdevices [get_integer_valueof "subdevices_count" 0]
+	set subdevices 0
+	for {set trip 0} {$trip < $num_devices} {incr trip} {
+	    with_test_prefix "trip $trip" {
+		gdb_test_multiple "continue" "resume" {
+		    -re -wrap ".*$srcfile:$bp.*" {
 
-		    # Compute the current inferior id.
-		    set current_inf [expr $trip + 2]
+			set lines_list [list \
+			    "${table_header_line}" \
+			    "${table_active_device_line}" \
+			    "${table_info_devices_hint_line}"]
 
-		    # LAST_DEVICE_INF represents the last inferior id of the current device.
-		    set last_device_inf $current_inf
-		    if { $subdevices > 0 } {
-			set current_inf [expr $trip * $subdevices + 2]
-			set last_device_inf [expr $current_inf + $subdevices - 1]
-			# Insert the additional sub-devices lines.
-			set lines_list [linsert \
-			    $lines_list 2 "(${table_device_line}(\r\n)?){[expr $subdevices - 1]}"]
+			# Get the number of sub-devices.
+			set subdevices [get_integer_valueof "subdevices_count" 0]
+
+			# Compute the current inferior id.
+			set current_inf [expr $trip + 2]
+
+			# LAST_DEVICE_INF represents the last inferior id of the current device.
+			set last_device_inf $current_inf
+			if { $subdevices > 0 } {
+			    set current_inf [expr $trip * $subdevices + 2]
+			    set last_device_inf [expr $current_inf + $subdevices - 1]
+			    # Insert the additional sub-devices lines.
+			    set lines_list [linsert \
+				$lines_list 2 "(${table_device_line}(\r\n)?){[expr $subdevices - 1]}"]
+			}
+
+			gdb_test "info inferiors ${current_inf}-${last_device_inf}" \
+			    [multi_line {*}$lines_list] \
+			    "info inferiors in kernel for device ${trip}"
 		    }
-
-		    gdb_test "info inferiors ${current_inf}-${last_device_inf}" \
-			[multi_line {*}$lines_list] \
-			"info inferiors in kernel for device ${trip}"
 		}
 	    }
 	}
+
+	# Display all available inferiors at the post-kernel breakpoint.
+	gdb_continue_to_breakpoint "post-kernel bp" ".*$srcfile:$end_bp.*"
+
+	gdb_test "info inferiors" \
+	    [multi_line \
+		"${table_header_extended_info_line}" \
+		"(${table_device_line}(\r\n)?){$num_devices,}" \
+		"${table_info_devices_hint_line}"
+		] "info inferiors post kernel for all ${num_devices} (sub)devices"
+
+	continue_sycl_program_to_termination
+
+	# All inferiors should disappear after the program finishes.
+	# (gdb) info inferiors
+	#   Num  Description            Connection                  Executable
+	# * 1    <null>                                             XXXXXXXX
+
+	# set test "info inferiors after program exit"
+	gdb_test "info inferiors" \
+	    "${table_header_line}\r\n${table_empty_inferior_line}" \
+	    "info inferiors after program exit"
     }
-
-    # Display all available inferiors at the post-kernel breakpoint.
-    gdb_continue_to_breakpoint "post-kernel bp" ".*$srcfile:$end_bp.*"
-
-    gdb_test "info inferiors" \
-	[multi_line \
-	    "${table_header_extended_info_line}" \
-	    "(${table_device_line}(\r\n)?){$num_devices,}" \
-	    "${table_info_devices_hint_line}"
-	    ] "info inferiors post kernel for all ${num_devices} (sub)devices"
-
-    continue_sycl_program_to_termination
-
-    # All inferiors should disappear after the program finishes.
-    # (gdb) info inferiors
-    #   Num  Description            Connection                  Executable
-    # * 1    <null>                                             XXXXXXXX
-
-    # set test "info inferiors after program exit"
-    gdb_test "info inferiors" \
-	"${table_header_line}\r\n${table_empty_inferior_line}" \
-	"info inferiors after program exit"
 }
-
-test_initialize

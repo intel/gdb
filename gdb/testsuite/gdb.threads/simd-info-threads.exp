@@ -23,90 +23,101 @@ load_lib sycl.exp
 
 standard_testfile simd.cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile decimal gdb_prompt
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
 
-    if {![require_sycl_device "gpu" "Intel*"]} {
-	unsupported "test is aimed at Intel GPUs only"
-        return 0
-    }
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
 
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
 
-    set first_line [gdb_get_line_number "kernel-first-line"]
-    set even_branch [gdb_get_line_number "kernel-even-branch"]
-    set odd_branch [gdb_get_line_number "kernel-odd-branch"]
-    set function [gdb_get_line_number "add-one-function"]
-    gdb_breakpoint "$first_line" {temporary}
-    gdb_breakpoint "$even_branch" {temporary}
-    gdb_breakpoint "$odd_branch" {temporary}
-    gdb_breakpoint "$function" {temporary}
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
 
-    gdb_continue_to_breakpoint "hit the BP in first line" \
-	".*$srcfile:$first_line.*"
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
 
-    set cur_thread [get_current_thread "first line"]
+	set first_line [gdb_get_line_number "kernel-first-line"]
+	set even_branch [gdb_get_line_number "kernel-even-branch"]
+	set odd_branch [gdb_get_line_number "kernel-odd-branch"]
+	set function [gdb_get_line_number "add-one-function"]
+	gdb_breakpoint "$first_line" {temporary}
+	gdb_breakpoint "$even_branch" {temporary}
+	gdb_breakpoint "$odd_branch" {temporary}
+	gdb_breakpoint "$function" {temporary}
 
-    # Current thread should be presented with 2 lines.
-    gdb_test "info thread $cur_thread" \
-	"\\\*.*$cur_thread:0 .* at $srcfile:$first_line.*\[^\r\n\]\
-	$cur_thread:\\\[1-$decimal\\\].* at $srcfile:$first_line.*" \
-	"info about current thread"
+	gdb_continue_to_breakpoint "hit the BP in first line" \
+	    ".*$srcfile:$first_line.*"
 
-    set second_thread [get_another_stopped_thread $srcfile $first_line $cur_thread]
+	set cur_thread [get_current_thread "first line"]
 
-    # Other thread should be presented via 1 line.
-    gdb_test "info thread $second_thread" \
-	"$second_thread:\\\[0-$decimal\\\].* at $srcfile:$first_line.*" \
-	"info about other thread"
+	# Current thread should be presented with 2 lines.
+	gdb_test "info thread $cur_thread" \
+	    "\\\*.*$cur_thread:0 .* at $srcfile:$first_line.*\[^\r\n\]\
+	    $cur_thread:\\\[1-$decimal\\\].* at $srcfile:$first_line.*" \
+	    "info about current thread"
+
+	set second_thread \
+	    [get_another_stopped_thread $srcfile $first_line $cur_thread]
+
+	# Other thread should be presented via 1 line.
+	gdb_test "info thread $second_thread" \
+	    "$second_thread:\\\[0-$decimal\\\].* at $srcfile:$first_line.*" \
+	    "info about other thread"
 
 
-    set hit_even_branch false
-    set hit_odd_branch false
-    set hit_function false
+	set hit_even_branch false
+	set hit_odd_branch false
+	set hit_function false
 
-    set test "info threads"
-    while { !($hit_even_branch && $hit_odd_branch && $hit_function) } {
-	gdb_test_multiple "continue" "hit the BP in branch" {
-	    -re ".*$srcfile:$even_branch.*\r\n$gdb_prompt" {
-		# Check that lanes ranges were updated.
-		set hit_even_branch true
-		set cur_thread [get_current_thread "even branch"]
-		gdb_test "$test $cur_thread" \
-		    "\\\*.*$cur_thread:0 .* at $srcfile:$even_branch.*\
-		    $cur_thread:\\\[2 4 6.*\\\].* at $srcfile:$even_branch.*"\
-		    "$test in even branch"
-	    }
-	    -re ".*$srcfile:$odd_branch.*\r\n$gdb_prompt" {
-		# Check that lanes ranges were updated.
-		set hit_odd_branch true
-		set cur_thread [get_current_thread "odd branch"]
-		gdb_test "$test $cur_thread" \
-		    "\\\*.*$cur_thread:1 .* at $srcfile:$odd_branch.*\
-		    $cur_thread:\\\[3 5 7.*\\\].* at $srcfile:$odd_branch.*"\
-		    "$test in odd branch"
-	    }
-	    -re ".*$srcfile:$function.*\r\n$gdb_prompt" {
-		# Check that SIMD lane in frame is set correctly.
-		set hit_function true
-		set cur_thread [get_current_thread "function"]
-		gdb_test_multiple "$test $cur_thread" "$test in function" {
-		    -re "\\\*.*$cur_thread:0.*to_number=($decimal).*at $srcfile:$function.*$cur_thread:\\\[1.*\\\].*to_number=($decimal).* at $srcfile:$function.*\r\n$gdb_prompt" {
-			set arg_of_current_lane $expect_out(1,string)
-			set arg_of_next_lane $expect_out(2,string)
-			gdb_assert {$arg_of_current_lane != $arg_of_next_lane}\
-			    "$test in function"
+	set test "info threads"
+	while { !($hit_even_branch && $hit_odd_branch && $hit_function) } {
+	    gdb_test_multiple "continue" "hit the BP in branch" {
+		-re ".*$srcfile:$even_branch.*\r\n$gdb_prompt" {
+		    # Check that lanes ranges were updated.
+		    set hit_even_branch true
+		    set cur_thread [get_current_thread "even branch"]
+		    gdb_test "$test $cur_thread" \
+			"\\\*.*$cur_thread:0 .* at $srcfile:$even_branch.*\
+			$cur_thread:\\\[2 4 6.*\\\].* at $srcfile:$even_branch"\
+			".*$test in even branch"
+		}
+		-re ".*$srcfile:$odd_branch.*\r\n$gdb_prompt" {
+		    # Check that lanes ranges were updated.
+		    set hit_odd_branch true
+		    set cur_thread [get_current_thread "odd branch"]
+		    gdb_test "$test $cur_thread" \
+			"\\\*.*$cur_thread:1 .* at $srcfile:$odd_branch.*\
+			$cur_thread:\\\[3 5 7.*\\\].* at $srcfile:$odd_branch.*"\
+			"$test in odd branch"
+		}
+		-re ".*$srcfile:$function.*\r\n$gdb_prompt" {
+		    # Check that SIMD lane in frame is set correctly.
+		    set hit_function true
+		    set cur_thread [get_current_thread "function"]
+		    gdb_test_multiple "$test $cur_thread" "$test in function" {
+			-re "\\\*.*$cur_thread:0.*to_number=($decimal).*at $srcfile:$function.*$cur_thread:\\\[1.*\\\].*to_number=($decimal).* at $srcfile:$function.*\r\n$gdb_prompt" {
+			    set arg_of_current_lane $expect_out(1,string)
+			    set arg_of_next_lane $expect_out(2,string)
+			    gdb_assert {$arg_of_current_lane != $arg_of_next_lane}\
+				"$test in function"
+			}
 		    }
 		}
-	    }
-	    -re "$gdb_prompt" {
-		break
+		-re "$gdb_prompt" {
+		    break
+		}
 	    }
 	}
     }
 }
-
-test_initialize

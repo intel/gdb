@@ -20,6 +20,17 @@ load_lib sycl.exp
 
 standard_testfile .cpp
 
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
 # Return the current line number.
 proc get_current_line {} {
     global decimal gdb_prompt
@@ -35,7 +46,7 @@ proc get_current_line {} {
     }
 }
 
-proc test_call_stack {call_stack_supported} {
+proc test_call_stack {call_stack_supported device} {
     global srcfile valnum_re decimal inferior_exited_re gdb_prompt
 
     set fourth_loc [gdb_get_line_number "ordinary-fourth-loc"]
@@ -236,7 +247,7 @@ proc test_call_stack {call_stack_supported} {
 	    || $current_line == $fourth_loc)
 	   && $i < 100} {
 	with_test_prefix "iteration $i" {
-	    if {[require_sycl_device "gpu" "Intel*"]} {
+	    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
 		set fourth_desc "fourth ${fill} at ${fill}$srcfile:$current_line"
 		gdb_test "backtrace 6" [multi_line \
 					    "#0${fill} $fourth_desc" \
@@ -270,30 +281,30 @@ proc test_call_stack {call_stack_supported} {
     gdb_test "undisplay 1-2"
 }
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global binfile
-
-    with_test_prefix "FunctionControl=0" {
-	gdb_test "set env IGC_FunctionControl=0"
-	    if {[start_sycl_program] < 0} {
-		return -1
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	with_test_prefix "FunctionControl=0" {
+	    gdb_test "set env IGC_FunctionControl=0"
+	    if {![runto_main [sycl_get_device_args $device]]} {
+		continue
 	    }
-	test_call_stack false
-    }
-
-    if {[require_sycl_device "gpu" "Intel*"]} {
-	clean_restart $binfile
-	# TEMP set IGC flags for the call stack.
-	gdb_test "set env IGC_FunctionControl=3"
-	gdb_test "set env IGC_ForceInlineStackCallWithImplArg=1"
-	start_sycl_program
-	with_test_prefix "FunctionControl=3" {
-	    test_call_stack true
+	    test_call_stack false "$device"
 	}
-    } else {
-	unsupported "FunctionControl flag is unsupported"
+
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    clean_restart $binfile
+	    # TEMP set IGC flags for the call stack.
+	    gdb_test "set env IGC_FunctionControl=3"
+	    gdb_test "set env IGC_ForceInlineStackCallWithImplArg=1"
+	    if {![runto_main [sycl_get_device_args $device]]} {
+		continue
+	    }
+	    with_test_prefix "FunctionControl=3" {
+		test_call_stack true "$device"
+	    }
+	} else {
+	    unsupported "FunctionControl flag is unsupported"
+	}
     }
 }
-
-test_initialize

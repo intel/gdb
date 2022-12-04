@@ -23,41 +23,51 @@ standard_testfile parallel-for-1D.cpp
 
 set MIFLAGS "-i=mi"
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global binfile MIFLAGS
-
-    # Run a simple flow for both sync and async MI modes:
-    # we hit a breakpoint inside the kernel and continue to end.
-    foreach_with_prefix async {"off" "on"} {
-	mi_clean_restart $binfile
-
-	mi_gdb_test "-gdb-set mi-async $async" ".*done.*" "set async $async"
-	mi_detect_async
-
-	if {$async == "on"} {
-	    set kfail "JIRA DOQG/3265"
-	} else {
-	    set kfail ""
-	}
-	if {[mi_start_sycl_program $kfail] < 0} {
-	    return -1
-	}
-
-	# Run till a temporary BP inside a kernel.
-	set first_kernel_line [gdb_get_line_number "kernel-first-line"]
-	set continue_test "Continue to 'kernel_first_line' and stop at breakpoint"
-	set hit_line [mi_continue_to_line $first_kernel_line $continue_test $kfail]
-	if {$hit_line == $first_kernel_line} {
-	    pass "$continue_test"
-	} else {
-	    fail "$continue_test"
-	}
-	# Send resuming command.
-	mi_send_resuming_command "exec-continue" "continuing to inferior exit" $kfail
-	# Expect normal exit.
-	mi_expect_stop "exited-normally" "" "" "" "" "" "exit normally" $kfail
-    }
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	# Run a simple flow for both sync and async MI modes:
+	# we hit a breakpoint inside the kernel and continue to end.
+	foreach_with_prefix async {"off" "on"} {
+	    mi_clean_restart $binfile
+
+	    mi_gdb_test "-gdb-set mi-async $async" ".*done.*" "set async $async"
+	    mi_detect_async
+
+	    if {$async == "on"} {
+		set kfail "JIRA DOQG/3265"
+	    } else {
+		set kfail ""
+	    }
+	    if {![mi_runto_main [sycl_get_device_args $device] $kfail]} {
+		continue
+	    }
+
+	    # Run till a temporary BP inside a kernel.
+	    set first_kernel_line [gdb_get_line_number "kernel-first-line"]
+	    set continue_test "Continue to 'kernel_first_line' and stop at breakpoint"
+	    set hit_line [mi_continue_to_line $first_kernel_line $continue_test $kfail]
+	    if {$hit_line == $first_kernel_line} {
+		pass "$continue_test"
+	    } else {
+		fail "$continue_test"
+	    }
+	    # Send resuming command.
+	    mi_send_resuming_command "exec-continue" "continuing to inferior exit" $kfail
+	    # Expect normal exit.
+	    mi_expect_stop "exited-normally" "" "" "" "" "" "exit normally" $kfail
+	}
+    }
+}

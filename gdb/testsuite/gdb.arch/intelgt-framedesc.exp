@@ -20,6 +20,17 @@ load_lib sycl.exp
 
 standard_testfile .cpp
 
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
 # Compare all fields of the current $framedesc against the previously
 # saved register.  For the "return_ip" and the "return_emask", up in the stack,
 # the "return_ip" and "return_emask" of frame N should have the same values as
@@ -64,57 +75,56 @@ proc test_unwound_framedesc {frame_id framedesc_input_values} {
 	"Check fe_sp field"
 }
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
 
-    if {![require_sycl_device "gpu" "Intel*"]} {
-	unsupported "test is aimed at Intel GPUs only"
-	return 0
-    }
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    array set breakpoints {}
-    set breakpoints(0) [gdb_get_line_number "ordinary-fourth-loc"]
-    set breakpoints(1) [gdb_get_line_number "ordinary-third-loc"]
-    set breakpoints(2) [gdb_get_line_number "ordinary-second-loc"]
-    set breakpoints(3) [gdb_get_line_number "ordinary-first-loc"]
-    set breakpoints(4) [gdb_get_line_number "ordinary-outer-loc"]
-
-    variable framedesc_values
-    array set framedesc_values {}
-    foreach_with_prefix frame_id [list 4 3 2 1 0] {
-	# Set a temporary breakpoint.
-	gdb_breakpoint $breakpoints($frame_id) {temporary}
-
-	# Continue to the set breakpoint.
-	gdb_continue_to_breakpoint "continue to bp $frame_id: $breakpoints($frame_id)" \
-	    "$srcfile:$breakpoints($frame_id).*"
-
-	# Save the framedesc register.
-	set framedesc_values($frame_id) [get_valueof "/x" "\$framedesc" "invalid"]
-    }
-
-    # Go up in the stack frames and compare the unwound $framedesc register
-    # with the previously saved one.
-    foreach frame_id [list 1 2 3 4] {
-	with_test_prefix "up to frame: $frame_id" {
-	    gdb_test "frame $frame_id" "$srcfile:$breakpoints($frame_id).*"
-	    test_unwound_framedesc $frame_id framedesc_values
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
 	}
-    }
 
-    # Revisit the stack frames while going down and recheck
-    # the unwound $framedesc register.
-    foreach frame_id [list 3 2 1] {
-	with_test_prefix "down to frame: $frame_id" {
-	    gdb_test "frame $frame_id" "$srcfile:$breakpoints($frame_id).*"
-	    test_unwound_framedesc $frame_id framedesc_values
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	array set breakpoints {}
+	set breakpoints(0) [gdb_get_line_number "ordinary-fourth-loc"]
+	set breakpoints(1) [gdb_get_line_number "ordinary-third-loc"]
+	set breakpoints(2) [gdb_get_line_number "ordinary-second-loc"]
+	set breakpoints(3) [gdb_get_line_number "ordinary-first-loc"]
+	set breakpoints(4) [gdb_get_line_number "ordinary-outer-loc"]
+
+	variable framedesc_values
+	array set framedesc_values {}
+	foreach_with_prefix frame_id [list 4 3 2 1 0] {
+	    # Set a temporary breakpoint.
+	    gdb_breakpoint $breakpoints($frame_id) {temporary}
+
+	    # Continue to the set breakpoint.
+	    gdb_continue_to_breakpoint "continue to bp $frame_id: $breakpoints($frame_id)" \
+		"$srcfile:$breakpoints($frame_id).*"
+
+	    # Save the framedesc register.
+	    set framedesc_values($frame_id) [get_valueof "/x" "\$framedesc" "invalid"]
+	}
+
+	# Go up in the stack frames and compare the unwound $framedesc register
+	# with the previously saved one.
+	foreach frame_id [list 1 2 3 4] {
+	    with_test_prefix "up to frame: $frame_id" {
+		gdb_test "frame $frame_id" "$srcfile:$breakpoints($frame_id).*"
+		test_unwound_framedesc $frame_id framedesc_values
+	    }
+	}
+
+	# Revisit the stack frames while going down and recheck
+	# the unwound $framedesc register.
+	foreach frame_id [list 3 2 1] {
+	    with_test_prefix "down to frame: $frame_id" {
+		gdb_test "frame $frame_id" "$srcfile:$breakpoints($frame_id).*"
+		test_unwound_framedesc $frame_id framedesc_values
+	    }
 	}
     }
 }
-
-test_initialize

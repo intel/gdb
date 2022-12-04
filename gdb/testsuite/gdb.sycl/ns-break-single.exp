@@ -21,17 +21,28 @@ load_lib sycl.exp
 
 standard_testfile parallel-for-branch.cpp
 
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
 # The actual test that we reuse once for a breakpoint at a guarded
 # statement that is hit by a single thread, and once more for a
 # conditional breakpoint whose condition holds for only one thread.
 
-proc test {location dim0val {condition ""}} {
+proc test {device location dim0val {condition ""}} {
     global srcfile binfile decimal gdb_prompt inferior_exited_re
 
     clean_restart ${binfile}
     gdb_test_no_output "set non-stop on"
 
-    if {[start_sycl_program] < 0} {
+    if {![runto_main [sycl_get_device_args $device]]} {
 	return -1
     }
 
@@ -80,16 +91,19 @@ proc test {location dim0val {condition ""}} {
     }
 }
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
 
-    with_test_prefix "guarded stmt" {
-	test "kernel-condition" "37"
-    }
-    with_test_prefix "conditional BP" {
-	test "kernel-last-line" "16" "if dim0 == 16"
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	with_test_prefix "guarded stmt" {
+	    test "$device" "kernel-condition" "37"
+	}
+	with_test_prefix "conditional BP" {
+	    test "$device" "kernel-last-line" "16" "if dim0 == 16"
+	}
     }
 }
-
-test_initialize

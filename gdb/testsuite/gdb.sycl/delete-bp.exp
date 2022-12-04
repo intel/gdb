@@ -19,25 +19,34 @@ load_lib sycl.exp
 
 standard_testfile parallel-for-1D.cpp
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
-
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
-
-    set last_line [gdb_get_line_number "kernel-last-line"]
-    gdb_breakpoint $last_line
-    set bpnum [get_integer_valueof "\$bpnum" 0 "get bpnum"]
-
-    # First, we should hit the breakpoint.  Any thread is fine.
-    gdb_continue_to_breakpoint "kernel" ".*$srcfile:$last_line.*"
-
-    # Delete and expect to run until completion.
-    gdb_test_no_output "delete $bpnum"
-
-    continue_sycl_program_to_termination
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
 }
 
-test_initialize
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set last_line [gdb_get_line_number "kernel-last-line"]
+	gdb_breakpoint $last_line
+	set bpnum [get_integer_valueof "\$bpnum" 0 "get bpnum"]
+
+	# First, we should hit the breakpoint.  Any thread is fine.
+	gdb_continue_to_breakpoint "kernel" ".*$srcfile:$last_line.*"
+
+	# Delete and expect to run until completion.
+	gdb_test_no_output "delete $bpnum"
+
+	continue_sycl_program_to_termination
+    }
+}

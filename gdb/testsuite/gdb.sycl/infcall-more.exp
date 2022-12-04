@@ -19,6 +19,18 @@ load_lib sycl.exp
 
 standard_testfile infcall-more.cpp
 
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+# Set -mavx512f flag to avoid compiler warnings.
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug "additional_flags=\"-mavx512f\""}]} {
+    return -1
+}
+
 # The main test sequence for GPU inferior calls.
 proc test_inferior_calls {simd_lane inside_kernel} {
     global srcfile
@@ -122,42 +134,40 @@ proc test_inferior_calls {simd_lane inside_kernel} {
 	"Finish the inferior call and get the returned result"
 }
 
-# A generic function name is used to call it from the SYCL library.
-proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    continue
+	}
 
-    if {![require_sycl_device "gpu" "Intel*"]} {
-	return 0
-    }
+	# To run the tests with different SIMD_WIDTH (e.g. 16), please change
+	# the DATARANGE accordingly in the file "infcall-more.cpp" so that all lanes
+	# are active and there is no threads switching.
+	set simd_width 8
 
-    # To run the tests with different SIMD_WIDTH (e.g. 16), please change
-    # the DATARANGE accordingly in the file "infcall-more.cpp" so that all lanes
-    # are active and there is no threads switching.
-    set simd_width 8
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
 
-    if {[start_sycl_program] < 0} {
-	return -1
-    }
+	set inside_kernel \
+	    [gdb_get_line_number "bp-after-variables-declaration"]
 
-    set inside_kernel [gdb_get_line_number "bp-after-variables-declaration"]
+	gdb_breakpoint "$srcfile:$inside_kernel"
+	gdb_continue_to_breakpoint "kernel after variable declaration" \
+	    ".*$srcfile:$inside_kernel.*"
 
-    gdb_breakpoint "$srcfile:$inside_kernel"
-    gdb_continue_to_breakpoint "kernel after variable declaration" \
-	".*$srcfile:$inside_kernel.*"
+	set lanes [list \
+		    0 \
+		    1 \
+		    [expr $simd_width / 2 - 2] \
+		    [expr $simd_width / 2 - 1] \
+		    [expr $simd_width / 2] \
+		    [expr $simd_width - 1]]
 
-    set lanes [list \
-		0 \
-		1 \
-		[expr $simd_width / 2 - 2] \
-		[expr $simd_width / 2 - 1] \
-		[expr $simd_width / 2] \
-		[expr $simd_width - 1]]
-
-    # Loop over the lanes to be tested and performe all the inferior calls tests.
-    foreach_with_prefix lane $lanes {
-	test_inferior_calls $lane $inside_kernel
+	# Loop over the lanes to be tested and performe all the inferior calls tests.
+	foreach_with_prefix lane $lanes {
+	    test_inferior_calls $lane $inside_kernel
+	}
     }
 }
-
-# Set -mavx512f flag to avoid compiler warnings.
-test_initialize "additional_flags=\"-mavx512f\""

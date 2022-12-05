@@ -37,10 +37,9 @@ int using_threads = 1;
     {								\
       if (debug_threads)					\
 	{							\
-	  fprintf (stderr, "%s: ", __FUNCTION__);		\
-	  fprintf (stderr, __VA_ARGS__);			\
-	  fprintf (stderr, "\n");				\
-	  fflush (stderr);					\
+	  debug_printf ("%s: ", __FUNCTION__);			\
+	  debug_printf (__VA_ARGS__);				\
+	  debug_printf ("\n");					\
 	}							\
     }								\
   while (0)

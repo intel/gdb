@@ -32,19 +32,8 @@ int using_threads = 1;
 
 /* Convenience macros.  */
 
-#define dprintf(...)						\
-  do								\
-    {								\
-      if (debug_threads)					\
-	{							\
-	  fprintf (stderr, "%s: ", __FUNCTION__);		\
-	  fprintf (stderr, __VA_ARGS__);			\
-	  fprintf (stderr, "\n");				\
-	  fflush (stderr);					\
-	}							\
-    }								\
-  while (0)
-
+#define dprintf(fmt, ...) \
+  debug_prefixed_printf_cond (debug_threads, "ze-low", fmt, ##__VA_ARGS__)
 
 /* Determine the most suitable type to be used for a register with bit size
    BITSIZE and element size ELEMSIZE.  */

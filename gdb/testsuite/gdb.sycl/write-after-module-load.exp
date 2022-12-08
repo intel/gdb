@@ -1,0 +1,111 @@
+# Copyright 2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests for writing memory after a module is loaded. 
+
+load_lib sycl.exp
+
+standard_testfile single-task.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![is_level_zero_debug_api]} {
+	    unsupported "test is aimed at Level Zero debug API only"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set line_before_kernel [gdb_get_line_number "line-before-kernel"]
+	gdb_breakpoint "$srcfile:$line_before_kernel"
+	gdb_continue_to_breakpoint "stop before kernel" \
+	    ".*$srcfile:$line_before_kernel.*"
+
+	gdb_test_no_output "set stop-on-solib-events 1"
+
+	# Continue until we load an in-memory object.
+	set in_memory_obj "not found"
+	gdb_test_multiple "continue" "load one kernel binary" {
+	    -re -wrap "Inferior loaded (<in-memory@$hex-$hex>).*" {
+		pass $gdb_test_name
+		set in_memory_obj $expect_out(1,string)
+		verbose -log "Solib event for $in_memory_obj"
+	    }
+	    timeout {
+		kfail "JIRA XDEPS/5103" "host thread is uninterruptible"
+	    }
+	}
+
+	if {$in_memory_obj eq "not found"} {
+	    continue
+	}
+
+	# Find the start PC of the loaded in-memory object.
+	set start_pc 0
+	gdb_test_multiple "info shared" "info shared" {
+	    -re -wrap "($hex)\\s+$hex\\s+Yes\\s+$in_memory_obj.*" {
+		pass $gdb_test_name
+		set start_pc $expect_out(1,string)
+		verbose -log "Start PC: $start_pc"
+	    }
+	}
+
+	gdb_assert {$start_pc != 0}
+	set fill "\[^\r\n\]*"
+
+	# Read and write to START_PC address.
+
+	# First we read and save the value.
+	set old_value [get_integer_valueof "*(unsigned char*)$start_pc" -1]
+	verbose -log "Old value: $old_value"
+	gdb_assert {$old_value != -1}
+	# Compute a new value which we will write.
+	if {$old_value == 255} {
+	    set new_value [expr $old_value - 1]
+	} else {
+	    set new_value [expr $old_value + 1]
+	}
+	verbose -log "New value: $new_value"
+
+	# Write the new value.
+	gdb_test "p *(unsigned char*)$start_pc=$new_value" \
+	    "= $new_value$fill" "set new value"
+	# Check the value was written.
+	gdb_test "p *(unsigned char*)$start_pc" "= $new_value$fill" \
+	    "new value is set"
+	# Reset to the old value.
+	gdb_test_no_output "set *(unsigned char*)$start_pc=$old_value" \
+	    "reset to old value"
+    }
+}

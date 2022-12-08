@@ -724,17 +724,22 @@ intelgt_frame_this_id (frame_info_ptr this_frame, void **this_prologue_cache,
   /* FIXME: Other tdeps populate and use the cache.  */
 
   /* Try to use symbol information to get the current start address.  */
-  CORE_ADDR func = get_frame_func (this_frame);
+  CORE_ADDR func;
 
-  /* Use the current PC as a fallback if no symbol info is available.  */
-  if (func == 0)
-    func = get_frame_pc (this_frame);
+  if (get_frame_func_if_available (this_frame, &func))
+    {
+      /* Use the current PC as a fallback if no symbol info is available.  */
+      if (func == 0)
+	func = get_frame_pc (this_frame);
 
-  /* FIXME: Because there is no full notion of stack, it
-     should be OK to ignore the SP reg.  Currently, we cannot use SP
-     even if we want to, because SP's size is 16 bytes whereas
-     CORE_ADDR is 8.  */
-  *this_id = frame_id_build_unavailable_stack (func);
+      /* FIXME: Because there is no full notion of stack, it
+	 should be OK to ignore the SP reg.  Currently, we cannot use SP
+	 even if we want to, because SP's size is 16 bytes whereas
+	 CORE_ADDR is 8.  */
+      *this_id = frame_id_build_unavailable_stack (func);
+    }
+  else
+    *this_id = outer_frame_id;
 }
 
 static value *

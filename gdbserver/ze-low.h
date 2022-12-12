@@ -118,6 +118,18 @@ struct ze_device_info
 
   /* A list of to-be-acknowledged events.  */
   events_t ack_pending;
+
+  /* Total number of threads on this device.  */
+  unsigned long nthreads = 0;
+
+  /* Number of resumed threads.  The value is useful for deciding if
+     we can omit sending an actual interrupt request when we want all
+     threads to be stopped in all-stop mode.
+
+     The value can underflow because of unavailable threads becoming
+     available and generating stop events.  Therefore we pay care to
+     prevent underflowing.  */
+  unsigned long nresumed = 0;
 };
 
 /* A thread's resume state.

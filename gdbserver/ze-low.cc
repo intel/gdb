@@ -309,6 +309,9 @@ ze_add_process (ze_device_info *device, ze_process_state state)
 	    add_thread (ptid, zetp);
 	  }
 
+  device->nthreads = tid;
+  device->nresumed = tid;
+
   dprintf ("process %d (%s) with %ld threads created for device %lu: %s.",
 	   (int) device->ordinal, ze_process_state_str (state), tid,
 	   device->ordinal, properties.name);
@@ -972,8 +975,10 @@ ze_resume (ze_device_info &device, ze_device_thread_t thread)
 static void
 ze_interrupt (ze_device_info &device, ze_device_thread_t thread)
 {
-  dprintf ("device %lu=%s, thread=%s", device.ordinal,
-	   device.properties.name, ze_thread_id_str (thread).c_str ());
+  dprintf ("device %lu=%s, thread=%s, nresumed=%ld%s",
+	   device.ordinal, device.properties.name,
+	   ze_thread_id_str (thread).c_str (), device.nresumed,
+	   ((device.nresumed == device.nthreads) ? " (all)" : ""));
 
   ze_result_t status = zetDebugInterrupt (device.session, thread);
   switch (status)
@@ -1391,6 +1396,10 @@ ze_target::fetch_events (ze_device_info &device)
 		if (zetp->exec_state == ze_thread_state_stopped)
 		  return;
 
+		/* Prevent underflowing.  */
+		if (device.nresumed > 0)
+		  device.nresumed--;
+
 		/* Discard any registers we may have fetched while TP was
 		   unavailable.  */
 		ze_discard_regcache (tp);
@@ -1414,6 +1423,10 @@ ze_target::fetch_events (ze_device_info &device)
 		    zetp->waitstatus.set_unavailable ();
 		  }
 	      });
+
+	    dprintf ("device %lu's nresumed=%ld%s",
+		     device.ordinal, device.nresumed,
+		     ((device.nresumed == device.nthreads) ? " (all)" : ""));
 	  }
 	  continue;
 
@@ -1438,9 +1451,17 @@ ze_target::fetch_events (ze_device_info &device)
 		if (zetp->exec_state == ze_thread_state_stopped)
 		  return;
 
+		/* Prevent underflowing.  */
+		if (device.nresumed > 0)
+		  device.nresumed--;
+
 		zetp->exec_state = ze_thread_state_unavailable;
 		zetp->waitstatus.set_unavailable ();
 	      });
+
+	    dprintf ("device %lu's nresumed=%ld%s",
+		     device.ordinal, device.nresumed,
+		     ((device.nresumed == device.nthreads) ? " (all)" : ""));
 	  }
 	  continue;
 	}
@@ -1726,6 +1747,12 @@ ze_target::resume (ze_device_info &device, enum resume_kind rkind)
 	    internal_error (_("bad execution state: %d."), state);
 	  });
 
+	/* All threads are potentially running from our point of view.  */
+	device.nresumed = device.nthreads;
+	dprintf ("device %lu's nresumed=%ld%s",
+		 device.ordinal, device.nresumed,
+		 ((device.nresumed == device.nthreads) ? " (all)" : ""));
+
 	/* There is nothing to resume if nothing is stopped.  */
 	if (nstopped == 0)
 	  return;
@@ -1783,6 +1810,14 @@ ze_target::resume (thread_info *tp, enum resume_kind rkind)
 	case resume_continue:
 	case resume_step:
 	  prepare_thread_resume (tp, rkind);
+	  if (device->nresumed < device->nthreads)
+	    device->nresumed++;
+	  else
+	    {
+	      device->nresumed = device->nthreads;
+	      dprintf ("capping device %lu's nresumed at %ld (all)",
+		       device->ordinal, device->nthreads);
+	    }
 	  regcache_invalidate_thread (tp);
 	  ze_resume (*device, zetp->id);
 	  return;
@@ -1794,8 +1829,19 @@ ze_target::resume (thread_info *tp, enum resume_kind rkind)
 
       internal_error (_("bad resume kind: %d."), rkind);
 
-    case ze_thread_state_running:
     case ze_thread_state_unavailable:
+      if (device->nresumed < device->nthreads)
+	device->nresumed++;
+      else
+	{
+	  device->nresumed = device->nthreads;
+	  dprintf ("capping device %lu's nresumed at %ld (all)",
+		   device->ordinal, device->nthreads);
+	}
+
+      /* Fall-through.  */
+
+    case ze_thread_state_running:
       ze_set_resume_state (tp, rkind);
 
       switch (rkind)
@@ -2320,15 +2366,44 @@ ze_target::pause_all (bool freeze)
   if (frozen > 1)
     return;
 
+  unsigned long nresumed = 0;
+  for (ze_device_info *device : devices)
+    {
+      dprintf ("device %lu's nresumed=%ld%s",
+	       device->ordinal, device->nresumed,
+	       ((device->nresumed == device->nthreads) ? " (all)" : ""));
+      nresumed += device->nresumed;
+    }
+
+  /* Check if we can exit early.  This saves us from iterating over
+     the threads.  */
+  if (nresumed == 0)
+    {
+      /* Clear all low-priority events.  */
+      for_each_thread ([] (thread_info *tp)
+	{
+	  if (!ze_has_priority_waitstatus (tp))
+	    (void) ze_move_waitstatus (tp);
+	});
+      return;
+    }
+
   /* Unavailable threads may become available and hence respond to our
      interrupt request.  To ensure that we are actually waiting for an
      unavailable thread's response, set the state to unknown and have it
      changed by fetch_events.
 
      This allows us to distinguish an older unavailable state from the
-     current state at the time of our interrupt request.  */
+     current state at the time of our interrupt request.
+
+     We skip changing the threads' exec_state and sending an interrupt
+     if no threads are running on the device.  */
   for_each_thread ([] (thread_info *tp)
     {
+      ze_device_info *device = ze_thread_device (tp);
+      if (device == nullptr || device->nresumed == 0)
+	return;
+
       enum ze_thread_exec_state_t state = ze_exec_state (tp);
       if (state != ze_thread_state_unavailable)
 	return;
@@ -2353,7 +2428,8 @@ ze_target::pause_all (bool freeze)
       if (device->process == nullptr)
 	continue;
 
-      ze_interrupt (*device, all);
+      if (device->nresumed != 0)
+	ze_interrupt (*device, all);
     }
 
   /* Fetch events until each thread is either stopped or unavailable.

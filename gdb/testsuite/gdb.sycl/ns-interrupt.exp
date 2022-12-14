@@ -99,6 +99,9 @@ foreach device $sycl_device_list {
 	    }
 	}
 
+	if {[is_level_zero_debug_api]} {
+	    setup_kfail "JIRA IGDB/3611" "*-*-*"
+	}
 	gdb_test_multiple "interrupt" "interrupt the thread" {
 	    -re "$gdb_prompt " {
 		gdb_test_multiple "" $gdb_test_name {

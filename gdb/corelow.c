@@ -668,6 +668,9 @@ core_target_open (const char *arg, int from_tty)
 
   current_inferior ()->push_target (std::move (target_holder));
 
+  if (gdbarch_core_load_hook_p (target->core_gdbarch ()))
+    gdbarch_core_load_hook (target->core_gdbarch (), core_bfd);
+
   switch_to_no_thread ();
 
   /* Need to flush the register cache (and the frame cache) from a

@@ -2036,6 +2036,7 @@ DWARF2_SRCS = \
 	dwarf2/read-gdb-index.c \
 	dwarf2/section.c \
 	dwarf2/stringify.c \
+	elfnote-file.c \
 	dwarf2/unit-head.c
 DWARF2_OBS = $(patsubst %.c,%.o, $(DWARF2_SRCS))
 

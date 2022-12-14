@@ -41,6 +41,13 @@
 #include "block.h"
 #include "elf-bfd.h"
 #include "infcall.h"
+#include "gdbcore.h"
+#include "elfnote-file.h"
+#include "regset.h"
+#include "solist.h"
+#include "solib.h"
+#include "symfile.h"
+#include "xml-tdesc.h"
 #include <algorithm>
 #include <array>
 
@@ -1347,6 +1354,394 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
   return possible_regnum;
 }
 
+/* Build the NT_PRPSINFO for IntelGT.  */
+
+static char *
+intelgt_make_prpsinfo (bfd *obfd, char *obuf, int *obufsize,
+		       const char *fname, const char *xml)
+{
+  /* The note data should be in the following format <FNAME 0x0 XML 0x0>.  */
+  int fname_len = strlen (fname);
+  int xml_len = strlen (xml);
+  gdb::byte_vector data (fname_len + xml_len + 2, 0);
+  memcpy (data.data (), fname, fname_len);
+  memcpy (data.data () + fname_len + 1, xml, xml_len);
+  return elfcore_write_note (obfd, obuf, obufsize, "CORE", NT_PRPSINFO,
+			     data.data (), data.size ());
+}
+
+/* Build the NT_PRSTATUO for IntelGT.  */
+
+static char *
+intelgt_make_prstatus (bfd *obfd, char *obuf, int *obufsize, uint64_t tid,
+		       uint32_t signal, uint32_t slm, const char *regs,
+		       int regs_size)
+{
+  int note_len = 8 + 4 + 4 + regs_size;
+  char *data = (char *) calloc (note_len, 1);
+  bfd_put_64 (obfd, tid, data);
+  bfd_put_32 (obfd, signal, data + 8);
+  bfd_put_32 (obfd, slm, data + 12);
+  memcpy (data + 16, regs, regs_size);
+  return elfcore_write_note (obfd, obuf, obufsize, "CORE", NT_PRSTATUS, data,
+			     note_len);
+}
+
+/* Implement the "iterate_over_regset_sections" gdbarch method.
+   This is used for both writing regsets to a core file and
+   later reading it back in GDB.  */
+
+static void
+intelgt_iterate_over_regset_sections (struct gdbarch *gdbarch,
+				      iterate_over_regset_sections_cb *cb,
+				      void *cb_data,
+				      const struct regcache *regcache)
+{
+  /* Generate register maps from the target description.  There may
+     be a more elegant way to automatically supply/collect all known
+     registers directly from a regcache but at the moment of implementing
+     this it was not found.  */
+  std::vector<struct regcache_map_entry> intelgt_regmap;
+  int count = gdbarch_num_regs (gdbarch);
+  int total_size = 0;
+
+  /* Supply/collect all known features using a single ".reg" section.
+     Content is fully dynamic and based on the target description
+     embedded in the core file itself, thus there is no need to
+     distinguish different register groups here.  */
+  for (int reg = 0; reg < count; ++reg)
+    {
+      int size = register_size (gdbarch, reg);
+      total_size += size;
+      intelgt_regmap.push_back ({ 1, reg, size });
+    }
+
+  intelgt_regmap.push_back ({ 0, 0, 0 });
+
+  struct regset intelgt_regset
+      = { intelgt_regmap.data (), regcache_supply_regset,
+	  regcache_collect_regset };
+
+  cb (".reg", total_size, total_size, &intelgt_regset, NULL, cb_data);
+}
+
+/* Structure for passing information from
+   intelgt_collect_thread_registers via an iterator to
+   intelgt_collect_regset_section_cb.  */
+
+struct intelgt_collect_regset_section_cb_data
+{
+  const struct regcache *regcache;
+  bfd *obfd;
+  char *note_data;
+  int *note_size;
+  unsigned long lwp;
+  enum gdb_signal stop_signal;
+  int abort_iteration;
+};
+
+/* Writes an ELF note with a register values for a single
+   GDB section.  Right now we put all registers into a single
+   ".reg" pseudo-section so this is expected to be called
+   only once.  */
+
+static void
+intelgt_collect_regset_section_cb (const char *sect_name, int supply_size,
+				   int collect_size,
+				   const struct regset *regset,
+				   const char *human_name, void *cb_data)
+{
+  struct intelgt_collect_regset_section_cb_data *data
+    = (struct intelgt_collect_regset_section_cb_data *) cb_data;
+
+  if (data->abort_iteration)
+    return;
+
+  gdb_assert (regset->collect_regset);
+
+  char *buf = (char *) xmalloc (collect_size);
+  regset->collect_regset (regset, data->regcache, -1, buf, collect_size);
+
+  gdb_assert (strcmp (sect_name, ".reg") == 0);
+  data->note_data = (char *) intelgt_make_prstatus (
+      data->obfd, data->note_data, data->note_size, data->lwp,
+      gdb_signal_to_host (data->stop_signal), 0 /* slm */, buf, collect_size);
+
+  xfree (buf);
+
+  if (data->note_data == NULL)
+    data->abort_iteration = 1;
+}
+
+/* Records the thread's register state for the corefile note
+   section.  */
+
+static char *
+intelgt_collect_thread_registers (const struct regcache *regcache,
+				  ptid_t ptid, bfd *obfd,
+				  char *note_data, int *note_size,
+				  enum gdb_signal stop_signal)
+{
+  struct gdbarch *gdbarch = regcache->arch ();
+  struct intelgt_collect_regset_section_cb_data data;
+
+  data.regcache = regcache;
+  data.obfd = obfd;
+  data.note_data = note_data;
+  data.note_size = note_size;
+  data.stop_signal = stop_signal;
+  data.abort_iteration = 0;
+  data.lwp = ptid.lwp ();
+
+  gdbarch_iterate_over_regset_sections (gdbarch,
+					intelgt_collect_regset_section_cb,
+					&data, regcache);
+  return data.note_data;
+}
+
+/* Arguments used by `intelgt_corefile_write_thread`.  Some of them
+   (primarily note_data/note_size) will be updated during the
+   iteration and later used by the caller.  */
+
+struct intelgt_corefile_thread_data
+{
+  struct gdbarch *gdbarch;
+  bfd *obfd;
+  char *note_data;
+  int *note_size;
+  enum gdb_signal stop_signal;
+};
+
+/* Writes ELF note data for a single thread.  Does so by collecting all
+   registers from the regcache and packing those into a buffer according to a
+   regmap.  */
+
+static void
+intelgt_corefile_write_thread (struct thread_info *info,
+			       struct intelgt_corefile_thread_data *args)
+{
+  struct regcache *regcache;
+  regcache = get_thread_arch_regcache (info->inf, info->ptid,
+				       args->gdbarch);
+
+  target_fetch_registers (regcache, -1);
+
+  args->note_data = intelgt_collect_thread_registers (
+      regcache, info->ptid, args->obfd, args->note_data, args->note_size,
+      args->stop_signal);
+}
+
+/* Build the note section for a corefile, and return it in a malloc buffer.  */
+
+__attribute__((unused)) /* See FIXME in intelgt_gdbarch_init funciton.  */
+static gdb::unique_xmalloc_ptr<char>
+intelgt_make_corefile_notes (struct gdbarch *gdbarch, bfd *obfd,
+			     int *note_size)
+{
+  gdb::unique_xmalloc_ptr<char> note_data;
+  const char *xml = tdesc_get_features_xml (gdbarch_target_desc (gdbarch));
+  note_data.reset (intelgt_make_prpsinfo (obfd, note_data.release (),
+					  note_size, "GPU", xml + 1));
+  try
+    {
+      update_thread_list ();
+    }
+  catch (const gdb_exception_error &e)
+    {
+      exception_print (gdb_stderr, e);
+      return note_data;
+    }
+
+  struct intelgt_corefile_thread_data thread_args;
+  thread_args.gdbarch = gdbarch;
+  thread_args.obfd = obfd;
+  thread_args.note_data = note_data.release ();
+  thread_args.note_size = note_size;
+  /* In case of `gcore` there is no signal: */
+  thread_args.stop_signal = GDB_SIGNAL_0;
+
+  for (thread_info *thread : current_inferior ()->threads ())
+    intelgt_corefile_write_thread (thread, &thread_args);
+
+  /* File (compute kernel) mappings.  */
+  type_allocator alloc (gdbarch);
+  struct type *long_type
+    = init_integer_type (alloc, gdbarch_long_bit (gdbarch), 0, "long");
+  file_mappings_builder mapping_builder (long_type);
+
+  uint64_t count = 0;
+
+  for (solib &so : current_program_space->solibs ())
+    {
+      if (so.so_name == "")
+	continue;
+      ++count;
+      ULONGEST so_addr = count << 50;
+
+      /* Find the kernel ELF on the local filesystem and copy it
+	into the core file memory: */
+
+      void *content = nullptr;
+      ULONGEST so_size = 0;
+      if (so.begin != 0 && so.end != 0)
+	{
+	  gdb_assert (so.end > so.begin);
+	  so_size = so.end - so.begin;
+	  content = xmalloc (so_size);
+	  read_memory (so.begin, (gdb_byte *) content, so_size);
+	}
+      else
+	{
+	  FILE *so_file = fopen (so.so_name.c_str (), "r");
+	  if (so_file == nullptr)
+	    error ("Could not open the file %s", so.so_name.c_str ());
+	  fseek (so_file, 0L, SEEK_END);
+	  so_size = ftell (so_file);
+	  gdb_assert (so_size > 0);
+	  fseek (so_file, 0, SEEK_SET);
+	  content = xmalloc (so_size);
+	  ULONGEST rsize = fread (content, 1, so_size, so_file);
+	  fclose (so_file);
+	  if (rsize != so_size)
+	    error ("Failed to read %s", so.so_name.c_str ());
+	}
+
+      flagword flags = SEC_ALLOC | SEC_HAS_CONTENTS | SEC_LOAD;
+      asection *osec = bfd_make_section_anyway_with_flags (obfd,
+							   "load-bin-gt",
+							   flags);
+      if (osec == nullptr)
+       {
+	 error ("Failed to create a section: %s",
+		bfd_errmsg (bfd_get_error ()));
+	 continue;
+       }
+      bfd_set_section_size (osec, so_size);
+      bfd_set_section_vma (osec, so_addr);
+      bfd_set_section_lma (osec, 0);
+      if (!bfd_set_section_userdata (osec, content))
+	error ("Failed to set section contents: %s",
+	       bfd_errmsg (bfd_get_error ()));
+
+      mapping_builder.add ({so_addr, so_size, so.addr_low,
+			    so.so_name.c_str ()});
+    }
+
+  gdb::byte_vector file_note_data = mapping_builder.build ();
+  thread_args.note_data = elfcore_write_file_note (obfd,
+						   thread_args.note_data,
+						   thread_args.note_size,
+						   file_note_data.data (),
+						   file_note_data.size ());
+
+  note_data.reset (thread_args.note_data);
+  return note_data;
+}
+
+static int
+intelgt_core_load_hook (struct gdbarch *gdbarch, bfd *abfd)
+{
+  asection *section = bfd_get_section_by_name (abfd, ".note.linuxcore.file");
+  if (section == nullptr)
+    return -1;
+
+  type_allocator alloc (gdbarch);
+  type *long_type
+      = init_integer_type (alloc, gdbarch_long_bit (gdbarch), 0, "long");
+
+  size_t note_size = bfd_section_size (section);
+  gdb::def_vector<gdb_byte> contents (note_size);
+  if (!bfd_get_section_contents (current_program_space->core_bfd (),
+				 section, contents.data (), 0,
+				 note_size))
+    {
+      warning (_("could not get core note contents"));
+      return -1;
+    }
+
+  iterate_file_mappings (
+      &contents, long_type,
+      [=] (int count)
+       {
+       },
+      [=] (int i, const file_mapping &fm)
+       {
+	 gdb_bfd_ref_ptr mem_bfd (gdb_bfd_open_from_target_memory (
+	       fm.vaddr, fm.size, "elf64-intelgt"));
+	 gdb_printf (_("Loading object file embedded into "
+			    "the core at 0x%lx-0x%lx\n"),
+	       fm.vaddr, fm.vaddr + fm.size);
+	 if (!bfd_check_format (mem_bfd.get (), bfd_object))
+	   error (_("Got object file from the core but "
+		    "can't read symbols: %s."),
+		  bfd_errmsg (bfd_get_error ()));
+
+	 section_addr_info sai;
+	 bfd_section *sec;
+	 for (sec = mem_bfd->sections; sec != NULL; sec = sec->next)
+	   if ((bfd_section_flags (sec) & (SEC_ALLOC | SEC_LOAD)) != 0)
+	     sai.emplace_back (bfd_section_vma (sec) + fm.offset,
+			       bfd_section_name (sec), sec->index);
+
+	 objfile *objf = symbol_file_add_from_bfd (mem_bfd, fm.filename,
+						   0, &sai,
+						   OBJF_SHARED, NULL);
+	 current_program_space->add_target_sections (objf);
+	 reinit_frame_cache ();
+       });
+
+  return 0;
+}
+
+/* Core file may contain pid values in different formats, depending on a setup.
+   Check which one is available and adapt text representation accordingly.  */
+
+static std::string
+intelgt_core_pid_to_str (struct gdbarch *gdbarch, ptid_t ptid)
+{
+  if (ptid.lwp () != 0)
+    return string_printf ("LWP %ld", ptid.lwp ());
+  else
+    return normal_pid_to_str (ptid);
+}
+
+/* Core file may embed a target description information about registers
+   used during the crashed program execution.  Use it if present.  */
+
+static const struct target_desc *
+intelgt_core_read_description (struct gdbarch *gdbarch,
+			       struct target_ops *target, bfd *abfd)
+{
+  asection *section = bfd_get_section_by_name (abfd, ".note.intelgt");
+   if (section == nullptr)
+    return nullptr;
+  size_t note_size = bfd_section_size (section);
+  gdb::def_vector<char> contents (note_size, 0);
+  if (!bfd_get_section_contents (abfd, section, contents.data (), 0,
+				 note_size))
+    return nullptr;
+  gdb_assert (contents.back () == 0);
+  /* Skip fname.  */
+  size_t fname_len = strlen (contents.data ()) + 1;
+  auto tdesc = string_read_description_xml (contents.data () + fname_len);
+  if (tdesc == nullptr)
+    error ("Can't handle intelgt core file with a missing target description");
+  return tdesc;
+}
+
+/* Filter VMAs to be dumped to a core file.  Currently nothing
+   is written - .text will come from an embedded full binary and
+   there is no good way to get small enough useful set of user pages
+   to keep.  Core files generated by the system will have more
+   memory regions though.  */
+
+static int
+intelgt_find_memory_regions (struct gdbarch *gdbarch,
+			     find_memory_region_ftype func, void *obfd)
+{
+  return 0;
+}
+
 /* Check if a small struct can be promoted.  Struct arguments less than or
    equal to 128-bits and only containing primitive element types are passed by
    value as a vector of bytes, and are stored in the SoA (structure of arrays)
@@ -2534,6 +2929,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   /* Populate gdbarch fields.  */
   set_gdbarch_ptr_bit (gdbarch, 64);
   set_gdbarch_addr_bit (gdbarch, 64);
+  set_gdbarch_long_bit (gdbarch, 64);
 
   set_gdbarch_register_type (gdbarch, intelgt_register_type);
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, intelgt_dwarf_reg_to_regnum);
@@ -2563,6 +2959,19 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_print_insn (gdbarch, intelgt_print_insn);
 
   set_gdbarch_active_lanes_mask (gdbarch, &intelgt_active_lanes_mask);
+
+  /* Core file support.  */
+  set_gdbarch_gcore_bfd_target (gdbarch, "elf64-intelgt");
+  set_gdbarch_find_memory_regions (gdbarch, intelgt_find_memory_regions);
+  // FIXME: Uncomment the following line to allow core file generation
+  // on intelgt targets via `gcore` command.
+  // set_gdbarch_make_corefile_notes (gdbarch, intelgt_make_corefile_notes);
+  set_gdbarch_core_load_hook (gdbarch, intelgt_core_load_hook);
+  set_gdbarch_iterate_over_regset_sections
+    (gdbarch, intelgt_iterate_over_regset_sections);
+  set_gdbarch_core_pid_to_str (gdbarch, intelgt_core_pid_to_str);
+  set_gdbarch_core_read_description
+    (gdbarch, intelgt_core_read_description);
 
 #if defined (USE_WIN32API)
   set_gdbarch_has_dos_based_file_system (gdbarch, 1);

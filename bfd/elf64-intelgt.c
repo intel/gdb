@@ -173,6 +173,38 @@ elf64_info_to_howto (bfd *abfd, arelent *bfd_reloc,
   return true;
 }
 
+static char *
+intelgt_elf_write_core_note (bfd *a __attribute__((unused)),
+			     char *b __attribute__((unused)),
+			     int *c __attribute__((unused)),
+			     int d __attribute__((unused)), ...)
+{
+  bfd_assert ("Use elfcore_write_note directly instead.", 0);
+  return NULL;
+}
+
+static bool
+intelgt_elf_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
+{
+  elf_tdata (abfd)->core->lwpid = bfd_get_64 (abfd, note->descdata);
+  elf_tdata (abfd)->core->signal = bfd_get_32 (abfd, note->descdata + 8);
+
+  return _bfd_elfcore_make_pseudosection (
+      abfd, ".reg", note->descsz - 16,
+      note->descpos + 16);
+}
+
+static bool
+intelgt_elf_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
+{
+  elf_tdata (abfd)->core->command = _bfd_elfcore_strndup (
+      abfd, note->descdata + 8, strlen (note->descdata + 8));
+
+  return _bfd_elfcore_make_pseudosection (
+      abfd, ".note.intelgt", note->descsz,
+      note->descpos);
+ }
+
 #define ELF_MAXPAGESIZE		    0x40000000
 
 #define TARGET_LITTLE_SYM		    intelgt_elf64_vec
@@ -187,6 +219,10 @@ elf64_info_to_howto (bfd *abfd, arelent *bfd_reloc,
 #define elf_backend_object_p		    elf64_intelgt_elf_object_p
 
 #define elf_backend_want_plt_sym	    0
+
+#define elf_backend_write_core_note	    intelgt_elf_write_core_note
+#define elf_backend_grok_prstatus	    intelgt_elf_grok_prstatus
+#define elf_backend_grok_psinfo		    intelgt_elf_grok_psinfo
 
 #define bfd_elf64_bfd_reloc_type_lookup     elf64_intelgt_reloc_type_lookup
 #define bfd_elf64_bfd_reloc_name_lookup     elf64_intelgt_reloc_name_lookup

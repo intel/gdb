@@ -51,6 +51,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include "cli/cli-cmds.h"
+#include "target-descriptions.h"
 #include "xml-tdesc.h"
 #include "memtag.h"
 #include "cli/cli-style.h"
@@ -1073,6 +1074,8 @@ core_target_open (const char *arg, int from_tty)
   validate_files ();
 
   current_inferior ()->push_target (std::move (target_holder));
+
+  target_find_description ();
 
   if (gdbarch_core_load_hook_p (target->core_gdbarch ()))
     gdbarch_core_load_hook (target->core_gdbarch (),

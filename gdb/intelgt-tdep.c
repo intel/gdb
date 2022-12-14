@@ -1544,6 +1544,59 @@ intelgt_make_corefile_notes (struct gdbarch *gdbarch, bfd *obfd,
   return note_data;
 }
 
+static int
+intelgt_core_load_hook (struct gdbarch *gdbarch, bfd *abfd)
+{
+  asection *section = bfd_get_section_by_name (abfd, ".note.linuxcore.file");
+  if (section == nullptr)
+    return -1;
+
+  type *long_type
+      = arch_integer_type (gdbarch, gdbarch_long_bit (gdbarch), 0, "long");
+
+  size_t note_size = bfd_section_size (section);
+  gdb::def_vector<gdb_byte> contents (note_size);
+  if (!bfd_get_section_contents (core_bfd, section, contents.data (), 0,
+				 note_size))
+    {
+      warning (_("could not get core note contents"));
+      return -1;
+    }
+
+  iterate_file_mappings (
+      &contents, long_type,
+      [=] (int count)
+       {
+       },
+      [=] (int i, const file_mapping &fm)
+       {
+	 gdb_bfd_ref_ptr mem_bfd (gdb_bfd_open_from_target_memory (
+	       fm.vaddr, fm.size, "elf64-intelgt"));
+	 gdb_printf (_("Loading object file embedded into "
+			    "the core at 0x%lx-0x%lx\n"),
+	       fm.vaddr, fm.vaddr + fm.size);
+	 if (!bfd_check_format (mem_bfd.get (), bfd_object))
+	   error (_("Got object file from the core but "
+		    "can't read symbols: %s."),
+		  bfd_errmsg (bfd_get_error ()));
+
+	 section_addr_info sai;
+	 bfd_section *sec;
+	 for (sec = mem_bfd->sections; sec != NULL; sec = sec->next)
+	   if ((bfd_section_flags (sec) & (SEC_ALLOC | SEC_LOAD)) != 0)
+	     sai.emplace_back (bfd_section_vma (sec) + fm.offset,
+			       bfd_section_name (sec), sec->index);
+
+	 objfile *objf = symbol_file_add_from_bfd (mem_bfd, fm.filename,
+						   0, &sai,
+						   OBJF_SHARED, NULL);
+	 current_program_space->add_target_sections (objf);
+	 reinit_frame_cache ();
+       });
+
+  return 0;
+}
+
 /* Core file may contain pid values in different formats, depending on a setup.
    Check which one is available and adapt text representation accordingly.  */
 
@@ -2687,6 +2740,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   // FIXME: Uncomment the following line to allow core file generation
   // on intelgt targets via `gcore` command.
   // set_gdbarch_make_corefile_notes (gdbarch, intelgt_make_corefile_notes);
+  set_gdbarch_core_load_hook (gdbarch, intelgt_core_load_hook);
   set_gdbarch_iterate_over_regset_sections
     (gdbarch, intelgt_iterate_over_regset_sections);
   set_gdbarch_core_pid_to_str (gdbarch, intelgt_core_pid_to_str);

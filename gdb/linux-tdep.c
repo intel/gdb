@@ -1129,16 +1129,10 @@ linux_read_core_file_mappings
   if (section == nullptr)
     return;
 
-  unsigned int addr_size_bits = gdbarch_addr_bit (gdbarch);
-  unsigned int addr_size = addr_size_bits / 8;
+  struct type *long_type
+    = arch_integer_type (gdbarch, gdbarch_long_bit (gdbarch), 0, "long");
+
   size_t note_size = bfd_section_size (section);
-
-  if (note_size < 2 * addr_size)
-    {
-      warning (_("malformed core note - too short for header"));
-      return;
-    }
-
   gdb::def_vector<gdb_byte> contents (note_size);
   if (!bfd_get_section_contents (core_bfd, section, contents.data (),
 				 0, note_size))
@@ -1147,61 +1141,14 @@ linux_read_core_file_mappings
       return;
     }
 
-  gdb_byte *descdata = contents.data ();
-  char *descend = (char *) descdata + note_size;
-
-  if (descdata[note_size - 1] != '\0')
-    {
-      warning (_("malformed note - does not end with \\0"));
-      return;
-    }
-
-  ULONGEST count = bfd_get (addr_size_bits, core_bfd, descdata);
-  descdata += addr_size;
-
-  ULONGEST page_size = bfd_get (addr_size_bits, core_bfd, descdata);
-  descdata += addr_size;
-
-  if (note_size < 2 * addr_size + count * 3 * addr_size)
-    {
-      warning (_("malformed note - too short for supplied file count"));
-      return;
-    }
-
-  char *filenames = (char *) descdata + count * 3 * addr_size;
-
-  /* Make sure that the correct number of filenames exist.  Complain
-     if there aren't enough or are too many.  */
-  char *f = filenames;
-  for (int i = 0; i < count; i++)
-    {
-      if (f >= descend)
-	{
-	  warning (_("malformed note - filename area is too small"));
-	  return;
-	}
-      f += strnlen (f, descend - f) + 1;
-    }
-  /* Complain, but don't return early if the filename area is too big.  */
-  if (f != descend)
-    warning (_("malformed note - filename area is too big"));
-
-  pre_loop_cb (count);
-
-  for (int i = 0; i < count; i++)
-    {
-      ULONGEST start = bfd_get (addr_size_bits, core_bfd, descdata);
-      descdata += addr_size;
-      ULONGEST end = bfd_get (addr_size_bits, core_bfd, descdata);
-      descdata += addr_size;
-      ULONGEST file_ofs
-	= bfd_get (addr_size_bits, core_bfd, descdata) * page_size;
-      descdata += addr_size;
-      char * filename = filenames;
-      filenames += strlen ((char *) filenames) + 1;
-
-      loop_cb (i, start, end, file_ofs, filename, nullptr);
-    }
+  iterate_file_mappings (&contents, long_type, pre_loop_cb,
+			 [=] (int i, const file_mapping& fm)
+			  {
+			    /* Expand file_mapping struct to avoid gdbarch
+			       dependency on elfnote-file.h.  */
+			    loop_cb (i, fm.vaddr, fm.vaddr + fm.size,
+				     fm.offset, fm.filename, nullptr);
+			  });
 }
 
 /* Implement "info proc mappings" for a corefile.  */

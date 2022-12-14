@@ -1693,7 +1693,7 @@ linux_make_mappings_callback (ULONGEST vaddr, ULONGEST size,
     return 0;
 
   auto *map = (file_mappings_builder *) data;
-  map->add (vaddr, size, offset, filename);
+  map->add ({vaddr, size, offset, filename});
 
   return 0;
 }
@@ -1716,13 +1716,13 @@ linux_make_mappings_corefile_notes (struct gdbarch *gdbarch, bfd *obfd,
 				  linux_make_mappings_callback,
 				  &mapping_builder);
 
-  int file_note_size = 0;
-  void *file_note_data = mapping_builder.build (&file_note_size);
+  gdb::byte_vector file_note_data = mapping_builder.build ();
 
-  if (file_note_data != nullptr)
+  if (file_note_data.size () > 0)
     note_data.reset (elfcore_write_file_note (obfd, note_data.release (),
-					      note_size, file_note_data,
-					      file_note_size));
+					      note_size,
+					      file_note_data.data (),
+					      file_note_data.size ()));
 }
 
 /* Fetch the siginfo data for the specified thread, if it exists.  If

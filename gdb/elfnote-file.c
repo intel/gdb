@@ -23,6 +23,14 @@
 #include "elf-bfd.h"
 #include "value.h"
 
+static void
+push_long (gdb::byte_vector *vec, type *long_type, ULONGEST value)
+{
+  gdb_byte buf[sizeof (ULONGEST)];
+  pack_long (buf, long_type, value);
+  vec->insert (vec->end (), &buf[0], &buf[long_type->length ()]);
+}
+
 /* See elfnote-file.h.  */
 
 file_mappings_builder::file_mappings_builder (type *long_type)
@@ -30,53 +38,45 @@ file_mappings_builder::file_mappings_builder (type *long_type)
   this->file_count = 0;
   this->long_type = long_type;
   /* Reserve space for the count.  */
-  obstack_blank (&this->data, long_type->length ());
+  this->data.resize (long_type->length ());
   /* We always write the page size as 1 since we have no good way to
      determine the correct value.  */
-  pack_long (this->buf, long_type, 1);
-  obstack_grow (&this->data, this->buf, long_type->length ());
+  push_long (&this->data, this->long_type, 1);
 }
 
 /* See elfnote-file.h.  */
 
 file_mappings_builder &
-file_mappings_builder::add (ULONGEST vaddr, ULONGEST size,
-			    ULONGEST offset, const char *filename)
+file_mappings_builder::add (const file_mapping &mapping)
 {
   ++this->file_count;
-  int length = this->long_type->length ();
-
-  pack_long (this->buf, this->long_type, vaddr);
-  obstack_grow (&this->data, this->buf, length);
-  pack_long (this->buf, this->long_type, vaddr + size);
-  obstack_grow (&this->data, this->buf, length);
-  pack_long (this->buf, this->long_type, offset);
-  obstack_grow (&this->data, this->buf, length);
-
-  obstack_grow_str0 (&this->filenames, filename);
+  push_long (&this->data, this->long_type, mapping.vaddr);
+  push_long (&this->data, this->long_type, mapping.vaddr + mapping.size);
+  push_long (&this->data, this->long_type, mapping.offset);
+  const char* p = mapping.filename;
+  do
+    {
+      this->filenames.push_back (*p);
+    }
+  while (*p++ != '\0');
 
   return *this;
 }
 
 /* See elfnote-file.h.  */
 
-void *
-file_mappings_builder::build (int *size)
+gdb::byte_vector
+file_mappings_builder::build ()
 {
   if (this->file_count == 0)
-    {
-      *size = 0;
-      return nullptr;
-    }
+    return gdb::byte_vector ();
 
-  /* Write the count to the obstack.  */
-  pack_long ((gdb_byte *) obstack_base (&this->data), this->long_type,
-	     this->file_count);
+  /* Write the count to the reserved space.  */
+  pack_long (this->data.data (), this->long_type, this->file_count);
 
-  /* Copy the filenames to the data obstack.  */
-  int filesize = obstack_object_size (&this->filenames);
-  obstack_grow (&this->data, obstack_base (&this->filenames), filesize);
+  /* Copy the filenames to the main buffer.  */
+  this->data.insert (this->data.end (), this->filenames.begin (),
+		     this->filenames.end ());
 
-  *size = obstack_object_size (&this->data);
-  return obstack_base (&this->data);
+  return std::move (this->data);
 }

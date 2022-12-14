@@ -26,19 +26,25 @@
 
 #include "defs.h"
 #include "gdbtypes.h"
-#include "obstack.h"
+#include "gdbsupport/byte-vector.h"
 
+/* Fields for an individual NT_FILE element.  */
+struct file_mapping
+{
+  ULONGEST vaddr;
+  ULONGEST size;
+  ULONGEST offset;
+  const char *filename;
+};
 class file_mappings_builder
 {
 private:
-  /* Buffer used for packing numbers.  */
-  gdb_byte buf[sizeof (ULONGEST)];
   /* Number of files mapped.  */
   ULONGEST file_count;
-  /* The filename obstack.  */
-  auto_obstack filenames;
-  /* The obstack for the main part of the data.  */
-  auto_obstack data;
+  /* The filename buffer.  */
+  gdb::byte_vector filenames;
+  /* The address/offset item buffer.  */
+  gdb::byte_vector data;
   /* The architecture's "long" type.  */
   type *long_type;
 
@@ -47,10 +53,9 @@ public:
   file_mappings_builder (type *long_type);
 
   /* Adds a new mapping to a currently created note.  */
-  file_mappings_builder& add (ULONGEST vaddr, ULONGEST size, ULONGEST offset,
-			      const char *filename);
+  file_mappings_builder &add (const file_mapping &mapping);
 
   /* Finalizes creation of the note data and releases the data buffer.  */
-  void *build (int *size);
+  gdb::byte_vector build ();
 };
 #endif

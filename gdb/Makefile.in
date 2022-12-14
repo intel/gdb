@@ -1115,6 +1115,7 @@ COMMON_SFILES = \
 	dwarf2/read-gdb-index.c \
 	dwarf2/section.c \
 	dwarf2/stringify.c \
+	elfnote-file.c \
 	extract-store-integer.c \
 	eval.c \
 	event-top.c \

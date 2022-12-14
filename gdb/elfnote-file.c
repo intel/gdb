@@ -80,3 +80,75 @@ file_mappings_builder::build ()
 
   return std::move (this->data);
 }
+
+/* See elfnote-file.h.  */
+
+void
+iterate_file_mappings (gdb::byte_vector *section, type *long_type,
+		       gdb::function_view<void (int)> pre_cb,
+		       gdb::function_view<void (int, const file_mapping&)> cb)
+{
+  ULONGEST addr_size = long_type->length ();
+
+  if (section->size () < 2 * addr_size)
+    {
+      warning (_("malformed core note - too short for header"));
+      return;
+    }
+
+  gdb_byte *descdata = section->data ();
+  char *descend = (char *) descdata + section->size ();
+
+  if (descdata[section->size () - 1] != '\0')
+    {
+      warning (_("malformed note - does not end with \\0"));
+      return;
+    }
+
+  ULONGEST count = unpack_long (long_type, descdata);
+  descdata += addr_size;
+
+  ULONGEST page_size = unpack_long (long_type, descdata);
+  descdata += addr_size;
+
+  if (section->size () < 2 * addr_size + count * 3 * addr_size)
+    {
+      warning (_("malformed note - too short for supplied file count"));
+      return;
+    }
+
+  char *filenames = (char *) descdata + count * 3 * addr_size;
+
+  /* Make sure that the correct number of filenames exist.  Complain
+     if there aren't enough or are too many.  */
+  char *f = filenames;
+  for (int i = 0; i < count; i++)
+    {
+      if (f >= descend)
+	{
+	  warning (_("malformed note - filename area is too small"));
+	  return;
+	}
+      f += strnlen (f, descend - f) + 1;
+    }
+  /* Complain, but don't return early if the filename area is too big.  */
+  if (f != descend)
+    warning (_("malformed note - filename area is too big"));
+
+  pre_cb (count);
+
+  for (int i = 0; i < count; i++)
+    {
+      ULONGEST start = unpack_long (long_type, descdata);
+      descdata += addr_size;
+      ULONGEST end = unpack_long (long_type, descdata);
+      descdata += addr_size;
+      ULONGEST file_ofs
+	= unpack_long (long_type, descdata) * page_size;
+      descdata += addr_size;
+      char * filename = filenames;
+      filenames += strlen ((char *) filenames) + 1;
+
+      cb (i, {start, end-start, file_ofs, filename});
+    }
+}

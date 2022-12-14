@@ -1139,16 +1139,11 @@ linux_read_core_file_mappings
   if (section == nullptr)
     return;
 
-  unsigned int addr_size_bits = gdbarch_addr_bit (gdbarch);
-  unsigned int addr_size = addr_size_bits / 8;
+  type_allocator alloc (gdbarch);
+  struct type *long_type
+    = init_integer_type (alloc, gdbarch_long_bit (gdbarch), 0, "long");
+
   size_t note_size = bfd_section_size (section);
-
-  if (note_size < 2 * addr_size)
-    {
-      warning (_("malformed core note - too short for header"));
-      return;
-    }
-
   gdb::def_vector<gdb_byte> contents (note_size);
   if (!bfd_get_section_contents (core_bfd, section, contents.data (),
 				 0, note_size))
@@ -1157,82 +1152,14 @@ linux_read_core_file_mappings
       return;
     }
 
-  gdb_byte *descdata = contents.data ();
-  char *descend = (char *) descdata + note_size;
-
-  if (descdata[note_size - 1] != '\0')
-    {
-      warning (_("malformed note - does not end with \\0"));
-      return;
-    }
-
-  ULONGEST count = bfd_get (addr_size_bits, core_bfd, descdata);
-  descdata += addr_size;
-
-  ULONGEST page_size = bfd_get (addr_size_bits, core_bfd, descdata);
-  descdata += addr_size;
-
-  if (note_size < 2 * addr_size + count * 3 * addr_size)
-    {
-      warning (_("malformed note - too short for supplied file count"));
-      return;
-    }
-
-  char *filenames = (char *) descdata + count * 3 * addr_size;
-
-  /* Make sure that the correct number of filenames exist.  Complain
-     if there aren't enough or are too many.  */
-  char *f = filenames;
-  for (int i = 0; i < count; i++)
-    {
-      if (f >= descend)
-	{
-	  warning (_("malformed note - filename area is too small"));
-	  return;
-	}
-      f += strnlen (f, descend - f) + 1;
-    }
-  /* Complain, but don't return early if the filename area is too big.  */
-  if (f != descend)
-    warning (_("malformed note - filename area is too big"));
-
-  const bfd_build_id *orig_build_id = cbfd->build_id;
-  std::unordered_map<ULONGEST, const bfd_build_id *> vma_map;
-
-  /* Search for solib build-ids in the core file.  Each time one is found,
-     map the start vma of the corresponding elf header to the build-id.  */
-  for (bfd_section *sec = cbfd->sections; sec != nullptr; sec = sec->next)
-    {
-      cbfd->build_id = nullptr;
-
-      if (sec->flags & SEC_LOAD
-	  && (get_elf_backend_data (cbfd)->elf_backend_core_find_build_id
-	       (cbfd, (bfd_vma) sec->filepos)))
-	vma_map[sec->vma] = cbfd->build_id;
-    }
-
-  cbfd->build_id = orig_build_id;
-  pre_loop_cb (count);
-
-  for (int i = 0; i < count; i++)
-    {
-      ULONGEST start = bfd_get (addr_size_bits, core_bfd, descdata);
-      descdata += addr_size;
-      ULONGEST end = bfd_get (addr_size_bits, core_bfd, descdata);
-      descdata += addr_size;
-      ULONGEST file_ofs
-	= bfd_get (addr_size_bits, core_bfd, descdata) * page_size;
-      descdata += addr_size;
-      char * filename = filenames;
-      filenames += strlen ((char *) filenames) + 1;
-      const bfd_build_id *build_id = nullptr;
-      auto vma_map_it = vma_map.find (start);
-
-      if (vma_map_it != vma_map.end ())
-	build_id = vma_map_it->second;
-
-      loop_cb (i, start, end, file_ofs, filename, build_id);
-    }
+  iterate_file_mappings (&contents, long_type, pre_loop_cb,
+			 [=] (int i, const file_mapping& fm)
+			  {
+			    /* Expand file_mapping struct to avoid gdbarch
+			       dependency on elfnote-file.h.  */
+			    loop_cb (i, fm.vaddr, fm.vaddr + fm.size,
+				     fm.offset, fm.filename, nullptr);
+			  });
 }
 
 /* Implement "info proc mappings" for a corefile.  */

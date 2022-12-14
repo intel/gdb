@@ -181,6 +181,7 @@ struct gdbarch
   gdbarch_core_thread_name_ftype *core_thread_name;
   gdbarch_core_xfer_siginfo_ftype *core_xfer_siginfo;
   const char * gcore_bfd_target;
+  gdbarch_core_load_hook_ftype *core_load_hook;
   int vtable_function_descriptors;
   int vbit_in_delta;
   gdbarch_skip_permanent_breakpoint_ftype *skip_permanent_breakpoint;
@@ -551,6 +552,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of core_thread_name, has predicate.  */
   /* Skip verify of core_xfer_siginfo, has predicate.  */
   /* Skip verify of gcore_bfd_target, has predicate.  */
+  /* Skip verify of core_load_hook, has predicate.  */
   /* Skip verify of vtable_function_descriptors, invalid_p == 0 */
   /* Skip verify of vbit_in_delta, invalid_p == 0 */
   /* Skip verify of skip_permanent_breakpoint, invalid_p == 0 */
@@ -1173,6 +1175,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   fprintf_filtered (file,
                       "gdbarch_dump: gcore_bfd_target = %s\n",
                       pstring (gdbarch->gcore_bfd_target));
+  fprintf_filtered (file,
+                      "gdbarch_dump: gdbarch_core_load_hook_p() = %d\n",
+                      gdbarch_core_load_hook_p (gdbarch));
+  fprintf_filtered (file,
+                      "gdbarch_dump: core_load_hook = <%s>\n",
+                      host_address_to_string (gdbarch->core_load_hook));
   fprintf_filtered (file,
                       "gdbarch_dump: vtable_function_descriptors = %s\n",
                       plongest (gdbarch->vtable_function_descriptors));
@@ -4028,6 +4036,30 @@ set_gdbarch_gcore_bfd_target (struct gdbarch *gdbarch,
                               const char * gcore_bfd_target)
 {
   gdbarch->gcore_bfd_target = gcore_bfd_target;
+}
+
+bool
+gdbarch_core_load_hook_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->core_load_hook != NULL;
+}
+
+int
+gdbarch_core_load_hook (struct gdbarch *gdbarch, bfd *abfd)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->core_load_hook != NULL);
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_core_load_hook called\n");
+  return gdbarch->core_load_hook (gdbarch, abfd);
+}
+
+void
+set_gdbarch_core_load_hook (struct gdbarch *gdbarch,
+                            gdbarch_core_load_hook_ftype core_load_hook)
+{
+  gdbarch->core_load_hook = core_load_hook;
 }
 
 int

@@ -568,6 +568,16 @@ objfile_find_memory_regions (struct target_ops *self,
   return 0;
 }
 
+/* To be updated with known section name patterns that
+   indicate that the section contents must be copied from the
+   already set section userdata rather than target memory.  */
+
+static bool
+section_userdata_is_contents (const char* name)
+{
+  return startswith (name, "load-bin");
+}
+
 static void
 gcore_copy_callback (bfd *obfd, asection *osec)
 {
@@ -581,6 +591,20 @@ gcore_copy_callback (bfd *obfd, asection *osec)
   /* Only interested in "load" sections.  */
   if (!startswith (bfd_section_name (osec), "load"))
     return;
+
+  /* Some sections already carry their contents in their userdata.
+     We had to delay writing the contents to allow creating more
+     sections.  */
+  if (section_userdata_is_contents (bfd_section_name (osec)))
+    {
+      void *contents = bfd_section_userdata (osec);
+      bfd_set_section_userdata (osec, nullptr);
+      if (!bfd_set_section_contents (obfd, osec, contents, 0, total_size))
+	warning (_("Failed to write corefile contents (%s)."),
+		 bfd_errmsg (bfd_get_error ()));
+      xfree (contents);
+      return;
+    }
 
   size = std::min (total_size, (bfd_size_type) MAX_COPY_BYTES);
   gdb::byte_vector memhunk (size);

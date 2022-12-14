@@ -33,6 +33,41 @@ elf64_intelgt_elf_object_p (bfd *abfd)
   return bfd_default_set_arch_mach (abfd, bfd_arch_intelgt, bfd_mach_intelgt);
 }
 
+static char *
+intelgt_elf_write_core_note (bfd *a __attribute__((unused)),
+			     char *b __attribute__((unused)),
+			     int *c __attribute__((unused)),
+			     int d __attribute__((unused)), ...)
+{
+  bfd_assert ("Use elfcore_write_note directly instead.", 0);
+  return NULL;
+}
+
+static bool
+intelgt_elf_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
+{
+  /* Do not overwrite the core signal if it
+     has already been set by another thread.  */
+  if (elf_tdata (abfd)->core->signal == 0)
+    elf_tdata (abfd)->core->signal = bfd_get_32 (abfd, note->descdata + 8);
+  elf_tdata (abfd)->core->lwpid = bfd_get_64 (abfd, note->descdata);
+
+  return _bfd_elfcore_make_pseudosection (
+      abfd, ".reg", note->descsz - 16,
+      note->descpos + 16);
+}
+
+static bool
+intelgt_elf_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
+{
+  elf_tdata (abfd)->core->command = _bfd_elfcore_strndup (
+      abfd, note->descdata, strlen (note->descdata));
+
+  return _bfd_elfcore_make_pseudosection (
+      abfd, ".note.intelgt", note->descsz,
+      note->descpos);
+ }
+
 #define TARGET_LITTLE_SYM		    intelgt_elf64_vec
 #define TARGET_LITTLE_NAME		    "elf64-intelgt"
 #define ELF_ARCH			    bfd_arch_intelgt
@@ -41,6 +76,10 @@ elf64_intelgt_elf_object_p (bfd *abfd)
 #define ELF_MAXPAGESIZE			    0x40000000
 
 #define elf_backend_object_p		    elf64_intelgt_elf_object_p
+
+#define elf_backend_write_core_note	    intelgt_elf_write_core_note
+#define elf_backend_grok_prstatus	    intelgt_elf_grok_prstatus
+#define elf_backend_grok_psinfo		    intelgt_elf_grok_psinfo
 
 #define bfd_elf64_bfd_reloc_type_lookup     bfd_default_reloc_type_lookup
 #define bfd_elf64_bfd_reloc_name_lookup     _bfd_norelocs_bfd_reloc_name_lookup

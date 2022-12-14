@@ -1562,18 +1562,30 @@ intelgt_make_corefile_notes (struct gdbarch *gdbarch, bfd *obfd,
       /* Find the kernel ELF on the local filesystem and copy it
 	into the core file memory: */
 
-      FILE *so_file = fopen (so.so_name.c_str (), "r");
-      if (so_file == nullptr)
-	error ("Could not open the file %s", so.so_name.c_str ());
-      fseek (so_file, 0L, SEEK_END);
-      ULONGEST so_size = ftell (so_file);
-      gdb_assert (so_size > 0);
-      fseek (so_file, 0, SEEK_SET);
-      void *content = xmalloc (so_size);
-      ULONGEST rsize = fread (content, 1, so_size, so_file);
-      fclose (so_file);
-      if (rsize != so_size)
-	error ("Failed to read %s", so.so_name.c_str ());
+      void *content = nullptr;
+      ULONGEST so_size = 0;
+      if (so.begin != 0 && so.end != 0)
+	{
+	  gdb_assert (so.end > so.begin);
+	  so_size = so.end - so.begin;
+	  content = xmalloc (so_size);
+	  read_memory (so.begin, (gdb_byte *) content, so_size);
+	}
+      else
+	{
+	  FILE *so_file = fopen (so.so_name.c_str (), "r");
+	  if (so_file == nullptr)
+	    error ("Could not open the file %s", so.so_name.c_str ());
+	  fseek (so_file, 0L, SEEK_END);
+	  so_size = ftell (so_file);
+	  gdb_assert (so_size > 0);
+	  fseek (so_file, 0, SEEK_SET);
+	  content = xmalloc (so_size);
+	  ULONGEST rsize = fread (content, 1, so_size, so_file);
+	  fclose (so_file);
+	  if (rsize != so_size)
+	    error ("Failed to read %s", so.so_name.c_str ());
+	}
 
       flagword flags = SEC_ALLOC | SEC_HAS_CONTENTS | SEC_LOAD;
       asection *osec = bfd_make_section_anyway_with_flags (obfd,

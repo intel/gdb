@@ -1020,6 +1020,15 @@ extern bool gdbarch_gcore_bfd_target_p (struct gdbarch *gdbarch);
 extern const char * gdbarch_gcore_bfd_target (struct gdbarch *gdbarch);
 extern void set_gdbarch_gcore_bfd_target (struct gdbarch *gdbarch, const char * gcore_bfd_target);
 
+/* Optional hook to be called for additional arch specific setup
+   after loading a core file. */
+
+extern bool gdbarch_core_load_hook_p (struct gdbarch *gdbarch);
+
+typedef int (gdbarch_core_load_hook_ftype) (struct gdbarch *gdbarch, bfd *abfd);
+extern int gdbarch_core_load_hook (struct gdbarch *gdbarch, bfd *abfd);
+extern void set_gdbarch_core_load_hook (struct gdbarch *gdbarch, gdbarch_core_load_hook_ftype *core_load_hook);
+
 /* If the elements of C++ vtables are in-place function descriptors rather
    than normal function pointers (which may point to code or a descriptor),
    set this to one. */

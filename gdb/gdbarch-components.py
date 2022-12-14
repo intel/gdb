@@ -1751,6 +1751,19 @@ BFD target to use when generating a core file.
     printer="pstring (gdbarch->gcore_bfd_target)",
 )
 
+Method(
+    comment="""
+Optional hook to be called for additional arch specific setup
+after loading a core file.
+""",
+    type="int",
+    name="core_load_hook",
+    params=[("bfd *", "abfd")],
+    predicate=True,
+    invalid=True,
+    printer="host_address_to_string (gdbarch->core_load_hook)",
+)
+
 Value(
     comment="""
 If the elements of C++ vtables are in-place function descriptors rather

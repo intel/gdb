@@ -51,6 +51,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include "gdbcmd.h"
+#include "target-descriptions.h"
 #include "xml-tdesc.h"
 #include "memtag.h"
 
@@ -523,14 +524,16 @@ core_target_open (const char *arg, int from_tty)
 
   validate_files ();
 
+  current_inferior ()->push_target (std::move (target_holder));
+
+  target_find_description ();
+
   /* If we have no exec file, try to set the architecture from the
      core file.  We don't do this unconditionally since an exec file
      typically contains more information that helps us determine the
      architecture than a core file.  */
   if (!current_program_space->exec_bfd ())
     set_gdbarch_from_file (core_bfd);
-
-  current_inferior ()->push_target (std::move (target_holder));
 
   if (gdbarch_core_load_hook_p (target->core_gdbarch ()))
     gdbarch_core_load_hook (target->core_gdbarch (), core_bfd);

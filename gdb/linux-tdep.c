@@ -28,6 +28,7 @@
 #include "regset.h"
 #include "elf/common.h"
 #include "elf-bfd.h"            /* for elfcore_write_* */
+#include "elfnote-file.h"
 #include "inferior.h"
 #include "cli/cli-utils.h"
 #include "arch-utils.h"
@@ -1673,25 +1674,6 @@ linux_find_memory_regions (struct gdbarch *gdbarch,
 					 &data);
 }
 
-/* This is used to pass information from
-   linux_make_mappings_corefile_notes through
-   linux_find_memory_regions_full.  */
-
-struct linux_make_mappings_data
-{
-  /* Number of files mapped.  */
-  ULONGEST file_count;
-
-  /* The obstack for the main part of the data.  */
-  struct obstack *data_obstack;
-
-  /* The filename obstack.  */
-  struct obstack *filename_obstack;
-
-  /* The architecture's "long" type.  */
-  struct type *long_type;
-};
-
 static linux_find_memory_region_ftype linux_make_mappings_callback;
 
 /* A callback for linux_find_memory_regions_full that updates the
@@ -1707,23 +1689,11 @@ linux_make_mappings_callback (ULONGEST vaddr, ULONGEST size,
 			      bool memory_tagged,
 			      const char *filename, void *data)
 {
-  struct linux_make_mappings_data *map_data
-    = (struct linux_make_mappings_data *) data;
-  gdb_byte buf[sizeof (ULONGEST)];
-
   if (*filename == '\0' || inode == 0)
     return 0;
 
-  ++map_data->file_count;
-
-  pack_long (buf, map_data->long_type, vaddr);
-  obstack_grow (map_data->data_obstack, buf, map_data->long_type->length ());
-  pack_long (buf, map_data->long_type, vaddr + size);
-  obstack_grow (map_data->data_obstack, buf, map_data->long_type->length ());
-  pack_long (buf, map_data->long_type, offset);
-  obstack_grow (map_data->data_obstack, buf, map_data->long_type->length ());
-
-  obstack_grow_str0 (map_data->filename_obstack, filename);
+  auto *map = (file_mappings_builder *) data;
+  map->add (vaddr, size, offset, filename);
 
   return 0;
 }
@@ -1737,45 +1707,22 @@ linux_make_mappings_corefile_notes (struct gdbarch *gdbarch, bfd *obfd,
 				    gdb::unique_xmalloc_ptr<char> &note_data,
 				    int *note_size)
 {
-  struct linux_make_mappings_data mapping_data;
   struct type *long_type
     = arch_integer_type (gdbarch, gdbarch_long_bit (gdbarch), 0, "long");
-  gdb_byte buf[sizeof (ULONGEST)];
 
-  auto_obstack data_obstack, filename_obstack;
+  file_mappings_builder mapping_builder (long_type);
 
-  mapping_data.file_count = 0;
-  mapping_data.data_obstack = &data_obstack;
-  mapping_data.filename_obstack = &filename_obstack;
-  mapping_data.long_type = long_type;
-
-  /* Reserve space for the count.  */
-  obstack_blank (&data_obstack, long_type->length ());
-  /* We always write the page size as 1 since we have no good way to
-     determine the correct value.  */
-  pack_long (buf, long_type, 1);
-  obstack_grow (&data_obstack, buf, long_type->length ());
-
-  linux_find_memory_regions_full (gdbarch, 
-				  dump_note_entry_p,
+  linux_find_memory_regions_full (gdbarch, dump_note_entry_p,
 				  linux_make_mappings_callback,
-				  &mapping_data);
+				  &mapping_builder);
 
-  if (mapping_data.file_count != 0)
-    {
-      /* Write the count to the obstack.  */
-      pack_long ((gdb_byte *) obstack_base (&data_obstack),
-		 long_type, mapping_data.file_count);
+  int file_note_size = 0;
+  void *file_note_data = mapping_builder.build (&file_note_size);
 
-      /* Copy the filenames to the data obstack.  */
-      int size = obstack_object_size (&filename_obstack);
-      obstack_grow (&data_obstack, obstack_base (&filename_obstack),
-		    size);
-
-      note_data.reset (elfcore_write_file_note (obfd, note_data.release (), note_size,
-						obstack_base (&data_obstack),
-						obstack_object_size (&data_obstack)));
-    }
+  if (file_note_data != nullptr)
+    note_data.reset (elfcore_write_file_note (obfd, note_data.release (),
+					      note_size, file_note_data,
+					      file_note_size));
 }
 
 /* Fetch the siginfo data for the specified thread, if it exists.  If

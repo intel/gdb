@@ -27,6 +27,7 @@
 #include "defs.h"
 #include "gdbtypes.h"
 #include "gdbsupport/byte-vector.h"
+#include "gdbsupport/function-view.h"
 
 /* Fields for an individual NT_FILE element.  */
 struct file_mapping
@@ -58,4 +59,13 @@ public:
   /* Finalizes creation of the note data and releases the data buffer.  */
   gdb::byte_vector build ();
 };
+
+/* Decode NT_FILE contents from data and call cb for each individual file
+   mapping decoded.  Input byte vector is supposed be created via
+   bfd_get_section_contents or similar.  Before the iteration pre_cb
+   is called once, with file mapping count supplied as an argument.  */
+void iterate_file_mappings (gdb::byte_vector *section, type *long_type,
+			    gdb::function_view<void (int)>,
+			    gdb::function_view<void (int,
+				const file_mapping&)>);
 #endif

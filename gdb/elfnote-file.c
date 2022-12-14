@@ -80,3 +80,100 @@ file_mappings_builder::build ()
 
   return std::move (this->data);
 }
+
+/* See elfnote-file.h.  */
+
+void
+iterate_file_mappings (gdb::byte_vector *section, type *ulong_type, bfd *cbfd,
+		       gdb::function_view<void (int)> pre_cb,
+		       gdb::function_view<void (int,
+						const bfd_build_id *,
+						const file_mapping &)> cb)
+{
+  ULONGEST addr_size = ulong_type->length ();
+
+  if (section->size () < 2 * addr_size)
+    {
+      warning (_("malformed core note - too short for header"));
+      return;
+    }
+
+  gdb_byte *descdata = section->data ();
+  char *descend = (char *) descdata + section->size ();
+
+  if (descdata[section->size () - 1] != '\0')
+    {
+      warning (_("malformed note - does not end with \\0"));
+      return;
+    }
+
+  ULONGEST count = unpack_long (ulong_type, descdata);
+  descdata += addr_size;
+
+  ULONGEST page_size = unpack_long (ulong_type, descdata);
+  descdata += addr_size;
+
+  if (section->size () < 2 * addr_size + count * 3 * addr_size)
+    {
+      warning (_("malformed note - too short for supplied file count"));
+      return;
+    }
+
+  char *filenames = (char *) descdata + count * 3 * addr_size;
+
+  /* Make sure that the correct number of filenames exist.  Complain
+     if there aren't enough or are too many.  */
+  char *f = filenames;
+  for (int i = 0; i < count; i++)
+    {
+      if (f >= descend)
+	{
+	  warning (_("malformed note - filename area is too small"));
+	  return;
+	}
+      f += strnlen (f, descend - f) + 1;
+    }
+  /* Complain, but don't return early if the filename area is too big.  */
+  if (f != descend)
+    warning (_("malformed note - filename area is too big"));
+
+  const bfd_build_id *orig_build_id = cbfd->build_id;
+  std::unordered_map<ULONGEST, const bfd_build_id *> vma_map;
+
+  /* Search for solib build-ids in the core file.  Each time one is found,
+     map the start vma of the corresponding elf header to the build-id.  */
+  for (bfd_section *sec = cbfd->sections; sec != nullptr; sec = sec->next)
+    {
+      cbfd->build_id = nullptr;
+
+      if (sec->flags & SEC_LOAD
+	  && (get_elf_backend_data (cbfd)->elf_backend_core_find_build_id
+	       (cbfd, (bfd_vma) sec->filepos)))
+	vma_map[sec->vma] = cbfd->build_id;
+    }
+
+  cbfd->build_id = orig_build_id;
+
+  pre_cb (count);
+
+  for (int i = 0; i < count; i++)
+    {
+      ULONGEST start = unpack_long (ulong_type, descdata);
+      descdata += addr_size;
+      ULONGEST end = unpack_long (ulong_type, descdata);
+      descdata += addr_size;
+      ULONGEST file_ofs
+	= unpack_long (ulong_type, descdata) * page_size;
+      descdata += addr_size;
+      char * filename = filenames;
+      filenames += strlen ((char *) filenames) + 1;
+
+      const bfd_build_id *build_id = nullptr;
+      auto vma_map_it = vma_map.find (start);
+
+      if (vma_map_it != vma_map.end ())
+	build_id = vma_map_it->second;
+
+      cb (i, build_id, {start, end-start, file_ofs, filename});
+    }
+}

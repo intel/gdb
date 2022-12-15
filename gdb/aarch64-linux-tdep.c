@@ -1609,7 +1609,7 @@ aarch64_linux_tagged_address_p (struct gdbarch *gdbarch, struct value *address)
   CORE_ADDR addr = value_as_address (address);
 
   /* Remove the top byte for the memory range check.  */
-  addr = gdbarch_remove_non_address_bits (gdbarch, addr);
+  addr = gdbarch_remove_non_addr_bits_memory (gdbarch, addr);
 
   /* Check if the page that contains ADDRESS is mapped with PROT_MTE.  */
   if (!linux_address_in_memtag_page (addr))
@@ -1635,7 +1635,8 @@ aarch64_linux_memtag_matches_p (struct gdbarch *gdbarch,
 
   /* Fetch the allocation tag for ADDRESS.  */
   gdb::optional<CORE_ADDR> atag
-    = aarch64_mte_get_atag (gdbarch_remove_non_address_bits (gdbarch, addr));
+    = aarch64_mte_get_atag (gdbarch_remove_non_addr_bits_memory (gdbarch,
+								 addr));
 
   if (!atag.has_value ())
     return true;
@@ -1674,7 +1675,7 @@ aarch64_linux_set_memtags (struct gdbarch *gdbarch, struct value *address,
   else
     {
       /* Remove the top byte.  */
-      addr = gdbarch_remove_non_address_bits (gdbarch, addr);
+      addr = gdbarch_remove_non_addr_bits_memory (gdbarch, addr);
 
       /* Make sure we are dealing with a tagged address to begin with.  */
       if (!aarch64_linux_tagged_address_p (gdbarch, address))
@@ -1731,7 +1732,8 @@ aarch64_linux_get_memtag (struct gdbarch *gdbarch, struct value *address,
 	return nullptr;
 
       /* Remove the top byte.  */
-      addr = gdbarch_remove_non_address_bits (gdbarch, addr);
+      addr = gdbarch_remove_non_addr_bits_memory (gdbarch, addr);
+
       gdb::optional<CORE_ADDR> atag = aarch64_mte_get_atag (addr);
 
       if (!atag.has_value ())
@@ -1805,8 +1807,9 @@ aarch64_linux_report_signal_info (struct gdbarch *gdbarch,
       uiout->text ("\n");
 
       gdb::optional<CORE_ADDR> atag
-	= aarch64_mte_get_atag (gdbarch_remove_non_address_bits (gdbarch,
-								 fault_addr));
+	= aarch64_mte_get_atag (
+	    gdbarch_remove_non_addr_bits_memory (gdbarch, fault_addr));
+
       gdb_byte ltag = aarch64_mte_get_ltag (fault_addr);
 
       if (!atag.has_value ())
@@ -2068,9 +2071,15 @@ aarch64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   /* The top byte of a user space address known as the "tag",
      is ignored by the kernel and can be regarded as additional
-     data associated with the address.  */
-  set_gdbarch_remove_non_address_bits (gdbarch,
-				       aarch64_remove_non_address_bits);
+     data associated with the address.
+     Configure address adjustment for watch-, breakpoints and memory
+     transfer.  */
+  set_gdbarch_remove_non_addr_bits_wpt (gdbarch,
+					aarch64_remove_non_address_bits);
+  set_gdbarch_remove_non_addr_bits_bpt (gdbarch,
+					aarch64_remove_non_address_bits);
+  set_gdbarch_remove_non_addr_bits_memory (gdbarch,
+					   aarch64_remove_non_address_bits);
 
   /* MTE-specific settings and hooks.  */
   if (tdep->has_mte ())

@@ -2455,7 +2455,7 @@ static bool
 aarch64_linux_tagged_address_p (struct gdbarch *gdbarch, CORE_ADDR address)
 {
   /* Remove the top byte for the memory range check.  */
-  address = gdbarch_remove_non_address_bits (gdbarch, address);
+  address = gdbarch_remove_non_addr_bits_memory (gdbarch, address);
 
   /* Check if the page that contains ADDRESS is mapped with PROT_MTE.  */
   if (!linux_address_in_memtag_page (address))
@@ -2477,7 +2477,8 @@ aarch64_linux_memtag_matches_p (struct gdbarch *gdbarch,
 
   /* Fetch the allocation tag for ADDRESS.  */
   std::optional<CORE_ADDR> atag
-    = aarch64_mte_get_atag (gdbarch_remove_non_address_bits (gdbarch, addr));
+    = aarch64_mte_get_atag (gdbarch_remove_non_addr_bits_memory (gdbarch,
+								 addr));
 
   if (!atag.has_value ())
     return true;
@@ -2516,7 +2517,7 @@ aarch64_linux_set_memtags (struct gdbarch *gdbarch, struct value *address,
   else
     {
       /* Remove the top byte.  */
-      addr = gdbarch_remove_non_address_bits (gdbarch, addr);
+      addr = gdbarch_remove_non_addr_bits_memory (gdbarch, addr);
 
       /* With G being the number of tag granules and N the number of tags
 	 passed in, we can have the following cases:
@@ -2565,7 +2566,7 @@ aarch64_linux_get_memtag (struct gdbarch *gdbarch, struct value *address,
   else
     {
       /* Remove the top byte.  */
-      addr = gdbarch_remove_non_address_bits (gdbarch, addr);
+      addr = gdbarch_remove_non_addr_bits_memory (gdbarch, addr);
       std::optional<CORE_ADDR> atag = aarch64_mte_get_atag (addr);
 
       if (!atag.has_value ())
@@ -2638,9 +2639,9 @@ aarch64_linux_report_signal_info (struct gdbarch *gdbarch,
       uiout->field_core_addr ("fault-addr", gdbarch, fault_addr);
       uiout->text ("\n");
 
-      std::optional<CORE_ADDR> atag
-	= aarch64_mte_get_atag (gdbarch_remove_non_address_bits (gdbarch,
-								 fault_addr));
+      std::optional<CORE_ADDR> atag = aarch64_mte_get_atag
+	(gdbarch_remove_non_addr_bits_memory (gdbarch,
+					      fault_addr));
       gdb_byte ltag = aarch64_mte_get_ltag (fault_addr);
 
       if (!atag.has_value ())

@@ -4592,9 +4592,15 @@ aarch64_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     tdep->ra_sign_state_regnum = ra_sign_state_offset + num_regs;
 
   /* Architecture hook to remove bits of a pointer that are not part of the
-     address, like memory tags (MTE) and pointer authentication signatures.  */
-  set_gdbarch_remove_non_address_bits (gdbarch,
-				       aarch64_remove_non_address_bits);
+     address, like memory tags (MTE) and pointer authentication signatures.
+     Configure address adjustment for watch-, breakpoints and memory
+     transfer.  */
+  set_gdbarch_remove_non_addr_bits_wpt (gdbarch,
+					aarch64_remove_non_address_bits);
+  set_gdbarch_remove_non_addr_bits_bpt (gdbarch,
+					aarch64_remove_non_address_bits);
+  set_gdbarch_remove_non_addr_bits_memory (gdbarch,
+					   aarch64_remove_non_address_bits);
 
   /* SME pseudo-registers.  */
   if (tdep->has_sme ())

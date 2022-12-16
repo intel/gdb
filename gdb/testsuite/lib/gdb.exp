@@ -5557,6 +5557,27 @@ proc gdb_compile {source dest type options} {
 	    || [test_compiler_info {icc-20-21-[7-9]}]} {
 	    lappend new_options "additional_flags=-diag-disable=10441"
 	}
+
+	# icpx/icx give the following warning if '-g' is used without '-O'.
+	#
+	#   icpx: remark: Note that use of '-g' without any
+	#   optimization-level option will turn off most compiler
+	#   optimizations similar to use of '-O0'
+	#
+	# The warning makes dejagnu think that compilation has failed.
+	#
+	# Furthermore, if no -O flag is passed, icx and icc optimize
+	# the code by default.  This breaks assumptions in many GDB
+	# tests that the code is unoptimized by default.
+	#
+	# To fix both problems, pass the -O0 flag explicitly, if no
+	# optimization option is given.
+	if {[test_compiler_info "icx-*"] || [test_compiler_info "icc-*"]} {
+	    if {[lsearch $options optimize=*] == -1
+		&& [lsearch $options additional_flags=-O*] == -1} {
+		lappend new_options "optimize=-O0"
+	    }
+	}
     }
 
     # If the 'build-id' option is used, then ensure that we generate a

@@ -5094,6 +5094,27 @@ proc gdb_compile {source dest type options} {
 	    || [test_compiler_info {icc-20-21-[1-9][0-9]}]} {
 	    lappend new_options "additional_flags=-diag-disable=10441"
 	}
+
+	# icpx/icx give the following warning if '-g' is used without '-O'.
+	#
+	#   icpx: remark: Note that use of '-g' without any
+	#   optimization-level option will turn off most compiler
+	#   optimizations similar to use of '-O0'
+	#
+	# The warning makes dejagnu think that compilation has failed.
+	#
+	# Furthermore, if no -O flag is passed, icx and icc optimize
+	# the code by default.  This breaks assumptions in many GDB
+	# tests that the code is unoptimized by default.
+	#
+	# To fix both problems, pass the -O0 flag explicitly, if no
+	# optimization option is given.
+	if {[test_compiler_info "icx-*"] || [test_compiler_info "icc-*"]} {
+	    if {[lsearch $options optimize=*] == -1
+		&& [lsearch $options additional_flags=-O*] == -1} {
+		lappend new_options "optimize=-O0"
+	    }
+	}
     }
 
     # If the 'build-id' option is used, then ensure that we generate a
@@ -5129,6 +5150,21 @@ proc gdb_compile {source dest type options} {
     # option is not supported so instead use the -module flag.
     # Additionally, Intel compilers need the -debug-parameters flag set to
     # emit debug info for all parameters in modules.
+    #
+    # ifx gives the following warning if '-g' is used without '-O'.
+    #
+    #   ifx: remark #10440: Note that use of a debug option
+    #   without any optimization-level option will turnoff most
+    #   compiler optimizations similar to use of '-O0'
+    #
+    # The warning makes dejagnu think that compilation has failed.
+    #
+    # Furthermore, if no -O flag is passed, Intel compilers optimize
+    # the code by default.  This breaks assumptions in many GDB
+    # tests that the code is unoptimized by default.
+    #
+    # To fix both problems, pass the -O0 flag explicitly, if no
+    # optimization option is given.
     if { !$getting_compiler_info && [lsearch -exact $options f90] != -1 } {
 	# Fortran compile.
 	set mod_path [standard_output_file ""]
@@ -5138,6 +5174,11 @@ proc gdb_compile {source dest type options} {
 		   || [test_compiler_info {ifx-*} f90] } {
 	    lappend new_options "additional_flags=-module ${mod_path}"
 	    lappend new_options "additional_flags=-debug-parameters all"
+
+	    if {[lsearch $options optimize=*] == -1
+		&& [lsearch $options additional_flags=-O*] == -1} {
+		lappend new_options "optimize=-O0"
+	    }
 	}
     }
 

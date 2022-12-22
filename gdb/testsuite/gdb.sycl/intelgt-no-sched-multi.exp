@@ -22,7 +22,7 @@ standard_testfile parallel-for-1D.cpp
 
 # A generic function name is used to call it from the SYCL library.
 proc "sycl_${gdb_test_file_name}_run_tests" {} {
-    global srcfile
+    global srcfile gdb_prompt
 
     if {![require_sycl_device "gpu" "Intel*"]} {
 	unsupported "test is aimed at Intel GPUs only"
@@ -36,6 +36,27 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
     set bp [gdb_get_line_number "first-line"]
     gdb_breakpoint "$bp" {temporary}
     gdb_continue_to_breakpoint "the bp" ".*$srcfile:$bp.*"
+
+    # Count the number of devices.
+    set num_devices 0
+    gdb_test_multiple "info devices" "info devices" {
+	-re "Location\[^\r\n\]+\r\n" {
+	    exp_continue
+	}
+	-re "\[^\r\n\]+Intel\[^\r\n\]+\r\n" {
+	    incr num_devices
+	    exp_continue
+	}
+	-re "^$gdb_prompt $" {
+	    pass $gdb_test_name
+	}
+    }
+
+    # We cannot resume devices individually on an all-stop target.
+    if {$num_devices > 1} {
+	untested "test can handle single-device cases only"
+	return 0
+    }
 
     # The auto-attach script sets schedule-multiple to on.
     # Turn it off and resume the inferiors individually.

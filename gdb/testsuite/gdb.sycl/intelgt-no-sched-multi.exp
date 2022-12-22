@@ -48,6 +48,27 @@ foreach device $sycl_device_list {
 	gdb_breakpoint "$bp" {temporary}
 	gdb_continue_to_breakpoint "the bp" ".*$srcfile:$bp.*"
 
+	# Count the number of devices.
+	set num_devices 0
+	gdb_test_multiple "info devices" "info devices" {
+	    -re "Location\[^\r\n\]+\r\n" {
+		exp_continue
+	    }
+	    -re "\[^\r\n\]+Intel\[^\r\n\]+\r\n" {
+		incr num_devices
+		exp_continue
+	    }
+	    -re "^$gdb_prompt $" {
+		pass $gdb_test_name
+	    }
+	}
+
+	# We cannot resume devices individually on an all-stop target.
+	if {$num_devices > 1} {
+	    untested "test can handle single-device cases only"
+	    continue
+	}
+
 	# The auto-attach script sets schedule-multiple to on.
 	# Turn it off and resume the inferiors individually.
 	gdb_test_no_output "set schedule-multiple off"

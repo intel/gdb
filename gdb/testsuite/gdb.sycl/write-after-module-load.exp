@@ -47,6 +47,9 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
 	    set in_memory_obj $expect_out(1,string)
 	    verbose -log "Solib event for $in_memory_obj"
 	}
+	timeout {
+	    kfail "JIRA XDEPS/5103" "host thread is uninterruptible"
+	}
     }
 
     if {$in_memory_obj eq "not found"} {

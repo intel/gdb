@@ -1846,6 +1846,19 @@ finish_command (const char *arg, int from_tty)
   if (frame == 0)
     error (_("\"finish\" not meaningful in the outermost frame."));
 
+  if (skip_trampoline_functions)
+    {
+      for (int i = 0; i < MAX_TRAMPOLINE_CHAIN_SIZE
+		      && (frame != nullptr)
+		      && in_trampoline_frame (frame); ++i)
+	frame = get_prev_frame (frame);
+
+      if (frame == nullptr)
+	error (_("\"finish\" not meaningful in the outermost non-trampoline \
+frame.  Consider running \"set skip-trampoline-functions off\", to stop in \
+trampoline frames for the \"finish\" command."));
+    }
+
   clear_proceed_status (0);
 
   tp = inferior_thread ();

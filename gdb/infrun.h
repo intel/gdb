@@ -106,6 +106,12 @@ extern bool non_stop;
    starting an inferior.  */
 extern bool disable_randomization;
 
+/* If set (default) GDB will step through functions/inlined subroutines marked
+   DW_AT_trampoline by the compiler.  If false, GDB will ignore the
+   attribute.  */
+
+extern bool skip_trampoline_functions;
+
 /* Returns a unique identifier for the current stop.  This can be used
    to tell whether a command has proceeded the inferior past the
    current location.  */

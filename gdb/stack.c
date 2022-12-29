@@ -2054,6 +2054,14 @@ backtrace_command_1 (const frame_print_options &fp_opts,
 	{
 	  QUIT;
 
+	  if (in_trampoline_frame (fi))
+	    {
+	      /* Trampoline frames are not printed so they are not counted in
+		 the backtrace limit.  */
+	      count++;
+	      continue;
+	    }
+
 	  /* Don't use print_stack_frame; if an error() occurs it probably
 	     means further attempts to backtrace would fail (on the other
 	     hand, perhaps the code does or could be fixed to make sure

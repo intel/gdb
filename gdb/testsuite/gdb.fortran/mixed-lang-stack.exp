@@ -41,7 +41,7 @@ set have_index [exec_has_index_section $binfile]
 # value to pass to GDB's 'set language ...' command.
 proc run_tests { lang } {
     with_test_prefix "lang=${lang}" {
-	global binfile hex have_index
+	global binfile hex have_index decimal
 
 	clean_restart ${binfile}
 
@@ -63,6 +63,10 @@ proc run_tests { lang } {
 	set e_arg "\['\"\]abcdef\['\"\]"
 	set 1b_args "\[^\r\n\]+$e_arg\[^\r\n\]+"
 	set 1g_args "obj=\[^\r\n\]+"
+	# Generic decimal number is checked in regex for Frame #8 and #9 to
+	# handle filtered trampoline frames.  Since Frame#8 and Frame#10 are
+	# set to trampoline in DWARF by Intel® Fortran Compiler (ifx), they
+	# are not shown by the backtrace command.
 	set bt_stack \
 	    [multi_line \
 		 "#0\\s+breakpt \\(\\) at \[^\r\n\]+" \
@@ -73,8 +77,8 @@ proc run_tests { lang } {
 		 "#5\\s+$hex in mixed_func_1d \\(\[^\r\n\]+\\) at \[^\r\n\]+" \
 		 "#6\\s+$hex in mixed_func_1c \\(\[^\r\n\]+\\) at \[^\r\n\]+" \
 		 "#7\\s+$hex in mixed_func_1b \\($1b_args\\) at \[^\r\n\]+" \
-		 "#8\\s+$hex in mixed_func_1a \\(\\) at \[^\r\n\]+" \
-		 "#9\\s+$hex in mixed_stack_main \\(\\) at \[^\r\n\]+" ]
+		 "#$decimal\\s+$hex in mixed_func_1a \\(\\) at \[^\r\n\]+" \
+		 "#$decimal\\s+$hex in mixed_stack_main \\(\\) at \[^\r\n\]+" ]
 	set main_args "argc=1, argv=${hex}( \[^\r\n\]+)?"
 	set bt_stack_kfail \
 	    [multi_line \

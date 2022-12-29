@@ -2260,6 +2260,11 @@ extern CORE_ADDR find_solib_trampoline_target (frame_info_ptr, CORE_ADDR);
 
 extern bool in_trampoline_function (CORE_ADDR pc);
 
+/* Return whether or not the pc of current frame is within a block that belongs
+   to a function that is marked as a trampoline by the compiler.  */
+
+extern bool in_trampoline_frame (frame_info_ptr);
+
 /* Find the target of a trampoline function marked via the DW_AT_trampoline
    attribute and return its address.  Returns 0 if the pc is not contained
    in a trampoline function (inlined or not).  If DW_AT_trampoline

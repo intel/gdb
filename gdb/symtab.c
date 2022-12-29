@@ -4141,6 +4141,18 @@ in_trampoline_function (CORE_ADDR pc)
 
 /* See symtab.h.  */
 
+bool
+in_trampoline_frame (frame_info *fi)
+{
+  CORE_ADDR pc;
+  if (get_frame_pc_if_available (fi, &pc))
+    return in_trampoline_function (pc);
+
+  return false;
+}
+
+/* See symtab.h.  */
+
 CORE_ADDR
 find_function_trampoline_target (CORE_ADDR pc)
 {

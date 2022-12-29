@@ -1,7 +1,7 @@
 /* Target interface for level-zero based targets for gdbserver.
    See https://github.com/oneapi-src/level-zero.git.
 
-   Copyright (C) 2020-2022 Free Software Foundation, Inc.
+   Copyright (C) 2020-2023 Free Software Foundation, Inc.
 
    This file is part of GDB.
 

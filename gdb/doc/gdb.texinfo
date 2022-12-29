@@ -63,7 +63,7 @@ and with the Back-Cover Texts as in (a) below.
 this GNU Manual.  Buying copies from GNU Press supports the FSF in
 developing GNU and promoting software freedom.''
 @sp 1
-Copyright @copyright{} 2021, Intel Corporation.
+Copyright @copyright{} 2021-2023, Intel Corporation.
 Intel's modifications are provided pursuant to the GNU Free
 Documentation license.
 @c man end

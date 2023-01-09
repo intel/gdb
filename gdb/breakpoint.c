@@ -9863,6 +9863,21 @@ bptype_to_target_hw_bp_type (bptype type)
     }
 }
 
+/* See breakpoint.h.  */
+
+watchpoint::~watchpoint ()
+{
+  /* Make sure to unlink the destroyed watchpoint from the related
+     breakpoint ring.  */
+
+  breakpoint *bpt = this;
+  breakpoint *related = bpt;
+  while (related->related_breakpoint != bpt)
+    related = related->related_breakpoint;
+
+  related->related_breakpoint = bpt->related_breakpoint;
+}
+
 /*  Return non-zero if EXP is verified as constant.  Returned zero
     means EXP is variable.  Also the constant detection may fail for
     some constant expressions and in such case still falsely return

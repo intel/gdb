@@ -840,6 +840,10 @@ struct breakpoint
 
 struct watchpoint : public breakpoint
 {
+
+  /* Destructor for WATCHPOINT.  */
+  virtual ~watchpoint ();
+
   /* String form of exp to use for displaying to the user (malloc'd),
      or NULL if none.  */
   gdb::unique_xmalloc_ptr<char> exp_string;

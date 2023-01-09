@@ -911,6 +911,9 @@ struct watchpoint : public breakpoint
 {
   using breakpoint::breakpoint;
 
+  /* Destructor for WATCHPOINT.  */
+  virtual ~watchpoint ();
+
   void re_set () override;
   int insert_location (struct bp_location *) override;
   int remove_location (struct bp_location *,

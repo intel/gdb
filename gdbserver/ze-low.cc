@@ -2172,22 +2172,51 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 	    return (zeproc->waitstatus.kind () != TARGET_WAITKIND_IGNORE);
 	  });
 
-      /* If we found a process event, we're done.
+      /* If we found a process event, it is our primary candidate.
+
+	 Process events with a low priority UNAVAILABLE waitstatus do not
+	 stop the target in all-stop, but some of its threads might have a
+	 pending waitstatus, which requires the stop.  If such THREAD is
+	 found, we prioritize it, clean the process waitstatus, and fall
+	 through to the thread reporting.  The process event will
+	 piggyback on it.
 
 	 We do not take any special care about fairness as we expect process
 	 events to be rather rare.  */
+      thread_info *thread = nullptr;
       if (process != nullptr)
 	{
 	  process_info_private *zeproc = process->priv;
 	  gdb_assert (zeproc != nullptr);
+	  ptid_t process_ptid = ptid_t (pid_of (process));
 
-	  *status = zeproc->waitstatus;
+	  /* If we got an unavailable process event, try to find another
+	     eventing thread for this process.  */
+	  if (zeproc->waitstatus.kind () == TARGET_WAITKIND_UNAVAILABLE)
+	    thread = ze_find_eventing_thread (process_ptid);
+
+	  /* If not found, return the process and clean its waitstatus.  */
+	  if (thread == nullptr)
+	    {
+	      *status = zeproc->waitstatus;
+	      zeproc->waitstatus.set_ignore ();
+
+	      return process_ptid;
+	    }
+
+	  /* THREAD should always match the PTID: we got a process event,
+	     so PTID must be either minus_one or the process's ptid.  */
+	  gdb_assert (thread->id.matches (ptid));
+
+	  /* The process event will piggyback onto the THREAD event.
+	     However, we still need to clean the process status.  */
 	  zeproc->waitstatus.set_ignore ();
-
-	  return ptid_t (pid_of (process));
 	}
 
-      thread_info *thread = ze_find_eventing_thread (ptid);
+      /* If we have previously found THREAD for the PROCESS, we use it.
+         Otherwise, proceed with searching for a thread event for PTID.  */
+      if (thread == nullptr)
+	thread = ze_find_eventing_thread (ptid);
 
       if (thread != nullptr)
 	{

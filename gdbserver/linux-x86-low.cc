@@ -279,9 +279,7 @@ static /*const*/ int i386_regmap[] =
 static int
 is_64bit_tdesc (void)
 {
-  struct regcache *regcache = get_thread_regcache (current_thread, 0);
-
-  return register_size (regcache->tdesc, 0) == 8;
+  return register_size (current_process ()->tdesc, 0) == 8;
 }
 
 #endif
@@ -2959,8 +2957,7 @@ x86_target::low_supports_range_stepping ()
 int
 x86_target::get_ipa_tdesc_idx ()
 {
-  struct regcache *regcache = get_thread_regcache (current_thread, 0);
-  const struct target_desc *tdesc = regcache->tdesc;
+  const struct target_desc *tdesc = current_process ()->tdesc;
 
 #ifdef __x86_64__
   return amd64_get_ipa_tdesc_idx (tdesc);

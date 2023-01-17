@@ -191,9 +191,7 @@ struct arch_process_info
 static int
 is_64bit_tdesc (void)
 {
-  struct regcache *regcache = get_thread_regcache (current_thread, 0);
-
-  return register_size (regcache->tdesc, 0) == 8;
+  return register_size (current_process ()->tdesc, 0) == 8;
 }
 
 static void

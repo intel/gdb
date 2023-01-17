@@ -43,7 +43,7 @@ get_thread_regcache (struct thread_info *thread, int fetch)
 
       gdb_assert (proc->tdesc != NULL);
 
-      regcache = new_register_cache (proc->tdesc);
+      regcache = new struct regcache (proc->tdesc);
       set_thread_regcache_data (thread, regcache);
     }
 
@@ -151,15 +151,10 @@ regcache::initialize (const target_desc *tdesc,
 
 #ifndef IN_PROCESS_AGENT
 
-struct regcache *
-new_register_cache (const struct target_desc *tdesc)
+regcache::regcache (const target_desc *tdesc)
 {
-  struct regcache *regcache = new struct regcache;
-
   gdb_assert (tdesc->registers_size != 0);
-  regcache->initialize (tdesc, nullptr);
-
-  return regcache;
+  initialize (tdesc, nullptr);
 }
 
 void

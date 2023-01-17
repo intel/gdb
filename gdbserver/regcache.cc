@@ -48,19 +48,26 @@ get_thread_regcache (struct thread_info *thread, bool fetch)
       regcache->thread = thread;
     }
 
-  if (fetch && regcache->registers_valid == 0)
-    {
-      scoped_restore_current_thread restore_thread;
-
-      switch_to_thread (thread);
-      /* Invalidate all registers, to prevent stale left-overs.  */
-      memset (regcache->register_status, REG_UNAVAILABLE,
-	      regcache->tdesc->reg_defs.size ());
-      fetch_inferior_registers (regcache, -1);
-      regcache->registers_valid = 1;
-    }
+  if (fetch)
+    regcache->fetch ();
 
   return regcache;
+}
+
+void
+regcache::fetch ()
+{
+  if (registers_valid == 0)
+    {
+      scoped_restore_current_thread restore_thread;
+      gdb_assert (this->thread != nullptr);
+      switch_to_thread (this->thread);
+
+      /* Invalidate all registers, to prevent stale left-overs.  */
+      memset (register_status, REG_UNAVAILABLE, tdesc->reg_defs.size ());
+      fetch_inferior_registers (this, -1);
+      registers_valid = 1;
+    }
 }
 
 /* See gdbsupport/common-regcache.h.  */

@@ -113,10 +113,9 @@ regcache_invalidate (void)
 
 #endif
 
-struct regcache *
-init_register_cache (struct regcache *regcache,
-		     const struct target_desc *tdesc,
-		     unsigned char *regbuf)
+void
+regcache::initialize (const target_desc *tdesc,
+		      unsigned char *regbuf)
 {
   if (regbuf == NULL)
     {
@@ -125,13 +124,13 @@ init_register_cache (struct regcache *regcache,
 	 created, in case there are registers the target never
 	 fetches.  This way they'll read as zero instead of
 	 garbage.  */
-      regcache->tdesc = tdesc;
-      regcache->registers
+      this->tdesc = tdesc;
+      this->registers
 	= (unsigned char *) xcalloc (1, tdesc->registers_size);
-      regcache->registers_owned = 1;
-      regcache->register_status
+      this->registers_owned = 1;
+      this->register_status
 	= (unsigned char *) xmalloc (tdesc->reg_defs.size ());
-      memset ((void *) regcache->register_status, REG_UNAVAILABLE,
+      memset ((void *) this->register_status, REG_UNAVAILABLE,
 	      tdesc->reg_defs.size ());
 #else
       gdb_assert_not_reached ("can't allocate memory from the heap");
@@ -139,17 +138,15 @@ init_register_cache (struct regcache *regcache,
     }
   else
     {
-      regcache->tdesc = tdesc;
-      regcache->registers = regbuf;
-      regcache->registers_owned = 0;
+      this->tdesc = tdesc;
+      this->registers = regbuf;
+      this->registers_owned = 0;
 #ifndef IN_PROCESS_AGENT
-      regcache->register_status = NULL;
+      this->register_status = nullptr;
 #endif
     }
 
-  regcache->registers_valid = 0;
-
-  return regcache;
+  this->registers_valid = 0;
 }
 
 #ifndef IN_PROCESS_AGENT
@@ -160,8 +157,9 @@ new_register_cache (const struct target_desc *tdesc)
   struct regcache *regcache = new struct regcache;
 
   gdb_assert (tdesc->registers_size != 0);
+  regcache->initialize (tdesc, nullptr);
 
-  return init_register_cache (regcache, tdesc, NULL);
+  return regcache;
 }
 
 void

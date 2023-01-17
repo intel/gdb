@@ -4705,7 +4705,7 @@ get_context_regcache (struct tracepoint_hit_ctx *ctx)
       if (!fctx->regcache_initted)
 	{
 	  fctx->regcache_initted = 1;
-	  init_register_cache (&fctx->regcache, ipa_tdesc, fctx->regspace);
+	  fctx->regcache.initialize (ipa_tdesc, fctx->regspace);
 	  supply_regblock (&fctx->regcache, NULL);
 	  supply_fast_tracepoint_registers (&fctx->regcache, fctx->regs);
 	}
@@ -4720,7 +4720,7 @@ get_context_regcache (struct tracepoint_hit_ctx *ctx)
       if (!sctx->regcache_initted)
 	{
 	  sctx->regcache_initted = 1;
-	  init_register_cache (&sctx->regcache, ipa_tdesc, sctx->regspace);
+	  sctx->regcache.initialize (ipa_tdesc, sctx->regspace);
 	  supply_regblock (&sctx->regcache, NULL);
 	  /* Pass down the tracepoint address, because REGS doesn't
 	     include the PC, but we know what it must have been.  */
@@ -4798,8 +4798,7 @@ do_action_at_tracepoint (struct tracepoint_hit_ctx *ctx,
 
 	/* Wrap the regblock in a register cache (in the stack, we
 	   don't want to malloc here).  */
-	init_register_cache (&tregcache, context_regcache->tdesc,
-			     regspace + 1);
+	tregcache.initialize (context_regcache->tdesc, regspace + 1);
 
 	/* Copy the register data to the regblock.  */
 	regcache_cpy (&tregcache, context_regcache);
@@ -5206,7 +5205,7 @@ traceframe_get_pc (struct traceframe *tframe)
   if (dataptr == NULL)
     return 0;
 
-  init_register_cache (&regcache, tdesc, dataptr);
+  regcache.initialize (tdesc, dataptr);
   return regcache_read_pc (&regcache);
 }
 

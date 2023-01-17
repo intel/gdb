@@ -67,6 +67,9 @@ struct regcache : public reg_buffer_common
 
   /* See gdbsupport/common-regcache.h.  */
   bool raw_compare (int regnum, const void *buf, int offset) const override;
+
+  /* Fetch the registers from the target, if not done already.  */
+  void fetch ();
 };
 
 void regcache_cpy (struct regcache *dst, struct regcache *src);

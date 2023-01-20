@@ -240,10 +240,13 @@ class IntelgtAutoAttach:
             return
 
         if not ('libze_loader.so' in event.new_objfile.filename or
-                'libze_intel_gpu.so' in event.new_objfile.filename):
+                'libze_intel_gpu.so' in event.new_objfile.filename or
+                'ze_loader.dll' in event.new_objfile.filename or
+                'ze_intel_gpu64.dll' in event.new_objfile.filename):
             return
 
-        if 'libze_intel_gpu.so' in event.new_objfile.filename:
+        if ('libze_intel_gpu.so' in event.new_objfile.filename or
+            'ze_intel_gpu64.dll' in event.new_objfile.filename):
             DebugLogger.log(
                 f"received {event.new_objfile.filename} loaded event.")
             if gdb.selected_inferior().was_attached:
@@ -257,7 +260,8 @@ class IntelgtAutoAttach:
                 self.init_gt_inferiors()
             return
 
-        if 'libze_loader.so' in event.new_objfile.filename:
+        if ('libze_loader.so' in event.new_objfile.filename or
+            'ze_loader.dll' in event.new_objfile.filename):
             self.the_bp = "zeContextCreate"
         else:
             return
@@ -491,7 +495,10 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
           self.get_env_variable("INTELGT_AUTO_ATTACH_GDBSERVER_PATH")
 
         binary = "gdbserver-ze " + self.gdbserver_args
-        gdbserver_attach_str = f"{binary} --attach - {inf.pid}"
+        if platform.system() == "Windows":
+            gdbserver_attach_str = f"{binary} --attach 127.0.0.1:PORT_PLACE_HOLDER {inf.pid}"
+        else:
+            gdbserver_attach_str = f"{binary} --attach - {inf.pid}"
 
         if gdbserver_path_env_var:
             gdbserver_attach_str = \
@@ -523,6 +530,11 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
 
         gdbserver_port = \
           self.get_env_variable("INTELGT_AUTO_ATTACH_GDBSERVER_PORT")
+        if platform.system() == "Windows":
+            if not gdbserver_port:
+                print("intelgt: Setting port to default 1234.")
+                gdbserver_port = "1234"
+            target_remote_str = target_remote_str.replace("PORT_PLACE_HOLDER", gdbserver_port)
         if gdbserver_port:
             print(f"intelgt: connecting to gdbserver-ze "
                   f"on port {gdbserver_port}.")

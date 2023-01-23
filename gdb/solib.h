@@ -93,6 +93,12 @@ extern void set_solib_ops (struct gdbarch *gdbarch,
 
 extern void update_solib_list (int from_tty);
 
+
+/* Acknowledge loading of new solibs.  This goes through all program
+   solibs and acknowledge any solib that requires an ACK.  */
+
+extern void ack_pending_solibs ();
+
 /* Return true if NAME is the libpthread shared library.  */
 
 extern bool libpthread_name_p (const char *name);

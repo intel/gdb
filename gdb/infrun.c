@@ -2693,6 +2693,9 @@ resume_1 (enum gdb_signal sig)
   gdb_assert (!tp->stop_requested);
   gdb_assert (!thread_is_in_step_over_chain (tp));
 
+  /* Acknowledge any pending solibs upon resuming.  */
+  ack_pending_solibs ();
+
   inferior *inf = tp->inf;
   process_stratum_target *target = inf->process_target ();
   if (inf->control.waitstatus_pending_p)
@@ -6390,6 +6393,7 @@ handle_inferior_event (struct execution_control_state *ecs)
 		stop_print_frame = true;
 
 		stop_waiting (ecs);
+
 		return;
 	      }
 	  }

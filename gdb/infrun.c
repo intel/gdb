@@ -5637,6 +5637,14 @@ handle_inferior_event (struct execution_control_state *ecs)
 
 	    handle_solib_event ();
 
+	    /* Acknowledge newly added solibs right away if we are not
+	       stopping on solib events.  In the other case, we postpone
+	       the libraries acknowledgment until everything is stopped
+	       in order to guarantee that the host thread does not make
+	       any progress between the ACK and the stop.  */
+	    if (!stop_on_solib_events)
+	      ack_pending_solibs ();
+
 	    ecs->event_thread->set_stop_pc
 	      (regcache_read_pc_protected (regcache));
 	    ecs->event_thread->control.stop_bpstat
@@ -5666,6 +5674,10 @@ handle_inferior_event (struct execution_control_state *ecs)
 		stop_print_frame = true;
 
 		stop_waiting (ecs);
+
+		/* Now that we stopped everything, we can acknowledge
+		   the loaded libraries.  */
+		ack_pending_solibs ();
 		return;
 	      }
 	  }

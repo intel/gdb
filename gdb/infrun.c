@@ -2691,6 +2691,9 @@ resume_1 (enum gdb_signal sig)
   gdb_assert (!tp->stop_requested);
   gdb_assert (!thread_is_in_step_over_chain (tp));
 
+  /* Acknowledge any pending solibs upon resuming.  */
+  ack_pending_solibs ();
+
   inferior *inf = tp->inf;
   process_stratum_target *target = inf->process_target ();
   if (inf->control.waitstatus.has_value ())

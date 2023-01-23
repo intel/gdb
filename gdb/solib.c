@@ -1071,7 +1071,6 @@ solib_add (const char *pattern, int from_tty, int readsyms)
     if (from_tty)
 	add_flags |= SYMFILE_VERBOSE;
 
-    std::list<so_list *> added_solibs;
     for (struct so_list *gdb : current_program_space->solibs ())
       if (! pattern || re_exec (gdb->so_name))
 	{
@@ -1094,22 +1093,13 @@ solib_add (const char *pattern, int from_tty, int readsyms)
 		    gdb_printf (_("Symbols already loaded for %s\n"),
 				gdb->so_name);
 		}
-	      else
-		added_solibs.emplace_back (gdb);
+	      else if (solib_read_symbols (gdb, add_flags))
+		loaded_any_symbols = true;
 	    }
 	}
 
-    for (so_list *gdb : added_solibs)
-      if (solib_read_symbols (gdb, add_flags))
-	loaded_any_symbols = true;
-
     if (loaded_any_symbols)
       breakpoint_re_set ();
-
-    /* Acknowledge loading of new solibs.  This must be called after
-       breakpoints have been set in this newly loaded solib.  */
-    for (so_list *gdb : added_solibs)
-      solib_ack_library (gdb);
 
     if (from_tty && pattern && ! any_matches)
       gdb_printf
@@ -1122,6 +1112,20 @@ solib_add (const char *pattern, int from_tty, int readsyms)
 	reinit_frame_cache ();
       }
   }
+}
+
+/* See solib.h.  */
+
+void
+ack_pending_solibs ()
+{
+  for (so_list *gdb : current_program_space->solibs ())
+    {
+      /* Request acknowledgment for all program solibs without checking
+	 the NEED_ACK flag, since the check is already happening
+	 in solib-target.c.  */
+      solib_ack_library (gdb);
+    }
 }
 
 /* Implement the "info sharedlibrary" command.  Walk through the

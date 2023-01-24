@@ -1914,38 +1914,36 @@ proc mi_continue_to_line {location test {known_fail ""}} {
 # Wait until gdb prints the current line.
 proc mi_get_stop_line {test {known_fail ""}} {
 
-  global mi_gdb_prompt
-  global async
+    global mi_gdb_prompt
+    global async
 
-  if {$async} {
-      set prompt_re ""
-  } else {
-      set prompt_re "$mi_gdb_prompt$"
-  }
+    set line ""
+    set nlines 0
+    gdb_expect {
+	-re "\\\*stopped,\[^\\\r\\\n\]*line=\"(\[0-9\]*)\"\[^\\\r\\\n\]*\r\n" {
+	    set line $expect_out(1,string)
+	    if {$async} {
+		return $line
+	    } else {
+		incr nlines
+		exp_continue
+	    }
+	}
+	-re "$mi_gdb_prompt" {
+	    if {$nlines == 0} {
+		fail "wait for stop, not stopped ($test)"
+	    }
+	    if {$nlines > 1} {
+		fail "wait for stop, multiple lines ($test)"
+	    }
+	}
+	timeout {
+	    if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
+	    fail "wait for stop, timeout ($test)"
+	}
+    }
 
-  set line ""
-  set nlines 0
-  gdb_expect {
-      -re "\\\*stopped,\[^\\\r\\\n\]*line=\"(\[0-9\]*)\"\[^\\\r\\\n\]*\r\n" {
-	  set line $expect_out(1,string)
-	  incr nlines
-	  exp_continue
-      }
-      -re "$mi_gdb_prompt" {
-	  if {$nlines == 0} {
-	      fail "wait for stop, not stopped ($test)"
-	  }
-	  if {$nlines > 1} {
-	      fail "wait for stop, multiple lines ($test)"
-	  }
-      }
-      timeout {
-	  if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
-	  fail "wait for stop, timeout ($test)"
-      }
-  }
-
-  return $line
+    return $line
 }
 
 # Run a MI test embedded in comments in a C file.

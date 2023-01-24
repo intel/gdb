@@ -1938,19 +1938,17 @@ proc mi_get_stop_line {} {
   global mi_gdb_prompt
   global async
 
-  if {$async} {
-      set prompt_re ""
-  } else {
-      set prompt_re "$mi_gdb_prompt$"
-  }
-
   set line ""
   set nlines 0
   gdb_expect {
       -re "\\\*stopped,\[^\\\r\\\n\]*line=\"(\[0-9\]*)\"\[^\\\r\\\n\]*\r\n" {
 	  set line $expect_out(1,string)
-	  incr nlines
-	  exp_continue
+	  if {$async} {
+	      return $line
+	  } else {
+	      incr nlines
+	      exp_continue
+	  }
       }
       -re "$mi_gdb_prompt" {
 	  if {$nlines == 0} {

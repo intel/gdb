@@ -46,7 +46,13 @@ proc "sycl_${gdb_test_file_name}_run_tests" {} {
 
 	# Run till a temporary BP inside a kernel.
 	set first_kernel_line [gdb_get_line_number "kernel-first-line"]
-	mi_continue_to_line $first_kernel_line "Continue to 'kernel_first_line' and stop at breakpoint" $kfail
+	set continue_test "Continue to 'kernel_first_line' and stop at breakpoint"
+	set hit_line [mi_continue_to_line $first_kernel_line $continue_test $kfail]
+	if {$hit_line == $first_kernel_line} {
+	    pass "$continue_test"
+	} else {
+	    fail "$continue_test"
+	}
 	# Send resuming command.
 	mi_send_resuming_command "exec-continue" "continuing to inferior exit" $kfail
 	# Expect normal exit.

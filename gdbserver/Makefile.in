@@ -413,7 +413,7 @@ mostlyclean clean:
 	rm -f gdbserver$(EXEEXT) gdbreplay$(EXEEXT) core make.log
 	rm -f $(IPA_LIB)
 	rm -f *-generated.cc
-	rm -f stamp-xml
+	rm -f stamp-xml stamp-version commit-id
 	rm -f $(DEPDIR)/*.Po
 	for i in $(CONFIG_SRC_SUBDIR); do \
 		rm -f $$i/*.o;	\
@@ -445,9 +445,30 @@ am--refresh:
 
 force:
 
-version-generated.cc: Makefile $(srcdir)/../gdb/version.in $(srcdir)/../bfd/version.h $(srcdir)/../gdbsupport/create-version.sh
+.PHONY: gen-commit-id
+
+version-generated.cc: stamp-version; @true
+
+stamp-version: Makefile $(srcdir)/../gdb/version.in $(srcdir)/../bfd/version.h $(srcdir)/../gdbsupport/create-version.sh commit-id
 	$(ECHO_GEN) $(SHELL) $(srcdir)/../gdbsupport/create-version.sh $(srcdir)/../gdb \
-		$(host_alias) $(target_alias) $@
+		$(host_alias) $(target_alias) version-generated.tmp `cat commit-id`
+	@$(SHELL) $(srcdir)/../move-if-change version-generated.tmp version-generated.cc
+	@echo stamp > stamp-version
+
+commit-id: gen-commit-id; @true
+
+gen-commit-id:
+	$(ECHO_GEN) cd $(srcdir); \
+		echo no-git > $(srcdir)/commit-id.t; \
+		git_path=`which git`; \
+		if [ "x$$git_path" != x ] ; then \
+			git_inside=`git rev-parse --is-inside-work-tree 2> /dev/null`; \
+			if [ "x$$?" == x0 ] && [ "x$$git_inside" == xtrue ] ; then \
+				git log -1 --format='%h' > $(srcdir)/commit-id.t; \
+			fi \
+		fi
+	mv $(srcdir)/commit-id.t commit-id.t
+	$(SHELL) $(srcdir)/../move-if-change commit-id.t commit-id
 
 xml-builtin-generated.cc: stamp-xml; @true
 stamp-xml: $(XML_DIR)/feature_to_c.sh Makefile $(XML_FILES)

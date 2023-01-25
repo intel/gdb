@@ -2211,7 +2211,7 @@ tags: TAGS
 clean mostlyclean: $(CONFIG_CLEAN)
 	@$(MAKE) $(FLAGS_TO_PASS) DO=clean "DODIRS=$(CLEANDIRS)" subdir_do
 	rm -f *.o *.a *~ init.c-tmp init.l-tmp version.c-tmp
-	rm -f init.c stamp-init version.c stamp-version
+	rm -f init.c stamp-init version.c stamp-version commit-id
 	rm -f gdb$(EXEEXT) core make.log
 	rm -f gdb[0-9]$(EXEEXT)
 	rm -f test-cp-name-parser$(EXEEXT)
@@ -2383,12 +2383,26 @@ $(srcdir)/copying.c: @MAINTAINER_MODE_TRUE@ $(srcdir)/../COPYING3 $(srcdir)/copy
 version.c: stamp-version; @true
 # Note that the obvious names for the temp file are taken by
 # create-version.sh.
-stamp-version: Makefile version.in $(srcdir)/../bfd/version.h $(srcdir)/../gdbsupport/create-version.sh
+stamp-version: Makefile version.in $(srcdir)/../bfd/version.h $(srcdir)/../gdbsupport/create-version.sh commit-id
 	$(ECHO_GEN) $(SHELL) $(srcdir)/../gdbsupport/create-version.sh $(srcdir) \
-	    $(host_alias) $(target_alias) version-t.t
+	    $(host_alias) $(target_alias) version-t.t `cat commit-id`
 	@$(SHELL) $(srcdir)/../move-if-change version-t.t version.c
 	@echo stamp > stamp-version
 
+commit-id: gen-commit-id; @true
+
+gen-commit-id:
+	$(ECHO_GEN) cd $(srcdir); \
+		echo no-git > $(srcdir)/commit-id.t; \
+		git_path=`which git`; \
+		if [ "x$$git_path" != x ] ; then \
+			git_inside=`git rev-parse --is-inside-work-tree 2> /dev/null`; \
+			if [ "x$$?" == x0 ] && [ "x$$git_inside" == xtrue ] ; then \
+				git log -1 --format='%h' > $(srcdir)/commit-id.t; \
+			fi \
+		fi
+	mv $(srcdir)/commit-id.t commit-id.t
+	$(SHELL) $(srcdir)/../move-if-change commit-id.t commit-id
 
 gdb.cxref: $(SFILES)
 	cxref -I. $(SFILES) >gdb.cxref

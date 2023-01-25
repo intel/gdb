@@ -20,16 +20,17 @@
 # Create version.c from version.in.
 # Usage:
 #    create-version.sh PATH-TO-GDB-SRCDIR HOST_ALIAS \
-#        TARGET_ALIAS OUTPUT-FILE-NAME
+#        TARGET_ALIAS OUTPUT-FILE-NAME A-COMMIT-ID
 
 srcdir="$1"
 host_alias="$2"
 target_alias="$3"
 output="$4"
+commit="$5"
 
 rm -f version.c-tmp "$output" version.tmp
 date=$(sed -n -e 's/^.* BFD_VERSION_DATE \(.*\)$/\1/p' "$srcdir/../bfd/version.h")
-sed -e "s/DATE/$date/" < "$srcdir/version.in" > version.tmp
+sed -e "s/DATE/$date/" < "$srcdir/version.in" | sed -e "s/COMMIT/$commit/" > version.tmp
 {
     echo '#include "gdbsupport/version.h"'
     echo 'const char version[] = "'"$(sed q version.tmp)"'";'

@@ -35,7 +35,7 @@ struct thread_info
 
   ~thread_info ()
   {
-    free_register_cache (this->regcache_data);
+    delete this->regcache_data;
   }
 
   /* The id of this thread.  */

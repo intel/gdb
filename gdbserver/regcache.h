@@ -78,6 +78,12 @@ struct regcache : public reg_buffer_common
 
   /* Copy the contents of SRC into this regcache.  */
   void copy_from (regcache *src);
+
+  /* Store the cached registers to the target and then discard the cache.  */
+  void invalidate ();
+
+  /* Discard the cache without storing the registers to the target.  */
+  void discard ();
 };
 
 regcache *get_thread_regcache (thread_info *thread, bool fetch = true);

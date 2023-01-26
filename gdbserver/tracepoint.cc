@@ -4703,7 +4703,7 @@ get_context_regcache (struct tracepoint_hit_ctx *ctx)
 	{
 	  fctx->regcache_initted = 1;
 	  fctx->regcache.initialize (ipa_tdesc, fctx->regspace);
-	  supply_regblock (&fctx->regcache, NULL);
+	  fctx->regcache.supply_regblock (nullptr);
 	  supply_fast_tracepoint_registers (&fctx->regcache, fctx->regs);
 	}
       regcache = &fctx->regcache;
@@ -4718,7 +4718,7 @@ get_context_regcache (struct tracepoint_hit_ctx *ctx)
 	{
 	  sctx->regcache_initted = 1;
 	  sctx->regcache.initialize (ipa_tdesc, sctx->regspace);
-	  supply_regblock (&sctx->regcache, NULL);
+	  sctx->regcache.supply_regblock (nullptr);
 	  /* Pass down the tracepoint address, because REGS doesn't
 	     include the PC, but we know what it must have been.  */
 	  supply_static_tracepoint_registers (&sctx->regcache,
@@ -5173,7 +5173,7 @@ fetch_traceframe_registers (int tfnum, struct regcache *regcache, int regnum)
   if (dataptr == NULL)
     {
       /* Mark registers unavailable.  */
-      supply_regblock (regcache, NULL);
+      regcache->supply_regblock (nullptr);
 
       /* We can generally guess at a PC, although this will be
 	 misleading for while-stepping frames and multi-location
@@ -5183,7 +5183,7 @@ fetch_traceframe_registers (int tfnum, struct regcache *regcache, int regnum)
 	regcache_write_pc (regcache, tpoint->address);
     }
   else
-    supply_regblock (regcache, dataptr);
+    regcache->supply_regblock (dataptr);
 
   return 0;
 }

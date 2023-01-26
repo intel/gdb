@@ -376,39 +376,23 @@ supply_register_by_name_zeroed (struct regcache *regcache,
 
 #endif
 
-/* Supply the whole register set whose contents are stored in BUF, to
-   REGCACHE.  If BUF is NULL, all the registers' values are recorded
-   as unavailable.  */
-
 void
-supply_regblock (struct regcache *regcache, const void *buf)
+regcache::supply_regblock (const void *buf)
 {
-  if (buf)
+  if (buf != nullptr)
     {
-      const struct target_desc *tdesc = regcache->tdesc;
-
-      memcpy (regcache->registers, buf, tdesc->registers_size);
+      memcpy (registers, buf, tdesc->registers_size);
 #ifndef IN_PROCESS_AGENT
-      {
-	int i;
-
-	for (i = 0; i < tdesc->reg_defs.size (); i++)
-	  regcache->register_status[i] = REG_VALID;
-      }
+      for (int i = 0; i < tdesc->reg_defs.size (); i++)
+	register_status[i] = REG_VALID;
 #endif
     }
   else
     {
-      const struct target_desc *tdesc = regcache->tdesc;
-
-      memset (regcache->registers, 0, tdesc->registers_size);
+      memset (registers, 0, tdesc->registers_size);
 #ifndef IN_PROCESS_AGENT
-      {
-	int i;
-
-	for (i = 0; i < tdesc->reg_defs.size (); i++)
-	  regcache->register_status[i] = REG_UNAVAILABLE;
-      }
+      for (int i = 0; i < tdesc->reg_defs.size (); i++)
+	register_status[i] = REG_UNAVAILABLE;
 #endif
     }
 }

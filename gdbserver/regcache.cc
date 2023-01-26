@@ -232,11 +232,9 @@ regcache::registers_to_string (char *buf)
 }
 
 void
-registers_from_string (struct regcache *regcache, char *buf)
+regcache::registers_from_string (const char *buf)
 {
   int len = strlen (buf);
-  unsigned char *registers = regcache->registers;
-  const struct target_desc *tdesc = regcache->tdesc;
 
   if (len != tdesc->registers_size * 2)
     {

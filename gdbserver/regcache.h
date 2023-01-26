@@ -96,6 +96,9 @@ struct regcache : public reg_buffer_common
      to this regcache.  If BUF is NULL, all the registers' values are
      recorded as unavailable.  */
   void supply_regblock (const void *buf);
+
+  /* Return the pointer to the register with number REGNUM.  */
+  unsigned char *register_data (int regnum) const;
 };
 
 regcache *get_thread_regcache (thread_info *thread, bool fetch = true);

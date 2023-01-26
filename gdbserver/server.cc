@@ -4344,7 +4344,7 @@ process_serial_event (void)
 	  else
 	    {
 	      regcache = get_thread_regcache (current_thread);
-	      registers_from_string (regcache, &cs.own_buf[1]);
+	      regcache->registers_from_string (&cs.own_buf[1]);
 	      write_ok (cs.own_buf);
 	    }
 	}

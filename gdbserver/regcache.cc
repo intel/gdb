@@ -316,12 +316,11 @@ regcache_register_size (const reg_buffer_common *regcache, int n)
     (gdb::checked_static_cast<const struct regcache *> (regcache)->tdesc, n);
 }
 
-static gdb::array_view<gdb_byte>
-register_data (const struct regcache *regcache, int n)
+gdb::array_view<gdb_byte>
+regcache::register_data (int regnum) const
 {
-  const gdb::reg &reg = find_register_by_number (regcache->tdesc, n);
-  return gdb::make_array_view (regcache->registers + reg.offset / 8,
-			       reg.size / 8);
+  const gdb::reg &reg = find_register_by_number (tdesc, regnum);
+  return gdb::make_array_view (registers + reg.offset / 8, reg.size / 8);
 }
 
 void
@@ -337,7 +336,7 @@ supply_register (struct regcache *regcache, int n, const void *vbuf)
 void
 regcache::raw_supply (int n, gdb::array_view<const gdb_byte> src)
 {
-  auto dst = register_data (this, n);
+  auto dst = register_data (n);
 
   if (src.data () != nullptr)
     {
@@ -362,7 +361,7 @@ regcache::raw_supply (int n, gdb::array_view<const gdb_byte> src)
 void
 supply_register_zeroed (struct regcache *regcache, int n)
 {
-  auto dst = register_data (regcache, n);
+  auto dst = regcache->register_data (n);
   memset (dst.data (), 0, dst.size ());
 #ifndef IN_PROCESS_AGENT
   if (regcache->register_status != NULL)
@@ -428,7 +427,7 @@ collect_register (struct regcache *regcache, int n, void *vbuf)
 void
 regcache::raw_collect (int n, gdb::array_view<gdb_byte> dst) const
 {
-  auto src = register_data (this, n);
+  auto src = register_data (n);
   copy (src, dst);
 }
 
@@ -469,7 +468,7 @@ regcache_raw_get_unsigned_by_name (struct regcache *regcache,
 void
 collect_register_as_string (struct regcache *regcache, int n, char *buf)
 {
-  bin2hex (register_data (regcache, n), buf);
+  bin2hex (regcache->register_data (n), buf);
 }
 
 void
@@ -516,7 +515,7 @@ regcache::raw_compare (int regnum, const void *buf, int offset) const
 {
   gdb_assert (buf != NULL);
 
-  gdb::array_view<const gdb_byte> regbuf = register_data (this, regnum);
+  gdb::array_view<const gdb_byte> regbuf = register_data (regnum);
   gdb_assert (offset < regbuf.size ());
   regbuf = regbuf.slice (offset);
 

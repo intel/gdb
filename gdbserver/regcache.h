@@ -84,6 +84,10 @@ struct regcache : public reg_buffer_common
 
   /* Discard the cache without storing the registers to the target.  */
   void discard ();
+
+  /* Convert all registers to a string in the currently specified remote
+     format.  */
+  void registers_to_string (char *buf);
 };
 
 regcache *get_thread_regcache (thread_info *thread, bool fetch = true);
@@ -105,11 +109,6 @@ void regcache_invalidate (void);
    current process.  */
 
 void regcache_release (void);
-
-/* Convert all registers to a string in the currently specified remote
-   format.  */
-
-void registers_to_string (struct regcache *regcache, char *buf);
 
 /* Convert a string to register values and fill our register cache.  */
 

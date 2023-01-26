@@ -4288,7 +4288,7 @@ process_serial_event (void)
 
 	  if (fetch_traceframe_registers (cs.current_traceframe,
 					  &a_regcache, -1) == 0)
-	    registers_to_string (&a_regcache, cs.own_buf);
+	    a_regcache.registers_to_string (cs.own_buf);
 	  else
 	    write_enn (cs.own_buf);
 	}
@@ -4301,7 +4301,7 @@ process_serial_event (void)
 	  else
 	    {
 	      regcache = get_thread_regcache (current_thread);
-	      registers_to_string (regcache, cs.own_buf);
+	      regcache->registers_to_string (cs.own_buf);
 	    }
 	}
       break;

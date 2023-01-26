@@ -88,6 +88,9 @@ struct regcache : public reg_buffer_common
   /* Convert all registers to a string in the currently specified remote
      format.  */
   void registers_to_string (char *buf);
+
+  /* Convert a string to register values and fill our register cache.  */
+  void registers_from_string (const char *buf);
 };
 
 regcache *get_thread_regcache (thread_info *thread, bool fetch = true);
@@ -109,10 +112,6 @@ void regcache_invalidate (void);
    current process.  */
 
 void regcache_release (void);
-
-/* Convert a string to register values and fill our register cache.  */
-
-void registers_from_string (struct regcache *regcache, char *buf);
 
 /* For regcache_read_pc see gdbsupport/common-regcache.h.  */
 

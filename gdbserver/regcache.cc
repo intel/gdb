@@ -211,16 +211,14 @@ find_register_by_number (const struct target_desc *tdesc, int n)
 #ifndef IN_PROCESS_AGENT
 
 void
-registers_to_string (struct regcache *regcache, char *buf)
+regcache::registers_to_string (char *buf)
 {
-  unsigned char *registers = regcache->registers;
-  const struct target_desc *tdesc = regcache->tdesc;
-
+  unsigned char *regs = registers;
   for (int i = 0; i < tdesc->reg_defs.size (); ++i)
     {
-      if (regcache->register_status[i] == REG_VALID)
+      if (register_status[i] == REG_VALID)
 	{
-	  bin2hex (registers, buf, register_size (tdesc, i));
+	  bin2hex (regs, buf, register_size (tdesc, i));
 	  buf += register_size (tdesc, i) * 2;
 	}
       else
@@ -228,7 +226,7 @@ registers_to_string (struct regcache *regcache, char *buf)
 	  memset (buf, 'x', register_size (tdesc, i) * 2);
 	  buf += register_size (tdesc, i) * 2;
 	}
-      registers += register_size (tdesc, i);
+      regs += register_size (tdesc, i);
     }
   *buf = '\0';
 }

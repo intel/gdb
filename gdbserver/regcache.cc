@@ -85,18 +85,22 @@ regcache_invalidate_thread (struct thread_info *thread)
 
   regcache = thread_regcache_data (thread);
 
-  if (regcache == NULL)
-    return;
+  if (regcache != nullptr)
+    regcache->invalidate ();
+}
 
-  if (regcache->registers_valid)
+void
+regcache::invalidate ()
+{
+  if (registers_valid)
     {
       scoped_restore_current_thread restore_thread;
-
-      switch_to_thread (thread);
-      store_inferior_registers (regcache, -1);
+      gdb_assert (this->thread != nullptr);
+      switch_to_thread (this->thread);
+      store_inferior_registers (this, -1);
     }
 
-  regcache->registers_valid = 0;
+  discard ();
 }
 
 /* See regcache.h.  */
@@ -120,6 +124,12 @@ regcache_invalidate (void)
 }
 
 #endif
+
+void
+regcache::discard ()
+{
+  registers_valid = 0;
+}
 
 void
 regcache::initialize (const target_desc *tdesc,

@@ -91,6 +91,11 @@ struct regcache : public reg_buffer_common
 
   /* Convert a string to register values and fill our register cache.  */
   void registers_from_string (const char *buf);
+
+  /* Supply the whole register set whose contents are stored in BUF,
+     to this regcache.  If BUF is NULL, all the registers' values are
+     recorded as unavailable.  */
+  void supply_regblock (const void *buf);
 };
 
 regcache *get_thread_regcache (thread_info *thread, bool fetch = true);
@@ -137,8 +142,6 @@ void supply_register_by_name (struct regcache *regcache,
 
 void supply_register_by_name_zeroed (struct regcache *regcache,
 				     const char *name);
-
-void supply_regblock (struct regcache *regcache, const void *buf);
 
 void collect_register (struct regcache *regcache, int n, void *buf);
 

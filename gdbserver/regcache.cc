@@ -64,9 +64,17 @@ regcache::fetch ()
       switch_to_thread (this->thread);
 
       /* Invalidate all registers, to prevent stale left-overs.  */
-      memset (register_status, REG_UNAVAILABLE, tdesc->reg_defs.size ());
+      discard ();
       fetch_inferior_registers (this, -1);
       registers_fetched = true;
+
+      /* Make sure that the registers that could not be fetched are
+	 now unavailable.  */
+      for (int i = 0; i < tdesc->reg_defs.size (); ++i)
+	{
+	  if (register_status[i] == REG_UNKNOWN)
+	    set_register_status (i, REG_UNAVAILABLE);
+	}
     }
 }
 
@@ -128,6 +136,9 @@ regcache_invalidate (void)
 void
 regcache::discard ()
 {
+#ifndef IN_PROCESS_AGENT
+  memset ((void *) register_status, REG_UNKNOWN, tdesc->reg_defs.size ());
+#endif
   registers_fetched = false;
 }
 
@@ -148,8 +159,7 @@ regcache::initialize (const target_desc *tdesc,
       this->registers_owned = true;
       this->register_status
 	= (enum register_status *) xmalloc (tdesc->reg_defs.size ());
-      memset ((void *) this->register_status, REG_UNAVAILABLE,
-	      tdesc->reg_defs.size ());
+      discard ();
 #else
       gdb_assert_not_reached ("can't allocate memory from the heap");
 #endif

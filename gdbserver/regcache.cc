@@ -333,16 +333,14 @@ regcache::raw_supply (int n, const void *buf)
     {
       memcpy (register_data (n), buf, register_size (tdesc, n));
 #ifndef IN_PROCESS_AGENT
-      if (register_status != NULL)
-	register_status[n] = REG_VALID;
+      set_register_status (n, REG_VALID);
 #endif
     }
   else
     {
       memset (register_data (n), 0, register_size (tdesc, n));
 #ifndef IN_PROCESS_AGENT
-      if (register_status != NULL)
-	register_status[n] = REG_UNAVAILABLE;
+      set_register_status (n, REG_UNAVAILABLE);
 #endif
     }
 }
@@ -355,8 +353,7 @@ supply_register_zeroed (struct regcache *regcache, int n)
   memset (regcache->register_data (n), 0,
 	  register_size (regcache->tdesc, n));
 #ifndef IN_PROCESS_AGENT
-  if (regcache->register_status != NULL)
-    regcache->register_status[n] = REG_VALID;
+  regcache->set_register_status (n, REG_VALID);
 #endif
 }
 
@@ -381,7 +378,7 @@ regcache::supply_regblock (const void *buf)
       memcpy (registers, buf, tdesc->registers_size);
 #ifndef IN_PROCESS_AGENT
       for (int i = 0; i < tdesc->reg_defs.size (); i++)
-	register_status[i] = REG_VALID;
+	set_register_status (i, REG_VALID);
 #endif
     }
   else
@@ -389,7 +386,7 @@ regcache::supply_regblock (const void *buf)
       memset (registers, 0, tdesc->registers_size);
 #ifndef IN_PROCESS_AGENT
       for (int i = 0; i < tdesc->reg_defs.size (); i++)
-	register_status[i] = REG_UNAVAILABLE;
+	set_register_status (i, REG_UNAVAILABLE);
 #endif
     }
 }
@@ -494,6 +491,16 @@ regcache::get_register_status (int regnum) const
   return (enum register_status) (register_status[regnum]);
 #else
   return REG_VALID;
+#endif
+}
+
+void
+regcache::set_register_status (int regnum, enum register_status status)
+{
+#ifndef IN_PROCESS_AGENT
+  gdb_assert (regnum >= 0 && regnum < tdesc->reg_defs.size ());
+  if (register_status != nullptr)
+    register_status[regnum] = status;
 #endif
 }
 

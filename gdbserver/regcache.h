@@ -36,6 +36,8 @@ struct regcache : public reg_buffer_common
   /* Back-link to the thread to which this regcache belongs.  */
   thread_info *thread = nullptr;
 
+private:
+
   /* Whether the REGISTERS buffer's contents are fetched.  If false,
      we haven't fetched the registers from the target yet.  Note that
      this register cache is _not_ pass-through, unlike GDB's.  Also,
@@ -49,6 +51,8 @@ struct regcache : public reg_buffer_common
   /* See gdbsupport/common-regcache.h.  */
   enum register_status *register_status = nullptr;
 
+public:
+
   /* Constructors.  */
   regcache () = default;
   regcache (const target_desc *tdesc);
@@ -58,6 +62,8 @@ struct regcache : public reg_buffer_common
   /* Deconstructor.  */
   virtual ~regcache ();
 #endif
+
+public:
 
   /* Init the regcache data.  */
   void initialize (const target_desc *tdesc, unsigned char *regbuf);

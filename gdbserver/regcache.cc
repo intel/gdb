@@ -57,7 +57,7 @@ get_thread_regcache (struct thread_info *thread, bool fetch)
 void
 regcache::fetch ()
 {
-  if (registers_valid == 0)
+  if (!registers_valid)
     {
       scoped_restore_current_thread restore_thread;
       gdb_assert (this->thread != nullptr);
@@ -66,7 +66,7 @@ regcache::fetch ()
       /* Invalidate all registers, to prevent stale left-overs.  */
       memset (register_status, REG_UNAVAILABLE, tdesc->reg_defs.size ());
       fetch_inferior_registers (this, -1);
-      registers_valid = 1;
+      registers_valid = true;
     }
 }
 
@@ -128,7 +128,7 @@ regcache_invalidate (void)
 void
 regcache::discard ()
 {
-  registers_valid = 0;
+  registers_valid = false;
 }
 
 void
@@ -145,7 +145,7 @@ regcache::initialize (const target_desc *tdesc,
       this->tdesc = tdesc;
       this->registers
 	= (unsigned char *) xcalloc (1, tdesc->registers_size);
-      this->registers_owned = 1;
+      this->registers_owned = true;
       this->register_status
 	= (unsigned char *) xmalloc (tdesc->reg_defs.size ());
       memset ((void *) this->register_status, REG_UNAVAILABLE,
@@ -158,13 +158,13 @@ regcache::initialize (const target_desc *tdesc,
     {
       this->tdesc = tdesc;
       this->registers = regbuf;
-      this->registers_owned = 0;
+      this->registers_owned = false;
 #ifndef IN_PROCESS_AGENT
       this->register_status = nullptr;
 #endif
     }
 
-  this->registers_valid = 0;
+  this->registers_valid = false;
 }
 
 #ifndef IN_PROCESS_AGENT

@@ -147,7 +147,7 @@ regcache::initialize (const target_desc *tdesc,
 	= (unsigned char *) xcalloc (1, tdesc->registers_size);
       this->registers_owned = true;
       this->register_status
-	= (unsigned char *) xmalloc (tdesc->reg_defs.size ());
+	= (enum register_status *) xmalloc (tdesc->reg_defs.size ());
       memset ((void *) this->register_status, REG_UNAVAILABLE,
 	      tdesc->reg_defs.size ());
 #else
@@ -489,7 +489,7 @@ regcache::get_register_status (int regnum) const
 #ifndef IN_PROCESS_AGENT
   gdb_assert (regnum >= 0 && regnum < tdesc->reg_defs.size ());
   if (register_status != nullptr)
-    return (enum register_status) (register_status[regnum]);
+    return register_status[regnum];
   else
     return REG_VALID;
 #else

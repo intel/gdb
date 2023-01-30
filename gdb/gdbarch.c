@@ -276,6 +276,7 @@ struct gdbarch
   gdbarch_workitem_global_size_ftype *workitem_global_size = nullptr;
   gdbarch_kernel_instance_id_ftype *kernel_instance_id = nullptr;
   gdbarch_entry_point_ftype *entry_point = nullptr;
+  gdbarch_update_architecture_ftype *update_architecture = default_update_architecture;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -563,6 +564,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of workitem_global_size, has predicate.  */
   /* Skip verify of kernel_instance_id, has predicate.  */
   /* Skip verify of entry_point, has predicate.  */
+  /* Skip verify of update_architecture, invalid_p == 0 */
   if (!log.empty ())
     internal_error (_("verify_gdbarch: the following are invalid ...%s"),
 		    log.c_str ());
@@ -1503,6 +1505,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: entry_point = <%s>\n",
 	      host_address_to_string (gdbarch->entry_point));
+  gdb_printf (file,
+	      "gdbarch_dump: update_architecture = <%s>\n",
+	      host_address_to_string (gdbarch->update_architecture));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -5948,4 +5953,21 @@ set_gdbarch_entry_point (struct gdbarch *gdbarch,
 			 gdbarch_entry_point_ftype entry_point)
 {
   gdbarch->entry_point = entry_point;
+}
+
+struct gdbarch *
+gdbarch_update_architecture (struct gdbarch *gdbarch, const target_desc *tdesc)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->update_architecture != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_update_architecture called\n");
+  return gdbarch->update_architecture (gdbarch, tdesc);
+}
+
+void
+set_gdbarch_update_architecture (struct gdbarch *gdbarch,
+				 gdbarch_update_architecture_ftype update_architecture)
+{
+  gdbarch->update_architecture = update_architecture;
 }

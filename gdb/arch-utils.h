@@ -419,4 +419,8 @@ extern enum return_value_convention default_gdbarch_return_value
 extern std::optional<CORE_ADDR> default_get_shadow_stack_pointer
   (gdbarch *gdbarch, regcache *regcache, bool &shadow_stack_enabled);
 
+/* Default implementation of gdbarch update_architecture method.  */
+extern struct gdbarch *
+default_update_architecture (struct gdbarch *gdbarch, const target_desc *tdesc);
+
 #endif /* GDB_ARCH_UTILS_H */

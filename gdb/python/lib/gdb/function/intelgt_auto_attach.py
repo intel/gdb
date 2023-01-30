@@ -169,6 +169,14 @@ intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
         if event is None:
             return
 
+        # For some OSes, .gnu_debugdata section makes GDB create an in-memory
+        # debug object file.  Ignore it and wait for the actual object file.
+        # See gdb/minidebug.c.
+        if event.new_objfile.filename.startswith(".gnu_debugdata for "):
+            DebugLogger.log(
+                f"Skipping hook breakpoint for {event.new_objfile.filename} loaded event.")
+            return
+
         if not 'libigfxdbgxchg64.so' in event.new_objfile.filename:
             return
 

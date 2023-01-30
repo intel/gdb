@@ -1889,3 +1889,13 @@ extern bool gdbarch_entry_point_p (struct gdbarch *gdbarch);
 typedef bool (gdbarch_entry_point_ftype) (CORE_ADDR *entry_p);
 extern bool gdbarch_entry_point (struct gdbarch *gdbarch, CORE_ADDR *entry_p);
 extern void set_gdbarch_entry_point (struct gdbarch *gdbarch, gdbarch_entry_point_ftype *entry_point);
+
+/* An architecture may change while the inferior is running.  For instance, the
+   length of the vector registers in AArch64's Scalable Vector Extension is given
+   by the contents of the VG pseudo-register.
+
+   Return a gdbarch corresponding to the given target description. */
+
+typedef struct gdbarch * (gdbarch_update_architecture_ftype) (struct gdbarch *gdbarch, const target_desc *tdesc);
+extern struct gdbarch * gdbarch_update_architecture (struct gdbarch *gdbarch, const target_desc *tdesc);
+extern void set_gdbarch_update_architecture (struct gdbarch *gdbarch, gdbarch_update_architecture_ftype *update_architecture);

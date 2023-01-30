@@ -325,4 +325,8 @@ extern enum return_value_convention default_gdbarch_return_value
       struct regcache *regcache, struct value **read_value,
       const gdb_byte *writebuf);
 
+/* Default implementation of gdbarch update_architecture method.  */
+extern struct gdbarch *
+default_update_architecture (struct gdbarch *gdbarch, const target_desc *tdesc);
+
 #endif /* ARCH_UTILS_H */

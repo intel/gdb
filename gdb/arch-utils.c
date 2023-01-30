@@ -1121,6 +1121,14 @@ default_update_call_site_pc (struct gdbarch *gdbarch, CORE_ADDR pc)
   return pc;
 }
 
+/* See arch-utils.h.  */
+
+struct gdbarch *
+default_update_architecture (struct gdbarch *gdbarch, const target_desc *tdesc)
+{
+  return gdbarch;
+}
+
 /* Non-zero if we want to trace architecture code.  */
 
 #ifndef GDBARCH_DEBUG

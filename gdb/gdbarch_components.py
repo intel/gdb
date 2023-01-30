@@ -2990,3 +2990,18 @@ Return true if the entry point was acquired in ENTRY_P.
     predicate=True,
     invalid=True,
 )
+
+Method(
+    comment="""
+An architecture may change while the inferior is running.  For instance, the
+length of the vector registers in AArch64's Scalable Vector Extension is given
+by the contents of the VG pseudo-register.
+
+Return a gdbarch corresponding to the given target description.
+""",
+    type="struct gdbarch *",
+    name="update_architecture",
+    params=[("const target_desc *", "tdesc")],
+    predefault="default_update_architecture",
+    invalid=False,
+)

@@ -31,6 +31,9 @@ enum register_status : signed char
     /* The register value is valid and cached.  */
     REG_VALID = 1,
 
+    /* The register value is valid, cached, and has been changed.  */
+    REG_DIRTY = 2,
+
     /* The register value is unavailable.  E.g., we're inspecting a
        traceframe, and this register wasn't collected.  Note that this
        "unavailable" is different from saying the register does not

@@ -256,6 +256,8 @@ regcache::registers_from_string (const char *buf)
 	len = tdesc->registers_size * 2;
     }
   hex2bin (buf, registers, len / 2);
+  /* All register data have been re-written.  Update the statuses.  */
+  memset (register_status, REG_VALID, tdesc->reg_defs.size ());
 }
 
 /* See regcache.h */

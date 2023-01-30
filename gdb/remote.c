@@ -990,6 +990,8 @@ public:
   gdb::array_view<const gdb_byte> thread_info_to_thread_handle (struct thread_info *tp)
     override;
 
+  struct gdbarch *thread_architecture (ptid_t ptid) override;
+
   void stop (ptid_t) override;
 
   void interrupt () override;
@@ -1693,6 +1695,10 @@ struct remote_thread_info : public private_thread_info
   /* This is set to the data address of the access causing the target
      to stop for a watchpoint.  */
   CORE_ADDR watch_data_address = 0;
+
+  /* The architecture corresponding to the target description returned
+     in the last stop reply or threads list.  */
+  struct gdbarch *arch = nullptr;
 
   /* Get the thread's resume state.  */
   enum resume_state get_resume_state () const
@@ -4542,6 +4548,29 @@ remote_target::update_thread_list ()
 	      info->name = std::move (item.name);
 	      info->id_str = std::move (item.id_str);
 	      info->thread_handle = std::move (item.thread_handle);
+
+	      /* If the threads list indicated a target description for this
+		 thread, add it to the thread information.  */
+	      if (item.tdesc_id)
+		{
+		  const target_desc *tdesc
+		      = get_remote_state ()->get_tdesc (*item.tdesc_id);
+
+		  gdb_assert (tdesc != nullptr);
+
+		  /* If there's no thread-specific gdbarch, use the one from the
+		     whole inferior.  */
+		  if (info->arch == nullptr)
+		    info->arch = tp->inf->arch ();
+
+		  gdbarch *new_arch = gdbarch_update_architecture (info->arch,
+								   tdesc);
+		  if (new_arch != info->arch)
+		    {
+		      registers_changed_thread (tp);
+		      info->arch = new_arch;
+		    }
+		}
 	    }
 	}
     }
@@ -8853,6 +8882,39 @@ remote_target::process_stop_reply (stop_reply_up stop_reply,
       && status->kind () != TARGET_WAITKIND_NO_RESUMED)
     {
       remote_notice_new_inferior (ptid, false);
+
+      thread_info *thr = this->find_thread (ptid);
+
+      /* If GDB already knows about this thread, we can give the
+	 architecture-specific code a chance to update the gdbarch based on the
+	 provided target description.  */
+      if (stop_reply->tdesc_id && thr != nullptr)
+	{
+	  remote_state *rs = this->get_remote_state ();
+	  rs->fetch_unknown_tdescs (this);
+
+	  const target_desc *tdesc
+	    = stop_reply->rs->get_tdesc (*stop_reply->tdesc_id);
+
+	  gdb_assert (tdesc != nullptr);
+
+	  /* If there's no gdbarch associated with the stop reply, use the one
+	     from the whole inferior.  */
+	  if (stop_reply->arch == nullptr)
+	    stop_reply->arch = thr->inf->arch ();
+
+	  stop_reply->arch = gdbarch_update_architecture (stop_reply->arch,
+							  tdesc);
+
+	  /* Save stop_reply->arch so that it can be returned by the
+	     thread_architecture method.  */
+	  remote_thread_info *remote_thr = get_remote_thread_info (thr);
+	  if (remote_thr->arch != stop_reply->arch)
+	    {
+	      registers_changed_thread (thr);
+	      remote_thr->arch = stop_reply->arch;
+	    }
+	}
 
       /* Expedited registers.  */
       if (!stop_reply->regcache.empty ())
@@ -15746,6 +15808,27 @@ remote_target::thread_info_to_thread_handle (struct thread_info *tp)
 {
   remote_thread_info *priv = get_remote_thread_info (tp);
   return priv->thread_handle;
+}
+
+/* Implementation of the thread_architecture method for the remote target.  */
+
+struct gdbarch *
+remote_target::thread_architecture (ptid_t ptid)
+{
+  thread_info *thr = this->find_thread (ptid);
+  remote_thread_info *remote_thr;
+
+  if (thr == nullptr)
+    remote_thr = nullptr;
+  else
+    remote_thr = get_remote_thread_info (thr);
+
+  if (remote_thr == nullptr || remote_thr->arch == nullptr)
+    /* The default thread_architecture implementation is the one from
+       process_stratum_target.  */
+    return process_stratum_target::thread_architecture (ptid);
+
+  return remote_thr->arch;
 }
 
 bool

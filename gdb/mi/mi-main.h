@@ -51,6 +51,8 @@ struct mi_suppress_notification
   bool memory;
   /* User selected context changed notification suppressed?  */
   bool user_selected_context;
+  /* Thread state notification suppressed?  */
+  bool thread_state;
 };
 extern struct mi_suppress_notification mi_suppress_notification;
 

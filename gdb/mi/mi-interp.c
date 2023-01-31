@@ -678,8 +678,11 @@ mi_on_normal_stop_1 (struct bpstat *bs, int print_frame)
 	mi_uiout->field_signed ("core", core);
     }
   
-  gdb_puts ("*stopped", mi->raw_stdout);
-  mi_out_put (mi_uiout, mi->raw_stdout);
+  if (!mi_suppress_notification.thread_state)
+    {
+      gdb_puts ("*stopped", mi->raw_stdout);
+      mi_out_put (mi_uiout, mi->raw_stdout);
+    }
   mi_out_rewind (mi_uiout);
   mi_print_timing_maybe (mi->raw_stdout);
   gdb_puts ("\n", mi->raw_stdout);
@@ -1008,12 +1011,15 @@ mi_on_resume_1 (struct mi_interp *mi,
   /* Backwards compatibility.  If doing a wildcard resume and there's
      only one inferior, output "all", otherwise, output each resumed
      thread individually.  */
-  if ((ptid == minus_one_ptid || ptid.is_pid ())
-      && !multiple_inferiors_p ())
-    gdb_printf (mi->raw_stdout, "*running,thread-id=\"all\"\n");
-  else
-    for (thread_info *tp : all_non_exited_threads (targ, ptid))
-      mi_output_running (tp);
+  if (!mi_suppress_notification.thread_state)
+    {
+      if ((ptid == minus_one_ptid || ptid.is_pid ())
+	  && !multiple_inferiors_p ())
+	gdb_printf (mi->raw_stdout, "*running,thread-id=\"all\"\n");
+      else
+	for (thread_info *tp : all_non_exited_threads (targ, ptid))
+	  mi_output_running (tp);
+    }
 
   if (!running_result_record_printed && mi_proceeded)
     {

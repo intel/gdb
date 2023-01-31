@@ -105,6 +105,9 @@ static bool mi_async = false;
    executing, mi_async is *not* updated.  */
 static bool mi_async_1 = false;
 
+/* User-controllable flag to suppress event notification in MI.  */
+static bool user_wants_mi_suppress_notification = false;
+
 static void
 set_mi_async_command (const char *args, int from_tty,
 		      struct cmd_list_element *c)
@@ -2908,6 +2911,27 @@ mi_cmd_complete (const char *command, char **argv, int argc)
 		       result.number_matches == max_completions ? "1" : "0");
 }
 
+/* Implement 'show suppress-mi-notifications'.  */
+
+static void
+show_suppress_mi_notifications (ui_file *file, int from_tty,
+				cmd_list_element *c, const char *value)
+{
+  gdb_printf (file, _("Suppression of printing MI notifications "
+		      "is %s.\n"), value);
+}
+
+/* Implement 'set suppress-mi-notifications'.  */
+
+static void
+set_suppress_mi_notifications (const char *args, int from_tty,
+			       cmd_list_element *c)
+{
+  mi_suppress_notification.user_selected_context
+    = user_wants_mi_suppress_notification;
+  mi_suppress_notification.thread_state
+    = user_wants_mi_suppress_notification;
+}
 
 void _initialize_mi_main ();
 void
@@ -2932,4 +2956,14 @@ Tells GDB whether MI should be in asynchronous mode."),
     = add_alias_cmd ("target-async", mi_async_cmds.show, class_run, 0,
 		     &showlist);
   deprecate_cmd (show_target_async_cmd, "show mi-async");
+
+  add_setshow_boolean_cmd ("suppress-mi-notifications", no_class,
+			   &user_wants_mi_suppress_notification, _("\
+Set whether MI notifications are suppressed."), _("\
+Show whether MI notifications are suppressed."), _("\
+When on, notifications (such as *stopped event)\n\
+in MI are suppressed."),
+			   set_suppress_mi_notifications,
+			   show_suppress_mi_notifications,
+			   &setlist, &showlist);
 }

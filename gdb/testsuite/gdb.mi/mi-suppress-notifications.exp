@@ -1,0 +1,92 @@
+# Copyright (C) 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test for the 'set suppress-mi-notifications' command.
+
+load_lib mi-support.exp
+global mi_gdb_prompt
+
+set MIFLAGS "-i=mi"
+
+standard_testfile
+
+if {[gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
+     executable debug] != "" } {
+    return -1
+}
+
+if {[mi_clean_restart $binfile]} {
+    return
+}
+mi_runto_main
+
+gdb_test_multiple "inferior 1" "Switching to thread 1 notification." {
+    -re "=thread-selected.*$mi_gdb_prompt$" {
+	pass $gdb_test_name
+    }
+    -re "$mi_gdb_prompt$" {
+	fail $gdb_test_name
+    }
+}
+
+mi_gdb_test "-gdb-set suppress-mi-notifications on"
+
+gdb_test_multiple "inferior 1" "Switching to thread 1 notification suppressed." {
+    -re "=thread-selected.*$mi_gdb_prompt$" {
+	fail $gdb_test_name
+    }
+    -re "$mi_gdb_prompt$" {
+	pass $gdb_test_name
+    }
+}
+
+gdb_test_multiple "-exec-next" "Stepping events are suppressed." {
+    -re "\\*running.*$mi_gdb_prompt$" {
+	fail "$gdb_test_name (got running)"
+    }
+    -re "\\*stopped.*$mi_gdb_prompt$" {
+	fail "$gdb_test_name (got stopped)"
+    }
+    -re "$mi_gdb_prompt$" {
+	pass $gdb_test_name
+    }
+}
+
+# Now check that suppression can be turned back off.
+mi_gdb_test "-gdb-set suppress-mi-notifications off"
+
+gdb_test_multiple "inferior 1" "Switching to thread 1 notification is here again." {
+    -re "=thread-selected.*$mi_gdb_prompt$" {
+	pass $gdb_test_name
+    }
+    -re "$mi_gdb_prompt$" {
+	fail "$gdb_test_name (no =thread-selected)"
+    }
+}
+
+set got_running 0
+set got_stopped 0
+gdb_test_multiple "-exec-next" "Stepping events are not suppressed." {
+    -re "\\*running.*" {
+	set got_running 1
+	exp_continue
+    }
+    -re "\\*stopped.*$mi_gdb_prompt$" {
+	set got_stopped 1
+    }
+}
+
+gdb_assert {$got_running} "got running notification back"
+gdb_assert {$got_stopped} "got stopped notification back"

@@ -31128,6 +31128,7 @@ additional changes that have occurred.  Those changes can either be a
 consequence of @sc{gdb/mi} commands (e.g., a breakpoint modified) or a result of
 target activity (e.g., target stopped).
 
+@subheading List of Possible Async Records
 The following is the list of possible async records:
 
 @table @code
@@ -31339,6 +31340,58 @@ thread group corresponding to the affected inferior.  The optional
 @code{type="code"} part is reported if the memory written to holds
 executable code.
 @end table
+
+@subheading The @code{-gdb-set suppress-mi-notifications} Command
+@subsubheading Synopsis
+
+@smallexample
+-gdb-set suppress-mi-notifications @r{[}on@r{|}off@r{]}
+@end smallexample
+
+When @code{on}, async records @code{=thread-selected}, @code{*stopped}
+and @code{*running} are suppressed.  When @code{off}, all async records
+are shown as usual.  The default value is @code{off}.  This setting might
+be useful for IDEs to avoid refreshing thread views on events that are
+not shown to the end user.
+
+@subsubheading @value{GDBN} Command
+
+The corresponding @value{GDBN} CLI command
+is @samp{set suppress-mi-notifications}.  To suppress CLI notifications
+use @samp{set suppress-cli-notifications}.
+
+@subsubheading Example
+@example
+-gdb-set suppress-mi-notifications on
+^done
+(gdb)
+inferior 1
+&"inferior 1\n"
+^done
+(gdb)
+-exec-next
+^running
+(gdb)
+
+(gdb)
+-gdb-set suppress-mi-notifications off
+^done
+(gdb)
+inferior 1
+&"inferior 1\n"
+~"[Switching to inferior 1 [process 64778] (/home/local/main)]\n"
+~"[Switching to thread 1 (process 64778)]\n"
+~"#0  main () at /home/local/main.c:24\n"
+~"24\t  global++;\n"
+=thread-selected,id="1",frame=@{level="0",addr="0x0000555555555140",func="main",args=[],file="/home/local/main.c",fullname="/home/local/main.c",line="24",arch="i386:x86-64"@}
+^done
+(gdb)
+-exec-next
+^running
+*running,thread-id="all"
+(gdb)
+*stopped,reason="end-stepping-range",frame=@{addr="0x000055555555514f",func="main",args=[],file="/home/local/main.c",fullname="/home/local/main.c",line="25",arch="i386:x86-64"@},thread-id="1",stopped-threads="all",core="16"
+@end example
 
 @node GDB/MI Breakpoint Information
 @subsection @sc{gdb/mi} Breakpoint Information

@@ -5,6 +5,13 @@
 
 * New commands
 
+set suppress-mi-notifications (on|off)
+show suppress-mi-notifications
+  This controls whether printing the notifications is suppressed for MI.
+  Notifications such as "thread-selected" (thread context switch),
+  "frame-selected" (frame context switch), "*stopped" (thread stopped),
+  "running" (thread running) can be suppressed.
+
 maint jit dump
   Dump an in-memory JIT object into a file.
 

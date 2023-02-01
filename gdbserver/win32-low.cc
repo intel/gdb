@@ -1051,7 +1051,7 @@ windows_nat::handle_access_violation (const EXCEPTION_RECORD *rec)
 static void
 maybe_adjust_pc ()
 {
-  struct regcache *regcache = get_thread_regcache (current_thread, 1);
+  struct regcache *regcache = get_thread_regcache (current_thread);
   child_fetch_inferior_registers (regcache, -1);
 
   windows_thread_info *th = thread_rec (current_thread_ptid (),

@@ -5702,7 +5702,12 @@ handle_inferior_event (struct execution_control_state *ecs)
 	    || stop_soon == STOP_QUIETLY_REMOTE)
 	  {
 	    infrun_debug_printf ("quietly stopped");
+	    /* HACK: In non-stop mode, the STOP_SOON flag on the module load
+	       event is set to STOP_QUIETLY_REMOTE, so this is where the
+	       loaded module needs to be handled and ack'ed.  */
+	    handle_solib_event ();
 	    stop_waiting (ecs);
+	    ack_pending_solibs ();
 	    return;
 	  }
 

@@ -130,6 +130,9 @@ struct ze_device_info
      available and generating stop events.  Therefore we pay care to
      prevent underflowing.  */
   unsigned long nresumed = 0;
+
+  /* Number of interrupts sent to this target.  */
+  unsigned long ninterrupts = 0;
 };
 
 /* A thread's resume state.
@@ -253,6 +256,17 @@ ze_thread_id_all ()
   all.thread = UINT32_MAX;
 
   return all;
+}
+
+/* Return true if TID is the all thread id.  */
+
+static inline bool
+ze_is_thread_id_all (ze_device_thread_t tid)
+{
+  return (tid.slice == UINT32_MAX
+	  && tid.subslice == UINT32_MAX
+	  && tid.eu == UINT32_MAX
+	  && tid.thread == UINT32_MAX);
 }
 
 /* Return the level-zero thread id for THREAD.  */

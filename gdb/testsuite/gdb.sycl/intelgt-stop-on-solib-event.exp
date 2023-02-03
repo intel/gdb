@@ -130,6 +130,11 @@ foreach device $sycl_device_list {
 	foreach_with_prefix stop_on_solib_events {0 1} {
 	    foreach_with_prefix auto_solib_add {"on" "off"} {
 		foreach_with_prefix non_stop_mode {"off" "on"} {
+		    if {$stop_on_solib_events == 1 && $non_stop_mode eq "on"} {
+			kfail "JIRA IGDB/3763" \
+			    "stopping at module load events in non-stop mode"
+			continue
+		    }
 		    clean_restart $binfile
 		    test_solib $device $stop_on_solib_events $auto_solib_add $non_stop_mode
 		}

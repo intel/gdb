@@ -984,6 +984,9 @@ ze_interrupt (ze_device_info &device, ze_device_thread_t thread)
   switch (status)
     {
     case ZE_RESULT_SUCCESS:
+      if (ze_is_thread_id_all (thread))
+	device.ninterrupts++;
+
       break;
 
     case ZE_RESULT_NOT_READY:
@@ -1425,6 +1428,16 @@ ze_target::fetch_events (ze_device_info &device)
 	    dprintf ("device %lu's nresumed=%ld%s",
 		     device.ordinal, device.nresumed,
 		     ((device.nresumed == device.nthreads) ? " (all)" : ""));
+
+	    /* This is the response to an interrupt if TID is "all".  */
+	    if (ze_is_thread_id_all (tid))
+	      {
+		if (device.ninterrupts > 0)
+		  device.ninterrupts--;
+		else
+		  warning (_("ignoring spurious stop-all event on "
+			     "device %lu"), device.ordinal);
+	      }
 	  }
 	  continue;
 
@@ -1460,6 +1473,16 @@ ze_target::fetch_events (ze_device_info &device)
 	    dprintf ("device %lu's nresumed=%ld%s",
 		     device.ordinal, device.nresumed,
 		     ((device.nresumed == device.nthreads) ? " (all)" : ""));
+
+	    /* This is the response to an interrupt if TID is "all".  */
+	    if (ze_is_thread_id_all (tid))
+	      {
+		if (device.ninterrupts > 0)
+		  device.ninterrupts--;
+		else
+		  warning (_("ignoring spurious unavailable-all event on "
+			     "device %lu"), device.ordinal);
+	      }
 	  }
 	  continue;
 	}
@@ -2426,7 +2449,7 @@ ze_target::pause_all (bool freeze)
       if (device->process == nullptr)
 	continue;
 
-      if (device->nresumed != 0)
+      if ((device->nresumed != 0) && (device->ninterrupts == 0))
 	ze_interrupt (*device, all);
     }
 

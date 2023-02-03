@@ -53,6 +53,7 @@ proc test_solib {device stop_on_solib_events auto_solib_add non_stop_mode} {
 	set test_name "shared library loaded"
 	set in_memory_lib "in-memory-$hex-$hex"
 
+	setup_kfail "JIRA XDEPS/5103" "*-*-*"
 	gdb_test_multiple "continue" $test_name {
 	    -re -wrap "Inferior loaded (${in_memory_lib}(\[\\s\r\n\])*)+" {
 		with_test_prefix "iteration $num_solib_event" {
@@ -98,6 +99,7 @@ proc test_solib {device stop_on_solib_events auto_solib_add non_stop_mode} {
 	}
 
 	verbose -log "stopped at solib events $num_solib_event times"
+	setup_kfail "JIRA IGDB/3763" "*-*-*"
 	gdb_assert {$num_solib_event > 0} "stopped at module load events"
     } else {
 	# The Intel GT target requires the kernel modules to be ack'ed.

@@ -1,4 +1,4 @@
-# Copyright 2022 Free Software Foundation, Inc.
+# Copyright 2022-2024 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -52,9 +52,10 @@ proc test_solib {device stop_on_solib_events auto_solib_add non_stop_mode} {
 	set num_solib_event 0
 	set test_name "shared library loaded"
 	set in_memory_lib "<in-memory@$hex-$hex>"
+	set switching_to_unavailable_thread "Switching to thread\[^\r\n]+unavailable.*"
 
 	gdb_test_multiple "continue" $test_name {
-	    -re -wrap "Inferior loaded (${in_memory_lib}(\[\\s\r\n\])*)+" {
+	    -re -wrap "${switching_to_unavailable_thread}Inferior loaded (${in_memory_lib}(\[\\s\r\n\])*)+" {
 		with_test_prefix "iteration $num_solib_event" {
 		    # Stopping at a module load event.
 		    incr num_solib_event

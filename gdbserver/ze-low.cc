@@ -1974,26 +1974,24 @@ ze_target::resume (thread_resume *resume_info, size_t n)
       });
 
   /* Check if there is a thread with a pending event for any of the
-     resume requests.  We would omit actually resuming the target if
-     there is such a thread.  */
-  if (!non_stop)
+     resume requests.  In all-stop mode, we would omit actually
+     resuming the target if there is such a thread.  In non-stop mode,
+     we omit resuming the thread itself.  */
+  size_t num_eventing = 0;
+  for (size_t i = 0; i < n; ++i)
     {
-      size_t num_eventing = 0;
-      for (size_t i = 0; i < n; ++i)
-	{
-	  const thread_resume &rinfo = resume_info[i];
-	  resume_kind rkind = rinfo.kind;
-	  ptid_t rptid = rinfo.thread;
+      const thread_resume &rinfo = resume_info[i];
+      resume_kind rkind = rinfo.kind;
+      ptid_t rptid = rinfo.thread;
 
-	  if (rkind == resume_stop)
-	    continue;
+      if (rkind == resume_stop)
+	continue;
 
-	  num_eventing += mark_eventing_threads (rptid, rkind);
-	}
-
-      if (num_eventing > 0)
-	return;
+      num_eventing += mark_eventing_threads (rptid, rkind);
     }
+
+  if ((num_eventing > 0) && !non_stop)
+    return;
 
   /* Let's hope that we're not getting any conflicting resume requests.
 
@@ -2025,13 +2023,31 @@ ze_target::resume (thread_resume *resume_info, size_t n)
 	      if ((rpid != -1) && (rpid != pid))
 		continue;
 
-	      resume (*device, rinfo.kind);
+	      resume_kind rkind = rinfo.kind;
+
+	      /* In non-stop mode, resume the threads individually,
+		 if there are threads with pending events.  To reduce
+		 the number of resume requests on the target, we may
+		 try to find a wildcard thread id that covers the
+		 range of the stopped threads, but we are not doing
+		 this at the moment.  */
+	      if (non_stop && (num_eventing > 0))
+		{
+		  for_each_thread (pid, [this, rkind] (thread_info *tp)
+		    {
+		      if (!ze_has_priority_waitstatus (tp))
+			resume (tp, rkind);
+		    });
+		}
+	      else
+		resume (*device, rkind);
 	    }
 	}
       else
 	{
 	  thread_info *tp = find_thread_ptid (rptid);
-	  resume (tp, rinfo.kind);
+	  if (!ze_has_priority_waitstatus (tp))
+	    resume (tp, rinfo.kind);
 	}
     }
 }

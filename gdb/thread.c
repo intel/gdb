@@ -1409,7 +1409,9 @@ print_thread_row (struct ui_out *uiout, thread_info *tp,
 	 threads we do not have PC.
 	 Note: inactive threads might still have a valid PC and frame, just
 	 all lanes are inactive, so we cannot read SIMD-dependent values.  */
-      if (!is_unavailable)
+      if (is_unavailable)
+	uiout->text ("(unavailable)\n");
+      else
 	{
 	  scoped_restore_current_simd_lane restore_lane {tp};
 	  if (!lanes.empty ())
@@ -1436,13 +1438,6 @@ print_thread_row (struct ui_out *uiout, thread_info *tp,
 	      if (bp != nullptr && bp->find_hit_lane_mask (hit_lane_mask))
 		uiout->field_fmt ("hit-lanes-mask", "0x%x", hit_lane_mask);
 	    }
-	}
-      else
-	{
-	  /* Lanes in this row are inactive.  This can happen if the current
-	     thread enters a conditional branch or all lanes in thread are
-	     inactive.  */
-	  uiout->text ("(inactive)\n");
 	}
     }
 
@@ -2529,16 +2524,21 @@ thread_command (const char *tidstr, int from_tty)
 	  std::string status_note = "";
 	  std::vector<int> lanes;
 
-	  if (tp->state == THREAD_STOPPED && tp->has_simd_lanes ())
+	  if (tp->state == THREAD_STOPPED)
 	    {
-	      if (tp->is_active ())
+	      if (tp->is_unavailable ())
+		status_note = " (unavailable)";
+	      else if (tp->has_simd_lanes ())
 		{
-		  int lane = tp->current_simd_lane ();
-		  lane_info = " lane " + std::to_string (lane);
-		  lanes.push_back (lane);
+		  if (tp->is_active ())
+		    {
+		      int lane = tp->current_simd_lane ();
+		      lane_info = " lane " + std::to_string (lane);
+		      lanes.push_back (lane);
+		    }
+		  else
+		    status_note = " (inactive)";
 		}
-	      else
-		status_note = " (inactive)";
 	    }
 	  else if (tp->state == THREAD_EXITED)
 	    status_note = " (exited)";
@@ -2722,17 +2722,24 @@ print_selected_thread_frame (struct ui_out *uiout,
 	  uiout->field_string ("new-thread-id", print_thread_id (tp, &lanes));
 	  uiout->text (" (");
 	  uiout->text (target_pid_to_str (inferior_ptid));
-	  if (tp->state == THREAD_STOPPED && tp->has_simd_lanes ())
+	  if (tp->state == THREAD_STOPPED)
 	    {
-	      if (is_active)
+	      if (tp->is_unavailable ())
+		uiout->text (") unavailable]");
+	      else if (tp->has_simd_lanes ())
 		{
-		  uiout->text (" lane ");
-		  int lane = tp->current_simd_lane ();
-		  uiout->text (std::to_string (lane));
-		  uiout->text (")]");
+		  if (is_active)
+		    {
+		      uiout->text (" lane ");
+		      int lane = tp->current_simd_lane ();
+		      uiout->text (std::to_string (lane));
+		      uiout->text (")]");
+		    }
+		  else
+		    uiout->text (") inactive]");
 		}
 	      else
-		uiout->text (") inactive]");
+		uiout->text (")]");
 	    }
 	  else
 	    uiout->text (")]");

@@ -163,6 +163,7 @@ static struct
   thread_info_ref thread;
   int simd_lane;
   unsigned int emask;
+  bool is_unavailable;
 } previous_focus;
 
 /* See infrun.h.  */
@@ -175,6 +176,7 @@ update_previous_thread ()
       previous_focus.thread = nullptr;
       previous_focus.simd_lane = -1;
       previous_focus.emask = 0x0;
+      previous_focus.is_unavailable = false;
     }
   else
     {
@@ -182,6 +184,7 @@ update_previous_thread ()
       previous_focus.thread = thread_info_ref::new_reference (tp);
       previous_focus.simd_lane = tp->current_simd_lane ();
       previous_focus.emask = tp->active_simd_lanes_mask ();
+      previous_focus.is_unavailable = tp->is_unavailable ();
     }
 }
 
@@ -9303,6 +9306,7 @@ normal_stop ()
       bool has_simd_lanes = current_thread->has_simd_lanes ();
       int current_simd_lane = current_thread->current_simd_lane ();
       unsigned int lanes_mask = current_thread->active_simd_lanes_mask ();
+      bool is_unavailable = current_thread->is_unavailable ();
 
       /* Do not notify a user about thread switching in non-stop mode.
 	 In that mode, as we don't want GDB to switch threads behind
@@ -9320,13 +9324,23 @@ normal_stop ()
 	  SWITCH_THRU_ALL_UIS ()
 	    {
 	      target_terminal::ours_for_output ();
-	      std::string lane_info = "";
-
-	      if (has_simd_lanes)
-		lane_info
-		  = ((lanes_mask == 0x0)
-		     ? " (inactive)"
-		     : " lane " + std::to_string (current_simd_lane));
+	      /* Notify the user if the new current thread is unavailable or
+		 inactive or an active SIMD lane is selected.  */
+	      const std::string state = [&] () -> std::string
+		{
+		  if (is_unavailable)
+		    return " unavailable";
+		  else if (has_simd_lanes)
+		    {
+		      if (lanes_mask == 0x0)
+			return " inactive";
+		      else
+			return std::string {" lane "}
+			  + std::to_string (current_simd_lane);
+		    }
+		  else
+		    return std::string {};
+		} ();
 
 	      std::vector<int> lanes;
 	      if (has_simd_lanes && (lanes_mask != 0x0))
@@ -9335,41 +9349,58 @@ normal_stop ()
 	      gdb_printf (_("[Switching to thread %s (%s%s)]\n"),
 			  print_thread_id (current_thread, &lanes),
 			  target_pid_to_str (inferior_ptid).c_str (),
-			  lane_info.c_str ());
+			  state.c_str ());
 	      annotate_thread_changed ();
 	    }
 
 	  update_previous_thread ();
 	}
-      else if (has_simd_lanes
-	       && previous_focus.thread != current_thread)
+      else if (previous_focus.thread == current_thread)
 	{
-	  /* If the thread did not change, there could be a change in SIMD
-	     lanes.  */
-	  if (previous_focus.emask != 0x0 && lanes_mask == 0x0)
-	    {
-		/* Thread became inactive.  */
-		SWITCH_THRU_ALL_UIS ()
-		{
-		  target_terminal::ours_for_output ();
+	  /* If the thread has not changed there still could have been a notable
+	     change in the thread state.  */
 
-		  ptid_t ptid = current_thread->ptid;
-		  gdb_printf (_("[Thread %s (%s) became inactive]\n"),
-			      print_thread_id (current_thread),
-			      target_pid_to_str (ptid).c_str ());
-		}
-	    }
-	  else if ((previous_focus.emask == 0x0 && lanes_mask != 0x0)
-		   || previous_focus.simd_lane != current_simd_lane)
+	  /* Thread became inactive or unavailable.  */
+	  const std::string state = [&] () -> std::string
 	    {
-	      /* Current thread is the same, but either became active
-		 or SIMD lane has changed.  */
+	      if (is_unavailable && !previous_focus.is_unavailable)
+		return "unavailable";
+	      else if (has_simd_lanes
+		       && previous_focus.emask != 0x0
+		       && lanes_mask == 0x0)
+		return "inactive";
+	      else
+		return {};
+	    } ();
+
+	  if (!state.empty ())
+	    {
+	      /* There is a state to publish.  */
 	      SWITCH_THRU_ALL_UIS ()
 		{
 		  target_terminal::ours_for_output ();
 
-		  gdb_printf (_("[Switching to SIMD lane %d]\n"),
-			      current_simd_lane);
+		  ptid_t ptid = current_thread->ptid;
+		  gdb_printf (_("[Thread %s (%s) became %s]\n"),
+			      print_thread_id (current_thread),
+			      target_pid_to_str (ptid).c_str (),
+			      state.c_str ());
+		}
+	    }
+	  if (has_simd_lanes)
+	    {
+	      if ((previous_focus.emask == 0x0 && lanes_mask != 0x0)
+		  || previous_focus.simd_lane != current_simd_lane)
+		{
+		  /* Current thread is the same, but either became active
+		     or SIMD lane has changed.  */
+		  SWITCH_THRU_ALL_UIS ()
+		    {
+		      target_terminal::ours_for_output ();
+
+		      gdb_printf (_("[Switching to SIMD lane %d]\n"),
+				  current_simd_lane);
+		    }
 		}
 	    }
 	  update_previous_thread ();

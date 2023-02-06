@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Test the "info threads" output for inactive threads.
+# Test the "info threads" output for unavailable threads.
 
 load_lib sycl.exp
 
@@ -54,13 +54,13 @@ foreach device $sycl_device_list {
 
 	# At this point, the device must have been initialized but the kernel
 	# is not yet offloaded.  So, there must be a second inferior but all
-	# of its threads are inactive.
+	# of its threads are unavailable.
 
 	set fill "\[^\r\n\]*"
 
 	foreach flag {"" "-stopped"} {
 	    set found_main 0
-	    set num_inactive 0
+	    set num_unavailable 0
 	    gdb_test_multiple "info threads $flag" "info threads $flag" -lbl {
 		-re "Id${fill}Target Id${fill}Frame${fill}" {
 		    exp_continue
@@ -69,19 +69,19 @@ foreach device $sycl_device_list {
 		    incr found_main
 		    exp_continue
 		}
-		-re "${decimal}\.${decimal}${fill}Thread ${fill}\\(inactive\\)" {
-		    incr num_inactive
+		-re "${decimal}\.${decimal} ${fill}\\(unavailable\\)" {
+		    incr num_unavailable
 		    exp_continue
 		}
 		-re "$gdb_prompt $" {
 		    gdb_assert {$found_main == 1} \
 			"$gdb_test_name: found main thread"
 		    if {$flag eq ""} {
-			gdb_assert {$num_inactive > 0} \
-			    "$gdb_test_name: num inactive"
+			gdb_assert {$num_unavailable > 0} \
+			    "$gdb_test_name: num unavailable"
 		    } else {
-			gdb_assert {$num_inactive == 0} \
-			    "$gdb_test_name: num inactive"
+			gdb_assert {$num_unavailable == 0} \
+			    "$gdb_test_name: num unavailable"
 		    }
 		}
 	    }

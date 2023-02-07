@@ -136,6 +136,7 @@ regcache_invalidate (void)
 void
 regcache::discard ()
 {
+  memset (registers, 0, tdesc->registers_size);
 #ifndef IN_PROCESS_AGENT
   memset ((void *) register_status, REG_UNKNOWN, tdesc->reg_defs.size ());
 #endif
@@ -149,16 +150,17 @@ regcache::initialize (const target_desc *tdesc,
   if (regbuf == NULL)
     {
 #ifndef IN_PROCESS_AGENT
+      this->tdesc = tdesc;
+      this->registers
+	= (unsigned char *) xmalloc (tdesc->registers_size);
+      this->registers_owned = true;
+      this->register_status
+	= (enum register_status *) xmalloc (tdesc->reg_defs.size ());
+
       /* Make sure to zero-initialize the register cache when it is
 	 created, in case there are registers the target never
 	 fetches.  This way they'll read as zero instead of
 	 garbage.  */
-      this->tdesc = tdesc;
-      this->registers
-	= (unsigned char *) xcalloc (1, tdesc->registers_size);
-      this->registers_owned = true;
-      this->register_status
-	= (enum register_status *) xmalloc (tdesc->reg_defs.size ());
       discard ();
 #else
       gdb_assert_not_reached ("can't allocate memory from the heap");

@@ -390,22 +390,13 @@ supply_register_by_name_zeroed (struct regcache *regcache,
 void
 regcache::supply_regblock (const void *buf)
 {
-  if (buf != nullptr)
-    {
-      memcpy (registers, buf, tdesc->registers_size);
+  gdb_assert (buf != nullptr);
+
+  memcpy (registers, buf, tdesc->registers_size);
 #ifndef IN_PROCESS_AGENT
-      for (int i = 0; i < tdesc->reg_defs.size (); i++)
-	set_register_status (i, REG_VALID);
+  for (int i = 0; i < tdesc->reg_defs.size (); i++)
+    set_register_status (i, REG_VALID);
 #endif
-    }
-  else
-    {
-      memset (registers, 0, tdesc->registers_size);
-#ifndef IN_PROCESS_AGENT
-      for (int i = 0; i < tdesc->reg_defs.size (); i++)
-	set_register_status (i, REG_UNAVAILABLE);
-#endif
-    }
 }
 
 #ifndef IN_PROCESS_AGENT

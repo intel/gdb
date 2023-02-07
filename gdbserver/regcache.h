@@ -103,8 +103,7 @@ public:
   void registers_from_string (const char *buf);
 
   /* Supply the whole register set whose contents are stored in BUF,
-     to this regcache.  If BUF is NULL, all the registers' values are
-     recorded as unavailable.  */
+     to this regcache.  BUF cannot be NULL.  */
   void supply_regblock (const void *buf);
 
   /* Return the pointer to the register with number REGNUM.  */

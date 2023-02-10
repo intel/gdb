@@ -58,6 +58,13 @@ foreach device_info ${device_list} {
 	set mod_re [multi_line \
 	    "\\d+:\[ \t\]+${int_type} module_declarations::var_c;" \
 	    "\\d+:\[ \t\]+${int_type} module_declarations::var_d;"]
+
+	# For GPU offload we have to switch to the host inferior to access host
+	# variables.
+	if {[require_openmp_device "GPU"] && [omp_is_level_zero_debug_api]} {
+	    gdb_test "inferior 1" "Switching to inferior 1.*" \
+		"switch to inferior 1"
+	}
 	gdb_test_multiple "info variables -n" "" {
 	    -re "\r\nAll defined variables:" {
 		if { ${state} == 0 } { set state 1 }
@@ -81,6 +88,10 @@ foreach device_info ${device_list} {
 		    fail ${gdb_test_name}
 		}
 	    }
+	}
+	if {[require_openmp_device "GPU"] && [omp_is_level_zero_debug_api]} {
+	    gdb_test "inferior 2" "Switching to inferior 2.*" \
+		"switch to inferior 2"
 	}
 
 	gdb_breakpoint [gdb_get_line_number "args-check"]

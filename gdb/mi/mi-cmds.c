@@ -38,7 +38,7 @@ struct mi_command_mi : public mi_command
      constructor, FUNC is the function called from do_invoke, which
      implements this MI command.  */
   mi_command_mi (const char *name, mi_cmd_argv_ftype func,
-		 int *suppress_notification)
+		 bool *suppress_notification)
     : mi_command (name, suppress_notification),
       m_argv_function (func)
   {
@@ -75,7 +75,7 @@ struct mi_command_cli : public mi_command
      forwarded to CLI_NAME as its argument string, otherwise, if ARGS_P is
      false, nullptr is send to CLI_NAME as its argument string.  */
   mi_command_cli (const char *name, const char *cli_name, bool args_p,
-		  int *suppress_notification)
+		  bool *suppress_notification)
     : mi_command (name, suppress_notification),
       m_cli_name (cli_name),
       m_args_p (args_p)
@@ -148,7 +148,7 @@ remove_mi_cmd_entries (remove_mi_cmd_entries_ftype callback)
 
 static void
 add_mi_cmd_mi (const char *name, mi_cmd_argv_ftype function,
-	       int *suppress_notification = nullptr)
+	       bool *suppress_notification = nullptr)
 {
   mi_command_up command (new mi_command_mi (name, function,
 					    suppress_notification));
@@ -163,7 +163,7 @@ add_mi_cmd_mi (const char *name, mi_cmd_argv_ftype function,
 
 static void
 add_mi_cmd_cli (const char *name, const char *cli_name, int args_p,
-		int *suppress_notification = nullptr)
+		bool *suppress_notification = nullptr)
 {
   mi_command_up command (new mi_command_cli (name, cli_name, args_p != 0,
 					     suppress_notification));
@@ -174,7 +174,7 @@ add_mi_cmd_cli (const char *name, const char *cli_name, int args_p,
 
 /* See mi-cmds.h.  */
 
-mi_command::mi_command (const char *name, int *suppress_notification)
+mi_command::mi_command (const char *name, bool *suppress_notification)
   : m_name (name),
     m_suppress_notification (suppress_notification)
 {
@@ -183,11 +183,11 @@ mi_command::mi_command (const char *name, int *suppress_notification)
 
 /* See mi-cmds.h.  */
 
-gdb::optional<scoped_restore_tmpl<int>>
+gdb::optional<scoped_restore_tmpl<bool>>
 mi_command::do_suppress_notification () const
 {
   if (m_suppress_notification != nullptr)
-    return scoped_restore_tmpl<int> (m_suppress_notification, 1);
+    return scoped_restore_tmpl<bool> (m_suppress_notification, true);
   else
     return {};
 }

@@ -155,7 +155,7 @@ struct mi_command
      this command.  The SUPPRESS_NOTIFICATION pointer is a flag which will
      be set to 1 when this command is invoked, and reset to its previous
      value once the command invocation has completed.  */
-  mi_command (const char *name, int *suppress_notification);
+  mi_command (const char *name, bool *suppress_notification);
 
   /* Destructor.  */
   virtual ~mi_command () = default;
@@ -189,7 +189,7 @@ struct mi_command
 
      If this command was created without a suppress notifications points,
      then this function returns an empty gdb::optional.  */
-  gdb::optional<scoped_restore_tmpl<int>> do_suppress_notification () const;
+  gdb::optional<scoped_restore_tmpl<bool>> do_suppress_notification () const;
 
 private:
 
@@ -197,7 +197,7 @@ private:
   const char *m_name;
 
   /* Pointer to integer to set during command's invocation.  */
-  int *m_suppress_notification;
+  bool *m_suppress_notification;
 };
 
 /* A command held in the global mi_cmd_table.  */

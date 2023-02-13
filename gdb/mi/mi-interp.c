@@ -482,10 +482,10 @@ mi_interp::on_about_to_proceed ()
 
 struct mi_suppress_notification mi_suppress_notification =
   {
-    0,
-    0,
-    0,
-    0,
+    false,
+    false,
+    false,
+    false,
   };
 
 void

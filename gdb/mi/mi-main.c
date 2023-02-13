@@ -2257,7 +2257,7 @@ mi_cmd_execute (struct mi_parse *parse)
 
   gdb_assert (parse->cmd != nullptr);
 
-  gdb::optional<scoped_restore_tmpl<int>> restore_suppress_notification
+  gdb::optional<scoped_restore_tmpl<bool>> restore_suppress_notification
     = parse->cmd->do_suppress_notification ();
 
   parse->cmd->invoke (parse);

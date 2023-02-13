@@ -42,15 +42,15 @@ extern int mi_proceeded;
 struct mi_suppress_notification
 {
   /* Breakpoint notification suppressed?  */
-  int breakpoint;
+  bool breakpoint;
   /* Command param changed notification suppressed?  */
-  int cmd_param_changed;
+  bool cmd_param_changed;
   /* Traceframe changed notification suppressed?  */
-  int traceframe;
+  bool traceframe;
   /* Memory changed notification suppressed?  */
-  int memory;
+  bool memory;
   /* User selected context changed notification suppressed?  */
-  int user_selected_context;
+  bool user_selected_context;
 };
 extern struct mi_suppress_notification mi_suppress_notification;
 

@@ -723,10 +723,10 @@ mi_about_to_proceed (bool step)
 
 struct mi_suppress_notification mi_suppress_notification =
   {
-    0,
-    0,
-    0,
-    0,
+    false,
+    false,
+    false,
+    false,
   };
 
 /* Emit notification on changing a traceframe.  */

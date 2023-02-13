@@ -575,7 +575,7 @@ mi_cmd_var_assign (const char *command, char **argv, int argc)
   /* MI command '-var-assign' may write memory, so suppress memory
      changed notification if it does.  */
   scoped_restore save_suppress
-    = make_scoped_restore (&mi_suppress_notification.memory, 1);
+    = make_scoped_restore (&mi_suppress_notification.memory, true);
 
   if (!varobj_set_value (var, expression))
     error (_("-var-assign: Could not assign "

@@ -2052,6 +2052,73 @@ ze_target::resume (thread_resume *resume_info, size_t n)
     }
 }
 
+/* Look for a thread preferably with a priority stop
+   event.  If we cannot find such an event, we look for an
+   interrupt-related stop event, e.g.  a stop because of an
+   external Ctrl-C or an internal pause_all request.  We pick
+   a THREAD_UNAVAILABLE event for reporting as the last resort.
+
+   We first make an iteration over the threads to figure out
+   what kind of an event we can report.  Once found, we select
+   a thread randomly.
+
+   In all-stop mode, we will ignore unavailable threads when
+   resuming the target.  So, unless we explicitly try to interact
+   with them, unavailable threads should be transparent to an
+   all-stop target.
+
+   In non-stop mode, we give more time for unavailable threads to
+   become available and report an event.  */
+
+static thread_info *
+ze_find_eventing_thread (ptid_t ptid)
+{
+  using thread_predicate = bool (*) (const thread_info *);
+  thread_predicate is_stopped = [] (const thread_info *tp)
+  {
+    return (ze_thread (tp)->waitstatus.kind () == TARGET_WAITKIND_STOPPED);
+  };
+
+  thread_predicate predicate = nullptr;
+  for (thread_info *tp : all_threads)
+    {
+      if (!tp->id.matches (ptid))
+	continue;
+
+      /* Only consider threads that were resumed.  */
+      ze_thread_resume_state_t state = ze_resume_state (tp);
+      if (state == ze_thread_resume_none)
+	continue;
+
+      if (ze_has_priority_waitstatus (tp))
+	{
+	  predicate = ze_has_priority_waitstatus;
+	  break;
+	}
+
+      if (is_stopped (tp))
+	predicate = is_stopped;
+      else if ((predicate == nullptr) && ze_has_waitstatus (tp))
+	predicate = ze_has_waitstatus;
+    }
+
+  thread_info *thread = nullptr;
+  if (predicate != nullptr)
+    thread = find_thread_in_random ([ptid, predicate] (thread_info *tp)
+      {
+	if (!tp->id.matches (ptid))
+	  return false;
+
+	/* Only consider threads that were resumed.  */
+	ze_thread_resume_state_t state = ze_resume_state (tp);
+	if (state == ze_thread_resume_none)
+	  return false;
+
+	return predicate (tp);
+      });
+  return thread;
+}
+
 ptid_t
 ze_target::wait (ptid_t ptid, target_waitstatus *status,
 		 target_wait_flags options)
@@ -2122,67 +2189,7 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 	  return ptid_t (pid_of (process));
 	}
 
-      /* We now look for a thread preferably with a priority stop
-	 event.  If we cannot find such an event, we look for an
-	 interrupt-related stop event, e.g.  a stop because of an
-	 external Ctrl-C or an internal pause_all request.  We pick
-	 a THREAD_UNAVAILABLE event for reporting as the last resort.
-
-	 We first make an iteration over the threads to figure out
-	 what kind of an event we can report.  Once found, we select
-	 a thread randomly.
-
-	 In all-stop mode, we will ignore unavailable threads when
-	 resuming the target.  So, unless we explicitly try to interact
-	 with them, unavailable threads should be transparent to an
-	 all-stop target.
-
-	 In non-stop mode, we give more time for unavailable threads to
-	 become available and report an event.  */
-      using thread_predicate = bool (*) (const thread_info *);
-      thread_predicate is_stopped = [] (const thread_info *tp)
-	{
-	  return (ze_thread (tp)->waitstatus.kind ()
-		  == TARGET_WAITKIND_STOPPED);
-	};
-
-      thread_predicate predicate = nullptr;
-      for (thread_info *tp : all_threads)
-	{
-	  if (!tp->id.matches (ptid))
-	    continue;
-
-	  /* Only consider threads that were resumed.  */
-	  ze_thread_resume_state_t state = ze_resume_state (tp);
-	  if (state == ze_thread_resume_none)
-	    continue;
-
-	  if (ze_has_priority_waitstatus (tp))
-	    {
-	      predicate = ze_has_priority_waitstatus;
-	      break;
-	    }
-
-	  if (is_stopped (tp))
-	    predicate = is_stopped;
-	  else if ((predicate == nullptr) && ze_has_waitstatus (tp))
-	    predicate = ze_has_waitstatus;
-	}
-
-      thread_info *thread = nullptr;
-      if (predicate != nullptr)
-	thread = find_thread_in_random ([ptid, predicate] (thread_info *tp)
-	  {
-	    if (!tp->id.matches (ptid))
-	      return false;
-
-	    /* Only consider threads that were resumed.  */
-	    ze_thread_resume_state_t state = ze_resume_state (tp);
-	    if (state == ze_thread_resume_none)
-	      return false;
-
-	    return predicate (tp);
-	  });
+      thread_info *thread = ze_find_eventing_thread (ptid);
 
       if (thread != nullptr)
 	{

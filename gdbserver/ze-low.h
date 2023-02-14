@@ -204,6 +204,10 @@ struct ze_thread_info
      What does gdbserver want this thread to do.  */
   enum ze_thread_resume_state_t resume_state = ze_thread_resume_none;
 
+  /* The start/end addresses for range-stepping.  */
+  CORE_ADDR step_range_start = 0;
+  CORE_ADDR step_range_end = 0;
+
   /* The thread's execution state.
 
      What is this thread actually doing.  */
@@ -342,6 +346,7 @@ public:
   void init ();
 
   bool supports_hardware_single_step () override { return true; }
+  bool supports_range_stepping () override { return true; }
   bool supports_multi_process () override { return true; }
   bool supports_non_stop () override { return true; }
   int start_non_stop (bool enable) override { async (enable); return 0; }
@@ -424,6 +429,9 @@ private:
 
   /* Resume TP.  */
   void resume (thread_info *tp, enum resume_kind rkind);
+
+  /* Return true if TP has single-stepped within its stepping range.  */
+  bool is_range_stepping (thread_info *tp);
 
 protected:
   /* Check whether a device is supported by this target.  */

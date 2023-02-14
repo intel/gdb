@@ -1019,6 +1019,25 @@ ze_interrupt (ze_device_info &device, ze_device_thread_t thread)
     }
 }
 
+bool
+ze_target::is_range_stepping (thread_info *tp)
+{
+  const ze_thread_info *zetp = ze_thread (tp);
+  gdb_assert (zetp != nullptr);
+
+  if ((zetp->exec_state == ze_thread_state_stopped)
+      && (zetp->stop_reason == TARGET_STOPPED_BY_SINGLE_STEP))
+    {
+      regcache *regcache = get_thread_regcache (tp, /* fetch = */ false);
+      CORE_ADDR pc = read_pc (regcache);
+
+      return ((pc >= zetp->step_range_start)
+	      && (pc < zetp->step_range_end));
+    }
+
+  return false;
+}
+
 int
 ze_target::attach_to_device (uint32_t pid, ze_device_handle_t device)
 {
@@ -2028,17 +2047,17 @@ ze_target::resume (thread_resume *resume_info, size_t n)
 	warning (_("ignoring signal on resume request for %d.%ld"),
 		 rinfo.thread.pid (), rinfo.thread.lwp ());
 
-      if ((rinfo.kind == resume_step)
-	  && (rinfo.step_range_start != rinfo.step_range_end))
-	warning (_("ignoring range step request for %d.%ld"),
-		 rinfo.thread.pid (), rinfo.thread.lwp ());
-
       ptid_t rptid = rinfo.thread;
       int rpid = rptid.pid ();
       if ((rptid == minus_one_ptid)
 	  || rptid.is_pid ()
 	  || (rptid.lwp () == -1))
 	{
+	  if ((rinfo.kind == resume_step)
+	      && (rinfo.step_range_start != rinfo.step_range_end))
+	    warning (_("ignoring range step request for %d.%ld"),
+		     rinfo.thread.pid (), rinfo.thread.lwp ());
+
 	  for (ze_device_info *device : devices)
 	    {
 	      gdb_assert (device != nullptr);
@@ -2071,7 +2090,36 @@ ze_target::resume (thread_resume *resume_info, size_t n)
 	{
 	  thread_info *tp = find_thread_ptid (rptid);
 	  if (!ze_has_priority_waitstatus (tp))
-	    resume (tp, rinfo.kind);
+	    {
+	      if (rinfo.kind == resume_step)
+		{
+		  ze_thread_info *zetp = ze_thread (tp);
+		  gdb_assert (zetp != nullptr);
+
+		  regcache *regcache
+		    = get_thread_regcache (tp, /* fetch = */ false);
+		  CORE_ADDR pc = read_pc (regcache);
+
+		  /* For single-stepping, start == end.  Typically,
+		     both are 0.  For range-stepping, the PC must be
+		     within the range.  */
+		  CORE_ADDR start = rinfo.step_range_start;
+		  CORE_ADDR end = rinfo.step_range_end;
+		  gdb_assert ((start == end)
+			      || ((pc >= start) && (pc < end)));
+
+		  zetp->step_range_start = start;
+		  zetp->step_range_end = end;
+
+		  if (start != end)
+		    dprintf ("resuming thread %s for stepping in range "
+			     "[0x%" PRIx64 ", 0x%" PRIx64 ")",
+			     ze_thread_id_str (zetp->id).c_str (),
+			     start, end);
+		}
+
+	      resume (tp, rinfo.kind);
+	    }
 	}
     }
 }
@@ -2245,11 +2293,28 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 
       if (thread != nullptr)
 	{
+	  ze_thread_info *zetp = ze_thread (thread);
+	  gdb_assert (zetp != nullptr);
+
+	  if (is_range_stepping (thread))
+	    {
+	      /* We are inside the stepping range.  Resume the thread
+		 and go back to fetching events.  */
+	      dprintf ("thread %s is stepping in range "
+		       "[0x%" PRIx64 ", 0x%" PRIx64 ")",
+		       ze_thread_id_str (zetp->id).c_str (),
+		       zetp->step_range_start, zetp->step_range_end);
+
+	      (void) ze_move_waitstatus (thread);
+	      resume (thread, resume_step);
+	      continue;
+	    }
+
 	  /* Stop all other threads.
 
 	     Save the waitstatus before, because pause_all clears all
 	     low-priority events.  */
-	  *status = ze_thread (thread)->waitstatus;
+	  *status = zetp->waitstatus;
 
 	  if (!non_stop)
 	    pause_all (false);
@@ -2257,6 +2322,8 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 	  /* Now also clear the thread's event, regardless of its
 	     priority.  */
 	  (void) ze_move_waitstatus (thread);
+	  zetp->step_range_start = 0;
+	  zetp->step_range_end = 0;
 
 	  /* FIXME: switch_to_thread
 

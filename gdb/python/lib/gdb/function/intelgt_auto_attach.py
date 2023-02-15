@@ -25,7 +25,6 @@ The auto-attach feature can be disabled by setting the OS environment
 variable 'INTELGT_AUTO_ATTACH_DISABLE' to a non-zero value.  It can be
 also set or unset in the inferior's environment, so that the user can
 disable or enable auto-attach in the same gdb session.
-'DISABLE_AUTO_ATTACH' is marked as deprecated and ignored.
 
 By default, it is expected that the 'gdbserver-gt' executable exists
 in the PATH.  Below are customization options via environment
@@ -156,10 +155,6 @@ class IntelgtAutoAttach:
     def is_auto_attach_disabled(self):
         """Helper function to check if auto-attach has been disabled via
         os environment variable or in inferior's environment."""
-        if self.get_env_variable("DISABLE_AUTO_ATTACH") is not None:
-            print("""\
-intelgt: env variable 'DISABLE_AUTO_ATTACH' is deprecated.  Use
-'INTELGT_AUTO_ATTACH_DISABLE' instead.""")
         env_value = self.get_env_variable("INTELGT_AUTO_ATTACH_DISABLE")
         return not(env_value is None or env_value == "0")
 

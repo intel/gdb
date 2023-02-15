@@ -1,0 +1,77 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test that we can define/hit a breakpoint, as well as, disassemble
+# inside a kernel compiled without debug info.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-1D.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+# Build without debug symbols.
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl nodebug "optimize=-O0"}]} {
+    return -1
+}
+
+proc run_test {} {
+    global hex
+
+    set kernel_function "get_dim"
+    gdb_breakpoint "$kernel_function" {allow-pending} \
+	"set a breakpoint at a function name of a stripped kernel"
+    set bpnum [get_integer_valueof "\$bpnum" 0 "get symbol bpnum"]
+    gdb_continue_to_breakpoint "Continue to function breakpoint" \
+	"$kernel_function.*"
+    gdb_test "disassemble" [multi_line \
+	"Dump of assembler code for function .*get_dim.*:" \
+	"(\[\\s=>\]+$hex .*)+" \
+	"End of assembler dump." \
+	] "run disassemble without debug info"
+    gdb_test "info sharedlibrary" [multi_line \
+	"($hex\\s+$hex\\s+Yes \\(\\*\\)\\s+<in-memory@$hex-$hex>)+" \
+	"\\(\\*\\): Shared library is missing debugging information." \
+	] "no symbols are loaded in the shared lib"
+    gdb_test_no_output "delete $bpnum" "delete bp from the kernel"
+    continue_sycl_program_to_termination
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![is_level_zero_debug_api]} {
+	    unsupported "test is aimed at Level Zero debug API only"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	run_test
+    }
+}

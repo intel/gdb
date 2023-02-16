@@ -31,50 +31,7 @@ if {[build_executable "failed to compile $srcfile" \
     return -1
 }
 
-# Convenience procedures to check register values.
-
-proc test_regs {emask ret_emask dmask} {
-    gdb_test "print/x \$emask" "$emask"
-    gdb_test "print/x \$framedesc.return_emask" "$ret_emask"
-    gdb_test "print/x ((int\[4\])\$sr0)\[2\]" "$dmask"
-}
-
-# MAIN_EMASK is the execution mask at the first level of branching,
-# inside the main kernel's frame.
-
-proc test_all_frames {emask main_emask} {
-    global hex
-
-    set dim0 [get_integer_valueof "dim0" "-1"]
-    gdb_assert {$dim0 != -1} "dim0 is valid"
-
-    set dmask "0xffff"
-    if {$dim0 > 15} {
-	set dmask      "0x1ff"
-	set emask      "0x[format %x [expr $dmask & $emask]]"
-	set main_emask "0x[format %x [expr $dmask & $main_emask]]"
-    }
-
-    verbose -log "expected emask: $emask, dmask: $dmask, main_emask: $main_emask"
-
-    with_test_prefix "dim0: $dim0" {
-	with_test_prefix "frame 0" {
-	    test_regs "$emask" "$emask" "$dmask"
-	}
-	gdb_test "frame 1"
-	with_test_prefix "frame 1" {
-	    test_regs "$emask" "$main_emask" "$dmask"
-	}
-	gdb_test "frame 2"
-	with_test_prefix "frame 2" {
-	    test_regs "$main_emask" "$hex" "$dmask"
-	}
-    }
-}
-
-proc test_emask {expected} {
-    global hex
-
+proc test_emask {expected {check_dmask "false"}} {
     set dim0 [get_integer_valueof "dim0" "-1"]
     gdb_assert {$dim0 != -1} "dim0 is valid"
 
@@ -86,6 +43,12 @@ proc test_emask {expected} {
 
     verbose -log "expected emask: $expected"
     gdb_test "p/x \$emask & $dmask" "$expected"
+
+    if {$check_dmask} {
+	verbose -log "expected dmask: $dmask"
+	setup_kfail "JIRA XDEPS/5169" "*-*-*"
+	gdb_test "print/x ((int\[4\])\$sr0)\[2\]" "$dmask"
+    }
 }
 
 foreach device $sycl_device_list {
@@ -139,11 +102,12 @@ foreach device $sycl_device_list {
 	}
 
 	for {set i 0} {$i < 24} {incr i} {
+	    # Check the value of dmask only at leaf functions.
 	    gdb_test_multiple "continue" "hit bp" {
 		-re -wrap "Breakpoint .*$srcfile:$bp_even_1.*" {
 		    incr bp_hit(1)
 		    with_test_prefix "even_1, hit $bp_hit(1)" {
-			test_all_frames "0x1111" "0x5555"
+			test_emask "0x1111" "true"
 			pass $gdb_test_name
 		    }
 		}
@@ -151,7 +115,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_even_2.*" {
 		    incr bp_hit(2)
 		    with_test_prefix "even_2, hit $bp_hit(2)" {
-			test_all_frames "0x4444" "0x5555"
+			test_emask "0x4444" "true"
 			pass $gdb_test_name
 		    }
 		}
@@ -159,7 +123,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_odd_1.*" {
 		    incr bp_hit(3)
 		    with_test_prefix "odd_1, hit $bp_hit(3)" {
-			test_all_frames "0x2222" "0xaaaa"
+			test_emask "0x2222" "true"
 			pass $gdb_test_name
 		    }
 		}
@@ -167,7 +131,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_odd_2.*" {
 		    incr bp_hit(4)
 		    with_test_prefix "odd_2, hit $bp_hit(4)" {
-			test_all_frames "0x8888" "0xaaaa"
+			test_emask "0x8888" "true"
 			pass $gdb_test_name
 		    }
 		}

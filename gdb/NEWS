@@ -2003,6 +2003,10 @@ focus, winheight, +, -, >, <
     has been masked in the frame.  On all other targets the field is not
     present.
 
+ ** -thread-info [--stopped]
+    This command now takes an optional flag, '--stopped', this is
+    the MI equivalent of the CLI 'info threads -stopped' command.
+
 * Testsuite
 
   The testsuite now creates the files gdb.cmd (containing the arguments

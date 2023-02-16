@@ -33978,14 +33978,16 @@ The corresponding @value{GDBN} command is @samp{pwd}.
 @subsubheading Synopsis
 
 @smallexample
- -thread-info [ @var{thread-id} ]
+ -thread-info [ @var{--stopped} @var{thread-id} ]
 @end smallexample
 
 Reports information about either a specific thread, if the
 @var{thread-id} parameter is present, or about all threads.
 @var{thread-id} is the thread's global thread ID.  When printing
 information about all threads, also reports the global ID of the
-current thread.
+current thread.  If the @var{--stopped} parameter is present then
+only stopped threads are printed.  The parameter can be useful
+to reduced the list when there is a large number of stopped threads.
 
 @subsubheading @value{GDBN} Command
 

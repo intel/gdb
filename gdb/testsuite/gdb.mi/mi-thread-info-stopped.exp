@@ -1,0 +1,92 @@
+# Copyright (C) 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test for the '--stopped' flag of the "-thread-info" command.
+
+load_lib mi-support.exp
+
+set MIFLAGS "-i=mi"
+
+standard_testfile
+
+if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
+     executable debug] != "" } {
+    return -1
+}
+
+save_vars { GDBFLAGS } {
+    append GDBFLAGS " -ex \"set non-stop on\""
+    mi_clean_restart $binfile
+}
+
+mi_runto_main
+
+# Run to the function 'mi-thread-info-stopped.c:something'.
+mi_create_breakpoint "mi-thread-info-stopped.c:something" \
+    "insert breakpoint at mi-thread-info-stopped.c:something" \
+    -number 2 -func something -file ".*mi-thread-info-stopped.c"
+
+mi_send_resuming_command "exec-continue" "continuing to mi-thread-info-stopped.c:something"
+
+set num_bp_actual_hit 0
+set num_bp_expected_hit 2
+set test "count breakpoint hits to mi-thread-info-stopped.c:something"
+gdb_expect {
+    -re "reason=\"breakpoint-hit\"" {
+	incr num_bp_actual_hit
+	if {$num_bp_actual_hit == $num_bp_expected_hit} {
+	    pass "mi-thread-info-stopped.c:something hitted: $num_bp_actual_hit"
+	} else {
+	    exp_continue
+	}
+    }
+    timeout {
+	fail "$test Expected: $num_bp_expected_hit, Actual: $num_bp_actual_hit"
+    }
+}
+
+# Count the number of running/stopped threads reported
+# by the "-thread-info" command.
+
+foreach flag {"" " --stopped"} {
+    set num_running 0
+    set num_stopped 0
+    send_gdb "-thread-info$flag\n"
+
+    set test "Check flag: \"$flag\""
+    gdb_expect {
+	-re "\\^done,threads=\\\[" {
+	    exp_continue
+	}
+	-re "state=\"(stopped|running)\"" {
+	    set state $expect_out(1,string)
+
+	    if {$state eq "running"} {
+		incr num_running
+	    } else {
+		incr num_stopped
+	    }
+	    exp_continue
+	}
+	-re ".*$mi_gdb_prompt" {
+	    gdb_assert {$num_stopped == 2} "-thread-info$flag stopped: $num_stopped"
+	    if {$flag eq ""} {
+		gdb_assert {$num_running == 3} "-thread-info$flag running: $num_running"
+	    } else {
+		gdb_assert {$num_running == 0} "-thread-info$flag running: $num_running"
+	    }
+	}
+    }
+}

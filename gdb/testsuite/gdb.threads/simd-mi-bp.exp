@@ -61,22 +61,22 @@ foreach device $sycl_device_list {
 
 	# Breakpoint with -p <thread> argument, no lane.
 	mi_gdb_test "-break-insert -t -p $first_thread_id $kernel_dim0_line" \
-	    "\\^done,bkpt=\{number=\".*\",type=\"breakpoint\",disp=\"del\",enabled=\"y\",addr=\"<MULTIPLE>\",thread=\"$first_thread_id\",thread=\"$first_thread_id\".*" \
+	    "\\^done,bkpt=\{number=\".*\",type=\"breakpoint\",disp=\"del\",enabled=\"y\",addr=\"<MULTIPLE>\",thread=\"$first_thread_id\".*" \
 	    "Insert breakpoint to thread $first_thread_id, no lane argument"
 
 	# Breakpoint with -p <thread> and -l <lane> arguments.
 	mi_gdb_test "-break-insert -t -p $second_thread_id -l 1 $condition_line" \
-	    "\\^done,bkpt=\{number=\".*\",type=\"breakpoint\",disp=\"del\",enabled=\"y\",addr=\"<MULTIPLE>\",thread=\"$second_thread_id\",thread=\"$second_thread_id\",lane=\"1\".*" \
+	    "\\^done,bkpt=\{number=\".*\",type=\"breakpoint\",disp=\"del\",enabled=\"y\",addr=\"<MULTIPLE>\",thread=\"$second_thread_id\",lane=\"1\".*" \
 	    "Insert breakpoint to thread $second_thread_id, lane 1"
 
 	# Breakpoint to even branch line with odd lane (should not hit).
 	mi_gdb_test "-break-insert -t -p $third_thread_id -l 3 $even_branch_line" \
-	    "\\^done,bkpt=\{number=\".*\",type=\"breakpoint\",disp=\"del\",enabled=\"y\",addr=\"<MULTIPLE>\",thread=\"$third_thread_id\",thread=\"$third_thread_id\",lane=\"3\".*" \
+	    "\\^done,bkpt=\{number=\".*\",type=\"breakpoint\",disp=\"del\",enabled=\"y\",addr=\"<MULTIPLE>\",thread=\"$third_thread_id\",lane=\"3\".*" \
 	    "Insert breakpoint to even line with odd lane"
 
 	# Breakpoint to odd branch line with odd lane (should hit).
 	mi_gdb_test "-break-insert -t -p $third_thread_id -l 3 $odd_branch_line" \
-	    "\\^done,bkpt=\{number=\".*\",type=\"breakpoint\",disp=\"del\",enabled=\"y\",addr=\"<MULTIPLE>\",thread=\"$third_thread_id\",thread=\"$third_thread_id\",lane=\"3\".*" \
+	    "\\^done,bkpt=\{number=\".*\",type=\"breakpoint\",disp=\"del\",enabled=\"y\",addr=\"<MULTIPLE>\",thread=\"$third_thread_id\",lane=\"3\".*" \
 	    "Insert breakpoint to thread $third_thread_id, lane 3"
 
 	# Continue and hit first breakpoint.

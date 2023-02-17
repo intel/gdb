@@ -6740,7 +6740,14 @@ print_one_breakpoint_location (struct breakpoint *b,
       output_thread_groups (uiout, "thread-groups", inf_nums, mi_only);
     }
 
-  if (!part_of_multiple)
+  /* In the MI output, each location of a thread or task specific
+     breakpoint includes the relevant thread or task ID.  This is done for
+     backwards compatibility reasons.
+
+     For the CLI output, the thread/task information is printed on a
+     separate line, see the 'stop only in thread' and 'stop only in task'
+     output below.  */
+  if (part_of_multiple && uiout->is_mi_like_p ())
     {
       if (b->thread != -1)
 	{

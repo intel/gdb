@@ -39,10 +39,15 @@ foreach device $sycl_device_list {
 	}
 
 	# Test breaking on a function inside the kernel.
-	gdb_breakpoint "$srcfile:first"
-	gdb_continue_to_breakpoint "break_at_first" ".*$srcfile:.*"
+	gdb_breakpoint "$srcfile:first" "temporary"
+	gdb_breakpoint "$srcfile:inlined_first" "temporary"
 
+	gdb_continue_to_breakpoint "break_at_first" ".*$srcfile:.*"
 	gdb_test "backtrace 1" "#0.* first .* at .*$srcfile:.*" \
 	    "first backtrace"
+
+	gdb_continue_to_breakpoint "break_at_inlined_first" ".*$srcfile:.*"
+	gdb_test "backtrace 1" "#0.* inlined_first .* at .*$srcfile:.*" \
+	    "inlined_first backtrace"
     }
 }

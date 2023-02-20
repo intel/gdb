@@ -142,6 +142,13 @@ extern observable<ptid_t /* ptid */> thread_stop_requested;
    resumed.  */
 extern observable<ptid_t /* ptid */> target_resumed;
 
+/* The TARGET is about to be internally resumed, even though the stop
+   might have not been shown to the user.
+   PTID parameter specifies which thread is resumed, and may be RESUME_ALL
+   if all threads are resumed.  */
+extern observable<process_stratum_target */* target */, ptid_t /* ptid */>
+  target_resumed_internal;
+
 /* The target is about to be proceeded.  STEP parameter specifies that
    proceed will be a stepping action.  */
 extern observable<bool /* step */> about_to_proceed;

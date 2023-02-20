@@ -49,6 +49,7 @@ DEFINE_OBSERVABLE (new_thread);
 DEFINE_OBSERVABLE (thread_exit);
 DEFINE_OBSERVABLE (thread_stop_requested);
 DEFINE_OBSERVABLE (target_resumed);
+DEFINE_OBSERVABLE (target_resumed_internal);
 DEFINE_OBSERVABLE (about_to_proceed);
 DEFINE_OBSERVABLE (breakpoint_created);
 DEFINE_OBSERVABLE (breakpoint_deleted);

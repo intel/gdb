@@ -2479,6 +2479,8 @@ do_target_resume (ptid_t resume_ptid, bool step, enum gdb_signal sig)
   infrun_debug_printf ("resume_ptid=%s, step=%d, sig=%s",
 		       resume_ptid.to_string ().c_str (),
 		       step, gdb_signal_to_symbol_string (sig));
+  process_stratum_target *proc_target = tp->inf->process_target ();
+  gdb::observers::target_resumed_internal.notify (proc_target, resume_ptid);
 
   target_resume (resume_ptid, step, sig);
 }

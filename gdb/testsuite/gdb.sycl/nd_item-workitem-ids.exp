@@ -1,0 +1,125 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for workitem IDs.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+proc get_id {name pretty} {
+    global decimal
+    set expected_id "unexpected"
+    if {$pretty} {
+	set fmt "<x>: %d, <y>: %d, <z>: %d"
+	set expected "\r\n(<x>: $decimal, <y>: $decimal, <z>: $decimal)"
+    } else {
+	set fmt "%d, %d, %d"
+	set expected "\r\n($decimal, $decimal, $decimal)"
+    }
+
+    gdb_test_multiple "printf \"$fmt\\n\",${name}2,${name}1,${name}0" "get expected id" {
+	-re -wrap $expected {
+	    set expected_id $expect_out(1,string)
+	}
+    }
+
+    return $expected_id
+}
+
+proc compare_id {name pretty} {
+    with_test_prefix "check $name" {
+	global decimal
+	set expected_val [get_id $name $pretty]
+	gdb_test "print \$_$name" "\\$$decimal = \\{$expected_val\\}" "check $name == {$expected_val}"
+    }
+}
+
+foreach device $sycl_device_list {
+    with_test_prefix [sycl_get_device_prefix $device] {
+	clean_restart "${binfile}"
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	set last_line [gdb_get_line_number "kernel-last-line"]
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set last_line [gdb_get_line_number "kernel-last-line"]
+	gdb_breakpoint $last_line
+	gdb_continue_to_breakpoint "kernel" ".*$srcfile:$last_line.*"
+
+	# Find threads from workgroups {0, 0, 0} and {1, 2, 3}.
+	# We will test only them.
+	set threads_to_test {}
+	set name "thread_workgroup"
+	gdb_test_multiple "thread apply * -q -s printf \"%d.%d {%d, %d, %d}\\n\",\$_inferior,\$_thread,${name}2,${name}1,${name}0" "find threads to test" {
+	    -re "\r\n($decimal\.$decimal) \\{0, 0, 0\\}" {
+		lappend threads_to_test $expect_out(1,string)
+		exp_continue
+	    }
+	    -re "\r\n($decimal\.$decimal) \\{1, 2, 3\\}" {
+		lappend threads_to_test $expect_out(1,string)
+		exp_continue
+	    }
+	    -re "\r\n$decimal\.$decimal \\{$decimal, $decimal, $decimal\\}" {
+		exp_continue
+	    }
+	    -re -wrap "" {
+		pass $gdb_test_name
+	    }
+	}
+
+	set simd_width [get_integer_valueof "\$_simd_width" -1]
+	gdb_assert {$simd_width > 0} "read SIMD width"
+
+	set num_threads_checked 0
+	gdb_test "disable pretty-printer global"
+	foreach tid $threads_to_test {
+	    with_test_prefix "thread $tid" {
+		gdb_test "thread $tid" "Switching to thread $tid.*" "switch to thread $tid"
+		compare_id "thread_workgroup" 0
+		incr num_threads_checked
+	    }
+	}
+
+	# Ensure that we have checked the expected number of threads.
+	# Workgroup size is 5x5x5 = 125.
+	set num_threads_in_workgroup \
+	    [expr (125 + $simd_width - 1) / $simd_width]
+	set expected_num [expr 2 * $num_threads_in_workgroup]
+	gdb_assert {$num_threads_checked == $expected_num} \
+	    "# threads checked = $num_threads_checked, # expected = $expected_num"
+
+	# Now test the pretty-printer format.
+	gdb_test "enable pretty-printer global"
+	compare_id "thread_workgroup" 1
+    }
+}

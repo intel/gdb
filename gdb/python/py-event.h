@@ -58,6 +58,11 @@ extern int emit_inferior_call_event (inferior_call_kind kind,
 extern int emit_register_changed_event (struct frame_info *frame,
 					int regnum);
 extern int emit_memory_changed_event (CORE_ADDR addr, ssize_t len);
+
+/* Flag to indicate whether we are currently handling emitted Python
+   events.  */
+extern bool in_evpy_emit_event;
+
 extern int evpy_emit_event (PyObject *event,
 			    eventregistry_object *registry);
 

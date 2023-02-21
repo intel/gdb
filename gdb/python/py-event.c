@@ -75,6 +75,9 @@ gdbpy_initialize_event_generic (PyTypeObject *type,
   return gdb_pymodule_addobject (gdb_module, name, (PyObject *) type);
 }
 
+/* See py-event.h.  */
+
+bool in_evpy_emit_event = false;
 
 /* Notify the list of listens that the given EVENT has occurred.
    returns 0 if emit is successful -1 otherwise.  */
@@ -84,6 +87,9 @@ evpy_emit_event (PyObject *event,
 		 eventregistry_object *registry)
 {
   Py_ssize_t i;
+
+  scoped_restore save_flag
+    = make_scoped_restore (&in_evpy_emit_event, true);
 
   /* Create a copy of call back list and use that for
      notifying listeners to avoid skipping callbacks

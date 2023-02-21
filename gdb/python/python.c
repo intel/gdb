@@ -682,8 +682,13 @@ execute_gdb_command (PyObject *self, PyObject *args, PyObject *kw)
 	 an exception reach the top level of the event loop, which are the
 	 two usual places in which stdin would be re-enabled. So, before we
 	 convert the exception and continue back in Python, we should
-	 re-enable stdin here.  */
-      async_enable_stdin ();
+	 re-enable stdin here, unless we are currently handling emitted
+	 Python events.  In that case, GDB would continue its normal course
+	 of execution and enable stdin itself in the way it normally
+	 does.  */
+      if (!in_evpy_emit_event)
+	async_enable_stdin ();
+
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 

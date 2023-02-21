@@ -486,6 +486,8 @@ intelgt_get_current_machine_code ()
 
 struct intelgt_gdbarch_data
 {
+  /* $r0 GRF register number.  */
+  int r0_regnum = -1;
   /* $ce register number in the regcache.  */
   int ce_regnum = -1;
   /* Register number for the GRF containing function return value.  */
@@ -1384,7 +1386,9 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
   /* Second, check if it is any specific individual register that
      needs to be tracked.  */
 
-  if (strcmp ("r26", reg_name) == 0)
+  if (strcmp ("r0", reg_name) == 0)
+    data->r0_regnum = possible_regnum;
+  else if (strcmp ("r26", reg_name) == 0)
     data->retval_regnum = possible_regnum;
   else if (strcmp ("cr0", reg_name) == 0)
     data->cr0_regnum = possible_regnum;
@@ -2373,6 +2377,56 @@ get_xe_version (unsigned int device_id)
   return device_xe_version;
 }
 
+/* Error out if the register STATUS is not valid.
+   REG_NUM is register number added to the final error message.
+   ERROR_MESSAGE is prepended to the final error message.  */
+
+static void
+intelgt_check_reg_status (register_status status, int reg_num,
+			  const std::string &error_message)
+{
+  if (status < REG_VALID)
+    error (_("%s Register %d has status %d."), error_message.c_str (),
+	   reg_num, status);
+}
+
+/* Return workgroup coordinates of the specified thread TP.  */
+
+static std::array<uint32_t, 3>
+intelgt_thread_workgroup (struct gdbarch *gdbarch, thread_info *tp)
+{
+  std::string err_msg = _("Cannot read thread workgroup.");
+
+  if (tp->is_unavailable ())
+    error ("%s", err_msg.c_str ());
+
+  std::array<uint32_t, 3> workgroup;
+
+  /* The workgroup coordinates are stored as { r0.1, r0.6, r0.7 }.  */
+  regcache *regcache = get_thread_regcache (tp);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  register_status reg_status;
+  reg_status = regcache->cooked_read_part (data->r0_regnum,
+					   1 * sizeof (uint32_t),
+					   sizeof (uint32_t),
+					   (gdb_byte *) &workgroup[0]);
+  intelgt_check_reg_status (reg_status, data->r0_regnum, err_msg);
+
+  reg_status = regcache->cooked_read_part (data->r0_regnum,
+					   6 * sizeof (uint32_t),
+					   sizeof (uint32_t),
+					   (gdb_byte *) &workgroup[1]);
+  intelgt_check_reg_status (reg_status, data->r0_regnum, err_msg);
+
+  reg_status = regcache->cooked_read_part (data->r0_regnum,
+					   7 * sizeof (uint32_t),
+					   sizeof (uint32_t),
+					   (gdb_byte *) &workgroup[2]);
+  intelgt_check_reg_status (reg_status, data->r0_regnum, err_msg);
+
+  return workgroup;
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -2516,6 +2570,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
     (gdbarch, intelgt_address_space_from_type_flags);
 
   set_gdbarch_is_inferior_device (gdbarch, true);
+  set_gdbarch_thread_workgroup (gdbarch, intelgt_thread_workgroup);
 
   /* Enable inferior call support.  */
   set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);

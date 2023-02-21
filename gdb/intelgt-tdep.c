@@ -2395,6 +2395,38 @@ get_device_id (gdbarch *gdbarch)
   return *device_info->target_id;
 }
 
+/* Return workgroup coordinates of the specified thread TP.  */
+
+static std::array<uint32_t, 3>
+intelgt_thread_workgroup (struct gdbarch *gdbarch, thread_info *tp)
+{
+  std::string err_msg = _("Cannot read thread workgroup.");
+
+  if (tp->is_unavailable ())
+    error ("%s", err_msg.c_str ());
+
+  std::array<uint32_t, 3> workgroup;
+
+  /* The workgroup coordinates are stored as { r0.1, r0.6, r0.7 }.  */
+  regcache *regcache = get_thread_regcache (tp);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+  intelgt_read_register_part (regcache, data->r0_regnum,
+			      1 * sizeof (uint32_t), sizeof (uint32_t),
+			      (gdb_byte *) &workgroup[0],
+			      err_msg.c_str ());
+  intelgt_read_register_part (regcache, data->r0_regnum,
+			      6 * sizeof (uint32_t), sizeof (uint32_t),
+			      (gdb_byte *) &workgroup[1],
+			      err_msg.c_str ());
+  intelgt_read_register_part (regcache, data->r0_regnum,
+			      7 * sizeof (uint32_t), sizeof (uint32_t),
+			      (gdb_byte *) &workgroup[2],
+			      err_msg.c_str ());
+
+  return workgroup;
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -2541,6 +2573,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
     (gdbarch, intelgt_address_class_type_flags);
 
   set_gdbarch_is_inferior_device (gdbarch, true);
+  set_gdbarch_thread_workgroup (gdbarch, intelgt_thread_workgroup);
 
   /* Enable inferior call support.  */
   set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);

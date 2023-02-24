@@ -320,7 +320,7 @@ struct d_info_checkpoint
 };
 
 /* Maximum number of times d_print_comp may be called recursively.  */
-#define MAX_RECURSION_COUNT 1024
+#define MAX_RECURSION_COUNT 4096
 
 enum { D_PRINT_BUFFER_LENGTH = 256 };
 struct d_print_info

@@ -88,7 +88,7 @@ foreach device $sycl_device_list {
 	regexp {value=\"(.*)\"} $output -> simd_width
 	verbose -log "simd width is $simd_width"
 
-	# Calculate the expected emask.
+	# Calculate the expected execution mask.
 	set mask 0xffffffff
 	set emask_int [expr $mask & int(pow(2, $simd_width) - 1)]
 	set emask_hex [format 0x%x $emask_int]
@@ -108,7 +108,7 @@ foreach device $sycl_device_list {
 	set thread_id [expect_breakpoint_hit $odd_branch_line \
 			   "hit BP at line $odd_branch_line"]
 
-	# Calculate the expected emask.
+	# Calculate the expected execution mask.
 	set mask 0xaaaaaaaa
 	set emask_int [expr $mask & int(pow(2, $simd_width) - 1)]
 	set emask_hex [format 0x%x $emask_int]
@@ -205,7 +205,8 @@ foreach device $sycl_device_list {
 	    "\\^done,hit-lanes-mask=\"0x8\".*" \
 	    "hit lanes mask for thread $second_thread_id"
 
-	# Test a host thread that it does not contain emask or simd width fields.
+	# Test a host thread that it does not contain the execution mask
+	# or simd width fields.
 	send_gdb "-thread-info 1\n"
 	gdb_expect 10 {
 	    -re "execution-mask.*$mi_gdb_prompt$" {

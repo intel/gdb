@@ -83,7 +83,7 @@ foreach device $sycl_device_list {
 	set output $expect_out(buffer)
 	regexp {value=\"(.*)\"} $output -> simd_width
 
-	# Calculate the expected emask.
+	# Calculate the expected execution mask.
 	set mask 0xffffffff
 	set emask_int [expr $mask & int(pow(2, $simd_width) - 1)]
 	set emask_hex [format 0x%x $emask_int]
@@ -99,7 +99,7 @@ foreach device $sycl_device_list {
 	# Expect breakpoint-hit stop event and get the id of the stopped thread.
 	set thread_id [expect_breakpoint_hit $odd_branch_line "expect breakpoint-hit event at line $odd_branch_line"]
 
-	# Calculate the expected emask.
+	# Calculate the expected execution mask.
 	set mask 0xaaaaaaaa
 	set emask_int [expr $mask & int(pow(2, $simd_width) - 1)]
 	set emask_hex [format 0x%x $emask_int]
@@ -178,7 +178,8 @@ foreach device $sycl_device_list {
 	    "\\^error,msg=\"-thread-info: Unknown option ``qid''\"" \
 	    "Check wrong argument 3"
 
-	# Test a host thread that it does not contain emask or simd width fields.
+	# Test a host thread that it does not contain the execution mask
+	# or simd width fields.
 	send_gdb "-thread-info 1\n"
 	gdb_expect 10 {
 	    -re "execution-mask" { fail "host thread has no execution mask output"}

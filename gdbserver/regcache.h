@@ -51,6 +51,11 @@ struct regcache : public reg_buffer_common
   /* Constructors.  */
   regcache () = default;
   regcache (const target_desc *tdesc);
+  regcache (const regcache &rhs) = delete;
+  regcache &operator= (const regcache &rhs) = delete;
+
+  /* Deconstructor.  */
+  virtual ~regcache ();
 #endif
 
   /* Init the regcache data.  */
@@ -76,10 +81,6 @@ struct regcache : public reg_buffer_common
 };
 
 regcache *get_thread_regcache (thread_info *thread, bool fetch = true);
-
-/* Release all memory associated with the register cache for INFERIOR.  */
-
-void free_register_cache (struct regcache *regcache);
 
 /* Invalidate cached registers for one thread.  */
 

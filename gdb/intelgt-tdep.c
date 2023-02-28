@@ -312,8 +312,8 @@ intelgt_get_current_machine_code ()
 
 struct intelgt_gdbarch_data
 {
-  /* $emask register number in the regcache.  */
-  int emask_regnum = -1;
+  /* $ce register number in the regcache.  */
+  int ce_regnum = -1;
   /* Register number for the GRF containing function return value.  */
   int retval_regnum = -1;
   /* Register number for the control register.  */
@@ -399,7 +399,7 @@ static int
 intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
 {
   constexpr int ip = 0;
-  constexpr int emask = 1;
+  constexpr int ce = 1;
 
   /* Register sets follow this format: [BEGIN, END), where BEGIN is inclusive
      and END is exclusive.  */
@@ -432,8 +432,8 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
 
   if (num == ip)
     return intelgt_pseudo_register_num (gdbarch, "ip");
-  if (num == emask)
-    return data->emask_regnum;
+  if (num == ce)
+    return data->ce_regnum;
 
   for (int regset = 0; regset < intelgt::regset_count; ++regset)
     if (num >= dwarf_nums[regset].start && num < dwarf_nums[regset].end)
@@ -469,20 +469,20 @@ intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
   regcache *thread_regcache = get_thread_regcache (tp);
 
-  /* Default to zero if the emask register is not available.  This may
+  /* Default to zero if the CE register is not available.  This may
      happen if TP is not available.  */
-  ULONGEST emask = 0ull;
-  regcache_cooked_read_unsigned (thread_regcache, data->emask_regnum,
-				 &emask);
+  ULONGEST ce = 0ull;
+  regcache_cooked_read_unsigned (thread_regcache, data->ce_regnum,
+				 &ce);
 
-  /* The higher bits of emask are undefined if they are outside the
+  /* The higher bits of CE are undefined if they are outside the
      dispatch mask range.  Clear them explicitly using the dispatch
      mask, which is at SR0.2.  SR0 elements are 4 byte wide.  */
   uint32_t sr0_2 = 0;
   thread_regcache->raw_read_part (data->sr0_regnum, sizeof (uint32_t) * 2,
 				  sizeof (sr0_2), (gdb_byte *) &sr0_2);
 
-  dprintf ("emask: %lx, dmask: %x", emask, sr0_2);
+  dprintf ("ce: %lx, dmask: %x", ce, sr0_2);
 
   /* The higher bits of dmask are undefined if they are outside the
      SIMD width.  Clear them explicitly.
@@ -502,7 +502,7 @@ intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
   if (width > 1)
     sr0_2 &= width_mask;
 
-  return emask & sr0_2;
+  return ce & sr0_2;
 }
 
 /* Return the PC of the first real instruction.  */
@@ -674,8 +674,7 @@ intelgt_init_reg (gdbarch *gdbarch, int regnum, dwarf2_frame_state_reg *reg,
     reg->how = DWARF2_FRAME_REG_RA;
   else if (regnum == gdbarch_sp_regnum (gdbarch))
     reg->how = DWARF2_FRAME_REG_CFA;
-  /* We use special functions to unwind the $emask
-     and $framedesc registers.  */
+  /* We use special functions to unwind the $framedesc register.  */
   else if (regnum == framedesc_regnum)
     {
       reg->how = DWARF2_FRAME_REG_FN;
@@ -1244,8 +1243,8 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
     data->sr0_regnum = possible_regnum;
   else if (strcmp ("isabase", reg_name) == 0)
     data->isabase_regnum = possible_regnum;
-  else if (strcmp ("emask", reg_name) == 0)
-    data->emask_regnum = possible_regnum;
+  else if (strcmp ("ce", reg_name) == 0)
+    data->ce_regnum = possible_regnum;
 
   return possible_regnum;
 }
@@ -2070,8 +2069,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
       /* Now check the collected metadata to ensure that all
 	 mandatory pieces are in place.  */
 
-      if (data->emask_regnum == -1)
-	error ("Debugging requires $emask provided by the target");
+      if (data->ce_regnum == -1)
+	error ("Debugging requires $ce provided by the target");
       if (data->retval_regnum == -1)
 	error ("Debugging requires return value register to be provided by "
 	       "the target");

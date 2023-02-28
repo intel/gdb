@@ -46,6 +46,7 @@ get_thread_regcache (struct thread_info *thread, bool fetch)
 
       regcache = new struct regcache (proc->tdesc);
       set_thread_regcache_data (thread, regcache);
+      regcache->thread = thread;
     }
 
   if (fetch && regcache->registers_valid == 0)

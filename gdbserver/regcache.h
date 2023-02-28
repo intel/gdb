@@ -70,9 +70,10 @@ struct regcache : public reg_buffer_common
 
   /* Fetch the registers from the target, if not done already.  */
   void fetch ();
-};
 
-void regcache_cpy (struct regcache *dst, struct regcache *src);
+  /* Copy the contents of SRC into this regcache.  */
+  void copy_from (regcache *src);
+};
 
 regcache *get_thread_regcache (thread_info *thread, bool fetch = true);
 

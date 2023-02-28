@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Tests for the Intel(R) Graphics Technology emask register via a
+# Tests for the Intel(R) Graphics Technology ce register via a
 # SYCL program.
 
 load_lib sycl.exp
@@ -31,7 +31,7 @@ if {[build_executable "failed to compile $srcfile" \
     return -1
 }
 
-proc test_emask {expected {check_dmask "false"}} {
+proc test_ce {expected {check_dmask "false"}} {
     set dim0 [get_integer_valueof "dim0" "-1"]
     gdb_assert {$dim0 != -1} "dim0 is valid"
 
@@ -41,8 +41,8 @@ proc test_emask {expected {check_dmask "false"}} {
 	set expected "0x[format %x [expr $dmask & $expected]]"
     }
 
-    verbose -log "expected emask: $expected"
-    gdb_test "p/x \$emask & $dmask" "$expected"
+    verbose -log "expected ce: $expected"
+    gdb_test "p/x \$ce & $dmask" "$expected"
 
     if {$check_dmask} {
 	verbose -log "expected dmask: $dmask"
@@ -107,7 +107,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_even_1.*" {
 		    incr bp_hit(1)
 		    with_test_prefix "even_1, hit $bp_hit(1)" {
-			test_emask "0x1111" "true"
+			test_ce "0x1111" "true"
 			pass $gdb_test_name
 		    }
 		}
@@ -115,7 +115,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_even_2.*" {
 		    incr bp_hit(2)
 		    with_test_prefix "even_2, hit $bp_hit(2)" {
-			test_emask "0x4444" "true"
+			test_ce "0x4444" "true"
 			pass $gdb_test_name
 		    }
 		}
@@ -123,7 +123,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_odd_1.*" {
 		    incr bp_hit(3)
 		    with_test_prefix "odd_1, hit $bp_hit(3)" {
-			test_emask "0x2222" "true"
+			test_ce "0x2222" "true"
 			pass $gdb_test_name
 		    }
 		}
@@ -131,7 +131,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_odd_2.*" {
 		    incr bp_hit(4)
 		    with_test_prefix "odd_2, hit $bp_hit(4)" {
-			test_emask "0x8888" "true"
+			test_ce "0x8888" "true"
 			pass $gdb_test_name
 		    }
 		}
@@ -139,7 +139,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_even_then_then.*" {
 		    incr bp_hit(5)
 		    with_test_prefix "even then-then, hit $bp_hit(5)" {
-			test_emask "0x101"
+			test_ce "0x101"
 			pass $gdb_test_name
 		    }
 		}
@@ -147,7 +147,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_even_then_else.*" {
 		    incr bp_hit(6)
 		    with_test_prefix "even then-else, hit $bp_hit(6)" {
-			test_emask "0x1010"
+			test_ce "0x1010"
 			pass $gdb_test_name
 		    }
 		}
@@ -155,7 +155,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_even_else_then.*" {
 		    incr bp_hit(7)
 		    with_test_prefix "even else-then, hit $bp_hit(7)" {
-			test_emask "0x404"
+			test_ce "0x404"
 			pass $gdb_test_name
 		    }
 		}
@@ -163,7 +163,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_even_else_else.*" {
 		    incr bp_hit(8)
 		    with_test_prefix "even else-else, hit $bp_hit(8)" {
-			test_emask "0x4040"
+			test_ce "0x4040"
 			pass $gdb_test_name
 		    }
 		}
@@ -171,7 +171,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_odd_then_then.*" {
 		    incr bp_hit(9)
 		    with_test_prefix "odd then-then, hit $bp_hit(9)" {
-			test_emask "0x202"
+			test_ce "0x202"
 			pass $gdb_test_name
 		    }
 		}
@@ -179,7 +179,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_odd_then_else.*" {
 		    incr bp_hit(10)
 		    with_test_prefix "odd then-else, hit $bp_hit(10)" {
-			test_emask "0x2020"
+			test_ce "0x2020"
 			pass $gdb_test_name
 		    }
 		}
@@ -187,7 +187,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_odd_else_then.*" {
 		    incr bp_hit(11)
 		    with_test_prefix "odd else-then, hit $bp_hit(11)" {
-			test_emask "0x808"
+			test_ce "0x808"
 			pass $gdb_test_name
 		    }
 		}
@@ -195,7 +195,7 @@ foreach device $sycl_device_list {
 		-re -wrap "Breakpoint .*$srcfile:$bp_odd_else_else.*" {
 		    incr bp_hit(12)
 		    with_test_prefix "odd else-else, hit $bp_hit(12)" {
-			test_emask "0x8080"
+			test_ce "0x8080"
 			pass $gdb_test_name
 		    }
 		}

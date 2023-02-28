@@ -40,7 +40,11 @@ struct thread_info : public intrusive_list_node<thread_info>
   { return m_regcache.get (); }
 
   void set_regcache (std::unique_ptr<struct regcache> regcache)
-  { m_regcache = std::move (regcache); }
+  {
+    m_regcache = std::move (regcache);
+    if (m_regcache != nullptr)
+      m_regcache->thread = this;
+  }
 
   void *target_data ()
   { return m_target_data; }

@@ -17,7 +17,7 @@
 
 load_lib sycl.exp
 
-standard_testfile intelgt-emask.cpp
+standard_testfile intelgt-ce.cpp
 
 set sycl_device_list [init_sycl_devices_list]
 if {[llength $sycl_device_list] == 0} {
@@ -78,14 +78,14 @@ foreach device $sycl_device_list {
 	    }
 	}
 
-	# Set and hit a BP at a join instruction.  We expect the emask to be 0x0 there.
+	# Set and hit a BP at a join instruction.  We expect the ce to be 0x0 there.
 	gdb_breakpoint "*$join_address" {temporary}
 	gdb_test "continue" ".*\\(inactive\\).*$srcfile.*" \
 	    "hit inactive thread"
-	# Check that the higher bits of $emask register are 0x0.
+	# Check that the higher bits of $ce register are 0x0.
 	# We have only 16 SIMD lanes.
-	gdb_test "print\/x \$emask & 0xffff" "= 0x0" \
-	    "print \$emask of an inactive thread"
+	gdb_test "print\/x \$ce & 0xffff" "= 0x0" \
+	    "print \$ce of an inactive thread"
 	gdb_test "thread" "Current thread.*\\(inactive\\).*" \
 	    "Current thread is marked as inactive"
 	set current_thread [get_current_thread "inactive stop"]

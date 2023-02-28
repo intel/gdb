@@ -68,7 +68,7 @@ struct regcache : public reg_buffer_common
 
 void regcache_cpy (struct regcache *dst, struct regcache *src);
 
-struct regcache *get_thread_regcache (struct thread_info *thread, int fetch);
+regcache *get_thread_regcache (thread_info *thread, bool fetch = true);
 
 /* Release all memory associated with the register cache for INFERIOR.  */
 

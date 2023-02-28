@@ -44,6 +44,10 @@ struct regcache : public reg_buffer_common
 #ifndef IN_PROCESS_AGENT
   /* One of REG_UNAVAILABLE or REG_VALID.  */
   unsigned char *register_status = nullptr;
+
+  /* Constructors.  */
+  regcache () = default;
+  regcache (const target_desc *tdesc);
 #endif
 
   /* Init the regcache data.  */
@@ -63,10 +67,6 @@ struct regcache : public reg_buffer_common
 };
 
 void regcache_cpy (struct regcache *dst, struct regcache *src);
-
-/* Create a new register cache for INFERIOR.  */
-
-struct regcache *new_register_cache (const struct target_desc *tdesc);
 
 struct regcache *get_thread_regcache (struct thread_info *thread, int fetch);
 

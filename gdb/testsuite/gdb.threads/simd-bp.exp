@@ -144,12 +144,12 @@ foreach device $sycl_device_list {
 		}
 		-re "$srcfile:$odd_branch.*$gdb_prompt" {
 		    set hit_cond_for_inactive_lane true
-		    gdb_test "p/t \$emask" "= \[01\]+" "odd branch emask"
+		    gdb_test "p/t \$ce" "= \[01\]+" "odd branch channels"
 		    fail $test_odd
 		}
 		-re "$srcfile:$even_branch.*$gdb_prompt" {
 		    set hit_lane_clause_for_inactive_lane true
-		    gdb_test "p/t \$emask" "= \[01\]+" "even branch emask"
+		    gdb_test "p/t \$ce" "= \[01\]+" "even branch channels"
 		    fail $test_even
 		}
 		-re "$srcfile:$condition_line.*$gdb_prompt" {

@@ -712,18 +712,18 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
       break;
 
     case ZET_DEBUG_REGSET_TYPE_CE_INTEL_GPU:
-      /* We expect a single 'emask' register.  */
+      /* We expect a single 'ce' register.  */
       if (regprop.count != 1)
-	warning (_("Ignoring %u unexpected 'emask' registers in %s."),
+	warning (_("Ignoring %u unexpected 'ce' registers in %s."),
 		 regprop.count - 1, device.name);
 
       feature = tdesc_create_feature (tdesc, intelgt::feature_ce);
 
-      tdesc_create_reg (feature, "emask", regnum++, 1, "CE",
+      tdesc_create_reg (feature, "ce", regnum++, 1, "CE",
 			regprop.bitSize,
 			intelgt_uint_reg_type (regprop.bitSize));
 
-      expedite.push_back ("emask");
+      expedite.push_back ("ce");
       break;
 
     case ZET_DEBUG_REGSET_TYPE_SR_INTEL_GPU:

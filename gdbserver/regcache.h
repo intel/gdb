@@ -33,6 +33,9 @@ struct regcache : public reg_buffer_common
   /* The regcache's target description.  */
   const struct target_desc *tdesc = nullptr;
 
+  /* Back-link to the thread to which this regcache belongs.  */
+  thread_info *thread = nullptr;
+
   /* Whether the REGISTERS buffer's contents are valid.  If false, we
      haven't fetched the registers from the target yet.  Not that this
      register cache is _not_ pass-through, unlike GDB's.  Note that

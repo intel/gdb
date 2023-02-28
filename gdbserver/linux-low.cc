@@ -790,7 +790,7 @@ linux_process_target::get_pc (lwp_info *lwp)
   scoped_restore_current_thread restore_thread;
   switch_to_thread (get_lwp_thread (lwp));
 
-  struct regcache *regcache = get_thread_regcache (current_thread, 1);
+  struct regcache *regcache = get_thread_regcache (current_thread);
   CORE_ADDR pc = low_get_pc (regcache);
 
   threads_debug_printf ("pc is 0x%lx", (long) pc);
@@ -806,7 +806,7 @@ linux_process_target::get_syscall_trapinfo (lwp_info *lwp, int *sysno)
   scoped_restore_current_thread restore_thread;
   switch_to_thread (get_lwp_thread (lwp));
 
-  regcache = get_thread_regcache (current_thread, 1);
+  regcache = get_thread_regcache (current_thread);
   low_get_syscall_trapinfo (regcache, sysno);
 
   threads_debug_printf ("get_syscall_trapinfo sysno %d", *sysno);
@@ -896,7 +896,7 @@ linux_process_target::save_stop_reason (lwp_info *lwp)
       if (pc != sw_breakpoint_pc)
 	{
 	  struct regcache *regcache
-	    = get_thread_regcache (current_thread, 1);
+	    = get_thread_regcache (current_thread);
 	  low_set_pc (regcache, sw_breakpoint_pc);
 	}
 
@@ -2077,7 +2077,7 @@ linux_process_target::maybe_move_out_of_jump_pad (lwp_info *lwp, int *wstat)
 			  (PTRACE_TYPE_ARG3) 0, &info);
 		}
 
-	      regcache = get_thread_regcache (current_thread, 1);
+	      regcache = get_thread_regcache (current_thread);
 	      low_set_pc (regcache, status.tpoint_addr);
 	      lwp->stop_pc = status.tpoint_addr;
 
@@ -3095,7 +3095,7 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
       if (increment_pc != 0)
 	{
 	  struct regcache *regcache
-	    = get_thread_regcache (current_thread, 1);
+	    = get_thread_regcache (current_thread);
 
 	  event_child->stop_pc += increment_pc;
 	  low_set_pc (regcache, event_child->stop_pc);
@@ -3383,7 +3383,7 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
       if (low_supports_breakpoints ())
 	{
 	  struct regcache *regcache
-	    = get_thread_regcache (current_thread, 1);
+	    = get_thread_regcache (current_thread);
 	  low_set_pc (regcache, event_child->stop_pc);
 	}
 
@@ -3618,7 +3618,7 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
       if (decr_pc != 0)
 	{
 	  struct regcache *regcache
-	    = get_thread_regcache (current_thread, 1);
+	    = get_thread_regcache (current_thread);
 	  low_set_pc (regcache, event_child->stop_pc + decr_pc);
 	}
     }
@@ -3966,7 +3966,7 @@ void
 linux_process_target::install_software_single_step_breakpoints (lwp_info *lwp)
 {
   struct thread_info *thread = get_lwp_thread (lwp);
-  struct regcache *regcache = get_thread_regcache (thread, 1);
+  struct regcache *regcache = get_thread_regcache (thread);
 
   scoped_restore_current_thread restore_thread;
 
@@ -4141,7 +4141,7 @@ linux_process_target::resume_one_lwp_throw (lwp_info *lwp, int step,
 
   if (proc->tdesc != NULL && low_supports_breakpoints ())
     {
-      struct regcache *regcache = get_thread_regcache (current_thread, 1);
+      struct regcache *regcache = get_thread_regcache (current_thread);
 
       lwp->stop_pc = low_get_pc (regcache);
 

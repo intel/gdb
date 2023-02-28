@@ -46,6 +46,9 @@ struct regcache : public reg_buffer_common
   unsigned char *register_status = nullptr;
 #endif
 
+  /* Init the regcache data.  */
+  void initialize (const target_desc *tdesc, unsigned char *regbuf);
+
   /* See gdbsupport/common-regcache.h.  */
   enum register_status get_register_status (int regnum) const override;
 
@@ -58,10 +61,6 @@ struct regcache : public reg_buffer_common
   /* See gdbsupport/common-regcache.h.  */
   bool raw_compare (int regnum, const void *buf, int offset) const override;
 };
-
-struct regcache *init_register_cache (struct regcache *regcache,
-				      const struct target_desc *tdesc,
-				      unsigned char *regbuf);
 
 void regcache_cpy (struct regcache *dst, struct regcache *src);
 

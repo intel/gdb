@@ -45,6 +45,7 @@
 #include "solib.h"
 #include "symfile.h"
 #include "xml-tdesc.h"
+#include "reggroups.h"
 #include <fstream>
 #include <iterator>
 #include <algorithm>
@@ -1250,6 +1251,25 @@ intelgt_pseudo_register_write (gdbarch *arch,
     }
   else
     error ("Pseudo-register %s is read-only", name);
+}
+
+/* Return the groups that an intelgt register can be categorised into.
+
+   We need to avoid saving / restoring of the CE register to fix a side
+   effect of an infcall problem.  The current intelgt infcall implementation
+   do not work properly in case of a thread branching.  As soon as the root
+   cause of the issue is fixed, this function is no longer needed.  */
+
+static int
+intelgt_register_reggroup_p (gdbarch *gdbarch, int regnum, reggroup *reggroup)
+{
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+  if ((reggroup == save_reggroup || reggroup == restore_reggroup)
+      && (regnum == data->ce_regnum))
+    return 0;
+
+  return default_register_reggroup_p (gdbarch, regnum, reggroup);
 }
 
 /* Called by tdesc_use_registers each time a new regnum
@@ -2591,6 +2611,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
       set_tdesc_pseudo_register_name (gdbarch, intelgt_pseudo_register_name);
       set_gdbarch_read_pc (gdbarch, intelgt_read_pc);
       set_gdbarch_write_pc (gdbarch, intelgt_write_pc);
+      set_gdbarch_register_reggroup_p (gdbarch, intelgt_register_reggroup_p);
     }
 
   /* Populate gdbarch fields.  */

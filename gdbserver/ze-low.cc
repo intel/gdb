@@ -907,10 +907,20 @@ ze_store_register (const ze_device_info &device,
       break;
 
     default:
-      error (_("Error %x writing register %ld (regset %" PRIu32
-	       ") for %s on %s."), status,  regno, regset.type,
-	     ze_thread_id_str (thread).c_str (),
-	     device.properties.name);
+      /* Writing the register (in particular, CR0) would fail for
+	 threads that are silently resumed by dbgUMD.  This can be
+	 occasionally seen for large workloads when resuming or
+	 running the "info threads" command following an interrupt.
+	 Erroring out in this case can distort the command's flow and
+	 lead to a hang-like behavior.  We do not use a 'warning'
+	 because if there are too many threads, the communication pipe
+	 between GDB and gdbserver can become flooded.  Hence we
+	 prefer a dprintf here.  */
+
+      dprintf (_("Error %x writing register %ld (regset %" PRIu32
+		 ") for %s on %s."), status,  regno, regset.type,
+	       ze_thread_id_str (thread).c_str (),
+	       device.properties.name);
     }
 }
 

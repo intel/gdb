@@ -167,6 +167,10 @@ enum ze_thread_exec_state_t
      resume it.  */
   ze_thread_state_stopped,
 
+  /* The thread is stopped but we are holding its stop event until we
+     resume it.  */
+  ze_thread_state_held,
+
   /* The thread is running.  We do not know whether it is still available
      to us and we're able to stop it or whether it would eventually hit a
      breakpoint.
@@ -215,7 +219,8 @@ struct ze_thread_info
 
   /* The thread's stop reason.
 
-     This is only valid if EXEC_STATE == ZE_THREAD_STATE_STOPPED.  */
+     This is only valid if EXEC_STATE == ZE_THREAD_STATE_STOPPED
+     or EXEC_STATE == ZE_THREAD_STATE_HELD.  */
   target_stop_reason stop_reason = TARGET_STOPPED_BY_NO_REASON;
 
   /* The waitstatus for this thread's last event.

@@ -653,6 +653,17 @@ ze_exec_state (const thread_info *tp)
   return zetp->exec_state;
 }
 
+/* Return whether TP has a stop execution state.  */
+
+static bool
+ze_thread_stopped (const thread_info *tp)
+{
+  ze_thread_exec_state_t state = ze_exec_state (tp);
+
+  return ((state == ze_thread_state_stopped)
+	  || (state == ze_thread_state_held));
+}
+
 /* Return whether TP has a pending event.  */
 
 static bool
@@ -1011,11 +1022,11 @@ ze_interrupt (ze_device_info &device, ze_device_thread_t thread)
 	 threads to reflect that.  */
       for_each_thread (device, thread, [&] (thread_info *tp)
 	{
+	  if (ze_thread_stopped (tp))
+	    return;
+
 	  ze_thread_info *zetp = ze_thread (tp);
 	  gdb_assert (zetp != nullptr);
-
-	  if (zetp->exec_state == ze_thread_state_stopped)
-	    return;
 
 	  zetp->exec_state = ze_thread_state_unavailable;
 	  zetp->waitstatus.set_unavailable ();
@@ -1035,7 +1046,7 @@ ze_target::is_range_stepping (thread_info *tp)
   const ze_thread_info *zetp = ze_thread (tp);
   gdb_assert (zetp != nullptr);
 
-  if ((zetp->exec_state == ze_thread_state_stopped)
+  if (ze_thread_stopped (tp)
       && (zetp->stop_reason == TARGET_STOPPED_BY_SINGLE_STEP))
     {
       regcache *regcache = get_thread_regcache (tp, /* fetch = */ false);
@@ -1416,19 +1427,19 @@ ze_target::fetch_events (ze_device_info &device)
 
 	    for_each_thread (device, tid, [&] (thread_info *tp)
 	      {
-		ze_thread_info *zetp = ze_thread (tp);
-		gdb_assert (zetp != nullptr);
-
 		/* Ignore threads we know to be stopped.
 
 		   We already analyzed the stop reason and probably
 		   destroyed it in the process.  */
-		if (zetp->exec_state == ze_thread_state_stopped)
+		if (ze_thread_stopped (tp))
 		  return;
 
 		/* Prevent underflowing.  */
 		if (device.nresumed > 0)
 		  device.nresumed--;
+
+		ze_thread_info *zetp = ze_thread (tp);
+		gdb_assert (zetp != nullptr);
 
 		/* Discard any registers we may have fetched while TP was
 		   unavailable.  */
@@ -1438,7 +1449,16 @@ ze_target::fetch_events (ze_device_info &device)
 		    gdb_signal signal = GDB_SIGNAL_0;
 		    target_stop_reason reason = get_stop_reason (tp, signal);
 
-		    zetp->exec_state = ze_thread_state_stopped;
+		    /* If this is an unavailable thread with a 'stop'
+		       resume state, from GDB's point of view the thread
+		       was interrupted.  We keep the event held to not
+		       confuse GDB.  */
+		    if ((zetp->exec_state == ze_thread_state_unavailable)
+			&& (zetp->resume_state == ze_thread_resume_stop))
+		      zetp->exec_state = ze_thread_state_held;
+		    else
+		      zetp->exec_state = ze_thread_state_stopped;
+
 		    zetp->stop_reason = reason;
 		    zetp->waitstatus.set_stopped (signal);
 		  }
@@ -1481,19 +1501,19 @@ ze_target::fetch_events (ze_device_info &device)
 
 	    for_each_thread (device, tid, [&] (thread_info *tp)
 	      {
-		ze_thread_info *zetp = ze_thread (tp);
-		gdb_assert (zetp != nullptr);
-
 		/* Ignore threads we know to be stopped.
 
 		   They would not be considered in the response event for
 		   an interrupt request.  */
-		if (zetp->exec_state == ze_thread_state_stopped)
+		if (ze_thread_stopped (tp))
 		  return;
 
 		/* Prevent underflowing.  */
 		if (device.nresumed > 0)
 		  device.nresumed--;
+
+		ze_thread_info *zetp = ze_thread (tp);
+		gdb_assert (zetp != nullptr);
 
 		zetp->exec_state = ze_thread_state_unavailable;
 		zetp->waitstatus.set_unavailable ();
@@ -1779,6 +1799,10 @@ ze_target::resume (ze_device_info &device, enum resume_kind rkind)
 		regcache_invalidate_thread (tp);
 		return;
 
+	      case ze_thread_state_held:
+		gdb_assert_not_reached ("threads with 'held' state should "
+					"have been turned into 'stopped'");
+
 	      case ze_thread_state_unavailable:
 		/* The thread is still running for all we know.  */
 		gdb_assert (!ze_has_waitstatus (tp));
@@ -1880,6 +1904,10 @@ ze_target::resume (thread_info *tp, enum resume_kind rkind)
 
       internal_error (_("bad resume kind: %d."), rkind);
 
+    case ze_thread_state_held:
+      gdb_assert_not_reached ("threads with 'held' state should "
+			      "have been turned into 'stopped'");
+
     case ze_thread_state_unavailable:
       if (device->nresumed < device->nthreads)
 	device->nresumed++;
@@ -1942,6 +1970,11 @@ ze_target::mark_eventing_threads (ptid_t resume_ptid, resume_kind rkind)
 
       ze_thread_info *zetp = ze_thread (tp);
       gdb_assert (zetp != nullptr);
+
+      /* If the thread's stop event was being held, it is now the time
+	 to convert the state to 'stopped' to unleash the event.  */
+      if (zetp->exec_state == ze_thread_state_held)
+	zetp->exec_state = ze_thread_state_stopped;
 
       /* TP may have stopped at a breakpoint that is already deleted
 	 by GDB.  Consider TP as an eventing thread only if the BP is
@@ -2135,6 +2168,12 @@ ze_find_eventing_thread (ptid_t ptid)
       if (state == ze_thread_resume_none)
 	continue;
 
+      /* If this thread's event is being held, we do not pick it for
+	 reporting.  */
+      ze_thread_exec_state_t exec_state = ze_exec_state (tp);
+      if (exec_state == ze_thread_state_held)
+	continue;
+
       if (ze_has_priority_waitstatus (tp))
 	{
 	  predicate = ze_has_priority_waitstatus;
@@ -2157,6 +2196,11 @@ ze_find_eventing_thread (ptid_t ptid)
 	/* Only consider threads that were resumed.  */
 	ze_thread_resume_state_t state = ze_resume_state (tp);
 	if (state == ze_thread_resume_none)
+	  return false;
+
+	/* Threads with held events are not picked.  */
+	ze_thread_exec_state_t exec_state = ze_exec_state (tp);
+	if (exec_state == ze_thread_state_held)
 	  return false;
 
 	return predicate (tp);
@@ -2349,8 +2393,7 @@ ze_memory_access_context (thread_info *thread, unsigned int addr_space)
 {
   /* With a stopped thread, we can access all address spaces, and we
      should be able to determine the device for that thread.  */
-  enum ze_thread_exec_state_t state = ze_exec_state (thread);
-  if (state == ze_thread_state_stopped)
+  if (ze_thread_stopped (thread))
     return std::pair<ze_device_thread_t, ze_device_info *>
       { ze_thread_id (thread), ze_thread_device (thread) };
 
@@ -2590,6 +2633,7 @@ ze_target::pause_all (bool freeze)
 	switch (state)
 	  {
 	  case ze_thread_state_stopped:
+	  case ze_thread_state_held:
 	  case ze_thread_state_unavailable:
 	    return false;
 

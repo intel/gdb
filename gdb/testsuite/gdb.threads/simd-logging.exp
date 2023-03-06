@@ -191,16 +191,10 @@ foreach device $sycl_device_list {
 
 	# Test warning if we try to apply a command to a specific lane on an executing
 	# thread.
-	if {[is_level_zero_debug_api]} {
-	    setup_kfail "JIRA DOQG/3500" "*-*-*"
-	}
 	gdb_test "thread apply :3 thread" \
 	    "warning: Thread $odd_branch_inf\.$running_thread is executing, cannot check SIMD lane status: Cannot apply command on SIMD lane" \
 	    "thread apply warning for an executing thread if run for a specific lane."
 
-	if {[is_level_zero_debug_api]} {
-	    setup_kfail "JIRA DOQG/3500" "*-*-*"
-	}
 	# Test warning if we try to apply a command on lanes.
 	gdb_test "thread apply :* thread" \
 	    "warning: Thread $odd_branch_inf\.$running_thread is executing, cannot check SIMD lane status: Cannot apply command on SIMD lane" \

@@ -90,6 +90,10 @@ public:
      may have spawned new threads we haven't heard of yet.  */
   bool threads_executing = false;
 
+  /* True if this is an all-stop target with a thread stepping over.
+     We set this when step-over starts, and clear when it finishs.  */
+  bool allstop_threads_stepping = false;
+
   /* If THREAD is resumed and has a pending wait status, add it to the
      target's "resumed with pending wait status" list.  */
   void maybe_add_resumed_with_pending_wait_status (thread_info *thread);

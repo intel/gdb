@@ -65,9 +65,6 @@ foreach device $sycl_device_list {
 	# intermediary output such as "Cannot execute this command while the
 	# target is running." is printed.
 	gdb_test "inferior 1" "Switching to inferior 1.*" "first switch"
-	if {[is_level_zero_debug_api]} {
-	    setup_kfail "JIRA DOQG/3111" "*-*-*"
-	}
 	gdb_test "continue" \
 	    [multi_line "Continuing." \
 		"\\\[Switching to Thread $fill lane 0\\\]" \
@@ -76,9 +73,6 @@ foreach device $sycl_device_list {
 	    "continue to kernel bp 2"
 
 	gdb_test "inferior 1" "Switching to inferior 1.*" "second switch"
-	if {[is_level_zero_debug_api]} {
-	    setup_kfail "JIRA DOQG/3111" "*-*-*"
-	}
 	gdb_test "continue" \
 	    [multi_line "Continuing." \
 		"" \
@@ -87,9 +81,6 @@ foreach device $sycl_device_list {
 
 	# Now the symmetric case: switch to the kernel inferior and resume.
 	gdb_test "inferior 2" "Switching to inferior 2.*" "third switch"
-	if {[is_level_zero_debug_api]} {
-	    setup_kfail "JIRA IGDB/3111" "*-*-*"
-	}
 	gdb_test "continue" \
 	    [multi_line "Continuing." \
 		"Result is 42" \

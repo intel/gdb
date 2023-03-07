@@ -2215,6 +2215,8 @@ start_step_over (void)
 	  /* With remote targets (at least), in all-stop, we can't
 	     issue any further remote commands until the program stops
 	     again.  */
+	  process_stratum_target *target = tp->inf->process_target ();
+	  target->allstop_threads_stepping = true;
 	  started = true;
 	  break;
 	}
@@ -3585,7 +3587,7 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 
   {
     scoped_disable_commit_resumed disable_commit_resumed ("proceeding");
-    bool step_over_started = start_step_over ();
+    start_step_over ();
 
     if (step_over_info_valid_p ())
       {
@@ -3620,6 +3622,11 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 	      }
 	    else
 	      {
+		/* An all-stop target cannot respond anymore if it has
+		   a thread stepping over, we need to skip it.  */
+		if (target->allstop_threads_stepping)
+		  continue;
+
 		/* Proceed a thread of the target.  Prefer the current
 		   thread, if it belongs to this target.  Otherwise
 		   just pick the first one.  */
@@ -3632,14 +3639,6 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 		    tp = first_non_exited_thread_of_inferior (inf);
 		  }
 		gdb_assert (tp != nullptr);
-
-		/* An all-stop target with a running thread cannot
-		   respond anymore.  This may be the case, e.g., if a
-		   step-over was started in this target.  If we started
-		   a step-over in the current thread we skip it here.  */
-		if ((tp->executing () && tp->resumed ())
-		      || (step_over_started && tp == cur_thr))
-		  continue;
 
 		INFRUN_SCOPED_DEBUG_START_END
 		  ("resuming threads, all-stop");
@@ -6507,7 +6506,12 @@ finish_step_over (struct execution_control_state *ecs)
     }
 
   if (!target_is_non_stop_p ())
-    return 0;
+    {
+      process_stratum_target *target;
+      target = ecs->event_thread->inf->process_target ();
+      target->allstop_threads_stepping = false;
+      return 0;
+    }
 
   /* Start a new step-over in another thread if there's one that
      needs it.  */

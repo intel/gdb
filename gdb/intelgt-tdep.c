@@ -1173,6 +1173,9 @@ intelgt_pseudo_register_read_value (gdbarch *arch,
     {
       /* emask is an alias for ce.  */
       gdb_assert (data->ce_regnum != -1);
+
+      warning (_("$emask is deprecated; use $ce instead"));
+
       value *ce = regcache->cooked_read_value (data->ce_regnum);
       if (!value_entirely_available (ce))
 	throw_error (NOT_AVAILABLE_ERROR,

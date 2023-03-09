@@ -1,0 +1,98 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test debugging an application that submits jobs to tiles-as-devices,
+# while GDB attaches to root devices only.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+save_vars { env(ZE_GDB_DO_NOT_ATTACH_TO_SUB_DEVICE) } {
+    set env(ZE_GDB_DO_NOT_ATTACH_TO_SUB_DEVICE) "1"
+
+    foreach device $sycl_device_list {
+	clean_restart "${binfile}"
+	with_test_prefix [sycl_get_device_prefix $device] {
+
+	    if {![require_sycl_device "$device" "gpu" "*"]} {
+		unsupported "test is aimed at GPUs only"
+		continue
+	    }
+
+	    if {![runto_main [sycl_get_device_args $device]]} {
+		continue
+	    }
+
+	    set num_devices_check [gdb_get_line_number "num-devices-check"]
+	    gdb_breakpoint $num_devices_check {temporary}
+	    gdb_continue_to_breakpoint "num devices check" \
+		".*$srcfile:$num_devices_check.*"
+	    set num_devices [get_integer_valueof "num_devices" 0 \
+			     "get the number of devices"]
+	    set num_sub_devices [get_integer_valueof "num_sub_devices" 0 \
+				 "get the number of subdevices"]
+	    if {$num_sub_devices < 1} {
+		unsupported "test is aimed at systems with subdevices"
+		continue
+	    }
+
+	    set bp1 [gdb_get_line_number "kernel-line-1"]
+	    gdb_breakpoint $bp1
+	    set end_bp [gdb_get_line_number "end-marker"]
+	    gdb_breakpoint $end_bp
+
+	    # The bp should be hit one time by each subdevices.
+	    set bp1_hit 0
+
+	    gdb_continue_to_breakpoint "kernel bp1 first hit" \
+		".*$srcfile:$bp1.*"
+	    incr bp1_hit
+
+	    # GDB should attach only to root devices.
+	    set fill "\[^\r\n\]+"
+	    set any_location "\\\[\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
+	    set dev_inferior_match "${fill}${decimal}${fill}device ${any_location}${fill}(\r\n)?"
+	    gdb_test "info inferiors" [multi_line \
+				       "${fill}1${fill}process${fill}" \
+				       "($dev_inferior_match){$num_devices}" \
+				       "Type${fill}"]
+
+	    for {set trip 2} {$trip <= $num_sub_devices} {incr trip} {
+		with_test_prefix "trip $trip" {
+		    gdb_test_multiple "continue" "resume and hit a bp" {
+			-re -wrap "$srcfile:$bp1.*" {
+			    incr bp1_hit
+			    pass $gdb_test_name
+			}
+		    }
+		}
+	    }
+	    gdb_assert {$bp1_hit == $num_sub_devices}
+	    gdb_continue_to_breakpoint "post-kernel bp" ".*$srcfile:$end_bp.*"
+	}
+    }
+}

@@ -152,12 +152,6 @@ class IntelgtAutoAttach:
             return default
         return env_var.replace(f"{var} = ", "", 1).strip()
 
-    def is_auto_attach_disabled(self):
-        """Helper function to check if auto-attach has been disabled via
-        os environment variable or in inferior's environment."""
-        env_value = self.get_env_variable("INTELGT_AUTO_ATTACH_DISABLE")
-        return not(env_value is None or env_value == "0")
-
     def handle_new_objfile_event(self, event):
         """Handler for a new object file load event.  If auto-attach has
         not been disabled, set a breakpoint at location 'BP_FCT'."""
@@ -173,9 +167,6 @@ class IntelgtAutoAttach:
             return
 
         if not 'libigfxdbgxchg64.so' in event.new_objfile.filename:
-            return
-
-        if self.is_auto_attach_disabled():
             return
 
         if ('libze_intel_gpu.so' in event.new_objfile.filename
@@ -430,6 +421,11 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
     @DebugLogger.log_call
     def handle_attach_gdbserver_gt(self, connection, inf):
         """Attach gdbserver to gt inferior either locally or remotely."""
+
+        # User may disable the auto attach from GDB command prompt.
+        if self.get_env_variable("INTELGT_AUTO_ATTACH_DISABLE", "0") == "1":
+            return False
+
         # Check 'INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH' in the inferior's
         # environment.
         gdbserver_gt_path_env_var = \
@@ -653,4 +649,7 @@ intelgt: the igfxdcd module (i.e. the debug driver) is not loaded.""")
 
         return was_cli_suppressed
 
-INTELGT_AUTO_ATTACH = IntelgtAutoAttach()
+AUTO_ATTACH_DISABLED = IntelgtAutoAttach.get_env_variable(
+        "INTELGT_AUTO_ATTACH_DISABLE", "0")
+if AUTO_ATTACH_DISABLED != "1":
+    INTELGT_AUTO_ATTACH = IntelgtAutoAttach()

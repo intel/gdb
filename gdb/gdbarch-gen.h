@@ -1811,3 +1811,30 @@ extern void set_gdbarch_reserve_stack_space (struct gdbarch *gdbarch, gdbarch_re
 typedef value * (gdbarch_get_inferior_call_return_value_ftype) (struct gdbarch *gdbarch, call_return_meta_info *return_info);
 extern value * gdbarch_get_inferior_call_return_value (struct gdbarch *gdbarch, call_return_meta_info *return_info);
 extern void set_gdbarch_get_inferior_call_return_value (struct gdbarch *gdbarch, gdbarch_get_inferior_call_return_value_ftype *get_inferior_call_return_value);
+
+/* Return array containing the coordinates of the thread group,
+   to which TP belongs. */
+
+extern bool gdbarch_thread_workgroup_p (struct gdbarch *gdbarch);
+
+typedef std::array<uint32_t, 3> (gdbarch_thread_workgroup_ftype) (struct gdbarch *gdbarch, thread_info *tp);
+extern std::array<uint32_t, 3> gdbarch_thread_workgroup (struct gdbarch *gdbarch, thread_info *tp);
+extern void set_gdbarch_thread_workgroup (struct gdbarch *gdbarch, gdbarch_thread_workgroup_ftype *thread_workgroup);
+
+/* Return array containing the local coordinates of the workitem that is
+   processed by thread TP within its thread group. */
+
+extern bool gdbarch_workitem_local_id_p (struct gdbarch *gdbarch);
+
+typedef std::array<uint32_t, 3> (gdbarch_workitem_local_id_ftype) (struct gdbarch *gdbarch, thread_info *tp);
+extern std::array<uint32_t, 3> gdbarch_workitem_local_id (struct gdbarch *gdbarch, thread_info *tp);
+extern void set_gdbarch_workitem_local_id (struct gdbarch *gdbarch, gdbarch_workitem_local_id_ftype *workitem_local_id);
+
+/* Return array containing the global coordinates of the workitem that is
+   processed by thread TP. */
+
+extern bool gdbarch_workitem_global_id_p (struct gdbarch *gdbarch);
+
+typedef std::array<uint32_t, 3> (gdbarch_workitem_global_id_ftype) (struct gdbarch *gdbarch, thread_info *tp);
+extern std::array<uint32_t, 3> gdbarch_workitem_global_id (struct gdbarch *gdbarch, thread_info *tp);
+extern void set_gdbarch_workitem_global_id (struct gdbarch *gdbarch, gdbarch_workitem_global_id_ftype *workitem_global_id);

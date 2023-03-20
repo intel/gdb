@@ -267,6 +267,9 @@ struct gdbarch
   bool is_inferior_device = false;
   gdbarch_reserve_stack_space_ftype *reserve_stack_space = default_reserve_stack_space;
   gdbarch_get_inferior_call_return_value_ftype *get_inferior_call_return_value = default_get_inferior_call_return_value;
+  gdbarch_thread_workgroup_ftype *thread_workgroup = nullptr;
+  gdbarch_current_workitem_local_id_ftype *current_workitem_local_id = nullptr;
+  gdbarch_current_workitem_global_id_ftype *current_workitem_global_id = nullptr;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -545,6 +548,9 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of is_inferior_device, invalid_p == 0 */
   /* Skip verify of reserve_stack_space, invalid_p == 0 */
   /* Skip verify of get_inferior_call_return_value, invalid_p == 0 */
+  /* Skip verify of thread_workgroup, has predicate.  */
+  /* Skip verify of current_workitem_local_id, has predicate.  */
+  /* Skip verify of current_workitem_global_id, has predicate.  */
   if (!log.empty ())
     internal_error (_("verify_gdbarch: the following are invalid ...%s"),
 		    log.c_str ());
@@ -1437,6 +1443,24 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: get_inferior_call_return_value = <%s>\n",
 	      host_address_to_string (gdbarch->get_inferior_call_return_value));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_thread_workgroup_p() = %d\n",
+	      gdbarch_thread_workgroup_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: thread_workgroup = <%s>\n",
+	      host_address_to_string (gdbarch->thread_workgroup));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_current_workitem_local_id_p() = %d\n",
+	      gdbarch_current_workitem_local_id_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: current_workitem_local_id = <%s>\n",
+	      host_address_to_string (gdbarch->current_workitem_local_id));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_current_workitem_global_id_p() = %d\n",
+	      gdbarch_current_workitem_global_id_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: current_workitem_global_id = <%s>\n",
+	      host_address_to_string (gdbarch->current_workitem_global_id));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -5680,4 +5704,76 @@ set_gdbarch_get_inferior_call_return_value (struct gdbarch *gdbarch,
 					    gdbarch_get_inferior_call_return_value_ftype get_inferior_call_return_value)
 {
   gdbarch->get_inferior_call_return_value = get_inferior_call_return_value;
+}
+
+bool
+gdbarch_thread_workgroup_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->thread_workgroup != NULL;
+}
+
+std::array<uint32_t, 3>
+gdbarch_thread_workgroup (struct gdbarch *gdbarch, thread_info *tp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->thread_workgroup != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_thread_workgroup called\n");
+  return gdbarch->thread_workgroup (gdbarch, tp);
+}
+
+void
+set_gdbarch_thread_workgroup (struct gdbarch *gdbarch,
+			      gdbarch_thread_workgroup_ftype thread_workgroup)
+{
+  gdbarch->thread_workgroup = thread_workgroup;
+}
+
+bool
+gdbarch_current_workitem_local_id_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->current_workitem_local_id != NULL;
+}
+
+std::array<uint32_t, 3>
+gdbarch_current_workitem_local_id (struct gdbarch *gdbarch, thread_info *tp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->current_workitem_local_id != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_current_workitem_local_id called\n");
+  return gdbarch->current_workitem_local_id (gdbarch, tp);
+}
+
+void
+set_gdbarch_current_workitem_local_id (struct gdbarch *gdbarch,
+				       gdbarch_current_workitem_local_id_ftype current_workitem_local_id)
+{
+  gdbarch->current_workitem_local_id = current_workitem_local_id;
+}
+
+bool
+gdbarch_current_workitem_global_id_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->current_workitem_global_id != NULL;
+}
+
+std::array<uint32_t, 3>
+gdbarch_current_workitem_global_id (struct gdbarch *gdbarch, thread_info *tp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->current_workitem_global_id != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_current_workitem_global_id called\n");
+  return gdbarch->current_workitem_global_id (gdbarch, tp);
+}
+
+void
+set_gdbarch_current_workitem_global_id (struct gdbarch *gdbarch,
+					gdbarch_current_workitem_global_id_ftype current_workitem_global_id)
+{
+  gdbarch->current_workitem_global_id = current_workitem_global_id;
 }

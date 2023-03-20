@@ -2810,3 +2810,39 @@ Method(
     predicate=False,
     invalid=False,
 )
+
+Method(
+    comment="""
+Return array containing the coordinates of the thread group,
+to which TP belongs.
+""",
+    type="std::array<uint32_t, 3>",
+    name="thread_workgroup",
+    params=[("thread_info *", "tp")],
+    predicate=True,
+    invalid=True,
+)
+
+Method(
+    comment="""
+Return array containing the local coordinates of the workitem that is
+processed by thread TP within its thread group.
+""",
+    type="std::array<uint32_t, 3>",
+    name="workitem_local_id",
+    params=[("thread_info *", "tp")],
+    predicate=True,
+    invalid=True,
+)
+
+Method(
+    comment="""
+Return array containing the global coordinates of the workitem that is
+processed by thread TP.
+""",
+    type="std::array<uint32_t, 3>",
+    name="workitem_global_id",
+    params=[("thread_info *", "tp")],
+    predicate=True,
+    invalid=True,
+)

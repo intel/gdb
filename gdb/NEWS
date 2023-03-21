@@ -43,6 +43,19 @@ thread apply thread-list|all|all-lanes -unavailable
 $_simd_lane
   The currently selected SIMD lane, when available.  Otherwise, void.
 
+$_thread_workgroup
+  The workgroup coordinates of the current thread.  Unsigned int vector
+  of size 3, when available.  Otherwise, void.
+
+$_workitem_local_id
+  The local ID coordinates of the workitem processed by the current context,
+  within its thread's workgroup.  Unsigned int vector of size 3, when
+  available.  Otherwise, void.
+
+$_workitem_global_id
+  The global ID coordinates of the workitem processed by the current context.
+  Unsigned int vector of size 3, when available.  Otherwise, void.
+
 * MI changes
 
   ** '-break-insert -l'

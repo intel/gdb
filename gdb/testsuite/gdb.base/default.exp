@@ -588,6 +588,9 @@ set show_conv_list \
 	{$_simd_lane = -1} \
 	{$_simd_width = -1} \
 	{$_thread = 0} \
+	{$_thread_workgroup = void} \
+	{$_workitem_local_id = void} \
+	{$_workitem_global_id = void} \
 	{$_gthread = 0} \
 	{$_inferior = 1} \
 	{$_inferior_thread_count = 0} \

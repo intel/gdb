@@ -4046,6 +4046,30 @@ is, using:
 The @code{tfaas} command accepts the same options as the @code{frame
 apply} command.  @xref{Frame Apply,,frame apply}.
 
+@anchor{thread workgroup}
+@cindex thread workgroup
+
+On some architectures the work is divided into logically independent
+workgroups.  The workgroup is a set of work items which may synchronize
+themselves within the workgroup, e.g.  using a barrier.  Several threads
+may work on a single workgroup.  Usually, if a thread has SIMD lanes, it
+can work on several work items from the same workgroup at once, one work item
+per SIMD lane.  The following convenience variables might be used to gets
+the workgroup ID and work item ID of the current context.
+
+@vindex $_thread_workgroup@r{, convenience variable}
+The workgroup coordinates of the current thread.  Unsigned int vector
+of size 3, when available.  Otherwise, void.
+
+@vindex $_workitem_local_id@r{, convenience variable}
+The local ID coordinates of the workitem processed by the current context,
+within its thread's workgroup.  Unsigned int vector of size 3, when
+available.  Otherwise, void.
+
+@vindex $_workitem_global_id@r{, convenience variable}
+The global ID coordinates of the workitem processed by the current context.
+Unsigned int vector of size 3, when available.  Otherwise, void.
+
 @kindex thread name
 @cindex name a thread
 @item thread name [@var{name}]

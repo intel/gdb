@@ -50,6 +50,7 @@
 #include "gdbsupport/gdb_optional.h"
 #include "inline-frame.h"
 #include "stack.h"
+#include <array>
 
 /* See gdbthread.h.  */
 
@@ -2847,6 +2848,72 @@ simd_width_make_value (gdbarch *gdbarch, internalvar *var, void *ignore)
 			     simd_width);
 }
 
+/* Return a new value with workgroup coordinates of the selected thread.
+   Return void if the workgroup is not defined or there is no thread
+   selected.  */
+static value *
+thread_workgroup_make_value (gdbarch *gdbarch, internalvar *var, void *ignore)
+{
+  const struct builtin_type *bt = builtin_type (gdbarch);
+  if (inferior_ptid == null_ptid || !gdbarch_thread_workgroup_p (gdbarch))
+    return allocate_value (bt->builtin_void);
+
+  thread_info *tp = inferior_thread ();
+  std::array<uint32_t, 3> workgroup_id
+    = gdbarch_thread_workgroup (gdbarch, tp);
+
+  type *result_type = init_vector_type (bt->builtin_unsigned_int, 3);
+  value *val = value_from_contents (result_type,
+				    (gdb_byte *) (workgroup_id.data ()));
+
+  return val;
+}
+
+/* Return a new value with local coordinates of the selected lane within
+   its workgroup.  Return void if the workitem local ID is not defined or
+   there is no thread selected.  */
+
+static value *
+workitem_local_id_make_value (gdbarch *gdbarch, internalvar *var, void *ignore)
+{
+  const struct builtin_type *bt = builtin_type (gdbarch);
+  if (inferior_ptid == null_ptid || !gdbarch_workitem_local_id_p (gdbarch))
+    return allocate_value (bt->builtin_void);
+
+  thread_info *tp = inferior_thread ();
+  std::array<uint32_t, 3> local_id
+    = gdbarch_workitem_local_id (gdbarch, tp);
+
+  type *result_type = init_vector_type (bt->builtin_unsigned_int, 3);
+  value *val = value_from_contents (result_type,
+				    (gdb_byte *) (local_id.data ()));
+
+  return val;
+}
+
+/* Return a new value with global coordinates of the selected lane.
+   Return void if the workitem global ID is not defined or there is no thread
+   selected.  */
+
+static value *
+workitem_global_id_make_value (gdbarch *gdbarch, internalvar *var,
+			       void *ignore)
+{
+  const struct builtin_type *bt = builtin_type (gdbarch);
+  if (inferior_ptid == null_ptid || !gdbarch_workitem_global_id_p (gdbarch))
+    return allocate_value (bt->builtin_void);
+
+  thread_info *tp = inferior_thread ();
+  std::array<uint32_t, 3> global_id
+    = gdbarch_workitem_global_id (gdbarch, tp);
+
+  type *result_type = init_vector_type (bt->builtin_unsigned_int, 3);
+  value *val = value_from_contents (result_type,
+				    (gdb_byte *) (global_id.data ()));
+
+  return val;
+}
+
 /* Commands with a prefix of `thread'.  */
 struct cmd_list_element *thread_cmd_list = NULL;
 
@@ -2888,6 +2955,30 @@ static const internalvar_funcs simd_width_funcs =
 {
   simd_width_make_value,
   nullptr,
+};
+
+/* Implementation of the `$_thread_workgroup' variable.  */
+
+static const internalvar_funcs thread_workgroup_funcs =
+{
+  thread_workgroup_make_value,
+  nullptr
+};
+
+/* Implementation of the `$_workitem_local_id' variable.  */
+
+static const internalvar_funcs workitem_local_id_funcs =
+{
+  workitem_local_id_make_value,
+  nullptr
+};
+
+/* Implementation of the `$_workitem_global_id' variable.  */
+
+static const internalvar_funcs workitem_global_id_funcs =
+{
+  workitem_global_id_make_value,
+  nullptr
 };
 
 void _initialize_thread ();
@@ -3027,4 +3118,10 @@ When on messages about thread creation and deletion are printed."),
 				&inferior_thread_count_funcs, NULL);
   create_internalvar_type_lazy ("_simd_lane", &simd_lane_funcs, nullptr);
   create_internalvar_type_lazy ("_simd_width", &simd_width_funcs, nullptr);
+  create_internalvar_type_lazy ("_thread_workgroup",
+				&thread_workgroup_funcs, nullptr);
+  create_internalvar_type_lazy ("_workitem_local_id",
+				&workitem_local_id_funcs, nullptr);
+  create_internalvar_type_lazy ("_workitem_global_id",
+				&workitem_global_id_funcs, nullptr);
 }

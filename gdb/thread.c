@@ -3007,6 +3007,7 @@ thread_workgroup_make_value (gdbarch *gdbarch, internalvar *var, void *ignore)
     = gdbarch_thread_workgroup (gdbarch, tp);
 
   type *result_type = init_vector_type (bt->builtin_unsigned_int, 3);
+  result_type->set_name ("_gdb_workitem");
   value *val = value_from_contents (result_type,
 				    (gdb_byte *) (workgroup_id.data ()));
 
@@ -3030,6 +3031,7 @@ workitem_local_id_make_value (gdbarch *gdbarch, internalvar *var, void *ignore)
     = gdbarch_current_workitem_local_id (gdbarch, tp);
 
   type *result_type = init_vector_type (bt->builtin_unsigned_int, 3);
+  result_type->set_name ("_gdb_workitem");
   value *val = value_from_contents (result_type,
 				    (gdb_byte *) (local_id.data ()));
 
@@ -3054,6 +3056,7 @@ workitem_global_id_make_value (gdbarch *gdbarch, internalvar *var,
     = gdbarch_current_workitem_global_id (gdbarch, tp);
 
   type *result_type = init_vector_type (bt->builtin_unsigned_int, 3);
+  result_type->set_name ("_gdb_workitem");
   value *val = value_from_contents (result_type,
 				    (gdb_byte *) (global_id.data ()));
 

@@ -1814,8 +1814,9 @@ ze_target::resume (ze_device_info &device, enum resume_kind rkind)
 	  {
 	    ze_set_resume_state (tp, rkind);
 
-	    enum ze_thread_exec_state_t state = ze_exec_state (tp);
-	    switch (state)
+	    ze_thread_info *zetp = ze_thread (tp);
+	    gdb_assert (zetp != nullptr);
+	    switch (zetp->exec_state)
 	      {
 	      case ze_thread_state_stopped:
 		/* We have reported the previous stop.  */
@@ -1833,6 +1834,7 @@ ze_target::resume (ze_device_info &device, enum resume_kind rkind)
 	      case ze_thread_state_unavailable:
 		/* The thread is still running for all we know.  */
 		gdb_assert (!ze_has_waitstatus (tp));
+		zetp->exec_state = ze_thread_state_running;
 		return;
 
 	      case ze_thread_state_running:
@@ -1846,7 +1848,7 @@ ze_target::resume (ze_device_info &device, enum resume_kind rkind)
 		return;
 	      }
 
-	    internal_error (_("bad execution state: %d."), state);
+	    internal_error (_("bad execution state: %d."), zetp->exec_state);
 	  });
 
 	/* All threads are potentially running from our point of view.  */
@@ -1944,6 +1946,9 @@ ze_target::resume (thread_info *tp, enum resume_kind rkind)
 	  dprintf ("capping device %lu's nresumed at %ld (all)",
 		   device->ordinal, device->nthreads);
 	}
+
+      if ((rkind == resume_continue) || (rkind == resume_step))
+	zetp->exec_state = ze_thread_state_running;
 
       /* Fall-through.  */
 

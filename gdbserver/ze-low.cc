@@ -30,6 +30,7 @@
 #include <thread>
 #include <utility>
 #include <algorithm>
+#include <set>
 
 #ifndef USE_WIN32API
 #  include <signal.h>
@@ -2161,10 +2162,22 @@ ze_target::resume (thread_resume *resume_info, size_t n)
       resume (tp, rinfo.kind);
     });
 
-  /* Let's hope that we're not getting any conflicting resume requests.
+  /* We may receive multiple requests that apply to a thread.  E.g.
+     "vCont;r0xff10,0xffa0:p1.9;c" could be sent to make thread 1.9 do
+     range-stepping from 0xff10 to 0xffa0, while continuing others.
+     According to the Remote Protocol Section E.2 (Packets),
+     "For each inferior thread, the leftmost action with a matching
+     thread-id is applied."  For this reason, we keep track of which
+     threads have been resumed individually so that we can skip them
+     when processing wildcard requests.
 
-     If higher layers cannot guarantee that, we'd need to add a check, but
-     this should really be the responsibility of higher layers, IMHO.  */
+     Alternatively, we could have the outer loop iterate over threads
+     and the inner loop iterate over resume infos to find the first
+     matching resume info for each thread.  There may, however, be a
+     large number of threads and a handful of resume infos that apply
+     to a few threads only.  For performance reasons, we prefer to
+     iterate over resume infos in the outer loop.  */
+  std::set<thread_info *> individually_resumed_threads;
   for (size_t i = 0; i < n; ++i)
     {
       const thread_resume &rinfo = resume_info[i];
@@ -2183,29 +2196,21 @@ ze_target::resume (thread_resume *resume_info, size_t n)
 	      if ((rpid != -1) && (rpid != pid))
 		continue;
 
-	      resume_kind rkind = rinfo.kind;
-
-	      /* In non-stop mode, resume the threads individually,
-		 if there are threads with pending events.  To reduce
-		 the number of resume requests on the target, we may
-		 try to find a wildcard thread id that covers the
-		 range of the stopped threads, but we are not doing
-		 this at the moment.  */
-	      if (non_stop && (num_eventing > 0))
+	      for_each_thread (pid, [&] (thread_info *tp)
 		{
-		  for_each_thread (pid, [&] (thread_info *tp)
-		    {
-		      apply_resume_info (rinfo, tp);
-		    });
-		}
-	      else
-		resume (*device, rkind);
+		  /* We trust that GDB will not send us wildcard resume
+		     requests with overlapping pids.  Hence, we track
+		     only individually-resumed threads.  */
+		  if (individually_resumed_threads.count (tp) == 0)
+		    apply_resume_info (rinfo, tp);
+		});
 	    }
 	}
       else
 	{
 	  thread_info *tp = find_thread_ptid (rptid);
 	  apply_resume_info (rinfo, tp);
+	  individually_resumed_threads.insert (tp);
 	}
     }
 }

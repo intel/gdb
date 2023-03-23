@@ -1971,11 +1971,6 @@ ze_target::resume (thread_info *tp, enum resume_kind rkind)
 size_t
 ze_target::mark_eventing_threads (ptid_t resume_ptid, resume_kind rkind)
 {
-  /* If resume_ptid is a wildcard PTID, convert it to a PID so that
-     'matches' will work.  */
-  if (resume_ptid.lwp () == -1 && resume_ptid.pid () > 0)
-    resume_ptid = ptid_t (resume_ptid.pid (), 0, 0);
-
   /* Note that even if we stopped all, unavailable threads may still
      report new events as we were not able to stop them.
 
@@ -2030,6 +2025,66 @@ ze_target::mark_eventing_threads (ptid_t resume_ptid, resume_kind rkind)
   return num_eventing;
 }
 
+/* Display a resume request for logging purposes.  */
+
+static void
+print_resume_info (const thread_resume &rinfo)
+{
+  ptid_t rptid = rinfo.thread;
+
+  switch (rinfo.kind)
+    {
+    case resume_continue:
+      dprintf ("received 'continue' resume request for (%s)",
+	       rptid.to_string ().c_str ());
+      return;
+
+    case resume_step:
+      dprintf ("received 'step' resume request for (%s)"
+	       " in range [0x%" PRIx64 ", 0x%" PRIx64 ")",
+	       rptid.to_string ().c_str (),
+	       rinfo.step_range_start, rinfo.step_range_end);
+      return;
+
+    case resume_stop:
+      dprintf ("received 'stop' resume request for (%s)",
+	       rptid.to_string ().c_str ());
+      return;
+    }
+
+  internal_error (_("bad resume kind: %d."), rinfo.kind);
+}
+
+/* Normalize the resume requests for easier processing later on.  */
+
+static void
+normalize_resume_infos (thread_resume *resume_info, size_t n)
+{
+  for (size_t i = 0; i < n; ++i)
+    {
+      thread_resume &rinfo = resume_info[i];
+      ptid_t rptid = rinfo.thread;
+
+      /* Log the original requests.  */
+      print_resume_info (rinfo);
+
+      /* We convert ptids of the form (p, -1, 0) to (p, 0, 0) to make
+	 'ptid.matches' work.  This transformation is safe because we
+	 enumerate the threads starting at 1.  */
+      if ((rptid.lwp () == -1) && (rptid.pid () > 0))
+	rinfo.thread = ptid_t (rptid.pid (), 0, 0);
+
+      if (rinfo.sig != 0)
+	{
+	  /*  Clear out the signal.  Our target does not accept
+	      signals.  */
+	  warning (_("Ignoring signal on resume request for %s"),
+		   rinfo.thread.to_string ().c_str ());
+	  rinfo.sig = 0;
+	}
+    }
+}
+
 void
 ze_target::resume (thread_resume *resume_info, size_t n)
 {
@@ -2054,6 +2109,8 @@ ze_target::resume (thread_resume *resume_info, size_t n)
       {
 	ze_clear_resume_state (tp);
       });
+
+  normalize_resume_infos (resume_info, n);
 
   /* Check if there is a thread with a pending event for any of the
      resume requests.  In all-stop mode, we would omit actually
@@ -2082,10 +2139,7 @@ ze_target::resume (thread_resume *resume_info, size_t n)
   for (size_t i = 0; i < n; ++i)
     {
       const thread_resume &rinfo = resume_info[i];
-      if (rinfo.sig != 0)
-	warning (_("ignoring signal on resume request for %d.%ld"),
-		 rinfo.thread.pid (), rinfo.thread.lwp ());
-
+      gdb_assert (rinfo.sig == 0);
       ptid_t rptid = rinfo.thread;
       int rpid = rptid.pid ();
       if ((rptid == minus_one_ptid)

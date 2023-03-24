@@ -432,8 +432,8 @@ private:
   /* Resume all threads on DEVICE.  */
   void resume (ze_device_info &device, enum resume_kind rkind);
 
-  /* Resume TP.  */
-  void resume (thread_info *tp, enum resume_kind rkind);
+  /* Resume TP using TP's resume state.  */
+  void resume (thread_info *tp);
 
   /* Return true if TP has single-stepped within its stepping range.  */
   bool is_range_stepping (thread_info *tp);
@@ -459,11 +459,10 @@ protected:
   virtual target_stop_reason get_stop_reason (thread_info *tp,
 					      gdb_signal &signal) = 0;
 
-  /* Prepare TP for resuming with RKIND.
+  /* Prepare TP for resuming using TP's RESUME_STATE.
 
-   This sets the ze execution state, typically to running.  */
-  virtual void prepare_thread_resume (thread_info *tp,
-				      enum resume_kind rkind) = 0;
+     This sets the ze execution state, typically to running.  */
+  virtual void prepare_thread_resume (thread_info *tp) = 0;
 
   /* Read the memory in the context of thread TP.  */
   int read_memory (thread_info *tp, CORE_ADDR memaddr,

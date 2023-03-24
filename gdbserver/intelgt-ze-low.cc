@@ -264,8 +264,7 @@ protected:
 
   target_stop_reason get_stop_reason (thread_info *, gdb_signal &) override;
 
-  void prepare_thread_resume (thread_info *tp,
-			      enum resume_kind rkind) override;
+  void prepare_thread_resume (thread_info *tp) override;
 
   /* Read one instruction from memory at PC into BUFFER and return the
      number of bytes read on success or a negative errno error code.
@@ -753,8 +752,7 @@ intelgt_ze_target::erratum_18020355813 (thread_info *tp)
 }
 
 void
-intelgt_ze_target::prepare_thread_resume (thread_info *tp,
-					  enum resume_kind rkind)
+intelgt_ze_target::prepare_thread_resume (thread_info *tp)
 {
   ze_thread_info *zetp = ze_thread (tp);
   gdb_assert (zetp != nullptr);
@@ -777,9 +775,9 @@ intelgt_ze_target::prepare_thread_resume (thread_info *tp,
   cr0[1] &= ~(1 << intelgt_cr0_1_external_halt_status);
 
   /* Distinguish stepping and continuing.  */
-  switch (rkind)
+  switch (zetp->resume_state)
     {
-    case resume_step:
+    case ze_thread_resume_step:
       /* We step by indicating a breakpoint exception, which will be
 	 considered on the next instruction.
 
@@ -798,12 +796,12 @@ intelgt_ze_target::prepare_thread_resume (thread_info *tp,
       zetp->waitstatus.set_unavailable ();
 
       /* Fall through.  */
-    case resume_continue:
+    case ze_thread_resume_run:
       cr0[1] &= ~(1 << intelgt_cr0_1_breakpoint_status);
       break;
 
     default:
-      internal_error (_("bad resume kind: %d."), rkind);
+      internal_error (_("bad resume kind: %d."), zetp->resume_state);
     }
 
   /* When stepping over a breakpoint, we need to suppress the breakpoint

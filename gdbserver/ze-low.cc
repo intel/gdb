@@ -1479,7 +1479,8 @@ ze_target::fetch_events (ze_device_info &device)
 				 ze_thread_id_str (zetp->id).c_str ());
 
 			zetp->waitstatus.set_ignore ();
-			resume (tp, resume_continue);
+			ze_set_resume_state (tp, resume_continue);
+			resume (tp);
 			return;
 		      }
 
@@ -1826,7 +1827,7 @@ ze_target::resume (ze_device_info &device, enum resume_kind rkind)
 		gdb_assert (!ze_has_waitstatus (tp));
 
 		nstopped += 1;
-		prepare_thread_resume (tp, rkind);
+		prepare_thread_resume (tp);
 		regcache_invalidate_thread (tp);
 		return;
 
@@ -1889,7 +1890,7 @@ ze_target::resume (ze_device_info &device, enum resume_kind rkind)
 }
 
 void
-ze_target::resume (thread_info *tp, enum resume_kind rkind)
+ze_target::resume (thread_info *tp)
 {
   ze_thread_info *zetp = ze_thread (tp);
   gdb_assert (zetp != nullptr);
@@ -1899,12 +1900,13 @@ ze_target::resume (thread_info *tp, enum resume_kind rkind)
   ze_device_info *device = ze_thread_device (tp);
   gdb_assert (device != nullptr);
 
+  ze_thread_resume_state_t resume_state = zetp->resume_state;
+  gdb_assert (resume_state != ze_thread_resume_none);
+
   ze_thread_exec_state_t state = zetp->exec_state;
   switch (state)
     {
     case ze_thread_state_stopped:
-      ze_set_resume_state (tp, rkind);
-
       /* We silently ignore threads that still need to report an event.
 
 	 We still need to keep the resume state set, so we will
@@ -1912,11 +1914,11 @@ ze_target::resume (thread_info *tp, enum resume_kind rkind)
       if (ze_has_priority_waitstatus (tp))
 	return;
 
-      switch (rkind)
+      switch (resume_state)
 	{
-	case resume_continue:
-	case resume_step:
-	  prepare_thread_resume (tp, rkind);
+	case ze_thread_resume_run:
+	case ze_thread_resume_step:
+	  prepare_thread_resume (tp);
 	  if (device->nresumed < device->nthreads)
 	    device->nresumed++;
 	  else
@@ -1929,12 +1931,12 @@ ze_target::resume (thread_info *tp, enum resume_kind rkind)
 	  ze_resume (*device, zetp->id);
 	  return;
 
-	case resume_stop:
+	case ze_thread_resume_stop:
 	  /* We silently ignore already stopped threads.  */
 	  return;
 	}
 
-      internal_error (_("bad resume kind: %d."), rkind);
+      internal_error (_("bad resume kind: %d."), resume_state);
 
     case ze_thread_state_held:
       gdb_assert_not_reached ("threads with 'held' state should "
@@ -1950,27 +1952,26 @@ ze_target::resume (thread_info *tp, enum resume_kind rkind)
 		   device->ordinal, device->nthreads);
 	}
 
-      if ((rkind == resume_continue) || (rkind == resume_step))
+      if ((resume_state == ze_thread_resume_run)
+	  || (resume_state == ze_thread_resume_step))
 	zetp->exec_state = ze_thread_state_running;
 
       [[fallthrough]];
 
     case ze_thread_state_running:
-      ze_set_resume_state (tp, rkind);
-
-      switch (rkind)
+      switch (resume_state)
 	{
-	case resume_continue:
-	case resume_step:
+	case ze_thread_resume_run:
+	case ze_thread_resume_step:
 	  /* Silently ignore already running or unavailable threads.  */
 	  return;
 
-	case resume_stop:
+	case ze_thread_resume_stop:
 	  ze_interrupt (*device, zetp->id);
 	  return;
 	}
 
-      internal_error (_("bad resume kind: %d."), rkind);
+      internal_error (_("bad resume kind: %d."), resume_state);
 
     case ze_thread_state_unknown:
       warning (_("thread %d.%ld has unknown execution "
@@ -2152,6 +2153,8 @@ ze_target::resume (thread_resume *resume_info, size_t n)
       if (ze_has_priority_waitstatus (tp))
 	return;
 
+      ze_set_resume_state (tp, rinfo.kind);
+
       if (rinfo.kind == resume_step)
 	{
 	  ze_thread_info *zetp = ze_thread (tp);
@@ -2171,7 +2174,7 @@ ze_target::resume (thread_resume *resume_info, size_t n)
 	  zetp->step_range_end = end;
 	}
 
-      resume (tp, rinfo.kind);
+      resume (tp);
     });
 
   /* We may receive multiple requests that apply to a thread.  E.g.
@@ -2421,7 +2424,8 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 		       zetp->step_range_start, zetp->step_range_end);
 
 	      zetp->waitstatus.set_ignore ();
-	      resume (thread, resume_step);
+	      ze_set_resume_state (thread, resume_step);
+	      resume (thread);
 	      continue;
 	    }
 
@@ -2827,7 +2831,8 @@ ze_target::unpause_all (bool unfreeze)
 	  for_each_thread (pid_of (process),
 			   [this, device] (thread_info *tp)
 	    {
-	      resume (tp, resume_continue);
+	      ze_set_resume_state (tp, resume_continue);
+	      resume (tp);
 	    });
 	}
     }

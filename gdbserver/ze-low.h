@@ -432,9 +432,6 @@ private:
   /* Resume all threads on DEVICE.  */
   void resume (ze_device_info &device, enum resume_kind rkind);
 
-  /* Resume TP using TP's resume state.  */
-  void resume (thread_info *tp);
-
   /* Return true if TP has single-stepped within its stepping range.  */
   bool is_range_stepping (thread_info *tp);
 

@@ -947,6 +947,106 @@ ze_discard_regcache (thread_info *tp)
   regcache->discard ();
 }
 
+/* Prepare for resuming TP.  Return true if TP should be actually
+   resumed.  */
+
+static bool
+ze_prepare_for_resuming (thread_info *tp)
+{
+  ze_thread_info *zetp = ze_thread (tp);
+  gdb_assert (zetp != nullptr);
+
+  /* We should not call this function if there is a priority
+     waitstatus.  */
+  gdb_assert (!ze_has_priority_waitstatus (tp));
+
+  /* When we get detached, we will remove the device but we will also mark
+     each thread exited.  We shouldn't try to resume them.  */
+  ze_device_info *device = ze_thread_device (tp);
+  gdb_assert (device != nullptr);
+
+  ze_thread_exec_state_t state = zetp->exec_state;
+  switch (state)
+    {
+    case ze_thread_state_stopped:
+      device->nresumed++;
+      if (device->nresumed > device->nthreads)
+	{
+	  device->nresumed = device->nthreads;
+	  dprintf ("capping device %lu's nresumed at %ld (all)",
+		   device->ordinal, device->nthreads);
+	}
+      return true;
+
+    case ze_thread_state_held:
+      gdb_assert_not_reached ("threads with 'held' state should "
+			      "have been turned into 'stopped'");
+
+    case ze_thread_state_unavailable:
+      device->nresumed++;
+      if (device->nresumed > device->nthreads)
+	{
+	  device->nresumed = device->nthreads;
+	  dprintf ("capping device %lu's nresumed at %ld (all)",
+		   device->ordinal, device->nthreads);
+	}
+
+      zetp->exec_state = ze_thread_state_running;
+
+      /* Ignore resuming unavailable threads.  */
+      return false;
+
+    case ze_thread_state_running:
+      /* Ignore resuming already running threads.  */
+      return false;
+
+    case ze_thread_state_unknown:
+      warning (_("thread %s has unknown execution "
+		 "state"), tp->id.to_string ().c_str ());
+      return false;
+    }
+
+  internal_error (_("bad execution state: %d."), state);
+}
+
+/* Prepare for stopping TP.  Return true if TP should be
+   actually stopped by sending an interrupt to the target.  */
+
+static bool
+ze_prepare_for_stopping (thread_info *tp)
+{
+  ze_thread_info *zetp = ze_thread (tp);
+  gdb_assert (zetp != nullptr);
+
+  /* When we get detached, we will remove the device but we will also mark
+     each thread exited.  We shouldn't try to stop them.  */
+  ze_device_info *device = ze_thread_device (tp);
+  gdb_assert (device != nullptr);
+
+  ze_thread_exec_state_t state = zetp->exec_state;
+  switch (state)
+    {
+    case ze_thread_state_stopped:
+      /* We silently ignore already stopped threads.  */
+      return false;
+
+    case ze_thread_state_held:
+      gdb_assert_not_reached ("threads with 'held' state should "
+			      "have been turned into 'stopped'");
+
+    case ze_thread_state_unavailable:
+    case ze_thread_state_running:
+      return true;
+
+    case ze_thread_state_unknown:
+      warning (_("thread %s has unknown execution state"),
+	       tp->id.to_string ().c_str ());
+      return false;
+    }
+
+  internal_error (_("bad execution state: %d."), state);
+}
+
 /* Resume THREAD on DEVICE.  */
 
 static void
@@ -1891,83 +1991,25 @@ ze_target::resume (thread_info *tp)
   ze_thread_resume_state_t resume_state = zetp->resume_state;
   gdb_assert (resume_state != ze_thread_resume_none);
 
-  ze_thread_exec_state_t state = zetp->exec_state;
-  switch (state)
+  ze_device_thread_t tid = ze_thread_id (tp);
+
+  switch (resume_state)
     {
-    case ze_thread_state_stopped:
-      /* We silently ignore threads that still need to report an event.
+    case ze_thread_resume_stop:
+      if (ze_prepare_for_stopping (tp))
+	ze_interrupt (*device, tid);
+      break;
 
-	 We still need to keep the resume state set, so we will
-	 actually report the event.  */
-      if (ze_has_priority_waitstatus (tp))
-	return;
-
-      switch (resume_state)
+    case ze_thread_resume_run:
+    case ze_thread_resume_step:
+      if (ze_prepare_for_resuming (tp))
 	{
-	case ze_thread_resume_run:
-	case ze_thread_resume_step:
 	  prepare_thread_resume (tp);
-	  if (device->nresumed < device->nthreads)
-	    device->nresumed++;
-	  else
-	    {
-	      device->nresumed = device->nthreads;
-	      dprintf ("capping device %lu's nresumed at %ld (all)",
-		       device->ordinal, device->nthreads);
-	    }
 	  regcache_invalidate_thread (tp);
-	  ze_resume (*device, zetp->id);
-	  return;
-
-	case ze_thread_resume_stop:
-	  /* We silently ignore already stopped threads.  */
-	  return;
+	  ze_resume (*device, tid);
 	}
-
-      internal_error (_("bad resume kind: %d."), resume_state);
-
-    case ze_thread_state_held:
-      gdb_assert_not_reached ("threads with 'held' state should "
-			      "have been turned into 'stopped'");
-
-    case ze_thread_state_unavailable:
-      if (device->nresumed < device->nthreads)
-	device->nresumed++;
-      else
-	{
-	  device->nresumed = device->nthreads;
-	  dprintf ("capping device %lu's nresumed at %ld (all)",
-		   device->ordinal, device->nthreads);
-	}
-
-      if ((resume_state == ze_thread_resume_run)
-	  || (resume_state == ze_thread_resume_step))
-	zetp->exec_state = ze_thread_state_running;
-
-      /* Fall-through.  */
-
-    case ze_thread_state_running:
-      switch (resume_state)
-	{
-	case ze_thread_resume_run:
-	case ze_thread_resume_step:
-	  /* Silently ignore already running or unavailable threads.  */
-	  return;
-
-	case ze_thread_resume_stop:
-	  ze_interrupt (*device, zetp->id);
-	  return;
-	}
-
-      internal_error (_("bad resume kind: %d."), resume_state);
-
-    case ze_thread_state_unknown:
-      warning (_("thread %d.%ld has unknown execution "
-		 "state"), tp->id.pid (), tp->id.lwp ());
-      return;
+      break;
     }
-
-  internal_error (_("bad execution state: %d."), state);
 }
 
 size_t

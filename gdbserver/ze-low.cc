@@ -2049,6 +2049,57 @@ normalize_resume_infos (thread_resume *resume_info, size_t n)
     }
 }
 
+/* Resuming threads of a device all at once with a single API call
+   is preferable to resuming threads individually.  Therefore, we
+   want to combine individual resume requests with wildcard resumes,
+   if possible.
+
+   For instance, if we receive "vCont;s:1;s:2;c", we would like to
+   make a single ze_resume call with the 'all.all.all.all' thread id
+   after preparing threads 1 and 2 for stepping and the others for
+   continuing.
+
+   We preprocess the resume requests to find for which devices we
+   shall combine the requests.  We attempt a merge in all-stop mode
+   when the requests contain continue/step requests only.  */
+
+static std::set<ze_device_info *>
+find_wildcard_devices (thread_resume *resume_info, size_t n,
+		       const std::list<ze_device_info *> &devices)
+{
+  std::set<ze_device_info *> wildcard_devices;
+
+  if (non_stop)
+    return wildcard_devices;
+
+  for (size_t i = 0; i < n; ++i)
+    {
+      if (resume_info[i].kind == resume_stop)
+	{
+	  wildcard_devices.clear ();
+	  break;
+	}
+
+      ptid_t rptid = resume_info[i].thread;
+      if (rptid == minus_one_ptid)
+	{
+	  for (ze_device_info *device : devices)
+	    wildcard_devices.insert (device);
+	  break;
+	}
+
+      if (rptid.is_pid ())
+	{
+	  process_info *proc = find_process_pid (rptid.pid ());
+	  ze_device_info *device = ze_process_device (proc);
+	  if (device != nullptr)
+	    wildcard_devices.insert (device);
+	}
+    }
+
+  return wildcard_devices;
+}
+
 void
 ze_target::resume (thread_resume *resume_info, size_t n)
 {
@@ -2096,6 +2147,11 @@ ze_target::resume (thread_resume *resume_info, size_t n)
   if ((num_eventing > 0) && !non_stop)
     return;
 
+  std::set<ze_device_info *> wildcard_devices
+    = find_wildcard_devices (resume_info, n, devices);
+
+  std::set<ze_device_info *> devices_to_resume;
+
   /* Lambda for applying a resume info on a single thread.  */
   auto apply_resume_info = ([&] (const thread_resume &rinfo,
 				 thread_info *tp)
@@ -2139,7 +2195,13 @@ ze_target::resume (thread_resume *resume_info, size_t n)
 	    {
 	      prepare_thread_resume (tp);
 	      regcache_invalidate_thread (tp);
-	      ze_resume (*device, tid);
+
+	      /* If the device can be resumed as a whole,
+		 omit resuming the thread individually.  */
+	      if (wildcard_devices.count (device) == 0)
+		ze_resume (*device, tid);
+	      else
+		devices_to_resume.insert (device);
 	    }
 	  break;
 	}
@@ -2196,6 +2258,11 @@ ze_target::resume (thread_resume *resume_info, size_t n)
 	  individually_resumed_threads.insert (tp);
 	}
     }
+
+  /* Finally, resume the whole devices.  */
+  ze_device_thread_t all = ze_thread_id_all ();
+  for (ze_device_info *device : devices_to_resume)
+    ze_resume (*device, all);
 }
 
 /* Look for a thread preferably with a priority stop

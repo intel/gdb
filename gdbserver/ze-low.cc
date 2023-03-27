@@ -1572,7 +1572,13 @@ ze_target::fetch_events (ze_device_info &device)
 
 			zetp->waitstatus.set_ignore ();
 			ze_set_resume_state (tp, resume_continue);
-			resume (tp);
+
+			bool should_resume = ze_prepare_for_resuming (tp);
+			gdb_assert (should_resume);
+			prepare_thread_resume (tp);
+			regcache_invalidate_thread (tp);
+			ze_resume (device, zetp->id);
+
 			return;
 		      }
 
@@ -1978,41 +1984,6 @@ ze_target::resume (ze_device_info &device, enum resume_kind rkind)
   internal_error (_("bad resume kind: %d."), rkind);
 }
 
-void
-ze_target::resume (thread_info *tp)
-{
-  ze_thread_info *zetp = ze_thread (tp);
-  gdb_assert (zetp != nullptr);
-
-  /* When we get detached, we will remove the device but we will also mark
-     each thread exited.  We shouldn't try to resume them.  */
-  ze_device_info *device = ze_thread_device (tp);
-  gdb_assert (device != nullptr);
-
-  ze_thread_resume_state_t resume_state = zetp->resume_state;
-  gdb_assert (resume_state != ze_thread_resume_none);
-
-  ze_device_thread_t tid = ze_thread_id (tp);
-
-  switch (resume_state)
-    {
-    case ze_thread_resume_stop:
-      if (ze_prepare_for_stopping (tp))
-	ze_interrupt (*device, tid);
-      break;
-
-    case ze_thread_resume_run:
-    case ze_thread_resume_step:
-      if (ze_prepare_for_resuming (tp))
-	{
-	  prepare_thread_resume (tp);
-	  regcache_invalidate_thread (tp);
-	  ze_resume (*device, tid);
-	}
-      break;
-    }
-}
-
 size_t
 ze_target::mark_eventing_threads (ptid_t resume_ptid, resume_kind rkind)
 {
@@ -2186,27 +2157,45 @@ ze_target::resume (thread_resume *resume_info, size_t n)
 	return;
 
       ze_set_resume_state (tp, rinfo.kind);
+      ze_device_info *device = ze_thread_device (tp);
+      ze_device_thread_t tid = ze_thread_id (tp);
 
-      if (rinfo.kind == resume_step)
+      switch (rinfo.kind)
 	{
-	  ze_thread_info *zetp = ze_thread (tp);
-	  gdb_assert (zetp != nullptr);
+	case resume_stop:
+	  if (ze_prepare_for_stopping (tp))
+	    ze_interrupt (*device, tid);
+	  break;
 
-	  regcache *regcache
-	    = get_thread_regcache (tp, /* fetch = */ false);
-	  CORE_ADDR pc = read_pc (regcache);
+	case resume_step:
+	  {
+	    ze_thread_info *zetp = ze_thread (tp);
+	    gdb_assert (zetp != nullptr);
 
-	  /* For single-stepping, start == end.  Typically, both are 0.
-	     For range-stepping, the PC must be within the range.  */
-	  CORE_ADDR start = rinfo.step_range_start;
-	  CORE_ADDR end = rinfo.step_range_end;
-	  gdb_assert ((start == end) || ((pc >= start) && (pc < end)));
+	    regcache *regcache
+	      = get_thread_regcache (tp, /* fetch = */ false);
+	    CORE_ADDR pc = read_pc (regcache);
 
-	  zetp->step_range_start = start;
-	  zetp->step_range_end = end;
+	    /* For single-stepping, start == end.  Typically, both are 0.
+	       For range-stepping, the PC must be within the range.  */
+	    CORE_ADDR start = rinfo.step_range_start;
+	    CORE_ADDR end = rinfo.step_range_end;
+	    gdb_assert ((start == end) || ((pc >= start) && (pc < end)));
+
+	    zetp->step_range_start = start;
+	    zetp->step_range_end = end;
+	  }
+	  /* Fall through.  */
+
+	case resume_continue:
+	  if (ze_prepare_for_resuming (tp))
+	    {
+	      prepare_thread_resume (tp);
+	      regcache_invalidate_thread (tp);
+	      ze_resume (*device, tid);
+	    }
+	  break;
 	}
-
-      resume (tp);
     });
 
   /* We may receive multiple requests that apply to a thread.  E.g.
@@ -2455,8 +2444,15 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 		       zetp->step_range_start, zetp->step_range_end);
 
 	      (void) ze_move_waitstatus (thread);
-	      ze_set_resume_state (thread, resume_step);
-	      resume (thread);
+	      gdb_assert (zetp->resume_state == ze_thread_resume_step);
+
+	      ze_device_info *device = ze_thread_device (thread);
+	      bool should_resume = ze_prepare_for_resuming (thread);
+	      gdb_assert (should_resume);
+	      prepare_thread_resume (thread);
+	      regcache_invalidate_thread (thread);
+	      ze_resume (*device, zetp->id);
+
 	      continue;
 	    }
 
@@ -2853,7 +2849,13 @@ ze_target::unpause_all (bool unfreeze)
 			   [this, device] (thread_info *tp)
 	    {
 	      ze_set_resume_state (tp, resume_continue);
-	      resume (tp);
+	      if (ze_prepare_for_resuming (tp))
+		{
+		  prepare_thread_resume (tp);
+		  regcache_invalidate_thread (tp);
+		  ze_device_thread_t tid = ze_thread_id (tp);
+		  ze_resume (*device, tid);
+		}
 	    });
 	}
     }

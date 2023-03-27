@@ -1799,7 +1799,18 @@ ze_target::attach (unsigned long pid)
 	  /* GDB (and higher layers of gdbserver) expects threads stopped on
 	     attach in all-stop mode.  */
 	  if (!non_stop)
-	    resume (*device, resume_stop);
+	    {
+	      int device_pid = ze_device_pid (*device);
+	      for_each_thread (device_pid, [this] (thread_info *tp)
+		{
+		  ze_set_resume_state (tp, resume_stop);
+		  bool should_stop = ze_prepare_for_stopping (tp);
+		  gdb_assert (should_stop);
+		});
+
+	      ze_device_thread_t all = ze_thread_id_all ();
+	      ze_interrupt (*device, all);
+	    }
 
 	  nattached += 1;
 	  break;
@@ -1861,7 +1872,7 @@ ze_target::detach (process_info *proc)
 	      (void) ze_move_waitstatus (tp);
 	    });
 
-	  resume (*device, resume_continue);
+	  resume (*device);
 	}
       catch (const gdb_exception_error &except)
 	{
@@ -1896,92 +1907,28 @@ ze_target::join (int pid)
 }
 
 void
-ze_target::resume (ze_device_info &device, enum resume_kind rkind)
+ze_target::resume (ze_device_info &device)
 {
-  switch (rkind)
+  gdb_assert (device.process != nullptr);
+
+  bool has_thread_to_resume = false;
+  for_each_thread (ze_device_pid (device), [&] (thread_info *tp)
     {
-    case resume_continue:
-    case resume_step:
-      {
-	int pid = ze_device_pid (device);
+      ze_set_resume_state (tp, resume_continue);
+      if (ze_prepare_for_resuming (tp))
+	{
+	  prepare_thread_resume (tp);
+	  regcache_invalidate_thread (tp);
+	  has_thread_to_resume = true;
+	}
+    });
 
-	/* We come here if we have nothing pending to report.  We can
-	   simply resume everything with a single resume request for
-	   all-stop and non-stop.  */
-	uint32_t nstopped = 0;
-	for_each_thread (pid, [this, rkind, &nstopped] (thread_info *tp)
-	  {
-	    ze_set_resume_state (tp, rkind);
+  /* There is nothing to resume if nothing is stopped.  */
+  if (!has_thread_to_resume)
+    return;
 
-	    ze_thread_info *zetp = ze_thread (tp);
-	    gdb_assert (zetp != nullptr);
-	    switch (zetp->exec_state)
-	      {
-	      case ze_thread_state_stopped:
-		/* We have reported the previous stop.  */
-		gdb_assert (!ze_has_waitstatus (tp));
-
-		nstopped += 1;
-		prepare_thread_resume (tp);
-		regcache_invalidate_thread (tp);
-		return;
-
-	      case ze_thread_state_held:
-		gdb_assert_not_reached ("threads with 'held' state should "
-					"have been turned into 'stopped'");
-
-	      case ze_thread_state_unavailable:
-		/* The thread is still running for all we know.  */
-		gdb_assert (!ze_has_waitstatus (tp));
-		zetp->exec_state = ze_thread_state_running;
-		return;
-
-	      case ze_thread_state_running:
-		/* The thread doesn't have anything to report.  */
-		gdb_assert (!ze_has_waitstatus (tp));
-		return;
-
-	      case ze_thread_state_unknown:
-		warning (_("thread %d.%ld has unknown execution state"),
-			 tp->id.pid (), tp->id.lwp ());
-		return;
-	      }
-
-	    internal_error (_("bad execution state: %d."), zetp->exec_state);
-	  });
-
-	/* All threads are potentially running from our point of view.  */
-	device.nresumed = device.nthreads;
-	dprintf ("device %lu's nresumed=%ld%s",
-		 device.ordinal, device.nresumed,
-		 ((device.nresumed == device.nthreads) ? " (all)" : ""));
-
-	/* There is nothing to resume if nothing is stopped.  */
-	if (nstopped == 0)
-	  return;
-
-	ze_device_thread_t all = ze_thread_id_all ();
-	ze_resume (device, all);
-	return;
-      }
-
-    case resume_stop:
-      {
-	/* The stop case is comparably easy since the target will ignore
-	   already stopped threads.  */
-	int pid = ze_device_pid (device);
-	for_each_thread (pid, [this, rkind] (thread_info *tp)
-	  {
-	    ze_set_resume_state (tp, rkind);
-	  });
-
-	ze_device_thread_t all = ze_thread_id_all ();
-	ze_interrupt (device, all);
-	return;
-      }
-    }
-
-  internal_error (_("bad resume kind: %d."), rkind);
+  ze_device_thread_t all = ze_thread_id_all ();
+  ze_resume (device, all);
 }
 
 size_t
@@ -2886,7 +2833,7 @@ ze_target::unpause_all (bool unfreeze)
 	  if (device->process == nullptr)
 	    continue;
 
-	  resume (*device, resume_continue);
+	  resume (*device);
 	}
     }
 }

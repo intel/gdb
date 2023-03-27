@@ -430,7 +430,7 @@ private:
   size_t mark_eventing_threads (ptid_t resume_ptid, enum resume_kind rkind);
 
   /* Resume all threads on DEVICE.  */
-  void resume (ze_device_info &device, enum resume_kind rkind);
+  void resume (ze_device_info &device);
 
   /* Return true if TP has single-stepped within its stepping range.  */
   bool is_range_stepping (thread_info *tp);

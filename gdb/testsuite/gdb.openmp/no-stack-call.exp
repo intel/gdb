@@ -1,0 +1,60 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests backtrace in an OpenMP program with nested for-loop and the
+# target distribute pragma.  The kernel does not make any stack-based
+# function calls, causing the runtime to not allocate scratch space
+# for threads.  This is a regression test.
+
+load_lib openmp.exp
+
+set device_list [omp_get_device_list]
+if {[llength ${device_list}] == 0} {
+    unsupported "target does not support OpenMP"
+    return 0
+}
+
+standard_testfile .cpp
+
+if {[build_executable "failed to compile ${srcfile}" \
+    ${binfile} ${srcfile} {openmp c++ debug}]} {
+    return -1
+}
+
+foreach device_info ${device_list} {
+    with_test_prefix [string cat [init_openmp_device ${device_info}] ":cpp"] {
+
+	clean_restart ${binfile}
+	if {![runto_main]} {
+	    untested "Failed to run to main"
+	    continue
+	}
+
+	set last_line [gdb_get_line_number "kernel-last-line"]
+	gdb_breakpoint ${last_line}
+
+	gdb_continue_to_breakpoint "kernel bp" ".*${srcfile}:${last_line}.*"
+
+	# Check that backtrace is not broken.
+	gdb_test_multiple "backtrace" "" {
+	    -re -wrap "Backtrace stopped\[^\r\n\]+" {
+		fail ${gdb_test_name}
+	    }
+	    -re -wrap "\r\n\#$decimal \[^\r\n\]+" {
+		pass ${gdb_test_name}
+	    }
+	}
+    }
+}

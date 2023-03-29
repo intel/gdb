@@ -38,23 +38,9 @@ variables.
    variable is prepended to the LD_LIBRARY_PATH environment variable
    when spawning 'gdbserver-gt'.
 
- * For remote-debugging scenarios, 'gdbserver-gt' is spawned in the
-   remote machine, via the 'ssh -T' protocol and using the current
-   username.  The remote machine address is extracted from GDB.
-
-   - To change the protocol, set the INTELGT_AUTO_ATTACH_REMOTE_PROTOCOL
-     environment variable to the desired value.
-
-   - To change the username, set the INTELGT_AUTO_ATTACH_REMOTE_USERNAME
-     environment variable to the desired value.
-
-   - To change the remote machine address, set the
-     INTELGT_AUTO_ATTACH_REMOTE_TARGET environment variable to the
-     desired value.
-
-   - To enable developer debug logs of the python script set the
-     INTELGT_AUTO_ATTACH_VERBOSE_LOG environment variable to the
-     desired value.
+ * To enable developer debug logs of the python script set the
+   INTELGT_AUTO_ATTACH_VERBOSE_LOG environment variable to the
+   desired value.
 """
 
 import re
@@ -419,7 +405,7 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
         return connection_str
 
     @DebugLogger.log_call
-    def handle_attach_gdbserver_gt(self, connection, inf):
+    def handle_attach_gdbserver_gt(self, inf):
         """Attach gdbserver to gt inferior either locally or remotely."""
 
         # User may disable the auto attach from GDB command prompt.
@@ -451,12 +437,8 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
                 f"LD_LIBRARY_PATH={igfxdbg_lib_path_env_var}:$LD_LIBRARY_PATH"
 
         try:
-            if connection == 'native':
-                self.make_native_gdbserver(inf, ld_lib_path_str,
-                                           gdbserver_gt_attach_str)
-            elif connection == 'remote':
-                self.make_remote_gdbserver(inf, ld_lib_path_str,
-                                           gdbserver_gt_attach_str)
+            self.make_native_gdbserver(inf, ld_lib_path_str,
+                                       gdbserver_gt_attach_str)
         except gdb.error as ex:
             """Explicitly raise exception to 'init_gt_inferior'.  This
             otherwise results in undhandled exception in 'init_gt_inferior'
@@ -503,59 +485,6 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
             # architecture info.
             print(connection_output.split("\n")[0])
 
-    @DebugLogger.log_call
-    def make_remote_gdbserver(self, inf, ld_lib_path, gdbserver_cmd):
-        """Spawn and connect to a remote instance of gdbserver."""
-        # Check 'INTELGT_AUTO_ATTACH_REMOTE_TARGET' in the inferior's
-        # environment.
-        remote_target_env_var = self.get_env_variable(
-            "INTELGT_AUTO_ATTACH_REMOTE_TARGET")
-
-        # Check 'INTELGT_AUTO_ATTACH_REMOTE_USERNAME' in the inferior's
-        # environment.
-        remote_username_str = self.get_env_variable(
-            "INTELGT_AUTO_ATTACH_REMOTE_USERNAME", "")
-        if remote_username_str != "":
-            remote_username_str += "@"
-
-        # Check 'INTELGT_AUTO_ATTACH_REMOTE_PROTOCOL' in the inferior's
-        # environment.
-        remote_protocol_str = self.get_env_variable(
-            "INTELGT_AUTO_ATTACH_REMOTE_PROTOCOL", "ssh -T")
-
-        # Switch to the gt inferior.
-        gt_inf = gdb.inferiors()[-1]
-        gdb.execute(f"inferior {gt_inf.num}", False, True)
-
-        if not remote_target_env_var:
-            connection_target = inf.connection_target
-            if connection_target is None:
-                # Connection over stdio pipe.
-                target_str = self.get_connection_str(inf.connection_string)
-                if target_str is None:
-                    print("intelgt: could not get connection string.")
-                    self.handle_error(inf)
-                    self.display_auto_attach_error_msg()
-                    return
-            else:
-                # Connection over tcp.
-                target_str = f"{remote_protocol_str} " \
-                             f"{remote_username_str}{connection_target}"
-                gdb.execute("set remotetimeout 20")
-        else:
-            # Connection over stdio pipe or tcp.
-            target_str = f"{remote_protocol_str} " \
-                         f"{remote_username_str}{remote_target_env_var}"
-            gdb.execute("set remotetimeout 20")
-
-        target_remote_str = \
-            " ".join((f"{target_str} {ld_lib_path} {gdbserver_cmd}").split())
-
-        gdb.execute(f"target extended-remote | {target_remote_str}")
-        print(f"intelgt: inferior {gt_inf.num} "
-              f"created remotely for process {inf.pid} "
-              f"using command '{target_remote_str}'")
-
     @staticmethod
     def igfxdcd_is_loaded():
         """Check if the igfxdcd module is loaded."""
@@ -582,7 +511,7 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
         host_inf = gdb.selected_inferior()
 
         connection = host_inf.connection.type
-        if connection not in ('remote', 'native'):
+        if connection != 'native':
             print(f"intelgt: connection name '{connection}' not recognized.")
             self.handle_error(host_inf)
             self.display_auto_attach_error_msg()
@@ -610,7 +539,7 @@ intelgt: the igfxdcd module (i.e. the debug driver) is not loaded.""")
             # Attach gdbserver to gt inferior.
             # This represents the first device.
             try:
-                self.handle_attach_gdbserver_gt(connection, host_inf)
+                self.handle_attach_gdbserver_gt(host_inf)
                 # Get the most recent gt inferior.
                 gt_inf = gdb.inferiors()[-1]
                 # For the --attach scenario we use gt_inf; for the

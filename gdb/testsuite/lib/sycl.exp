@@ -117,6 +117,10 @@ proc get_sycl_supported_devices {sycl_device_list} {
 		set gdbserver_started 1
 		exp_continue
 	    }
+	    -re "Quit anyway\\? \\(y or n\\) $" {
+		send_gdb "y\n"
+		set result 1
+	    }
 	    -re -wrap "received signal SIGABRT, Aborted.*" {
 		set result 1
 	    }

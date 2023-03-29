@@ -42,6 +42,7 @@ variables.
 
 import re
 import subprocess
+import platform
 import gdb
 
 class DebugLogger:
@@ -90,6 +91,109 @@ class DebugLogger:
         are enabled."""
         if DebugLogger.debug_log_is_enabled():
             print(f"intelgt: {msg}")
+
+class IntelgtErrorReport():
+    """Class to handle and highlight intelgt GPU debugging errors."""
+
+    @staticmethod
+    def exit_intelgt_session(
+            input_err=None, exception=None, terminate=True):
+        """Highlight the error and give the option to user for ending the GPU
+        Debugging session."""
+        if exception:
+            # Color the exception message in YELLOW color for the better
+            # visibility of issue.
+            print(f"\033[93m{str(exception)}\033[93m")
+
+        # Print remaining error messages in RED color.
+        print("\033[31m")
+
+        if input_err:
+            print(f"{input_err}")
+
+        print("""
+ERROR: gdbserver-ze failed to start.  Intel GPU debugging is not possible.
+Set the environment variable INTELGT_AUTO_ATTACH_DISABLE=1 for disabling auto-attach.
+\033[0m""")
+
+        try:
+            if terminate:
+                gdb.execute("quit")
+
+        # In case user enters "n" for quit command, exception is triggered.
+        except RuntimeError:
+            print("""\033[31m
+Continuing with GPU-debugging disabled.
+\033[0m""")
+
+    @staticmethod
+    def execute_with_errorcapture(command, capture_output=True):
+        """Run gdb.execute with to_string option set to True to capture the
+        output from gdbserver.  In case of exception, highlight the error."""
+        try:
+            gdb.execute(f"{command}", False, capture_output)
+            return True
+        except gdb.error as gdb_exception:
+            IntelgtErrorReport.exit_intelgt_session(exception=gdb_exception)
+            return False
+
+    @staticmethod
+    def is_level_zero_debugging_enabled():
+        """Gets environment variable 'ZET_ENABLE_PROGRAM_DEBUGGING' value and
+        returns True if it is enabled otherwise returns False."""
+        env_var = IntelgtAutoAttach.get_env_variable(
+            "ZET_ENABLE_PROGRAM_DEBUGGING", "0")
+
+        return env_var == "1"
+
+    @staticmethod
+    def get_kmd_debug_enabled_status():
+        """ Return True if prelim_enable_eu_debug kernel settings is set to 1
+        for all GPU devices otherwise it returns False."""
+        try:
+            """Check i915 prelim_enable_eu_debug settings."""
+            # Settings are not yet known for Windows so return True for now.
+            if platform.system() == "Windows":
+                return True
+            if platform.system() != "Linux":
+                return False
+            find_out = subprocess.check_output(
+                "find /sys/devices | grep enable_eu_debug",
+                shell=True).decode()
+            lines = find_out.split('\n')
+            if len(lines) == 0:
+                return False
+
+            # All GPUs should have prelim_enable_eu_debug set to 1.
+            for line in lines:
+                if line == "":
+                    continue
+                debug_enabled = subprocess.run(["cat", line],
+                        capture_output=True, text=True,
+                        check=True).stdout
+                if "0" in debug_enabled:
+                    return False
+            return True
+        except (RuntimeError, subprocess.CalledProcessError):
+            return False
+
+    @staticmethod
+    def is_initialization_error():
+        """Raise the error with appropriate reason if any pre-requisite is
+        missing for the intelgt GPU debugging.  It is called before attempting
+        to attach gdbserver-ze."""
+        if not IntelgtErrorReport.is_level_zero_debugging_enabled():
+            IntelgtErrorReport.exit_intelgt_session("""
+Debugging of GPU offloaded code is not enabled.
+Set 'ZET_ENABLE_PROGRAM_DEBUGGING=1' in host process environment.""")
+            return True
+        if not IntelgtErrorReport.get_kmd_debug_enabled_status():
+            IntelgtErrorReport.exit_intelgt_session("""
+Set kernel parameter 'i915.debug_eu=1' or set /sys/class/drm/card*/prelim_enable_eu_debug system files value to 1.""")
+            return True
+
+        return False
+
 
 # pylint: disable-next=too-many-instance-attributes
 class IntelgtAutoAttach:
@@ -349,12 +453,6 @@ class IntelgtAutoAttach:
         gdb.execute(f"remove-inferior {gt_inf.num}")
         self.inf_dict[inf] = None
 
-    def display_auto_attach_error_msg(self):
-        """Display auto attach error message."""
-        print("""\
-intelgt: gdbserver-ze failed to start.  The environment variable
-INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
-
     @staticmethod
     def get_connection_str(var):
         """Helper function to get the string used on a connection over stdio
@@ -377,6 +475,9 @@ INTELGT_AUTO_ATTACH_DISABLE=1 can be used for disabling auto-attach.""")
 
         # User may disable the auto attach from GDB command prompt.
         if self.get_env_variable("INTELGT_AUTO_ATTACH_DISABLE", "0") == "1":
+            return False
+
+        if IntelgtErrorReport.is_initialization_error():
             return False
 
         # Check 'INTELGT_AUTO_ATTACH_GDBSERVER_PATH' in the inferior's
@@ -405,6 +506,8 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
             if ctrl-c is used whilst attaching to inferior.  """
             raise ex
 
+        return True
+
     @DebugLogger.log_call
     def make_native_gdbserver(self, inf, gdbserver_cmd):
         """Spawn and connect to a native instance of gdbserver."""
@@ -424,11 +527,11 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
         if gdbserver_port:
             print(f"intelgt: connecting to gdbserver-ze "
                   f"on port {gdbserver_port}.")
-            gdb.execute(f"target remote :{gdbserver_port}", False,
-                        capture_output)
+            IntelgtErrorReport.execute_with_errorcapture(
+                f"target remote :{gdbserver_port}", capture_output)
         else:
-            gdb.execute(f"target remote | {target_remote_str}", False,
-                        capture_output)
+            IntelgtErrorReport.execute_with_errorcapture(
+                f"target remote | {target_remote_str}", capture_output)
             print(f"intelgt: gdbserver-ze started for "
                   f"process {inf.pid}.")
 
@@ -449,7 +552,8 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
         if connection != 'native':
             print(f"intelgt: connection name '{connection}' not recognized.")
             self.handle_error(host_inf)
-            self.display_auto_attach_error_msg()
+            IntelgtErrorReport.exit_intelgt_session(f"""
+Connection name '{connection}' not recognized.""")
             return
 
         self.hook_bp.delete()
@@ -463,7 +567,8 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
             # Attach gdbserver to gt inferior.
             # This represents the first device.
             try:
-                self.handle_attach_gdbserver_gt(host_inf)
+                if not self.handle_attach_gdbserver_gt(host_inf):
+                    return
                 # Get the most recent gt inferior.
                 gt_inf = gdb.inferiors()[-1]
                 # For the --attach scenario we use gt_inf; for the
@@ -474,7 +579,7 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
             # Fix ctrl-c while attaching to gt inferior.
             except KeyboardInterrupt:
                 self.handle_error(host_inf)
-                self.display_auto_attach_error_msg()
+                IntelgtErrorReport.exit_intelgt_session("Received ctrl-c interrupt.")
             except gdb.error as ex:
                 # If auto attach fails due to uninitialized context, it
                 # should be retried by setting up the hook bp.
@@ -483,7 +588,7 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
                     self.setup_hook_bp()
                 else:
                     self.handle_error(host_inf, details=str(ex))
-                    self.display_auto_attach_error_msg()
+                    IntelgtErrorReport.exit_intelgt_session(exception=ex)
 
             if not self.is_nonstop:
                 gdb.execute("set schedule-multiple on")

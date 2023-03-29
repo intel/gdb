@@ -113,6 +113,10 @@ proc get_sycl_supported_devices {sycl_device_list} {
 	    -re -wrap "(?:Breakpoint) .* (at|in).*sycl-hello.cpp:$inside_kernel.*" {
 		set result 0
 	    }
+	    -re "Quit anyway\\? \\(y or n\\) $" {
+		send_gdb "y\n"
+		set result 1
+	    }
 	    -re -wrap "received signal SIGABRT, Aborted.*" {
 		set result 1
 	    }

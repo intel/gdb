@@ -35,7 +35,7 @@ if {[build_executable "failed to compile $srcfile" \
     return -1
 }
 
-proc spawn_and_attach_sycl_proc {executable device} {
+proc spawn_sycl_proc {executable device} {
     # We directly use 'remote_spawn' to be able to pass
     # the program arguments.
     set command [list "$executable"]
@@ -47,14 +47,45 @@ proc spawn_and_attach_sycl_proc {executable device} {
     set spawn_id [remote_spawn target "$command"]
     sleep 2
 
-    # Try to attach if spawn id is valid.
-    if {$spawn_id != -1} {
-	# Obtain PID to attach.
-	set testpid [spawn_id_get_pid $spawn_id]
-	# Attach gdb to proc.
-	gdb_test "attach $testpid" "Attaching to program.*" "attach command"
-    }
     return $spawn_id
+}
+
+# Find the stopped threads, check their backtrace, and return the
+# thread ids.
+
+proc test_attach {testpid} {
+    global srcfile
+
+    # Attach GDB to the process.
+    gdb_test "attach $testpid" "Attaching to program.*" "attach command"
+
+    # Get the spinning kernel line.
+    set spinning_line [gdb_get_line_number "spinning-line"]
+
+    # Find all spinning threads.  It is expected to find 4 threads exactly,
+    # as the input data size is 64 and subgroup size is 16.  These values
+    # can be controlled with DATA_SIZE (64 by default) and SUB_GROUP_SIZE
+    # (16 by default) flags, if needed.
+    set num_spinning_threads 4
+    set spinning_threads [get_stopped_threads $srcfile $spinning_line]
+    verbose -log "spinning threads: $spinning_threads"
+    gdb_assert { [llength $spinning_threads] == $num_spinning_threads } \
+	"expecting $num_spinning_threads spinning threads"
+
+    # For each spinning thread, check the backtrace.
+    set i 1
+    foreach thread $spinning_threads {
+	with_test_prefix "testing spinning thread $i" {
+	    gdb_test "thread $thread" ".*$thread.*" \
+		"switching to $thread"
+	    gdb_test "bt" [multi_line \
+		"#0.*main.*$srcfile:$spinning_line.*" \
+		"#1.*" ]
+	}
+	incr i
+    }
+
+    return $spinning_threads
 }
 
 foreach device $sycl_device_list {
@@ -72,7 +103,7 @@ foreach device $sycl_device_list {
 	}
 
 	# Spawn sycl proc and attach.
-	set test_spawn_id [spawn_and_attach_sycl_proc $binfile $device]
+	set test_spawn_id [spawn_sycl_proc $binfile $device]
 
 	# Return early if it is failed to spawn a sycl proc.
 	if {$test_spawn_id == -1} {
@@ -80,35 +111,27 @@ foreach device $sycl_device_list {
 	    continue
 	}
 
-	# Get the spinning kernel line.
-	set spinning_line [gdb_get_line_number "spinning-line"]
+	# Obtain PID to attach.
+	set test_pid [spawn_id_get_pid $test_spawn_id]
+	verbose -log "spawn id: $test_spawn_id, test pid: $test_pid"
 
-	# Find all spinning threads.  It is expected to find 4 threads exactly,
-	# as the input data size is 64 and subgroup size is 16.  These values
-	# can be controlled with DATA_SIZE (64 by default) and SUB_GROUP_SIZE
-	# (16 by default) flags, if needed.
-	set num_spinning_threads 4
-	set spinning_threads ""
-	for {set i 1} {$i <= $num_spinning_threads} {incr i} {
-	    set spinning_thread($i) [get_another_stopped_thread \
-		$srcfile $spinning_line "$spinning_threads" "find spin thread $i"]
-	    append spinning_threads " $spinning_thread($i)"
+	with_test_prefix "first attach" {
+	    set spinning_threads_1 [test_attach $test_pid]
 	}
-	verbose -log "spinning threads: $spinning_threads"
-	gdb_assert { [llength $spinning_threads] == $num_spinning_threads } \
-	    "expecting $num_spinning_threads spinning threads"
 
-	# For each spinning thread, check the backtrace and break the loop.
-	foreach thread $spinning_threads {
-	    with_test_prefix "testing spinning thread $thread" {
-		gdb_test "thread $thread" ".*$thread.*" \
-		    "switching to $thread"
-		gdb_test "bt" [multi_line \
-		    "#0.*main.*$srcfile:$spinning_line.*" \
-		    "#1.*" ]
-		gdb_test "thread apply $thread:* -q -s p spin = false" \
-		    " = false" "break the loop at $thread"
-	    }
+	# Detach from the host application and attach again.
+	gdb_test "detach inferior 1" \
+	    "Detaching from program.*intelgt: inferior .* has been removed."
+
+	# Re-attach and test the spinning threads, again.
+	with_test_prefix "second attach" {
+	    set spinning_threads_2 [test_attach $test_pid]
+	}
+
+	# For each spinning thread, stop spinning.
+	foreach thread $spinning_threads_2 {
+	    gdb_test "thread apply $thread:* -q -s p spin = false" \
+		" = false" "break the loop at $thread"
 	}
 
 	# Continue to termination.

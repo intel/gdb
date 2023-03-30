@@ -98,8 +98,8 @@ foreach device $sycl_device_list {
 		gdb_test "bt" [multi_line \
 		    "#0.*main.*$srcfile:$spinning_line.*" \
 		    "#1.*" ]
-		gdb_test "thread apply $thread:* -q -s p spin = 0" \
-		    " = 0" "break the loop at $thread"
+		gdb_test "thread apply $thread:* -q -s p spin = false" \
+		    " = false" "break the loop at $thread"
 	    }
 	}
 

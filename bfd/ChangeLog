@@ -1,3 +1,9 @@
+2023-03-30  Nick Clifton  <nickc@redhat.com>
+
+	PR 30285
+	* elf.c (_bfd_elf_slurp_version_tables): Fail if no version
+	definitions are allocated.
+
 2022-12-06  Nick Clifton  <nickc@redhat.com>
 
 	PR 29852

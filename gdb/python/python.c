@@ -637,6 +637,11 @@ execute_gdb_command (PyObject *self, PyObject *args, PyObject *kw)
 
   scoped_restore preventer = prevent_dont_repeat ();
 
+  /* If the executed command raises an exception, we may have to
+     enable stdin and recover the GDB prompt.  Check the current
+     state.  */
+  bool prompt_was_blocked = (current_ui->prompt_state == PROMPT_BLOCKED);
+
   try
     {
       gdbpy_allow_threads allow_threads;
@@ -682,10 +687,26 @@ execute_gdb_command (PyObject *self, PyObject *args, PyObject *kw)
     {
       /* If an exception occurred then we won't hit normal_stop (), or have
 	 an exception reach the top level of the event loop, which are the
-	 two usual places in which stdin would be re-enabled. So, before we
-	 convert the exception and continue back in Python, we should
-	 re-enable stdin here.  */
-      async_enable_stdin ();
+	 two usual places in which stdin would be re-enabled. So, we check
+	 here if stdin should be re-enabled, and do so if it is the case.
+	 Stdin should not be re-enabled if it is already blocked because,
+	 for example, we are running a command in the context of a
+	 synchronous execution command ("run", "continue", etc.).  Like
+	 this:
+
+	 User runs "continue"
+	 --> command blocks the prompt
+	 --> Python API is invoked, e.g.  via events
+	 --> gdb.execute(C) invoked inside Python
+	 --> command C raises an exception
+	 --> this location
+
+	 In this case case, GDB would go back to the top "continue" command
+	 and move on with its normal course of execution.  That is, it
+	 would enable stdin in the way it normally does.  */
+      if (!prompt_was_blocked)
+	async_enable_stdin ();
+
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 

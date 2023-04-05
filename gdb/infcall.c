@@ -862,6 +862,14 @@ call_function_by_hand_dummy (struct value *function,
   infcall_debug_printf ("calling %s", get_function_name (funaddr, name_buf,
 							 sizeof (name_buf)));
 
+  /* Allow architecture to make infcalls post-clean-up and handle early
+     exit due to thrown error.  */
+  SCOPE_EXIT
+    {
+      if (gdbarch_post_infcall_p (gdbarch))
+	gdbarch_post_infcall (gdbarch, funaddr);
+    };
+
   /* A holder for the inferior status.
      This is only needed while we're preparing the inferior function call.  */
   infcall_control_state_up inf_status (save_infcall_control_state ());

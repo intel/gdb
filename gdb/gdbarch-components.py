@@ -699,6 +699,21 @@ Method(
 
 Method(
     comment="""
+Give gdbarch the chance to make post-clean-up after inferior calls.
+This method is called by a scope destructor and its implementation should
+not throw.
+""",
+    type="void",
+    name="post_infcall",
+    params=[
+        ("CORE_ADDR", "funaddr"),
+    ],
+    predicate=True,
+    invalid=True,
+)
+
+Method(
+    comment="""
 Return true if the code of FRAME is writable.
 """,
     type="int",

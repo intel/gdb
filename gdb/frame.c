@@ -2475,6 +2475,32 @@ inside_entry_func (frame_info_ptr this_frame)
 {
   CORE_ADDR entry_point;
 
+  /* FIXME: On the Intel GT architecture, if stack-based function
+     calls are enabled, scratch space is allocated.  If there is no
+     scratch, this means stack-based calls were disabled and there
+     cannot be a call stack.  Check for this condition and stop the
+     backtrace immediately.  This is a heuristic, though, because
+     scratch space can be allocated even when stack-based calls are
+     disabled, for reasons other than stack calls.  For a proper
+     solution, we need to know the kernel entry point.  Until this
+     information is available in a DBG register, we keep the heuristic
+     below.  */
+  gdbarch *gdbarch = get_frame_arch (this_frame);
+  if (gdbarch_bfd_arch_info (gdbarch)->arch == bfd_arch_intelgt)
+    {
+      int regnum = user_reg_map_name_to_regnum (gdbarch, "scrbase", 7);
+      if (regnum >= 0)
+	{
+	  uint64_t scrbase = 0;
+	  if (regcache_cooked_read_unsigned (get_current_regcache (),
+					     regnum, &scrbase) != REG_VALID)
+	    return true;
+
+	  if (scrbase == 0)
+	    return true;
+	}
+    }
+
   if (!entry_point_address_query (&entry_point))
     return false;
 

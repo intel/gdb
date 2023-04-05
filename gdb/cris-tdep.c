@@ -777,7 +777,9 @@ cris_push_dummy_code (struct gdbarch *gdbarch,
 		      struct value **args, int nargs,
 		      struct type *value_type,
 		      CORE_ADDR *real_pc, CORE_ADDR *bp_addr,
-		      struct regcache *regcache)
+		      struct regcache *regcache,
+		      dummy_frame_dtor_ftype **arch_dummy_dtor,
+		      void **arch_dtor_data)
 {
   /* Allocate space sufficient for a breakpoint.  */
   sp = (sp - 4) & ~3;

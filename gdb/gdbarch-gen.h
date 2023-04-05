@@ -355,6 +355,16 @@ typedef CORE_ADDR (gdbarch_push_dummy_code_ftype) (struct gdbarch *gdbarch, CORE
 extern CORE_ADDR gdbarch_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr, struct value **args, int nargs, struct type *value_type, CORE_ADDR *real_pc, CORE_ADDR *bp_addr, struct regcache *regcache);
 extern void set_gdbarch_push_dummy_code (struct gdbarch *gdbarch, gdbarch_push_dummy_code_ftype *push_dummy_code);
 
+/* Give gdbarch the chance to make post-clean-up after inferior calls.
+   This method is called by a scope destructor and its implementation should
+   not throw. */
+
+extern bool gdbarch_post_infcall_p (struct gdbarch *gdbarch);
+
+typedef void (gdbarch_post_infcall_ftype) (struct gdbarch *gdbarch, CORE_ADDR funaddr);
+extern void gdbarch_post_infcall (struct gdbarch *gdbarch, CORE_ADDR funaddr);
+extern void set_gdbarch_post_infcall (struct gdbarch *gdbarch, gdbarch_post_infcall_ftype *post_infcall);
+
 /* Return true if the code of FRAME is writable. */
 
 typedef int (gdbarch_code_of_frame_writable_ftype) (struct gdbarch *gdbarch, frame_info_ptr frame);

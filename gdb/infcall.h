@@ -47,7 +47,6 @@ struct call_return_meta_info
   CORE_ADDR struct_addr;
 };
 
-
 /* Determine a function's address and its return type from its value.
    If the function is a GNU ifunc, then return the address of the
    target function, and set *FUNCTION_TYPE to the target function's

@@ -366,25 +366,6 @@ find_function_addr (struct value *function,
   return funaddr + gdbarch_deprecated_function_start_offset (gdbarch);
 }
 
-/* For CALL_DUMMY_ON_STACK, push a breakpoint sequence that the called
-   function returns to.  */
-
-static CORE_ADDR
-push_dummy_code (struct gdbarch *gdbarch,
-		 CORE_ADDR sp, CORE_ADDR funaddr,
-		 gdb::array_view<value *> args,
-		 struct type *value_type,
-		 CORE_ADDR *real_pc, CORE_ADDR *bp_addr,
-		 struct regcache *regcache)
-{
-  gdb_assert (gdbarch_push_dummy_code_p (gdbarch));
-
-  return gdbarch_push_dummy_code (gdbarch, sp, funaddr,
-				  args.data (), args.size (),
-				  value_type, real_pc, bp_addr,
-				  regcache);
-}
-
 /* See infcall.h.  */
 
 void
@@ -1026,6 +1007,18 @@ call_function_by_hand_dummy (struct value *function,
 
   gdb::observers::inferior_call_pre.notify (inferior_ptid, funaddr);
 
+  /* ARCH_DUMMY_DTOR is an arch-defined destructor that's set by
+     'gdbarch_push_dummy_code' and called when the dummy frame is removed.
+     This allows architectures to do inferior calls post-cleanup.  */
+  dummy_frame_dtor_ftype *arch_dummy_dtor = nullptr;
+  void *arch_dtor_data = nullptr;
+  auto scoped_post_infcall_cleaner
+    = make_scope_exit ([&arch_dummy_dtor, &arch_dtor_data] ()
+      {
+	if (arch_dummy_dtor != nullptr)
+	  arch_dummy_dtor (arch_dtor_data, 0);
+      });
+
   /* Determine the location of the breakpoint (and possibly other
      stuff) that the called function will return to.  The SPARC, for a
      function returning a structure or union, needs to make space for
@@ -1043,9 +1036,14 @@ call_function_by_hand_dummy (struct value *function,
 	/* Be careful BP_ADDR is in inferior PC encoding while
 	   BP_ADDR_AS_ADDRESS is a plain memory address.  */
 
-	sp = push_dummy_code (gdbarch, sp, funaddr, args,
-			      target_values_type, &real_pc, &bp_addr,
-			      get_current_regcache ());
+	if (!gdbarch_push_dummy_code_p (gdbarch))
+	  error (_("This target does not support function calls."));
+
+	sp = gdbarch_push_dummy_code (gdbarch, sp, funaddr, args.data (),
+				      args.size (), target_values_type,
+				      &real_pc, &bp_addr,
+				      get_current_regcache (),
+				      &arch_dummy_dtor, &arch_dtor_data);
 
 	/* Write a legitimate instruction at the point where the infcall
 	   breakpoint is going to be inserted.  While this instruction
@@ -1090,7 +1088,8 @@ call_function_by_hand_dummy (struct value *function,
 	sp = gdbarch_push_dummy_code (gdbarch, sp, funaddr, args.data (),
 				      args.size (), target_values_type,
 				      &real_pc, &bp_addr,
-				      get_current_regcache ());
+				      get_current_regcache (),
+				      &arch_dummy_dtor, &arch_dtor_data);
 	break;
       }
     default:
@@ -1328,6 +1327,13 @@ call_function_by_hand_dummy (struct value *function,
   if (dummy_dtor != NULL)
     register_dummy_frame_dtor (dummy_id, call_thread.get (),
 			       dummy_dtor, dummy_dtor_data);
+  if (arch_dummy_dtor != nullptr)
+    register_dummy_frame_dtor (dummy_id, call_thread.get (),
+			       arch_dummy_dtor, arch_dtor_data);
+
+  /* From now on, the dummy frame dtor is responsible for the post
+     infcall cleanup.  */
+  scoped_post_infcall_cleaner.release ();
 
   /* Register a clean-up for unwind_on_terminating_exception_breakpoint.  */
   SCOPE_EXIT { delete_std_terminate_breakpoint (); };

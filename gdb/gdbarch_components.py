@@ -668,6 +668,11 @@ Value(
 )
 
 Method(
+    comment="""
+This method is used as an arch preparation for an inferior call.  It also
+allows the arch to set a dummy destructor to be called when the dummy
+frame is removed.
+""",
     type="CORE_ADDR",
     name="push_dummy_code",
     params=[
@@ -679,8 +684,11 @@ Method(
         ("CORE_ADDR *", "real_pc"),
         ("CORE_ADDR *", "bp_addr"),
         ("struct regcache *", "regcache"),
+        ("dummy_frame_dtor_ftype **", "arch_dummy_dtor"),
+        ("void **", "arch_dtor_data"),
     ],
     predicate=True,
+    invalid=True,
 )
 
 Method(

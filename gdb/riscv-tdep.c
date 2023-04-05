@@ -2458,7 +2458,9 @@ static CORE_ADDR
 riscv_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp,
 		       CORE_ADDR funaddr, struct value **args, int nargs,
 		       struct type *value_type, CORE_ADDR *real_pc,
-		       CORE_ADDR *bp_addr, struct regcache *regcache)
+		       CORE_ADDR *bp_addr, struct regcache *regcache,
+		       dummy_frame_dtor_ftype **arch_dummy_dtor,
+		       void **arch_dtor_data)
 {
   /* A nop instruction is 'add x0, x0, 0'.  */
   static const gdb_byte nop_insn[] = { 0x13, 0x00, 0x00, 0x00 };

@@ -46,13 +46,25 @@ main (int argc, char *argv[])
   sycl::id<2> id_2D {11, 22};
   sycl::id<3> id_3D {11, 22, 33};
 
+  sycl::id<1>& id_1D_ref = id_1D;
+  sycl::id<2>& id_2D_ref = id_2D;
+  sycl::id<3>& id_3D_ref = id_3D;
+
   sycl::range<1> range_1D {DIM0};
   sycl::range<2> range_2D {DIM0, DIM1};
   sycl::range<3> range_3D {DIM0, DIM1, DIM2};
 
+  sycl::range<1>& range_1D_ref = range_1D;
+  sycl::range<2>& range_2D_ref = range_2D;
+  sycl::range<3>& range_3D_ref = range_3D;
+
   sycl::buffer<int, 1> buffer_1D {&data_1D[0], range_1D};
   sycl::buffer<int, 2> buffer_2D {&data_2D[0][0], range_2D};
   sycl::buffer<int, 3> buffer_3D {&data_3D[0][0][0], range_3D};
+
+  sycl::buffer<int, 1>& buffer_1D_ref = buffer_1D;
+  sycl::buffer<int, 2>& buffer_2D_ref = buffer_2D;
+  sycl::buffer<int, 3>& buffer_3D_ref = buffer_3D;
 
   return 0; /* end-of-program */
 }

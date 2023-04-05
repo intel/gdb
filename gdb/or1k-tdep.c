@@ -601,7 +601,9 @@ static CORE_ADDR
 or1k_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp,
 		      CORE_ADDR function, struct value **args, int nargs,
 		      struct type *value_type, CORE_ADDR * real_pc,
-		      CORE_ADDR * bp_addr, struct regcache *regcache)
+		      CORE_ADDR * bp_addr, struct regcache *regcache,
+		      dummy_frame_dtor_ftype **arch_dummy_dtor,
+		      void **arch_dtor_data)
 {
   CORE_ADDR bp_slot;
 

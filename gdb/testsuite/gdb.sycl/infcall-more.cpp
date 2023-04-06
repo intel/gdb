@@ -273,6 +273,11 @@ main (int argc, char *argv[])
 	cgh.parallel_for (dataRange, [=] (sycl::id<1> wiID)
 	  {
 	    numbers[0] = make_all_calls ();  /* line-inside-kernel */
+
+	    if (wiID % 2 == 0) /* thread-branching */
+	      numbers[wiID] = integer_grf_args (wiID, 1, 1);  /* then-branch */
+	    else
+	      numbers[wiID] = no_args ();  /* else-branch */
 	  });
       });
   }

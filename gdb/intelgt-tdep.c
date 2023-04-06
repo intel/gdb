@@ -40,6 +40,8 @@
 #include "elf-bfd.h"
 #include "infcall.h"
 #include <algorithm>
+#include <array>
+#include <stack>
 
 /* Address space flags.
    We are assigning the TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 to the shared
@@ -287,6 +289,7 @@ enum xe_version
 /* Translate the DEVICE_ID to GDB Xe version.  */
 
 static xe_version get_xe_version (unsigned int device_id);
+static uint32_t get_device_id (gdbarch *gdbarch);
 
 /* Intelgt memory handler to manage memory allocation and releasing of
    a target memory region.  We are using a linked list to keep track of
@@ -1559,6 +1562,201 @@ intelgt_unwind_sp (gdbarch *gdbarch, frame_info_ptr next_frame)
   return fe_sp;
 }
 
+/* Read the debug area info and initialize SCRATCH_AREA in intelgt data.  */
+
+static void
+intelgt_read_debug_area_header (gdbarch *gdbarch)
+{
+  /* Layout of the debug area header.  */
+  struct debug_area_header
+  {
+    char magic[8] = "";
+    uint64_t reserved_1 = 0;
+    uint8_t version = 0;
+    uint8_t pgsize = 0;
+    uint8_t size = 0;
+    uint8_t reserved_2 = 0;
+    uint16_t scratch_begin = 0;
+    uint16_t scratch_end = 0;
+  } dbg_header;
+
+  CORE_ADDR isabase = intelgt_get_isabase (get_current_regcache ());
+  int err = target_read_memory (isabase, (gdb_byte *)&dbg_header,
+				sizeof dbg_header);
+  if (err != 0)
+    error (_("Target failed to read the debug area header at %s"),
+	   paddress (gdbarch, isabase));
+
+  if (strcmp (dbg_header.magic, "dbgarea") != 0)
+    error (_("Failed to find scratch debug area at %s"),
+	   paddress (gdbarch, isabase));
+
+  if (dbg_header.version != 0)
+    error (_("Unknown version of debug area header."));
+
+  /* Initialize SCRATCH_AREA.  */
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  data->scratch_area = new target_memory_allocator (
+    isabase + dbg_header.scratch_begin,
+    dbg_header.scratch_end - dbg_header.scratch_begin);
+}
+
+/* Return a pointer to the scratch area object.  */
+
+static target_memory_allocator *
+get_scratch_area (gdbarch *gdbarch)
+{
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  if (data->scratch_area == nullptr)
+    {
+      intelgt_read_debug_area_header (gdbarch);
+      if (data->scratch_area == nullptr)
+	error (_("Device scratch area is needed for this operation but could "
+		 "not be found."));
+    }
+
+  return data->scratch_area;
+}
+
+/* Intelgt implementation of the dummy frame dtor.  This function will be
+   called when a dummy frame is removed or an error is thrown during the
+   infcall flow.
+
+   In this dtor, we free up the scratch memory that we used to inject the
+   CALLA instruction in "intelgt_push_dummy_code".  */
+
+static void
+intelgt_infcall_dummy_dtor (void *data, int unused)
+{
+  /* Do not error out if any exception is thrown.  */
+  try
+    {
+      auto infcall_cleanup_data = (std::pair<gdbarch *, CORE_ADDR> *) data;
+      gdbarch *gdbarch = infcall_cleanup_data->first;
+      CORE_ADDR calla_addr = infcall_cleanup_data->second;
+      delete infcall_cleanup_data;
+
+      target_memory_allocator *scratch_area = get_scratch_area (gdbarch);
+      scratch_area->free (calla_addr);
+    }
+  catch (const gdb_exception_error &e)
+    {
+      exception_print (gdb_stderr, e);
+    }
+}
+
+/* Intelgt implementation of the "push_dummy_code" method.
+
+   In this function, we are injecting a CALLA instruction in the debug area.
+   We set the REAL_PC to start executing from the injected instruction,
+   which will then force the function to return to the next address, and that
+   would be the BP_ADDR.  */
+
+static CORE_ADDR
+intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
+			 value **args, int nargs, type *value_type,
+			 CORE_ADDR *real_pc, CORE_ADDR *bp_addr,
+			 regcache *regcache,
+			 dummy_frame_dtor_ftype **arch_dummy_dtor,
+			 void **dtor_data)
+{
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  target_memory_allocator *scratch_area = get_scratch_area (gdbarch);
+
+  /* Allocate memory for two instructions in the scratch area.  The first is
+     for the CALLA, and the second is the return address, where GDB inserts
+     a breakpoint.  */
+  CORE_ADDR calla_addr = scratch_area->alloc (2 * intelgt::MAX_INST_LENGTH);
+
+  /* Set the dummy frame dtor right after scratch memory allocation,
+     so that it gets called for any exception.  */
+  auto *infcall_cleanup_data
+    = new std::pair<struct gdbarch *, CORE_ADDR> (gdbarch, calla_addr);
+  *arch_dummy_dtor = intelgt_infcall_dummy_dtor;
+  *dtor_data = infcall_cleanup_data;
+
+  /* Compute the execution size from SIMD_WIDTH, below is the EXEC_SIZE
+     encoding according to the spec.
+     000b = 1 Channels
+     001b = 2 Channels
+     010b = 4 Channels
+     011b = 8 Channels
+     100b = 16 Channels
+     101b = 32 Channels.  */
+  const uint32_t simd_width = get_simd_width_for_pc (funaddr);
+  uint32_t exec_size = 0;
+  while ((simd_width >> exec_size) > 1)
+    exec_size++;
+
+  /* Make sure that 2^EXEC_SIZE = SIMD_WIDTH.  */
+  gdb_assert (1 << exec_size == simd_width);
+
+  /* Make sure to have a cleared buffer for the CALLA instruction
+     and the return breakpoint.  */
+  gdb_byte buff[2 * intelgt::MAX_INST_LENGTH];
+  memset (buff, 0, sizeof (buff));
+
+  /* Construct the dummy CALLA instruction.  */
+  gdb_byte *calla_inst = buff;
+
+  constexpr uint32_t calla_opcode = 0x2b;
+  calla_inst[0] = calla_opcode;
+
+  /* Compute the DEVICE_GEN from the DEVICE_ID, so that we can determine
+     the correct encoding for some fields of the instruction.  */
+  uint32_t device_id = get_device_id (gdbarch);
+  xe_version device_version = get_xe_version (device_id);
+  switch (device_version)
+    {
+    case XE_HP:
+    case XE_HPG:
+      calla_inst[2] = exec_size;
+      break;
+    case XE_HPC:
+      calla_inst[2] = exec_size << 2;
+      break;
+    default:
+      error (_("Unsupported device id 0x%x"), device_id);
+    }
+
+  /* Location of the CallMask field in the framedesc register (subreg 0)
+     and the Src0.IsImm field (bit 46).  */
+  constexpr uint32_t dst_subreg = 0x04;
+  calla_inst[6] = dst_subreg;
+  /* Destination register number for the CALLA instruction.  */
+  uint32_t dst_reg = data->framedesc_base_regnum ();
+  calla_inst[7] = dst_reg;
+
+  /* Determine the jump IP from function address.
+     FUNADDR = JIP + $isabase.  */
+  CORE_ADDR isabase = intelgt_get_isabase (regcache);
+  CORE_ADDR jump_ip = funaddr - isabase;
+
+  /* Store the JIP in the last 4 bytes of the CALLA instruction.  */
+  bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  store_unsigned_integer (calla_inst + intelgt::MAX_INST_LENGTH - 4, 4,
+			  byte_order, (uint32_t) jump_ip);
+
+  /* Use the NOP instruction for the return breakpoint.  */
+  constexpr uint32_t nop_opcode = 0x60;
+  gdb_byte *nop_inst = buff + intelgt::MAX_INST_LENGTH;
+  nop_inst[0] = nop_opcode;
+
+  /* Inject the dummy CALLA instruction and the breakpoint in the
+     reserved space.  */
+  int err = target_write_memory (calla_addr, buff, sizeof (buff));
+  if (err != 0)
+    error ("Target failed to inject a dummy calla instruction at 0x%lx",
+	   calla_addr);
+
+  /* Update the REAL_PC to execute the CALLA, which would make the function
+     return to the next address.  Use that address as the BP_ADDR.  */
+  *real_pc = calla_addr;
+  *bp_addr = calla_addr + intelgt::MAX_INST_LENGTH;
+
+  return sp;
+}
+
 /* Intelgt implementation of the "push_dummy_call" method.  */
 
 static CORE_ADDR
@@ -1580,12 +1778,6 @@ intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
   /* ADDRESS_SIZE is the size of an address in bytes.  */
   const int address_size = gdbarch_addr_bit (gdbarch) / 8;
   CORE_ADDR fe_sp = sp;
-
-  /* Set the return address register to point to the entry point of
-     the program, where a breakpoint lies in wait.  The return address
-     register is the framedesc.return_ip which is located at the first four
-     bytes of "framedesc".  */
-  regcache->cooked_write_part (framedesc_regnum, 0, 4, (gdb_byte *) &bp_addr);
 
   /* Determine the reserved space for the returned struct.  This includes
      large vectors that do not fit into available return GRFs.  */
@@ -2071,6 +2263,30 @@ fe_stack_handle_small_struct (CORE_ADDR addr, type *valtype,
   return fe_addr;
 }
 
+/* Helper function to return the device version using ARCH.  */
+
+static uint32_t
+get_device_id (gdbarch *gdbarch)
+{
+  try
+    {
+      const target_desc *tdesc = gdbarch_target_desc (gdbarch);
+      const std::string &tdesc_device_id
+	= tdesc_find_device_info_attribute (tdesc, "target_id");
+      if (tdesc_device_id.empty ())
+	error (_("Failed to read target id from device."));
+
+      unsigned long device_id = std::stoul (tdesc_device_id, nullptr, 16);
+      gdb_assert (device_id <= UINT32_MAX);
+      return (uint32_t) device_id;
+    }
+  catch (const gdb_exception &e)
+    {
+      exception_print (gdb_stderr, e);
+      return 0u;
+    }
+}
+
 static xe_version
 get_xe_version (unsigned int device_id)
 {
@@ -2309,7 +2525,9 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
     gdbarch, intelgt_return_in_first_hidden_param_p);
   set_gdbarch_value_arg_coerce (gdbarch, intelgt_value_arg_coerce);
   set_gdbarch_dummy_id (gdbarch, intelgt_dummy_id);
+  set_gdbarch_call_dummy_location (gdbarch, AT_CUSTOM_POINT);
   set_gdbarch_reserve_stack_space (gdbarch, intelgt_reserve_stack_space);
+  set_gdbarch_push_dummy_code (gdbarch, intelgt_push_dummy_code);
   set_gdbarch_get_inferior_call_return_value (
     gdbarch, intelgt_get_inferior_call_return_value);
 

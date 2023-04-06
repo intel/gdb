@@ -40,6 +40,8 @@
 #include "elf-bfd.h"
 #include "infcall.h"
 #include <algorithm>
+#include <array>
+#include <stack>
 
 /* Address space flags.
    We are assigning the TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 to the shared
@@ -1416,6 +1418,168 @@ intelgt_unwind_sp (gdbarch *gdbarch, frame_info_ptr next_frame)
   return fe_sp;
 }
 
+/* This stack is used to store the instructions at the entry point of
+   the kernel when an inferior call takes place, so that we can restore
+   the original contents after the infcall completes.  We need stack here
+   to keep track of the entry point instructions for nested inferior
+   calls.
+   The stack entry is a pair of the byte array which holds the entry
+   instruction and a bool flag, which shows the instruction validity.
+   The instruction may be invalid in case we failed to find the kernel
+   entry point or read the memory from this point.  */
+
+std::stack<std::pair<std::array<gdb_byte, intelgt::MAX_INST_LENGTH>, bool>>
+entry_inst_stack;
+
+/* Determine the kernel start address.  */
+
+static bool
+get_kernel_entry (CORE_ADDR pc, CORE_ADDR &entry_addr)
+{
+  /* TODO: this needs to be changed once we have kernel start address
+     available in registers.  Until then find the section which contains
+     the PC and take its address.  */
+  obj_section *s = find_pc_section (pc);
+  if (s == nullptr)
+    return false;
+
+  entry_addr = s->addr ();
+  return true;
+}
+
+/* Intelgt implementation of the "push_dummy_code" method.
+
+   In this function, we are injecting a CALLA instruction at the entry point
+   address of the kernel.  We set the REAL_PC to start executing from the
+   injected instruction, which will then force the function
+   to return to the next instruction address, and that would be the
+   BP_ADDR.  */
+
+static CORE_ADDR
+intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
+			 value **args, int nargs, type *value_type,
+			 CORE_ADDR *real_pc, CORE_ADDR *bp_addr,
+			 regcache *regcache)
+{
+  /* We push to the ENTRY_INST_STACK unconditionally, to avoid branching,
+     since the post-clean up is called on every error.
+     At first, the instruction is marked invalid (FALSE).  */
+  std::array<gdb_byte, intelgt::MAX_INST_LENGTH> entry_inst;
+  entry_inst_stack.push (std::make_pair (std::move (entry_inst), false));
+
+  CORE_ADDR entry_addr = 0;
+  if (!get_kernel_entry (funaddr, entry_addr))
+    error ("Failed to get kernel starting address.");
+
+  int err = 0;
+  /* Save the original instruction data in ENTRY_INST_STACK so we can restore
+     it back after running the infcall.  */
+  err = target_read_memory (entry_addr, entry_inst_stack.top ().first.data (),
+			    intelgt::MAX_INST_LENGTH);
+  if (err != 0)
+    error ("Target failed to read memory at 0x%lx", entry_addr);
+
+  /* We have read the entry instruction.  Mark it valid.  */
+  entry_inst_stack.top ().second = true;
+
+  /* Compute the execution size from SIMD_WIDTH, below is the EXEC_SIZE
+     encoding according to the spec.
+     000b = 1 Channels
+     001b = 2 Channels
+     010b = 4 Channels
+     011b = 8 Channels
+     100b = 16 Channels
+     101b = 32 Channels.  */
+  const uint32_t simd_width = get_simd_width_for_pc (funaddr);
+  uint32_t exec_size = 0;
+  while ((simd_width >> exec_size) > 1)
+    exec_size++;
+
+  /* Make sure that 2^EXEC_SIZE = SIMD_WIDTH.  */
+  gdb_assert (1 << exec_size == simd_width);
+
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+  /* Construct the dummy CALLA instruction.  */
+  gdb_byte calla_inst[intelgt::MAX_INST_LENGTH];
+  memset (calla_inst, 0, intelgt::MAX_INST_LENGTH);
+
+  constexpr uint32_t calla_opcode = 0x2b;
+  calla_inst[0] = calla_opcode;
+#if defined (HAVE_LIBIGA64)
+  calla_inst[2] = data->iga_version >= IGA_XE_HPC ? exec_size << 2 : exec_size;
+#else
+  error ("Inferior call feature is not available: libiga64 is missing.");
+#endif /* defined (HAVE_LIBIGA64)  */
+
+  /* Location of the CallMask field in the framedesc register (subreg 0)
+     and the Src0.IsImm field (bit 46).  */
+  constexpr uint32_t dst_subreg = 0x04;
+  calla_inst[6] = dst_subreg;
+  /* Destination register number for the CALLA instruction.  */
+  uint32_t dst_reg = data->framedesc_base_regnum ();
+  calla_inst[7] = dst_reg;
+
+  /* Determine the jump IP from function address.
+     FUNADDR = JIP + $isabase.  */
+  gdb_assert (data->isabase_regnum != -1);
+  uint64_t isabase = 0, jump_ip = 0;
+  if (regcache->cooked_read (data->isabase_regnum, &isabase) != REG_VALID)
+    throw_error (NOT_AVAILABLE_ERROR,
+		 _("Register %d (isabase) is not available"),
+		 data->isabase_regnum);
+  jump_ip = funaddr - isabase;
+
+  /* Store the JIP in the last 4 bytes of the CALLA instruction.  */
+  bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  store_unsigned_integer (calla_inst + intelgt::MAX_INST_LENGTH - 4, 4,
+			  byte_order, (uint32_t) jump_ip);
+
+  /* Inject the dummy CALLA instruction.  */
+  err = target_write_memory (entry_addr, calla_inst, intelgt::MAX_INST_LENGTH);
+  if (err != 0)
+    error ("Target failed to inject a dummy calla instruction at 0x%lx",
+	   entry_addr);
+
+  /* Update the REAL_PC to execute the CALLA, which would make the function
+     return to the next address.  Use that address BP_ADDR.  */
+  *real_pc = entry_addr;
+  *bp_addr = entry_addr + intelgt::MAX_INST_LENGTH;
+
+  return sp;
+}
+
+/* Intelgt implementation of the "post_infcall" method.
+
+   In this function, we restore the entry point original instruction that we
+   used to inject a CALLA instruction in intelgt_push_dummy_code.  */
+
+static void
+intelgt_post_infcall (gdbarch *gdbarch, CORE_ADDR funaddr)
+{
+  /* There always should be an entry instruction restore buffer.  */
+  gdb_assert (!entry_inst_stack.empty ());
+  CORE_ADDR entry_addr = 0;
+  if (get_kernel_entry (funaddr, entry_addr))
+    {
+      /* Restore the entry instruction only if its restore value
+	 is valid.  */
+      if (entry_inst_stack.top ().second)
+	{
+	  int err = target_write_memory (entry_addr,
+					 entry_inst_stack.top ().first.data (),
+					 intelgt::MAX_INST_LENGTH);
+	  if (err != 0)
+	    warning ("Target failed to restore instruction at 0x%lx",
+		     entry_addr);
+	}
+    }
+  else
+    warning ("Failed to get kernel starting address.");
+
+  entry_inst_stack.pop ();
+}
+
 /* Intelgt implementation of the "push_dummy_call" method.  */
 
 static CORE_ADDR
@@ -1437,12 +1601,6 @@ intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
   /* ADDRESS_SIZE is the size of an address in bytes.  */
   const int address_size = gdbarch_addr_bit (gdbarch) / 8;
   CORE_ADDR fe_sp = sp;
-
-  /* Set the return address register to point to the entry point of
-     the program, where a breakpoint lies in wait.  The return address
-     register is the framedesc.return_ip which is located at the first four
-     bytes of "framedesc".  */
-  regcache->cooked_write_part (framedesc_regnum, 0, 4, (gdb_byte *) &bp_addr);
 
   /* Determine the reserved space for the returned struct.  This includes
      large vectors that do not fit into available return GRFs.  */
@@ -2153,7 +2311,10 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
     gdbarch, intelgt_return_in_first_hidden_param_p);
   set_gdbarch_value_arg_coerce (gdbarch, intelgt_value_arg_coerce);
   set_gdbarch_dummy_id (gdbarch, intelgt_dummy_id);
+  set_gdbarch_call_dummy_location (gdbarch, AT_CUSTOM_POINT);
   set_gdbarch_reserve_stack_space (gdbarch, intelgt_reserve_stack_space);
+  set_gdbarch_push_dummy_code (gdbarch, intelgt_push_dummy_code);
+  set_gdbarch_post_infcall (gdbarch, intelgt_post_infcall);
   set_gdbarch_get_inferior_call_return_value (
     gdbarch, intelgt_get_inferior_call_return_value);
 #endif /* not USE_WIN32API */

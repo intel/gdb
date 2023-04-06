@@ -5949,8 +5949,15 @@ proc gdb_compile {source dest type options} {
 		verbose "compiling gdb_saved_set_unbuffered_obj"
 		set unbuf_src ${srcdir}/lib/set_unbuffered_mode.c
 		set unbuf_obj ${objdir}/set_unbuffered_mode.o
+		set unbuf_options {nowarnings}
 
-		set result [gdb_compile "${unbuf_src}" "${unbuf_obj}" object {nowarnings}]
+		# Intel compiler icx has linking problem in unbuffer mode so
+		# icpx is used instead.
+		if {[test_compiler_info "icx-*" c++]} {
+		    lappend unbuf_options c++
+		}
+		set result [gdb_compile \
+		    "${unbuf_src}" "${unbuf_obj}" object "${unbuf_options}"]
 		if { $result != "" } {
 		    return $result
 		}

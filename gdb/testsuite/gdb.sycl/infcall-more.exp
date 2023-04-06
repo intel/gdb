@@ -169,5 +169,33 @@ foreach device $sycl_device_list {
 	foreach_with_prefix lane $lanes {
 	    test_inferior_calls $lane $inside_kernel
 	}
+
+	set then_branch [gdb_get_line_number "then-branch"]
+	set else_branch [gdb_get_line_number "else-branch"]
+	set thread_branch [gdb_get_line_number "thread-branch"]
+
+	gdb_breakpoint "$srcfile:$thread_branch"
+	gdb_continue_to_breakpoint "at thread branching" \
+	    ".*$srcfile:$thread_branch.*"
+
+	gdb_test_no_output "set scheduler-locking step"
+	set branches_step 0
+	for {set i 0} {$i < 2} {incr i} {
+	    gdb_test_multiple "next" "step over thread branching" {
+		-re -wrap "$then_branch.*" {
+		    incr branches_step
+		    pass "stopped into then-branch"
+		    gdb_test "print integer_grf_args(8, 9, 10)" "= 720" \
+			"infcall at then-branch"
+		}
+		-re -wrap "$else_branch.*" {
+		    incr branches_step
+		    pass "stepped into else-branch"
+		    gdb_test "print integer_grf_args(7, 6, 5)" "= 210" \
+			"infcall at else-branch"
+		}
+	    }
+	}
+	gdb_assert {$branches_step == 2} "stepped into both branches"
     }
 }

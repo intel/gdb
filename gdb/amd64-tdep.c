@@ -944,7 +944,7 @@ amd64_classify (struct type *type, enum amd64_reg_class theclass[2])
 
   /* Aggregates.  */
   else if (code == TYPE_CODE_ARRAY || code == TYPE_CODE_STRUCT
-	   || code == TYPE_CODE_UNION)
+	   || code == TYPE_CODE_UNION || code == TYPE_CODE_STRING)
     amd64_classify_aggregate (type, theclass);
 }
 

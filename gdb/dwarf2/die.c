@@ -54,6 +54,10 @@ dump_die_shallow (struct ui_file *f, int indent, struct die_info *die)
 	      indent, "",
 	      dwarf_bool_name (die->child != NULL));
 
+  gdb_printf (f, "%*s  has next: %s\n",
+	      indent, "",
+	      dwarf_bool_name (die->next != nullptr));
+
   gdb_printf (f, "%*s  attributes:\n", indent, "");
 
   for (i = 0; i < die->num_attrs; ++i)
@@ -187,7 +191,7 @@ dump_die_1 (struct ui_file *f, int level, int max_level, struct die_info *die)
 	}
     }
 
-  if (die->next != NULL && level > 0)
+  if (die->next != nullptr)
     {
       dump_die_1 (f, level, max_level, die->next);
     }

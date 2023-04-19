@@ -36,9 +36,17 @@ if {[build_executable "failed to compile $srcfile" \
 }
 
 proc spawn_and_attach_sycl_proc {executable device} {
-    # Spawn a sycl proc and wait for a few seconds.
-    set spawn_id [spawn_wait_for_attach [list \
-	"${executable} [sycl_get_device_args $device]"]]
+    # We directly use 'remote_spawn' to be able to pass
+    # the program arguments.
+    set command [list "$executable"]
+    foreach arg [sycl_get_device_args $device] {
+	lappend command $arg
+    }
+    verbose -log "command: $command"
+
+    set spawn_id [remote_spawn target "$command"]
+    sleep 2
+
     # Try to attach if spawn id is valid.
     if {$spawn_id != -1} {
 	# Obtain PID to attach.

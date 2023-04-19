@@ -117,6 +117,10 @@ get_test_insn (struct gdbarch *gdbarch, size_t *len)
 	*len = bplen;
       }
       break;
+    case bfd_arch_intelgt:
+      /* The intelgt architecture needs to initialize the gdbarch with
+	 an IGA context to be able to use the disassembler.  */
+      return insn;
     case bfd_arch_i386:
       {
 	const struct bfd_arch_info *info = gdbarch_bfd_arch_info (gdbarch);

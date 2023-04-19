@@ -353,6 +353,31 @@ proc get_another_stopped_thread {srcfile line ids_to_ignore {msg ""}} {
     return $another_stopped_thread
 }
 
+# Returns the list of IDs of the threads stopped at $srcfile:$line.
+# The returned thread IDs are in the format of (<inferior
+# number>.<thread number>) and SIMD lane information is omitted.  For
+# thread 2.3:0 returns "2.3".
+
+proc get_stopped_threads {srcfile line {msg "get stopped threads"}} {
+    global decimal
+
+    # Frame arguments are irrelevant.  Ignore them for faster results.
+    set wpfa "with print frame-arguments none -- "
+
+    set stopped_threads {}
+    gdb_test_multiple "${wpfa}info threads -stopped" $msg -lbl {
+	-re "\r\n. ($decimal\(\.$decimal\)?)\[^\r\n\]* at $srcfile:$line" {
+	    lappend stopped_threads $expect_out(1,string)
+	    exp_continue
+	}
+	-re -wrap "" {
+	    pass $gdb_test_name
+	}
+    }
+
+    return $stopped_threads
+}
+
 # Returns 1 if the target device is selected via OFFLOAD_DEVICE_GROUP
 # and OFFLOAD_GPU_ID, 0 otherwise.
 # device contains ";" separated following information:

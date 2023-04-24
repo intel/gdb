@@ -44,7 +44,11 @@ if {[has_int128_cxx]} {
     # canonicalizes the name to "__int128 unsigned", and there isn't a
     # c-exp.y production for this.
     # https://sourceware.org/bugzilla/show_bug.cgi?id=20991
-    lappend typelist __int128
+    if {[test_compiler_info "icc-*"]} {
+	lappend typelist __int128_t
+    } else {
+	lappend typelist __int128
+    }
 }
 
 # Create the test file.

@@ -92,9 +92,9 @@ pid_of (const process_info *proc)
   return proc->pid;
 }
 
-/* Return a pointer to the process that corresponds to the current
-   thread (current_thread).  It is an error to call this if there is
-   no current thread selected.  */
+/* Return a pointer to the current process.  Note that the current
+   process may be non-null while the current thread (current_thread)
+   is null.  */
 
 struct process_info *current_process (void);
 struct process_info *get_thread_process (const struct thread_info *);

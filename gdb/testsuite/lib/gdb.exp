@@ -1893,6 +1893,7 @@ proc gdb_test_list_exact { cmd name elm_find_regexp elm_extract_regexp result_ma
     global gdb_prompt
 
     set matches [lsort $result_match_list]
+    set matches_num [llength $matches]
     set seen {}
     gdb_test_multiple $cmd $name {
 	"$cmd\[\r\n\]" { exp_continue }
@@ -1905,15 +1906,25 @@ proc gdb_test_list_exact { cmd name elm_find_regexp elm_extract_regexp result_ma
 	    exp_continue
 	}
 	-re "$gdb_prompt $" {
-	    set failed ""
-	    foreach got [lsort $seen] have $matches {
+	    set failed_test ""
+	    set seen_num [llength $seen]
+	    gdb_assert {$matches_num == $seen_num} \
+		"expected list length == seen list length ($matches_num == $seen_num)"
+	    set sorted_seen [lsort $seen]
+	    foreach got $sorted_seen have $matches {
 		if {![string equal $got $have]} {
-		    set failed $have
+		    if {[lsearch -sorted $matches $got] == -1} {
+			set failed_test "$name (got unexpected entry $got)"
+		    } elseif {[lsearch -sorted $sorted_seen $have] == -1} {
+			set failed_test "$name ($have not found)"
+		    } else {
+			set failed_test "$name (got: \"$got\", expected: \"$have\")"
+		    }
 		    break
 		}
 	    }
-	    if {[string length $failed] != 0} {
-		fail "$name ($failed not found)"
+	    if {[string length $failed_test] != 0} {
+		fail $failed_test
 	    } else {
 		pass $name
 	    }

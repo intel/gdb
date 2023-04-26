@@ -920,6 +920,38 @@ intelgt_sw_breakpoint_from_kind (gdbarch *gdbarch, int kind, int *size)
   return nullptr;
 }
 
+/* Generic pointers are tagged in order to preserve the address
+   space to which they are pointing.  Tags are encoded into bits [61:63] of
+   an address:
+
+   000/111 - global,
+   001 - private,
+   010 - local (SLM)
+
+   Variables in SLM will not have tagged addresses.  They will be marked
+   in DWARF and have a instance_flag because of that.  To communicate to
+   gdbserver that it should access SLM, we tag the address here.  This was
+   chosen as relying on the type system and RSP to communicate that, was
+   problematic for generic pointers (as types are cached and shared).  */
+static CORE_ADDR
+intelgt_pointer_to_address (gdbarch *gdbarch,
+			    type *type, const gdb_byte *buf)
+{
+  CORE_ADDR addr = extract_unsigned_integer (buf, type->length (),
+					     gdbarch_byte_order (gdbarch));
+
+  /* Tag slm addresses.  This will be used by gdbserver to figure out which
+     address space to read.  */
+  if ((type->instance_flags () & INTELGT_TYPE_INSTANCE_FLAG_SLM) != 0)
+    {
+      constexpr CORE_ADDR addr_space_bits = (CORE_ADDR) 0x7 << 61;
+      constexpr CORE_ADDR slm_mask = (CORE_ADDR) 0x2 << 61;
+      addr = (addr & ~addr_space_bits) | slm_mask;
+    }
+
+  return addr;
+}
+
 #if defined (HAVE_LIBIGA64)
 /* Map CORE_ADDR to symbol names for jump labels in an IGA disassembly.  */
 
@@ -1002,6 +1034,19 @@ intelgt_address_class_type_flags_to_name (struct gdbarch *gdbarch,
     return INTELGT_SLM_ADDRESS_QUALIFIER;
   else
     return nullptr;
+}
+
+/* Implementation of `address_class_type_flags' gdbarch method.
+
+   This method maps DW_AT_address_class attributes to a
+   type_instance_flag_value.  */
+static type_instance_flags
+intelgt_address_class_type_flags (int byte_size, int dwarf2_addr_class)
+{
+  /* The value 1 of the DW_AT_address_class attribute corresponds to SLM.  */
+  if (dwarf2_addr_class == 1)
+    return INTELGT_TYPE_INSTANCE_FLAG_SLM;
+  return 0;
 }
 
 /* Implementation of `address_class_name_to_type_flags' gdbarch method,
@@ -2737,6 +2782,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_sw_breakpoint_from_kind (gdbarch,
 				       intelgt_sw_breakpoint_from_kind);
   set_gdbarch_can_step_over_breakpoint (gdbarch, 1);
+  set_gdbarch_pointer_to_address (gdbarch, intelgt_pointer_to_address);
   set_gdbarch_can_leave_breakpoints (gdbarch, true);
   dwarf2_frame_set_init_reg (gdbarch, intelgt_init_reg);
 
@@ -2768,6 +2814,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
     (gdbarch, intelgt_address_class_type_flags_to_name);
   set_gdbarch_address_space_from_type_flags
     (gdbarch, intelgt_address_space_from_type_flags);
+  set_gdbarch_address_class_type_flags
+    (gdbarch, intelgt_address_class_type_flags);
 
   set_gdbarch_is_inferior_device (gdbarch, true);
   set_gdbarch_thread_workgroup (gdbarch, intelgt_thread_workgroup);

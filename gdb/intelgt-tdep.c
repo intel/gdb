@@ -1094,6 +1094,19 @@ intelgt_address_class_type_flags_to_name (struct gdbarch *gdbarch,
     return nullptr;
 }
 
+/* Implementation of `address_class_type_flags' gdbarch method.
+
+   This method maps DW_AT_address_class attributes to a
+   type_instance_flag_value.  */
+static type_instance_flags
+intelgt_address_class_type_flags (int byte_size, int dwarf2_addr_class)
+{
+  /* The value 1 of the DW_AT_address_class attribute corresponds to SLM.  */
+  if (dwarf2_addr_class == 1)
+    return INTELGT_TYPE_INSTANCE_FLAG_SLM;
+  return 0;
+}
+
 /* Implementation of `address_class_name_to_type_flags' gdbarch method,
    as defined in gdbarch.h.  */
 
@@ -2523,6 +2536,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_address_class_type_flags_to_name
     (gdbarch, intelgt_address_class_type_flags_to_name);
   set_gdbarch_translate_address (gdbarch, intelgt_translate_address);
+  set_gdbarch_address_class_type_flags
+    (gdbarch, intelgt_address_class_type_flags);
 
   /* Enable inferior call support.  */
   set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);

@@ -225,6 +225,26 @@ intelgt_write_cr0 (thread_info *tp, int subreg, uint32_t value)
   intelgt_write_cr0 (regcache, subreg, value);
 }
 
+static unsigned int
+intelgt_decode_tagged_address (CORE_ADDR addr)
+{
+  /* Generic pointers are tagged in order to preserve the address space to
+     which they are pointing.  Tags are encoded into bits [61:63] of an
+     address:
+
+     000/111 - global,
+     001 - private,
+     010 - local (SLM)
+
+     We currently cannot decode this tag in GDB, as the information
+     cannot be added to the (cached) type instance flags, as it changes at
+     runtime.  */
+  if ((addr >> 61) == 0x2ul)
+    return (unsigned int) ZET_DEBUG_MEMORY_SPACE_TYPE_SLM;
+
+  return (unsigned int) ZET_DEBUG_MEMORY_SPACE_TYPE_DEFAULT;
+}
+
 /* Return a human-readable device UUID string.  */
 
 static std::string
@@ -276,6 +296,16 @@ protected:
   bool is_at_eot (thread_info *tp);
 
   bool erratum_18020355813 (thread_info *tp);
+
+  /* Read the memory in the context of thread TP.  */
+  int read_memory (thread_info *tp, CORE_ADDR memaddr,
+		   unsigned char *myaddr, int len,
+		   unsigned int addr_space = 0) override;
+
+  /* Write the memory in the context of thread TP.  */
+  int write_memory (thread_info *tp, CORE_ADDR memaddr,
+		    const unsigned char *myaddr, int len,
+		    unsigned int addr_space = 0) override;
 
 private:
   /* Add a register set for REGPROP on DEVICE to REGSETS and increment REGNUM
@@ -581,6 +611,28 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 
   signal = GDB_SIGNAL_UNKNOWN;
   return TARGET_STOPPED_BY_NO_REASON;
+}
+
+int
+intelgt_ze_target::read_memory (thread_info *tp, CORE_ADDR memaddr,
+				unsigned char *myaddr, int len,
+				unsigned int addr_space)
+{
+  if (addr_space == (unsigned int) ZET_DEBUG_MEMORY_SPACE_TYPE_DEFAULT)
+    addr_space = intelgt_decode_tagged_address (memaddr);
+
+  return ze_target::read_memory (tp, memaddr, myaddr, len, addr_space);
+}
+
+int
+intelgt_ze_target::write_memory (thread_info *tp, CORE_ADDR memaddr,
+				 const unsigned char *myaddr, int len,
+				 unsigned int addr_space)
+{
+  if (addr_space == (unsigned int) ZET_DEBUG_MEMORY_SPACE_TYPE_DEFAULT)
+    addr_space = intelgt_decode_tagged_address (memaddr);
+
+  return ze_target::write_memory (tp, memaddr, myaddr, len, addr_space);
 }
 
 int

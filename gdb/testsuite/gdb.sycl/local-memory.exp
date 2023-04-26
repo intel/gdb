@@ -1,0 +1,145 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for SYCL, for accessing objects in the local address
+# space.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+	set one_pattern_found "\[\r\n\]*1 pattern found\[.\]"
+
+	set line1 [gdb_get_line_number "BP1"]
+	set line2 [gdb_get_line_number "BP2"]
+	set line3 [gdb_get_line_number "BP3"]
+	gdb_breakpoint $line1 {temporary}
+	gdb_breakpoint $line2 {temporary}
+	gdb_breakpoint $line3 {temporary}
+	gdb_continue_to_breakpoint "1d slm BP1" ".*$srcfile:$line1.*"
+
+	# Test reading and writing
+	with_test_prefix "via variable" {
+	    gdb_test "print local_mem\[0\]" "= 1"
+	    gdb_test_no_output "set local_mem\[0\] = 42"
+	    gdb_test "print local_mem\[0\]" "= 42" "test write"
+	}
+
+	with_test_prefix "via generic pointer" {
+	    gdb_test "print *generic_ptr" "= 2" "read"
+	    gdb_test_no_output "set *generic_ptr = 43"
+	    gdb_test "print *generic_ptr" "= 43" "test write"
+	    gdb_test "print local_mem\[1\]" "= 43" "sanity test write"
+	}
+
+	with_test_prefix "via sycl pointers" {
+	    setup_kfail "GSD/4611" "*-*-*"
+	    gdb_test "print *d_local_ptr" "= 42"
+
+	    setup_kfail "GSD/4611" "*-*-*"
+	    gdb_test_no_output "set *d_local_ptr = 44"
+
+	    setup_kfail "GSD/4611" "*-*-*"
+	    gdb_test "print *r_local_ptr" "= 44"
+
+	    setup_kfail "GSD/4611" "*-*-*"
+	    gdb_test_no_output "set *r_local_ptr = 46"
+
+	    setup_kfail "GSD/4611" "*-*-*"
+	    gdb_test "print local_mem\[0\]" "= 46" "test write"
+	}
+
+	with_test_prefix "test global int via pointer in SLM" {
+	    gdb_test "print *local_mem_ptr\[1\]" "= 421" "read"
+	    gdb_test_no_output "set *local_mem_ptr\[1\] = 434"
+	    gdb_test "print *local_mem_ptr\[1\]" "= 434" "test write"
+	    gdb_test "print generic_var" "= 434" "sanity test write"
+	}
+
+	with_test_prefix "test SLM int via pointer in SLM" {
+	    setup_kfail "GSD/4611" "*-*-*"
+	    gdb_test "print *local_mem_ptr\[0\]" "= 46" "read"
+	    gdb_test_no_output "set *local_mem_ptr\[0\] = 434"
+	    gdb_test "print *local_mem_ptr\[0\]" "= 434" "test write"
+	    gdb_test "print local_mem\[0\]" "= 434" "sanity test write"
+	}
+
+	# These tests need to run on the intelgt target to be able to use @slm.
+	if {[is_level_zero_debug_api] && [require_sycl_device "$device" "gpu" "Intel*"]} {
+	    with_test_prefix "via address" {
+		set addr [get_hexadecimal_valueof "&local_mem\[0\]" 0]
+		gdb_test "print *(@slm int*) $addr" "= 434"
+		gdb_test_no_output "set *(@slm int*) $addr = 433"
+		gdb_test "print *(@slm int*) $addr" "= 433" "test write"
+		gdb_test "print local_mem\[0\]" "= 433" "sanity test write"
+	    }
+	}
+
+	# Test find command.
+	set start_addr [get_hexadecimal_valueof "&(local_mem\[0\])" "start address"]
+	set addr [get_hexadecimal_valueof "&(local_mem\[2\])" "slm address"]
+
+	# This need to run on the intelgt target to be able to use @slm.
+	if {[is_level_zero_debug_api] && [require_sycl_device "$device" "gpu" "Intel*"]} {
+	    gdb_test "find $start_addr, +sizeof(int\[3\]), (@slm int) 3" \
+		"${addr}.*${one_pattern_found}" \
+		"find type pattern"
+	}
+	gdb_test "find generic_ptr, +sizeof(int\[3\]), 3" \
+	    "${addr}.*${one_pattern_found}" \
+	    "find address pattern with generic pointer"
+
+	gdb_continue_to_breakpoint "1d slm BP2" ".*$srcfile:$line2.*"
+
+	# Test reading and writing after the generic pointer has switched the
+	# address space it is pointing to.
+	with_test_prefix "via generic pointer after switching address space" {
+	    gdb_test "print *generic_ptr" "= 44" "read"
+	    gdb_test_no_output "set *generic_ptr = 444"
+	    gdb_test "print *generic_ptr" "= 444" "test write"
+	}
+
+	gdb_continue_to_breakpoint "1d slm BP3" ".*$srcfile:$line3.*"
+
+	# Test watchpoints in SLM.
+	gdb_test "watch *generic_ptr" \
+	    ".*\[Ww\]atchpoint $decimal:.*generic_ptr" \
+	    "set watchpoint on generic_ptr"
+
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    setup_kfail "IGDB/3935" "*-*-*"
+	}
+	gdb_test "continue" \
+	    "Continuing.*\[Ww\]atchpoint.*generic_ptr.*Old value = 3.*New value = 6.*" \
+	    "watchpoint hit"
+    }
+}

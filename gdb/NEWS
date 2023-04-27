@@ -53,6 +53,13 @@ info threads [-gid] [-stopped] [ID]...
 
 * MI changes
 
+  ** New field in '-thread-info': 'thread-workgroup'
+
+     Added a new field to the '-thread-info' command.  If the thread is
+     stopped, available, and the workgroup is defined for its arch,
+     the new field contains a string with 3D tuple: "x, y, z" that
+     denotes the coordinates of the thread workgroup.
+
   ** '-break-insert -l'
 
      Added optional -l <simd-lane-id> argument to MI command -break-insert.

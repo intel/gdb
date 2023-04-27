@@ -2948,3 +2948,28 @@ proc mi_stopped_thread_ids {srcfile line} {
 	}
     }
 }
+
+# Return the integer value of an expression EXP.
+# The default value is DEFAULT.
+# The TEST parameter is optional and sets the test name.
+
+proc mi_get_integer_valueof {exp default {test ""}} {
+    global mi_gdb_prompt decimal
+
+    if {$test == ""} {
+	set test "get integer valueof \"${exp}\""
+    }
+
+    set val ${default}
+    send_gdb "-data-evaluate-expression ${exp}\n"
+    gdb_expect {
+	-re ".*done,value=\"(\[-\]?$decimal)\".*$mi_gdb_prompt" {
+	    set val $expect_out(1,string)
+	    pass "$test"
+	}
+	timeout {
+	    fail "$test (timeout)"
+	}
+    }
+    return ${val}
+}

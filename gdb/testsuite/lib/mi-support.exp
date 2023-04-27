@@ -3054,3 +3054,40 @@ proc mi_stopped_thread_ids {srcfile line} {
 	}
     }
 }
+
+# Return the integer value of an expression EXP.
+# The default value is DEFAULT.
+# Optional parameters THREAD and LANE set the context for the expression
+# evaluation via --thread and --lane.
+# The TEST parameter is optional and sets the test name.
+
+proc mi_get_integer_valueof {exp default {thread ""} {lane ""} {test ""}} {
+    global mi_gdb_prompt decimal
+
+    if {$test eq ""} {
+	set test "get integer value for \"$exp\""
+    }
+
+    if {$thread ne ""} {
+	set test "$test for thread $thread"
+	set thread "--thread $thread "
+    }
+
+    if {$lane ne ""} {
+	set test "$test for lane $lane"
+	set lane "--lane $lane "
+    }
+
+    set val ${default}
+    send_gdb "-data-evaluate-expression ${thread}${lane}${exp}\n"
+    gdb_expect {
+	-re ".*done,value=\"(\[-\]?$decimal)\".*$mi_gdb_prompt" {
+	    set val $expect_out(1,string)
+	    pass "$test"
+	}
+	timeout {
+	    fail "$test (timeout)"
+	}
+    }
+    return ${val}
+}

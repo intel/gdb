@@ -34340,6 +34340,19 @@ the command.
 
 @end table
 
+@subsubheading Work-item information
+
+If a stopped thread is processing a single or several work-items and @value{GDBN}
+supports reading the work-item data for the underlying architecture, the thread's
+data returned by the command include the following additional information:
+
+@table @samp
+@item thread-workgroup
+A string containing a three-dimensional tuple: "x, y, z" that denotes
+the coordinates of the thread workgroup.
+
+@end table
+
 @subsubheading Example
 
 @smallexample
@@ -34355,6 +34368,18 @@ the command.
            state="running"@}],
 current-thread-id="1"
 (gdb)
+@end smallexample
+
+With work-item and SIMD support:
+
+@smallexample
+-thread-info 1
+^done,threads=[@{id="1",target-id="Thread 1",
+		 frame=@{level="0",addr="0xffff8000ffec4ad0",func="foo",
+			 args=[],file="foo.cpp",fullname="/tmp/foo.cpp",
+			 line="25",arch="intelgt"@},
+		 execution-mask="0xffff",simd-width="16",hit-lanes-mask="0xffff",
+		 thread-workgroup="0,0,0",thread-group="i2",state="stopped"@}]
 @end smallexample
 
 @findex -thread-list-ids

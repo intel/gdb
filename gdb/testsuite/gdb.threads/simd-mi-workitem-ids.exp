@@ -1,0 +1,64 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests workitem ID support in MI.
+#
+
+load_lib sycl.exp
+load_lib mi-support.exp
+
+standard_testfile simd.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	mi_clean_restart $binfile
+
+	if {![mi_runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	# Set temporary breakpoint to line $kernel_dim0_line and continue.
+	mi_tbreak "get_dim" "define temp bp on get_dim"
+	mi_send_resuming_command "exec-continue" "-exec-continue to get_dim"
+	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" "$decimal" \
+	    [list ".*" ".*" {locno="[0-9]+"}] \
+	    "expect bp hit at get_dim"
+
+	# Get global ID of the current thread.
+	set current_thread [mi_get_integer_valueof "\$_gthread" 0]
+
+	mi_gdb_test "-thread-info $current_thread" \
+	    "\\^done,threads=\\\[\{.*thread-workgroup=\"$decimal,$decimal,$decimal\",.*\}\\\]" \
+	    "Check workgroup field"
+    }
+}

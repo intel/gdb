@@ -1348,6 +1348,48 @@ thread_target_id_str (thread_info *tp)
     return target_id;
 }
 
+using uint_3d = std::array<uint32_t, 3>;
+
+/* Print a three-dimensional DATA to the NAME field.  */
+
+static void
+print_workitem_field (ui_out *uiout, const char *name, const uint_3d &data)
+{
+  uiout->field_fmt (name, "%u,%u,%u", data[0], data[1], data[2]);
+}
+
+/* Read the data with GET_DATA for the thread TP and print it to NAME field.  */
+
+static void
+read_and_print_workitem_field (ui_out *uiout, thread_info *tp, const char *name,
+			       std::function<uint_3d (gdbarch*,
+						      thread_info*)> get_data)
+{
+  try
+    {
+      uint_3d data = get_data (tp->inf->arch (), tp);
+      print_workitem_field (uiout, name, data);
+    }
+  catch (const gdb_exception &e)
+    {
+      /* We don't want to abort the MI command.  */
+      threads_debug_printf ("thread = %s: %s: %s", name,
+			    tp->ptid.to_string ().c_str (), e.what ());
+    }
+}
+
+/* Print all work-item related data of thread TP.  */
+
+static void
+print_workitem_data_mi (ui_out *uiout, thread_info *tp)
+{
+  gdb_assert (uiout->is_mi_like_p ());
+
+  if (gdbarch_thread_workgroup_p (tp->inf->arch ()))
+    read_and_print_workitem_field (uiout, tp, "thread-workgroup",
+				   gdbarch_thread_workgroup);
+}
+
 /* Print one row in info thread table.
    TP is the thread related to the printed row.
    ACTIVE shows whether we print active lanes now.
@@ -1448,17 +1490,23 @@ print_thread_row (ui_out *uiout, thread_info *tp,
 			     uiout->is_mi_like_p (),
 			     LOCATION, 0);
 
-	  /* SIMD specific fields for MI.  */
-	  if (uiout->is_mi_like_p () && tp->has_simd_lanes ())
+	  /* Fields for MI which are only for stopped available threads.  */
+	  if (uiout->is_mi_like_p ())
 	    {
-	      unsigned int mask = tp->active_simd_lanes_mask ();
-	      uiout->field_fmt ("execution-mask", "0x%x", mask);
-	      unsigned int width = tp->get_simd_width ();
-	      uiout->field_fmt ("simd-width", "%u", width);
-	      bpstat *bp = tp->control.stop_bpstat;
-	      unsigned int hit_lane_mask;
-	      if (bp != nullptr && bp->find_hit_lane_mask (hit_lane_mask))
-		uiout->field_fmt ("hit-lanes-mask", "0x%x", hit_lane_mask);
+	      if (tp->has_simd_lanes ())
+		{
+		  unsigned int mask = tp->active_simd_lanes_mask ();
+		  uiout->field_fmt ("execution-mask", "0x%x", mask);
+		  unsigned int width = tp->get_simd_width ();
+		  uiout->field_fmt ("simd-width", "%u", width);
+		  bpstat *bp = tp->control.stop_bpstat;
+		  unsigned int hit_lane_mask;
+		  if (bp != nullptr && bp->find_hit_lane_mask (hit_lane_mask))
+		    uiout->field_fmt ("hit-lanes-mask", "0x%x",
+				      hit_lane_mask);
+		}
+
+	      print_workitem_data_mi (uiout, tp);
 	    }
 	}
     }

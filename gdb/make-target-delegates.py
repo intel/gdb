@@ -76,6 +76,8 @@ METHOD = re.compile(
 # Space-separated symbols.
 CP_SYMBOLS = CP_SYMBOL + r"(\s+" + CP_SYMBOL + r")*"
 
+DEFAULT_ARG_VALUE = r"(\s*\=\s*[^\s].*)?"
+
 # Regular expression used to dissect argument types.
 ARGTYPES = re.compile(
     "^("
@@ -86,6 +88,7 @@ ARGTYPES = re.compile(
     + CP_SYMBOLS
     + r"(\s|\*|&)+)"
     + SYMBOL
+    + DEFAULT_ARG_VALUE
     + ")$"
 )
 

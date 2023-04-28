@@ -1,0 +1,90 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for workitem IDs for conditional breakpoints.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+proc get_id {name pretty} {
+    global decimal
+    set expected_id "unexpected"
+    if {$pretty} {
+	set fmt "<x>: %d, <y>: %d, <z>: %d"
+	set expected "\r\n(<x>: $decimal, <y>: $decimal, <z>: $decimal)"
+    } else {
+	set fmt "%d, %d, %d"
+	set expected "\r\n($decimal, $decimal, $decimal)"
+    }
+
+    gdb_test_multiple "printf \"$fmt\\n\",${name}2,${name}1,${name}0" "get expected id" {
+	-re -wrap $expected {
+	    set expected_id $expect_out(1,string)
+	}
+    }
+
+    return $expected_id
+}
+
+proc compare_id {name pretty} {
+    with_test_prefix "check $name" {
+	global decimal
+	set expected_val [get_id $name $pretty]
+	gdb_test "print \$_$name" "\\$$decimal = \\{$expected_val\\}" "check $name == {$expected_val}"
+    }
+}
+
+foreach device $sycl_device_list {
+    with_test_prefix [sycl_get_device_prefix $device] {
+	clean_restart "${binfile}"
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set kernel_1 [gdb_get_line_number "kernel-1"]
+	set kernel_2 [gdb_get_line_number "kernel-2"]
+	# Set a BP in the first kernel with the false condition, but which
+	# will trigger local ID computation.
+	gdb_breakpoint "$kernel_1 if \$_workitem_local_id == {9,9,9}"
+	# Set a BP in the second kernel.
+	gdb_breakpoint "$kernel_2 if \$_workitem_local_id == {0,1,2}" {temporary}
+	gdb_continue_to_breakpoint "kernel" ".*$srcfile:$kernel_2.*"
+	set local_id [get_id "workitem_local_id" 0]
+	gdb_assert {$local_id eq "0, 1, 2"} "check local id"
+
+	gdb_test "disable pretty-printer global"
+	compare_id "thread_workgroup" 0
+	compare_id "workitem_local_id" 0
+	compare_id "workitem_global_id" 0
+    }
+}

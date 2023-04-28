@@ -22,9 +22,9 @@
 int
 main (int argc, char *argv[])
 {
-  constexpr size_t DIM0 = 60;
-  constexpr size_t DIM1 = 40;
-  constexpr size_t DIM2 = 20;
+  constexpr size_t DIM0 = 18;
+  constexpr size_t DIM1 = 12;
+  constexpr size_t DIM2 = 6;
 
   int in[DIM0][DIM1][DIM2];
   int out[DIM0][DIM1][DIM2];
@@ -48,30 +48,15 @@ main (int argc, char *argv[])
 	auto accessorOut
 	  = bufferOut.get_access<sycl::access::mode::write> (cgh);
 
-	sycl::nd_range<3> kernel_range (dataRange, sycl::range<3> (4, 4, 4));
+	sycl::nd_range<3> kernel_range (dataRange, sycl::range<3> (2, 2, 2));
 	cgh.parallel_for (kernel_range, [=] (sycl::nd_item<3> item)
 	  [[sycl::reqd_sub_group_size(16)]]
 	  {
-	    sycl::id<3> gid = item.get_global_id (); /* kernel-first-line */
-
-	    size_t thread_workgroup0 = item.get_group (0);
-	    size_t thread_workgroup1 = item.get_group (1);
-	    size_t thread_workgroup2 = item.get_group (2);
-
-	    size_t workitem_global_id0 = item.get_global_id (0);
-	    size_t workitem_global_id1 = item.get_global_id (1);
-	    size_t workitem_global_id2 = item.get_global_id (2);
-
-	    size_t workitem_local_id0 = item.get_local_id (0);
-	    size_t workitem_local_id1 = item.get_local_id (1);
-	    size_t workitem_local_id2 = item.get_local_id (2);
-
+	    sycl::id<3> gid = item.get_global_id ();
 	    int in_elem = accessorIn[gid];
-	    accessorOut[gid] = in_elem; /* kernel-1-last-line */
+	    accessorOut[gid] = in_elem; /* kernel-1 */
 	  });
       });
-
-    deviceQueue.wait_and_throw ();
 
     deviceQueue.submit ([&] (sycl::handler& cgh)
       {
@@ -79,7 +64,7 @@ main (int argc, char *argv[])
 	auto accessorOut
 	  = bufferOut.get_access<sycl::access::mode::write> (cgh);
 
-	sycl::nd_range<3> kernel_range (dataRange, sycl::range<3> (5, 5, 5));
+	sycl::nd_range<3> kernel_range (dataRange, sycl::range<3> (3, 3, 3));
 	cgh.parallel_for (kernel_range, [=] (sycl::nd_item<3> item)
 	  [[sycl::reqd_sub_group_size(32)]]
 	  {
@@ -98,7 +83,7 @@ main (int argc, char *argv[])
 	    size_t workitem_local_id2 = item.get_local_id (2);
 
 	    int in_elem = accessorIn[gid];
-	    accessorOut[gid] = in_elem; /* kernel-2-last-line */
+	    accessorOut[gid] = in_elem; /* kernel-2 */
 	  });
       });
   }

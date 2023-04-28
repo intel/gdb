@@ -36,6 +36,7 @@
 #include "inferior.h"
 #include "user-regs.h"
 #include "objfiles.h"
+#include "observable.h"
 #include "block.h"
 #include "elf-bfd.h"
 #include "infcall.h"
@@ -51,6 +52,7 @@
 #include <algorithm>
 #include <array>
 #include <stack>
+#include <unordered_map>
 
 /* Address space flags.
    We are assigning the TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 to the shared
@@ -95,6 +97,64 @@ struct regnum_range
   int start;
   int end;
 };
+
+/* Implicit arguments structure, version 0.
+   The lifespan of a structure and the corresponding local ID table is
+   the corresponding kernel dispatch.  */
+struct implicit_args
+{
+  uint8_t struct_size;
+  uint8_t struct_version;
+  uint8_t num_work_dim;
+  uint8_t simd_width;
+  uint32_t local_size_x;
+  uint32_t local_size_y;
+  uint32_t local_size_z;
+  uint64_t global_size_x;
+  uint64_t global_size_y;
+  uint64_t global_size_z;
+  uint64_t printf_buffer_ptr;
+  uint64_t global_offset_x;
+  uint64_t global_offset_y;
+  uint64_t global_offset_z;
+  uint64_t local_id_table_ptr;
+  uint32_t group_count_x;
+  uint32_t group_count_y;
+  uint32_t group_count_z;
+  uint64_t rt_global_buffer_ptr;
+
+  /* Disable copy, default others.  */
+  implicit_args () = default;
+  implicit_args &operator= (const implicit_args &) = delete;
+  implicit_args (const implicit_args &) = delete;
+  implicit_args (implicit_args &&) = default;
+  implicit_args &operator= (implicit_args &&) = default;
+};
+
+/* The value type of the implicit arguments cache.  We want to store both
+   the implicit arguments structure and its local ID table.  */
+
+typedef std::pair<implicit_args, std::vector<uint16_t>>
+  implicit_args_value_pair;
+
+/* Global cache to store implicit args and local IDs.
+   Key: stringified "inferior num" + "implicit args address".
+   This key is guarantied to be unique during the kernel dispatch.
+   However, we currently do not have a means to identify the kernel
+   dispatch.  Thus, the cache has to be cleared at every target resume.  */
+
+std::unordered_map<std::string, implicit_args_value_pair> implicit_args_cache;
+
+/* Return the reference to the entry in implicit_args_cache.
+   If there is no entry yet, try to read it.
+   Use this function to get the implicit arguments struct and local IDs.
+
+   TP thread is used to find the address to the implicit args structure.
+   We need to have the access to its registers and build the key to
+   the cache based on its inferior number.  */
+
+static implicit_args_value_pair &
+intelgt_implicit_args_find_value_pair (gdbarch *gdbarch, thread_info *tp);
 
 /* The 'gdbarch_data' stuff specific for this architecture.  */
 
@@ -335,6 +395,8 @@ struct intelgt_gdbarch_data
   int sr0_regnum = -1;
   /* Register number for the instruction base virtual register.  */
   int isabase_regnum = -1;
+  /* Register number for the general state base SBA register.  */
+  int genstbase_regnum = -1;
   /* Assigned regnum ranges for DWARF regsets.  */
   regnum_range regset_ranges[intelgt::regset_count];
   /* Enabled pseudo-register for the current target description.  */
@@ -1305,6 +1367,8 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
     data->isabase_regnum = possible_regnum;
   else if (strcmp ("ce", reg_name) == 0)
     data->ce_regnum = possible_regnum;
+  else if (strcmp ("genstbase", reg_name) == 0)
+    data->genstbase_regnum = possible_regnum;
 
   return possible_regnum;
 }
@@ -2631,6 +2695,225 @@ intelgt_check_reg_status (register_status status, int reg_num,
 	   reg_num, status);
 }
 
+namespace intelgt_implicit_args
+{
+/* A helper function to parse the fields of the implicit args structure.
+   ENTRY is the reference to the field, we return the parsed value here.
+   OFFSET is the reference to the offset of the field in BUFFER.  After
+   parsing the ENTRY, it gets incremented by the SIZEOF (ENTRY).
+   BUF is the buffer from where the structure is parsed.
+   BYTE_ORDER is arch specific.
+   STRUCT_SIZE is the size of the whole struct.  Used for validation.  */
+
+template <typename T>
+static void
+parse_arg (T &entry, size_t &offset, const gdb_byte *buf,
+	   bfd_endian byte_order, uint8_t struct_size)
+{
+  if (offset + sizeof (entry) > struct_size)
+    error (_("Implicit argument parsing failed: (offset %ld + field size %ld) "
+	     "is greater than the read struct size %d."),
+	   offset, sizeof (entry), struct_size);
+  if (offset + sizeof (entry) > sizeof (implicit_args))
+    error (_("Implicit argument parsing failed: (offset %ld + field size %ld) "
+	     "is greater than the expected struct size %ld."),
+	   offset, sizeof (entry), sizeof (implicit_args));
+  entry = extract_unsigned_integer (buf + offset, sizeof (entry), byte_order);
+  offset += sizeof (entry);
+}
+
+/* Parse BUF into the implicit ARGS struct.  The result is written
+   to the implicit ARGS.
+   Note, the current layout corresponds to the version 0
+   of the implicit arguments structure.
+   Error out if the structure could not be parsed.  */
+
+static void
+parse_struct (implicit_args &args, const gdb_byte *buf,
+	      const bfd_endian byte_order)
+{
+  args.struct_size = extract_unsigned_integer (buf, sizeof (args.struct_size),
+					       byte_order);
+  /* It could happen that the struct has some fields not yet known to
+     the debugger.  Ignore them and continue.  */
+  if (args.struct_size > sizeof (implicit_args))
+    dprintf ("Implicit arguments have greater size (%d) than expected (%ld).",
+	     args.struct_size, sizeof (implicit_args));
+
+  size_t offset = sizeof (args.struct_size);
+  const uint8_t struct_size = args.struct_size;
+  parse_arg (args.struct_version, offset, buf, byte_order, struct_size);
+  parse_arg (args.num_work_dim, offset, buf, byte_order, struct_size);
+  parse_arg (args.simd_width, offset, buf, byte_order, struct_size);
+  parse_arg (args.local_size_x, offset, buf, byte_order, struct_size);
+  parse_arg (args.local_size_y, offset, buf, byte_order, struct_size);
+  parse_arg (args.local_size_z, offset, buf, byte_order, struct_size);
+  parse_arg (args.global_size_x, offset, buf, byte_order, struct_size);
+  parse_arg (args.global_size_y, offset, buf, byte_order, struct_size);
+  parse_arg (args.global_size_z, offset, buf, byte_order, struct_size);
+  parse_arg (args.printf_buffer_ptr, offset, buf, byte_order, struct_size);
+  parse_arg (args.global_offset_x, offset, buf, byte_order, struct_size);
+  parse_arg (args.global_offset_y, offset, buf, byte_order, struct_size);
+  parse_arg (args.global_offset_z, offset, buf, byte_order, struct_size);
+  parse_arg (args.local_id_table_ptr, offset, buf, byte_order, struct_size);
+  try
+    {
+      /* We do not require the following fields to be present.  Do not error
+	 out if they are missing.  */
+      parse_arg (args.group_count_x, offset, buf, byte_order, struct_size);
+      parse_arg (args.group_count_y, offset, buf, byte_order, struct_size);
+      parse_arg (args.group_count_z, offset, buf, byte_order, struct_size);
+      parse_arg (args.rt_global_buffer_ptr, offset, buf, byte_order,
+		 struct_size);
+    }
+  catch (const gdb_exception_error &e)
+    {
+      dprintf ("%s", e.message->c_str ());
+    }
+}
+
+/* Return the address of the implicit args structure.  */
+
+static CORE_ADDR
+get_address (gdbarch *gdbarch, thread_info *tp)
+{
+  /* The implicit arguments address is stored as r0.0[31:6] as a
+     general state offset.  */
+
+  regcache *regcache = get_thread_regcache (tp);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  CORE_ADDR implicit_args_address = 0;
+  register_status reg_status
+    = regcache->cooked_read_part (data->r0_regnum, 0, sizeof (uint32_t),
+				  (gdb_byte *) &implicit_args_address);
+  std::string error_msg = _("Cannot read implicit arguments.");
+  intelgt_check_reg_status (reg_status, data->r0_regnum, error_msg);
+
+  /* Mask out the lowest 6 bits.  */
+  implicit_args_address &= ~0x3f;
+
+  /* Adjust with genstbase.  */
+  CORE_ADDR genstbase;
+  reg_status = regcache->cooked_read (data->genstbase_regnum, &genstbase);
+  intelgt_check_reg_status (reg_status, data->genstbase_regnum, error_msg);
+  implicit_args_address += genstbase;
+
+  return implicit_args_address;
+}
+
+/* Construct the key for the thread TP and the implicit args
+   address ADDRESS.  */
+
+static std::string
+make_key (gdbarch *gdbarch, thread_info *tp, CORE_ADDR address)
+{
+  /* Construct the key in the cache.  */
+  return (std::to_string (tp->inf->num) + std::to_string (address));
+}
+
+/* Construct the key for the thread TP.  */
+
+static std::string
+make_key (gdbarch *gdbarch, thread_info *tp)
+{
+  CORE_ADDR address = get_address (gdbarch, tp);
+
+  return make_key (gdbarch, tp, address);
+}
+
+/* Heuristic check that the implicit args structure is valid.
+   Error out if the implicit ARGS have an unexpected value.  */
+
+static void
+check_valid (const implicit_args &args)
+{
+  /* The current implementation corresponds to the layout
+     defined for version 0.  */
+  if (args.struct_version != 0)
+    error (_("Implicit arguments struct_version is not expected %d"),
+	   args.struct_version);
+
+  /* We require fields up to local_id_table_ptr.  */
+  if (args.struct_size <= 80)
+    error (_("Implicit arguments struct_size is not expected %d"),
+	   args.struct_size);
+
+  /* We expect SIMD width be only 1, 8, 16, or 32.  */
+  if (args.simd_width != 1 && args.simd_width != 8
+      && args.simd_width != 16 && args.simd_width != 32)
+    error (_("Implicit arguments simd_width is not expected %d"),
+	   args.simd_width);
+
+  /* The number of dimensions could be 1, 2, or 3.  */
+  if (args.num_work_dim == 0 || args.num_work_dim > 3)
+    error (_("Implicit arguments num_work_dim is not expected %d"),
+	   args.num_work_dim);
+}
+
+/* Read the implicit args struct for the thread TP.  If the final struct
+   is valid, store it in the global cache.  */
+
+static void
+read_args (gdbarch *gdbarch, thread_info *tp)
+{
+  const bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  CORE_ADDR args_address = get_address (gdbarch, tp);
+
+  const std::string cache_key = make_key (gdbarch, tp, args_address);
+  /* We should not re-read the same implicit arguments.  */
+  gdb_assert (implicit_args_cache.count (cache_key) == 0);
+
+  /* Read the whole struct with the size we expect.  */
+  gdb_byte buf[sizeof (implicit_args)];
+  if (target_read_memory (args_address, buf, sizeof (implicit_args)) != 0)
+    error (_("Could not read implicit args structure of size %ld "
+	     "at address 0x%lx."),
+	   sizeof (implicit_args), args_address);
+
+  implicit_args implicit_args;
+  parse_struct (implicit_args, buf, byte_order);
+  /* Heuristic sanity check of the struct.  */
+  check_valid (implicit_args);
+
+  /* TODO: Now read the local IDs flat sequence.  */
+  std::vector<uint16_t> local_ids;
+
+  /* Cache both implicit args and local IDs.  */
+  implicit_args_cache[cache_key]
+    = std::make_pair (std::move (implicit_args), std::move (local_ids));
+}
+} /* namespace intelgt_implicit_args.  */
+
+static implicit_args_value_pair &
+intelgt_implicit_args_find_value_pair (gdbarch *gdbarch, thread_info *tp)
+{
+  if (tp->is_unavailable ())
+    error (_("Cannot read implicit arguments of unavailable thread."));
+
+  const std::string key = intelgt_implicit_args::make_key (gdbarch, tp);
+
+  /* If the implicit args were not yet read, try to read it.  This can happen
+     if the ID is being evaluated in the BP condition, so the normal stop
+     event has not yet occured.  */
+  if (implicit_args_cache.count (key) == 0)
+    intelgt_implicit_args::read_args (gdbarch, tp);
+  gdb_assert (implicit_args_cache.count (key) > 0);
+
+  return implicit_args_cache[key];
+}
+
+/* We clear the cached values every time the target is truly resumed,
+   even if the stop was not shown to a user, e.g., after BP condition
+   was not met.  */
+
+static void
+intelgt_on_target_resumed_internal (process_stratum_target *target,
+				    ptid_t ptid)
+{
+  dprintf ("Clear implicit arguments cache.");
+  implicit_args_cache.clear ();
+}
+
 /* Return workgroup coordinates of the specified thread TP.  */
 
 static std::array<uint32_t, 3>
@@ -2874,4 +3157,12 @@ _initialize_intelgt_tdep ()
 			   nullptr,
 			   show_intelgt_debug,
 			   &setdebuglist, &showdebuglist);
+
+  /* We need to invalidate the cache at every target resume, as we do not know,
+     whether the cached implicit arguments are valid at the next stop.
+     We need to do that even when the stop was not shown to the user,
+     e.g., after a breakpoint condition was evaluated to false and the stop
+     did not occur.  */
+  gdb::observers::target_resumed_internal.attach
+    (intelgt_on_target_resumed_internal, "intelgt");
 }

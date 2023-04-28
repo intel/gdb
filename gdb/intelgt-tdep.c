@@ -3236,6 +3236,66 @@ intelgt_thread_workgroup (struct gdbarch *gdbarch, thread_info *tp)
   return workgroup;
 }
 
+/* Compute the local ID coordinates within a workgroup for a given
+   thread TP.  */
+
+static std::array<uint32_t, 3>
+intelgt_workitem_local_id (gdbarch *gdbarch, thread_info *tp)
+{
+  std::string err_msg = _("Cannot read work item local ID.");
+  if (tp->is_unavailable ())
+    error (_("%s"), err_msg.c_str ());
+
+  const implicit_args_value_pair &value_pair
+    = intelgt_implicit_args_find_value_pair (gdbarch, tp);
+  const implicit_args &implicit_args = value_pair.first;
+  const std::vector<uint16_t> &local_ids = value_pair.second;
+
+  /* Index of thread TP within the local ID table, stored in r0.2[7:0].  */
+  uint8_t tid;
+  regcache *regcache = get_thread_regcache (tp);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  register_status reg_status
+    = regcache->cooked_read_part (data->r0_regnum,
+				  2 * sizeof (uint32_t), sizeof (uint8_t),
+				  (gdb_byte *) &tid);
+  intelgt_check_reg_status (reg_status, data->r0_regnum, err_msg);
+
+  /* Local ID entry size.  */
+  unsigned int local_id_len
+    = intelgt_implicit_args::local_id_entry_length (implicit_args.simd_width);
+  gdb_assert (local_id_len % 3 == 0);
+
+  std::array<uint32_t, 3> local_id;
+  int lane = tp->current_simd_lane ();
+  local_id[0] = local_ids[tid * local_id_len + 0 * local_id_len / 3 + lane];
+  local_id[1] = local_ids[tid * local_id_len + 1 * local_id_len / 3 + lane];
+  local_id[2] = local_ids[tid * local_id_len + 2 * local_id_len / 3 + lane];
+
+  return local_id;
+}
+
+/* Compute the global ID coordinates for a given thread TP.  */
+
+static std::array<uint32_t, 3>
+intelgt_workitem_global_id (gdbarch *gdbarch, thread_info *tp)
+{
+  if (tp->is_unavailable ())
+    error (_("Cannot read work item global ID of unavailable thread."));
+
+  std::array<uint32_t, 3> local_id = intelgt_workitem_local_id (gdbarch, tp);
+  std::array<uint32_t, 3> group = intelgt_thread_workgroup (gdbarch, tp);
+  const implicit_args &implicit_args
+    = intelgt_implicit_args_find_value_pair (gdbarch, tp).first;
+
+  std::array<uint32_t, 3> global_id;
+  global_id[0] = group[0] * implicit_args.local_size_x + local_id[0];
+  global_id[1] = group[1] * implicit_args.local_size_y + local_id[1];
+  global_id[2] = group[2] * implicit_args.local_size_z + local_id[2];
+
+  return global_id;
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -3396,6 +3456,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
   set_gdbarch_is_inferior_device (gdbarch, true);
   set_gdbarch_thread_workgroup (gdbarch, intelgt_thread_workgroup);
+  set_gdbarch_workitem_local_id (gdbarch, intelgt_workitem_local_id);
+  set_gdbarch_workitem_global_id (gdbarch, intelgt_workitem_global_id);
 
   /* Enable inferior call support.  */
   set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);

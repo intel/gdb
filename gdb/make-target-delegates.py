@@ -72,17 +72,18 @@ METHOD = re.compile(
     + METHOD_TRAILER
 )
 
+# Space-separated symbols.
+CP_SYMBOLS = CP_SYMBOL + r"(\s+" + CP_SYMBOL + r")*"
+
 # Regular expression used to dissect argument types.
 ARGTYPES = re.compile(
     "^("
     + r"(?P<E>enum\s+"
     + SYMBOL
-    + r"\s*)("
-    + SYMBOL
-    + ")?"
-    + r"|(?P<T>.*(enum\s+)?"
-    + SYMBOL
-    + r".*(\s|\*|&))"
+    + r")"
+    + r"|(?P<T>((const|enum)\s+)?"
+    + CP_SYMBOLS
+    + r"(\s|\*|&)+)"
     + SYMBOL
     + ")$"
 )

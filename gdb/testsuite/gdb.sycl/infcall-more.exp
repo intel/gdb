@@ -32,13 +32,22 @@ if {[build_executable "failed to compile $srcfile" \
 }
 
 # The main test sequence for GPU inferior calls.
-proc test_inferior_calls {simd_lane inside_kernel} {
+proc test_inferior_calls {simd_lane inside_kernel device} {
     global srcfile
     gdb_test "thread :$simd_lane" "Switching to thread .*:$simd_lane .*"
 
+    if {([is_atsm $device] && [require_sycl_device $device "gpu" "Intel*"])
+	|| ([is_level_zero_debug_api] && [is_sles_distro])} {
+	setup_kfail "JIRA IGDB/3737" "*-*-*"
+    }
     gdb_test "print no_args()" "= 20" \
 	"Inferior call of a function without arguments"
 
+    if {([is_atsm $device] && [require_sycl_device $device "gpu" "Intel*"])
+	|| ([is_level_zero_debug_api] && [is_sles_distro])} {
+	kfail "JIRA IGDB/3737" "Skip the remaining tests to avoid unnecessary timeouts"
+	return 0
+    }
     gdb_test "print integer_grf_args(3, 4, 5)" "= 60" \
 	"Arguments are passed on GRFs: 1"
     gdb_test "print integer_grf_args(6, 7, 8)" "= 336" \
@@ -132,6 +141,7 @@ proc test_inferior_calls {simd_lane inside_kernel} {
 			   "$inside_kernel.*" \
 			   "Value returned is \\$\[0-9\]+ = 336"] \
 	"Finish the inferior call and get the returned result"
+    return 1
 }
 
 foreach device $sycl_device_list {
@@ -167,7 +177,9 @@ foreach device $sycl_device_list {
 
 	# Loop over the lanes to be tested and performe all the inferior calls tests.
 	foreach_with_prefix lane $lanes {
-	    test_inferior_calls $lane $inside_kernel
+	    if {![test_inferior_calls $lane $inside_kernel $device]} {
+		return
+	    }
 	}
 
 	set then_branch [gdb_get_line_number "then-branch"]

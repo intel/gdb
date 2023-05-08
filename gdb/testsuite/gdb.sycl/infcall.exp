@@ -46,7 +46,18 @@ foreach device $sycl_device_list {
 	gdb_breakpoint $outside
 
 	gdb_continue_to_breakpoint "inside" ".*$srcfile:$inside.*"
+	if {([is_atsm $device]
+	    && [require_sycl_device $device "gpu" "Intel*"])
+	    || ([is_level_zero_debug_api] && [is_sles_distro])} {
+	    setup_kfail "JIRA IGDB/3737" "*-*-*"
+	}
 	gdb_test "print second(3, 4)" "= 528" "infcall inside kernel"
+	if {([is_atsm $device]
+	    && [require_sycl_device $device "gpu" "Intel*"])
+	    || ([is_level_zero_debug_api] && [is_sles_distro])} {
+	    kfail "JIRA IGDB/3737" "Skip the remaining tests to avoid unnecessary timeouts"
+	    return
+	}
 
 	gdb_continue_to_breakpoint "outside" ".*$srcfile:$outside.*"
 	gdb_test "print second(5, 7)" "= 1005" "infcall outside kernel"

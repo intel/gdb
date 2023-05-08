@@ -240,6 +240,33 @@ proc is_level_zero_debug_api {} {
     }
 }
 
+# Return non-zero, if the OS distro is SLES.
+
+gdb_caching_proc is_sles_distro {
+    global tcl_platform
+
+    set os_str $tcl_platform(os)
+    if {"$os_str" == "Linux"} {
+	set file_data [exec cat "/etc/issue"]
+
+	if {[string match "*SUSE Linux Enterprise Server*" "$file_data"]} {
+	    return 1
+	}
+    }
+    return 0
+}
+
+# Return non-zero if the device is ATSM.
+
+proc is_atsm {device} {
+
+    if {[string match "*Intel* Data Center GPU Flex Series 140*" $device]} {
+	return 1;
+    }
+
+    return 0;
+}
+
 # Issue a 'continue' command and expect to see program termination.
 
 proc continue_sycl_program_to_termination {{msg_suffix ""} {known_fail ""}} {

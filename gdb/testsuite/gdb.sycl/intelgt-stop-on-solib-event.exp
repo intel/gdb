@@ -51,7 +51,7 @@ proc test_solib {device stop_on_solib_events auto_solib_add non_stop_mode} {
     if {$stop_on_solib_events} {
 	set num_solib_event 0
 	set test_name "shared library loaded"
-	set in_memory_lib "in-memory-$hex-$hex"
+	set in_memory_lib "<in-memory@$hex-$hex>"
 
 	setup_kfail "JIRA XDEPS/5103" "*-*-*"
 	gdb_test_multiple "continue" $test_name {

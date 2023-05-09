@@ -14400,9 +14400,10 @@ static struct type *
 read_tag_reference_type (struct die_info *die, struct dwarf2_cu *cu,
 			  enum type_code refcode)
 {
+  struct gdbarch *gdbarch = cu->per_objfile->objfile->arch ();
   struct comp_unit_head *cu_header = &cu->header;
   struct type *type, *target_type;
-  struct attribute *attr;
+  int byte_size, addr_class;
 
   gdb_assert (refcode == TYPE_CODE_REF || refcode == TYPE_CODE_RVALUE_REF);
 
@@ -14414,13 +14415,59 @@ read_tag_reference_type (struct die_info *die, struct dwarf2_cu *cu,
     return type;
 
   type = lookup_reference_type (target_type, refcode);
-  attr = dwarf2_attr (die, DW_AT_byte_size, cu);
-  if (attr != nullptr)
-    type->set_length (attr->constant_value (cu_header->addr_size));
-  else
-    type->set_length (cu_header->addr_size);
 
-  maybe_set_alignment (cu, die, type);
+  attribute *attr_byte_size = dwarf2_attr (die, DW_AT_byte_size, cu);
+  if (attr_byte_size != nullptr)
+    byte_size = attr_byte_size->constant_value (cu_header->addr_size);
+  else
+    byte_size = cu_header->addr_size;
+
+  attribute *attr_address_class = dwarf2_attr (die,
+					       DW_AT_address_class,
+					       cu);
+  if (attr_address_class != nullptr)
+    addr_class = attr_address_class->constant_value (DW_ADDR_none);
+  else
+    addr_class = DW_ADDR_none;
+
+  ULONGEST alignment = get_alignment (cu, die);
+
+  /* If the pointer size, alignment, or address class is different
+     than the default, create a type variant marked as such and set
+     the length accordingly.  */
+  if (type->length () != byte_size
+      || (alignment != 0 && TYPE_RAW_ALIGN (type) != 0
+	  && alignment != TYPE_RAW_ALIGN (type))
+      || addr_class != DW_ADDR_none)
+    {
+      if (gdbarch_address_class_type_flags_p (gdbarch))
+	{
+	  type_instance_flags type_flags
+	    = gdbarch_address_class_type_flags (gdbarch, byte_size,
+						addr_class);
+	  gdb_assert ((type_flags & ~TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL)
+		      == 0);
+	  type = make_type_with_address_space (type, type_flags);
+	}
+      else if (type->length () != byte_size)
+	{
+	  complaint (_("invalid reference size %d"), byte_size);
+	}
+      else if (TYPE_RAW_ALIGN (type) != alignment)
+	{
+	  complaint (_("Invalid DW_AT_alignment"
+		       " - DIE at %s [in module %s]"),
+		     sect_offset_str (die->sect_off),
+		     objfile_name (cu->per_objfile->objfile));
+	}
+      else
+	{
+	  /* Should we also complain about unhandled address classes?  */
+	}
+    }
+
+  type->set_length (byte_size);
+  set_type_align (type, alignment);
   return set_die_type (die, type, cu);
 }
 

@@ -57,7 +57,7 @@ foreach device $sycl_device_list {
 	# Continue until we load an in-memory object.
 	set in_memory_obj "not found"
 	gdb_test_multiple "continue" "load one kernel binary" {
-	    -re -wrap "Inferior loaded (in-memory-$hex-$hex).*" {
+	    -re -wrap "Inferior loaded (<in-memory@$hex-$hex>).*" {
 		pass $gdb_test_name
 		set in_memory_obj $expect_out(1,string)
 		verbose -log "Solib event for $in_memory_obj"

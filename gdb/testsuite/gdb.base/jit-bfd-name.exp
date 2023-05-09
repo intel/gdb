@@ -105,7 +105,7 @@ gdb_test_multiple "maint info symtabs" "" {
     -re "^\\\}\\s*\r\n" {
 	exp_continue
     }
-    -re "^\\\{ objfile <in-memory@($hex)>\\s+\[^\r\n\]+\r\n" {
+    -re "^\\\{ objfile <in-memory@($hex)-$hex>\\s+\[^\r\n\]+\r\n" {
 	lappend bfd_name_addrs $expect_out(1,string)
 	exp_continue
     }

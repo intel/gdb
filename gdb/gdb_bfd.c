@@ -229,7 +229,8 @@ struct target_buffer
       m_size (size)
   {
     m_filename
-      = xstrprintf ("<in-memory@%s>", core_addr_to_string_nz (m_base));
+      = xstrprintf ("<in-memory@%s-%s>", core_addr_to_string_nz (m_base),
+		    core_addr_to_string_nz (m_base + m_size));
   }
 
   /* Return the size of the in-memory BFD file.  */
@@ -241,7 +242,7 @@ struct target_buffer
   { return m_base; }
 
   /* Return a generated filename for the in-memory BFD file.  The generated
-     name will include the M_BASE value.  */
+     name will include the begin and end address of the in-memory file.  */
   const char *filename () const
   { return m_filename.get (); }
 

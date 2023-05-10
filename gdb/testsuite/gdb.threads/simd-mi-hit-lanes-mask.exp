@@ -62,7 +62,7 @@ foreach device $sycl_device_list {
 
 	# Continue and expect to hit the breakpoint at odd line.
 	mi_send_resuming_command "exec-continue" "continuing to bp"
-	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $odd_branch_line [list ",execution-mask=\"$hex\",simd-width=\"$decimal\"" "disp=\"del\",hit-lanes-mask=\"0x8\""] "expect bp hit at line $odd_branch_line"
+	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $odd_branch_line [list ",execution-mask=\"$hex\",simd-width=\"$decimal\"" "disp=\"del\",hit-lanes-mask=\"0x8\"" {locno="[0-9]+"}] "expect bp hit at line $odd_branch_line"
 
 	# Test hit lanes mask for current thread.
 	mi_gdb_test "-thread-hit-lanes-mask" \

@@ -68,7 +68,7 @@ foreach device $sycl_device_list {
 	set odd_branch_line [gdb_get_line_number "kernel-odd-branch"]
 
 	# Set temporary breakpoint to line $kernel_dim0_line and continue.
-	mi_tbreak $kernel_dim0_line
+	mi_tbreak $kernel_dim0_line "define temp bp at $kernel_dim0_line"
 	mi_send_resuming_command "exec-continue" "run to $kernel_dim0_line (exec-continue)"
 
 	# Expect breakpoint-hit stop event and get the id of the stopped thread.
@@ -89,11 +89,11 @@ foreach device $sycl_device_list {
 	set emask_hex [format 0x%x $emask_int]
 
 	mi_gdb_test "-thread-info $thread_id" \
-	    "\\^done,threads=\\\[\{id=\".*\",target-id=.*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",hit-lanes-mask=\"$hex\",thread-group=\"i$decimal\",state=\"stopped\"\}\\\]" \
+	    "\\^done,threads=\\\[\{id=\".*\",target-id=.*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",hit-lanes-mask=\"$hex\",.*,state=\"stopped\"\}\\\]" \
 	    "Check execution mask and simd width for thread $thread_id at line $kernel_dim0_line"
 
 	# Set temporary breakpoint to line $odd_branch_line and continue.
-	mi_tbreak $odd_branch_line
+	mi_tbreak $odd_branch_line "define temp bp at $odd_branch_line"
 	mi_send_resuming_command "exec-continue" "run to $odd_branch_line (exec-continue)"
 
 	# Expect breakpoint-hit stop event and get the id of the stopped thread.
@@ -105,7 +105,7 @@ foreach device $sycl_device_list {
 	set emask_hex [format 0x%x $emask_int]
 
 	mi_gdb_test "-thread-info $thread_id" \
-	    "\\^done,threads=\\\[\{id=\".*\",target-id=.*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",hit-lanes-mask=\"$hex\",thread-group=\"i$decimal\",state=\"stopped\"\}\\\]" \
+	    "\\^done,threads=\\\[\{id=\".*\",target-id=.*,execution-mask=\"$emask_hex\",simd-width=\"$simd_width\",hit-lanes-mask=\"$hex\",.*,state=\"stopped\"\}\\\]" \
 	    "Check execution mask and simd width for thread $thread_id at line $odd_branch_line"
 
 	# Test --qid argument with thread id

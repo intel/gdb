@@ -73,7 +73,7 @@ foreach device $sycl_device_list {
 	set odd_branch_inf "invalid"
 	set odd_branch_thread "invalid"
 	gdb_test_multiple "continue -a" "continue to kernel-odd-branch" {
-	    -re "Thread ($decimal).($decimal)$fill hit Temporary breakpoint $decimal, with SIMD lanes \\\[1 3 5 7.*\\\],${fill}$srcfile:$bp_odd_branch\r\n" {
+	    -re "Thread ($decimal).($decimal)$fill hit Temporary breakpoint $bkptno_numopt_re, with SIMD lanes \\\[1 3 5 7.*\\\],${fill}$srcfile:$bp_odd_branch\r\n" {
 		set odd_branch_inf $expect_out(1,string)
 		set odd_branch_thread $expect_out(2,string)
 		exp_continue

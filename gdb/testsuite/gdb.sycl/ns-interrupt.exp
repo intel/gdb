@@ -103,6 +103,7 @@ foreach device $sycl_device_list {
 	    }
 	}
 
+	setup_kfail "JIRA IGDB/3924" "*-*-*"
 	gdb_test_multiple "interrupt" "interrupt the thread" {
 	    -re "$gdb_prompt " {
 		gdb_test_multiple "" $gdb_test_name {

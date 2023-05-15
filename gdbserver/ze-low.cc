@@ -2132,6 +2132,35 @@ ze_target::resume (thread_resume *resume_info, size_t n)
   if ((num_eventing > 0) && !non_stop)
     return;
 
+  /* Lambda for applying a resume info on a single thread.  */
+  auto apply_resume_info = ([&] (const thread_resume &rinfo,
+				 thread_info *tp)
+    {
+      if (ze_has_priority_waitstatus (tp))
+	return;
+
+      if (rinfo.kind == resume_step)
+	{
+	  ze_thread_info *zetp = ze_thread (tp);
+	  gdb_assert (zetp != nullptr);
+
+	  regcache *regcache
+	    = get_thread_regcache (tp, /* fetch = */ false);
+	  CORE_ADDR pc = read_pc (regcache);
+
+	  /* For single-stepping, start == end.  Typically, both are 0.
+	     For range-stepping, the PC must be within the range.  */
+	  CORE_ADDR start = rinfo.step_range_start;
+	  CORE_ADDR end = rinfo.step_range_end;
+	  gdb_assert ((start == end) || ((pc >= start) && (pc < end)));
+
+	  zetp->step_range_start = start;
+	  zetp->step_range_end = end;
+	}
+
+      resume (tp, rinfo.kind);
+    });
+
   /* Let's hope that we're not getting any conflicting resume requests.
 
      If higher layers cannot guarantee that, we'd need to add a check, but
@@ -2164,10 +2193,9 @@ ze_target::resume (thread_resume *resume_info, size_t n)
 		 this at the moment.  */
 	      if (non_stop && (num_eventing > 0))
 		{
-		  for_each_thread (pid, [this, rkind] (thread_info *tp)
+		  for_each_thread (pid, [&] (thread_info *tp)
 		    {
-		      if (!ze_has_priority_waitstatus (tp))
-			resume (tp, rkind);
+		      apply_resume_info (rinfo, tp);
 		    });
 		}
 	      else
@@ -2177,31 +2205,7 @@ ze_target::resume (thread_resume *resume_info, size_t n)
       else
 	{
 	  thread_info *tp = find_thread_ptid (rptid);
-	  if (!ze_has_priority_waitstatus (tp))
-	    {
-	      if (rinfo.kind == resume_step)
-		{
-		  ze_thread_info *zetp = ze_thread (tp);
-		  gdb_assert (zetp != nullptr);
-
-		  regcache *regcache
-		    = get_thread_regcache (tp, /* fetch = */ false);
-		  CORE_ADDR pc = read_pc (regcache);
-
-		  /* For single-stepping, start == end.  Typically,
-		     both are 0.  For range-stepping, the PC must be
-		     within the range.  */
-		  CORE_ADDR start = rinfo.step_range_start;
-		  CORE_ADDR end = rinfo.step_range_end;
-		  gdb_assert ((start == end)
-			      || ((pc >= start) && (pc < end)));
-
-		  zetp->step_range_start = start;
-		  zetp->step_range_end = end;
-		}
-
-	      resume (tp, rinfo.kind);
-	    }
+	  apply_resume_info (rinfo, tp);
 	}
     }
 }

@@ -6465,7 +6465,7 @@ remote_target::remote_detach_1 (inferior *inf, int from_tty)
     {
       /* Save the pid as a string before mourning, since that will
 	 unpush the remote target, and we need the string after.  */
-      std::string infpid = target_pid_to_str (ptid_t (pid));
+      std::string infpid = inferior_pid_to_str (inf);
 
       target_mourn_inferior (inferior_ptid);
       if (print_inferior_events)

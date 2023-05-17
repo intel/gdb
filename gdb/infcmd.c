@@ -2473,10 +2473,9 @@ kill_command (const char *arg, int from_tty)
   if (!query (_("Kill the program being debugged? ")))
     error (_("Not confirmed."));
 
-  int pid = current_inferior ()->pid;
   /* Save the pid as a string before killing the inferior, since that
      may unpush the current target, and we need the string after.  */
-  std::string pid_str = target_pid_to_str (ptid_t (pid));
+  std::string pid_str = inferior_pid_to_str (current_inferior ());
   int infnum = current_inferior ()->num;
 
   target_kill ();

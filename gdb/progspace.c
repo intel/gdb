@@ -327,12 +327,12 @@ print_program_space (struct ui_out *uiout, int requested)
 		printed_header = 1;
 		gdb_printf ("\n\tBound inferiors: ID %d (%s)",
 			    inf->num,
-			    target_pid_to_str (ptid_t (inf->pid)).c_str ());
+			    inferior_pid_to_str (inf).c_str ());
 	      }
 	    else
 	      gdb_printf (", ID %d (%s)",
 			  inf->num,
-			  target_pid_to_str (ptid_t (inf->pid)).c_str ());
+			  inferior_pid_to_str (inf).c_str ());
 	  }
 
       uiout->text ("\n");

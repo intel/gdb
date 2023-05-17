@@ -216,7 +216,7 @@ add_inferior (int pid, bool hidden)
       if (pid != 0)
 	gdb_printf (_("[New inferior %d (%s)]\n"),
 		    inf->num,
-		    target_pid_to_str (ptid_t (pid)).c_str ());
+		    inferior_pid_to_str (inf).c_str ());
       else
 	gdb_printf (_("[New inferior %d]\n"), inf->num);
     }
@@ -316,15 +316,16 @@ exit_inferior_silent (inferior *inf)
 void
 detach_inferior (inferior *inf)
 {
-  /* Save the pid, since exit_inferior_1 will reset it.  */
-  int pid = inf->pid;
+  std::string msg;
+
+  if (print_inferior_events)
+    msg = inferior_pid_to_str (inf);
 
   exit_inferior_1 (inf, 0);
 
   if (print_inferior_events)
-    gdb_printf (_("[Inferior %d (%s) detached]\n"),
-		inf->num,
-		target_pid_to_str (ptid_t (pid)).c_str ());
+    gdb_printf (_("[Inferior %d (%s) detached]\n"), inf->num,
+		msg.c_str ());
 }
 
 /* Unhide INF by moving it to the end and assigning a positive num.  */
@@ -480,14 +481,15 @@ number_of_inferiors (void)
 /* Converts an inferior process id to a string.  Like target_pid_to_str, but
    special cases the null process and devices.  */
 
-static std::string
+const std::string
 inferior_pid_to_str (const inferior *inf)
 {
   const int pid = inf->pid;
   if (pid != 0)
     {
       gdbarch *target_gdbarch = inf->gdbarch;
-      if (gdbarch_is_inferior_device (target_gdbarch))
+      if ((target_gdbarch != nullptr)
+	  && gdbarch_is_inferior_device (target_gdbarch))
 	{
 	  const target_desc *tdesc = gdbarch_target_desc (target_gdbarch);
 	  const std::string pci_slot

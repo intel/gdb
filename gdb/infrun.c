@@ -668,13 +668,10 @@ holding the child stopped.  Try \"set detach-on-fork\" or \
 	{
 	  if (print_inferior_events)
 	    {
-	      /* Ensure that we have a process ptid.  */
-	      ptid_t process_ptid = ptid_t (parent_ptid.pid ());
-
 	      target_terminal::ours_for_output ();
 	      gdb_printf (_("[Detaching after fork from "
 			    "parent %s]\n"),
-			  target_pid_to_str (process_ptid).c_str ());
+			  inferior_pid_to_str (parent_inf).c_str ());
 	    }
 
 	  target_detach (parent_inf, 0);
@@ -2348,7 +2345,7 @@ resume_1 (enum gdb_signal sig)
     {
       infrun_debug_printf
 	("inferior %s has pending wait status %s.",
-	 target_pid_to_str (ptid_t (inf->pid)).c_str (),
+	 inferior_pid_to_str (inf).c_str (),
 	 inf->control.waitstatus.to_string ().c_str ());
 
       target->threads_executing = true;
@@ -8662,7 +8659,7 @@ void
 print_exited_reason (struct ui_out *uiout, int exitstatus)
 {
   struct inferior *inf = current_inferior ();
-  std::string pidstr = target_pid_to_str (ptid_t (inf->pid));
+  std::string pidstr = inferior_pid_to_str (inf);
 
   annotate_exited (exitstatus);
   if (exitstatus)

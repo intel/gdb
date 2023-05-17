@@ -850,6 +850,8 @@ extern void prune_inferiors (void);
 
 extern int number_of_inferiors (void);
 
+extern const std::string inferior_pid_to_str (const inferior *inf);
+
 extern struct inferior *add_inferior_with_spaces (bool hidden = false);
 
 /* Print the current selected inferior.  */

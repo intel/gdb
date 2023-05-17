@@ -1671,11 +1671,11 @@ print_inferior_quit_action (inferior *inf, ui_file *out)
   if (inf->attach_flag)
     gdb_printf (out,
 		_("\tInferior %d [%s] will be detached.\n"), inf->num,
-		target_pid_to_str (ptid_t (inf->pid)).c_str ());
+		inferior_pid_to_str (inf).c_str ());
   else
     gdb_printf (out,
 		_("\tInferior %d [%s] will be killed.\n"), inf->num,
-		target_pid_to_str (ptid_t (inf->pid)).c_str ());
+		inferior_pid_to_str (inf).c_str ());
 }
 
 /* If necessary, make the user confirm that we should quit.  Return

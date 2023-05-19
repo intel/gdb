@@ -50,11 +50,20 @@ foreach device_info "${device_list}" {
 	}
 
 	gdb_breakpoint [gdb_get_line_number "breakpt"]
+	if {[require_openmp_device "CPU"]} {
+	    setup_kfail "CMPLRLLVM/47935" "*-*-*"
+	}
 	gdb_continue_to_breakpoint "breakpt"
 
+	if {[require_openmp_device "CPU"]} {
+	    setup_kfail "CMPLRLLVM/47935" "*-*-*"
+	}
 	gdb_test "print aRec" "= \\( a = 2, b = 3 \\)" \
 	    "Print rectangle structure with members' name"
 
+	if {[require_openmp_device "CPU"]} {
+	    setup_kfail "CMPLRLLVM/47935" "*-*-*"
+	}
 	gdb_test "ptype aRec" \
 	    [multi_line \
 		"type \\= Type rectangle" \

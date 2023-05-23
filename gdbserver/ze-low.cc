@@ -693,10 +693,11 @@ ze_has_priority_waitstatus (const thread_info *tp)
       return false;
 
     case TARGET_WAITKIND_STOPPED:
-      /* If this thread was stopped internally by GDB,
+      /* If this thread was stopped internally by pause_all,
 	 it is not an interesting case.  */
       return !((zetp->stop_reason == TARGET_STOPPED_BY_NO_REASON)
-	       && (zetp->waitstatus.sig () == GDB_SIGNAL_INT));
+	       && (zetp->waitstatus.sig () == GDB_SIGNAL_INT)
+	       && (zetp->resume_state != ze_thread_resume_stop));
 
     default:
       return true;

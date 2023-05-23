@@ -694,10 +694,13 @@ ze_has_priority_waitstatus (const thread_info *tp)
       return false;
 
     case TARGET_WAITKIND_STOPPED:
-      /* If this thread was stopped internally by GDB,
-	 it is not an interesting case.  */
-      return !((zetp->stop_reason == TARGET_STOPPED_BY_NO_REASON)
-	       && (zetp->waitstatus.sig () == GDB_SIGNAL_INT));
+      /* If this thread was stopped via an interrupt, it is an interesting
+	 case if GDB wanted it stopped with a stop resume request.  */
+      if ((zetp->stop_reason == TARGET_STOPPED_BY_NO_REASON)
+	  && (zetp->waitstatus.sig () == GDB_SIGNAL_INT))
+	return (zetp->resume_state == ze_thread_resume_stop);
+
+      return true;
 
     default:
       return true;
@@ -1962,7 +1965,10 @@ ze_target::mark_eventing_threads (ptid_t resume_ptid, resume_kind rkind)
 	return;
 
       if (!ze_has_priority_waitstatus (tp))
-	return;
+	{
+	  (void) ze_move_waitstatus (tp);
+	  return;
+	}
 
       ze_thread_info *zetp = ze_thread (tp);
       gdb_assert (zetp != nullptr);

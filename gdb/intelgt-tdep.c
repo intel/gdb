@@ -3021,6 +3021,119 @@ check_valid (const implicit_args &args)
 	   args.num_work_dim);
 }
 
+/* Get the overall number of uint16_t elements in a single local id entry.
+   This includes the placeholder ("reserved") values for SIMD 8 case.
+   For different SIMD widths the local ID entry in the table looks as:
+   SIMD-1:
+
+     struct local_id {
+       uint16_t lx;
+       uint16_t ly;
+       uint16_t lz;
+     };
+
+   SIMD-8:
+
+    struct local_id {
+      uint16_t lx[8];
+      uint16_t <reserved>[8];
+      uint16_t ly[8];
+      uint16_t <reserved>[8];
+      uint16_t lz[8];
+      uint16_t <reserved>[8];
+    };
+
+  SIMD-16 and SIMD-32:
+
+    struct local_id {
+      uint16_t lx[<simd-width>];
+      uint16_t ly[<simd-width>];
+      uint16_t lz[<simd-width>];
+    };
+
+  We store local ID table as a flat list, so we do not care about its
+  internal structure.
+
+  Return the flat vector size of a single (x, y, z) entry.  */
+
+static unsigned int
+local_id_entry_length (unsigned int simd_width)
+{
+  switch (simd_width)
+    {
+    case 1:
+      return 3;
+    case 8:
+      return 8 * 2 * 3;
+    case 16:
+      return 16 * 3;
+    case 32:
+      return 32 * 3;
+    default:
+      error (_("Unexpected SIMD width %d."), simd_width);
+    }
+}
+
+/* Read and parse the local ID table corresponding to the passed
+   IMPLICIT_ARGS struct.  Return the flat vector of decoded elements,
+   including the "reserved" parts in-between (e.g., for SIMD 8).
+
+   The local ID table is a table of different combinations of work item
+   local IDs within a workgroup.  These combinations are the same for all
+   workgroups.
+
+   An entry of the local ID table is a struct with 3 or 6 fields,
+   depending on the SIMD width.
+   See the comment to local_id_vector_size for the details.
+
+   We store the local ID table as a flat vector, to simplify the representation
+   for different SIMD widths.  */
+
+static std::vector<uint16_t>
+read_local_id_table (gdbarch *gdbarch, thread_info *tp,
+		     const implicit_args &args, bfd_endian byte_order)
+{
+  /* Read the number of threads in a workgroup from r0.2[31:24].
+     Local ID table has that many entries.  */
+  uint8_t local_id_table_length;
+  regcache *regcache = get_thread_regcache (tp);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  register_status reg_status
+    = regcache->cooked_read_part (data->r0_regnum,
+				  2 * sizeof (uint32_t) + 3 * sizeof (uint8_t),
+				  sizeof (uint8_t),
+				  (gdb_byte *) &local_id_table_length);
+  intelgt_check_reg_status (reg_status, data->r0_regnum,
+			    _("Cannot read number of elements in local ID "
+			      "table."));
+  dprintf ("Number of elements in local ID table: %u", local_id_table_length);
+
+  /* The vector-length of one entry in the local ID table.  */
+  const size_t local_id_entry_len = local_id_entry_length (args.simd_width);
+
+  /* The number of uint16_t elements to read for the complete
+     local ID table.  */
+  const size_t elements_to_read = local_id_table_length * local_id_entry_len;
+
+  /* Buffer to read the raw local ID table.  */
+  const size_t bytes_to_read = sizeof (uint16_t) * elements_to_read;
+  std::vector<gdb_byte> local_ids_raw (bytes_to_read);
+  int err = target_read_memory (args.local_id_table_ptr,
+				local_ids_raw.data (), bytes_to_read);
+  if (err != 0)
+    error (_("Cannot read local ID table at address 0x%lx of size %ld."),
+	   args.local_id_table_ptr, bytes_to_read);
+
+  /* The parsed local ID table.  */
+  std::vector<uint16_t> local_ids (elements_to_read);
+  for (int i = 0; i < elements_to_read; i++)
+    local_ids[i]
+      = extract_unsigned_integer (local_ids_raw.data () + i * sizeof (uint16_t),
+				  sizeof (uint16_t), byte_order);
+
+  return local_ids;
+}
+
 /* Read the implicit args struct for the thread TP.  If the final struct
    is valid, store it in the global cache.  */
 
@@ -3046,8 +3159,9 @@ read_args (gdbarch *gdbarch, thread_info *tp)
   /* Heuristic sanity check of the struct.  */
   check_valid (implicit_args);
 
-  /* TODO: Now read the local IDs flat sequence.  */
-  std::vector<uint16_t> local_ids;
+  /* Now read the local IDs flat sequence.  */
+  std::vector<uint16_t> local_ids
+    = read_local_id_table (gdbarch, tp, implicit_args, byte_order);
 
   /* Cache both implicit args and local IDs.  */
   implicit_args_cache[cache_key]

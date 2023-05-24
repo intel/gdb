@@ -248,6 +248,76 @@ proc run_kill_host_scenario {non_stop_mode device} {
 	"killing host inferior"
 }
 
+# Check for handling of auto attach disable.
+
+proc run_to_end_autoattach_disable {device} {
+    global inferior_exited_re
+
+    if {![runto_main [sycl_get_device_args $device]]} {
+	return
+    }
+
+    gdb_test_no_output "set env INTELGT_AUTO_ATTACH_DISABLE=1"
+    gdb_test "show env INTELGT_AUTO_ATTACH_DISABLE" \
+	"INTELGT_AUTO_ATTACH_DISABLE = 1"
+
+    gdb_test_multiple "continue" "run without starting gdbserver" {
+	-re -wrap "intelgt: gdbserver-ze started for process..*" {
+	    fail $gdb_test_name
+	}
+	-re -wrap "$inferior_exited_re normally].*" {
+	    pass $gdb_test_name
+	}
+	-re -wrap "$inferior_exited_re with code.*" {
+	    fail $gdb_test_name
+	}
+    }
+}
+
+# Check for handling of auto attach error diagnostic messages.
+
+proc run_to_end_autoattach_check_errors {device quit} {
+    global inferior_exited_re
+
+    if {![runto_main [sycl_get_device_args $device]]} {
+	return
+    }
+
+    gdb_test_no_output "set env ZET_ENABLE_PROGRAM_DEBUGGING=0"
+    gdb_test "show env ZET_ENABLE_PROGRAM_DEBUGGING" \
+	"ZET_ENABLE_PROGRAM_DEBUGGING = 0"
+
+    set has_failure 1
+    set error_captured 0
+    gdb_test_multiple "continue" "continue" {
+	-re "Set 'ZET_ENABLE_PROGRAM_DEBUGGING=1' in host process environment.\r\n" {
+	    set error_captured 1
+	    exp_continue
+	}
+	-re "Quit anyway\\? \\(y or n\\) $" {
+	    if {$quit} {
+		send_gdb "y\n"
+		if {$error_captured} {
+		    set has_failure 0
+		}
+	    } else {
+		send_gdb "n\n"
+		exp_continue
+	    }
+	}
+	-re -wrap "$inferior_exited_re normally].*" {
+	    if {!$quit && $error_captured} {
+		set has_failure 0
+	    }
+	}
+	-re -wrap "$inferior_exited_re with code.*" {
+	    set has_failure 1
+	}
+    }
+
+    gdb_assert {$has_failure == 0}
+}
+
 foreach device $sycl_device_list {
     clean_restart "${binfile}"
     with_test_prefix [sycl_get_device_prefix $device] {
@@ -295,6 +365,21 @@ foreach device $sycl_device_list {
 	    with_test_prefix "kill_host_scenario" {
 		run_kill_host_scenario $non_stop_mode $device
 	    }
+	}
+
+	# Run the program to end by disabling auto attach to
+	# test that gdbserver-ze is not started.
+	with_test_prefix "auto_attach_disabled" {
+	    clean_restart $binfile
+	    run_to_end_autoattach_disable $device
+	}
+
+	# Run the program to end by disabling mandatory configuration
+	# for GPU offload.  Test if auto attach script prints warning
+	# accordingly and finally test with and without force quit.
+	foreach_with_prefix quit {true false} {
+	    clean_restart $binfile
+	    run_to_end_autoattach_check_errors $device $quit
 	}
     }
 }

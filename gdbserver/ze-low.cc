@@ -2844,35 +2844,7 @@ ze_target::unpause_all (bool unfreeze)
 	}
     });
 
-  if (non_stop)
-    {
-      /* Let's resume threads by device.  */
-      for (ze_device_info *device : devices)
-	{
-	  gdb_assert (device != nullptr);
-
-	  /* Ignore devices we're not modelling as processes.  */
-	  process_info *process = device->process;
-	  if (process == nullptr)
-	    continue;
-
-	  /* Resume the threads one by one.  Do not try to group them
-	     any further for now.  */
-	  for_each_thread (pid_of (process),
-			   [this, device] (thread_info *tp)
-	    {
-	      ze_set_resume_state (tp, resume_continue);
-	      if (ze_prepare_for_resuming (tp))
-		{
-		  prepare_thread_resume (tp);
-		  regcache_invalidate_thread (tp);
-		  ze_device_thread_t tid = ze_thread_id (tp);
-		  ze_resume (*device, tid);
-		}
-	    });
-	}
-    }
-  else
+  if (!non_stop)
     {
       /* Check whether we have events we have not reported, yet.
 
@@ -2889,18 +2861,18 @@ ze_target::unpause_all (bool unfreeze)
 	 We will report the event in the next wait ().  */
       if (thread != nullptr)
 	return;
+    }
 
-      /* There are no unreported events.  Let's resume everything.  */
-      for (ze_device_info *device : devices)
-	{
-	  gdb_assert (device != nullptr);
+  /* Let's resume threads by device.  */
+  for (ze_device_info *device : devices)
+    {
+      gdb_assert (device != nullptr);
 
-	  /* Ignore devices we're not modelling as processes.  */
-	  if (device->process == nullptr)
-	    continue;
+      /* Ignore devices we're not modelling as processes.  */
+      if (device->process == nullptr)
+	continue;
 
-	  resume (*device);
-	}
+      resume (*device);
     }
 }
 

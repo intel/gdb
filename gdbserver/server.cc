@@ -1131,7 +1131,10 @@ gdb_read_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len,
       /* (assume no half-trace half-real blocks for now) */
     }
 
-  if (set_desired_process ())
+  /* Some memory accesses may require having a thread context.
+     Attempt switching to the selected thread first, with a fall-back
+     option to a process.  */
+  if (set_desired_thread () || set_desired_process ())
     res = read_inferior_memory (memaddr, myaddr, len, addr_space);
   else
     res = 1;
@@ -1153,7 +1156,10 @@ gdb_write_memory (CORE_ADDR memaddr, const unsigned char *myaddr, int len,
     {
       int ret;
 
-      if (set_desired_process ())
+      /* Some memory accesses may require having a thread context.
+	 Attempt switching to the selected thread first, with a
+	 fall-back option to a process.  */
+      if (set_desired_thread () || set_desired_process ())
 	ret = target_write_memory (memaddr, myaddr, len, addr_space);
       else
 	ret = EIO;

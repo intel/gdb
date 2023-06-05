@@ -2,7 +2,7 @@
 /* vi:set ro: */
 
 /* Intel (R) graphics technology device names for for GDB, the GNU debugger.
-   Copyright (C) 2022 Free Software Foundation, Inc.
+   Copyright (C) 2022-2023 Free Software Foundation, Inc.
    This file is part of GDB.
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by

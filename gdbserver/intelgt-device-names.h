@@ -1,7 +1,7 @@
 /* Code for name translation of Intel(R) Graphics Technology devices for the
    remote server of GDB.
 
-   Copyright (C) 2022 Free Software Foundation, Inc.
+   Copyright (C) 2022-2023 Free Software Foundation, Inc.
 
    This file is part of GDB.
 

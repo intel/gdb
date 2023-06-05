@@ -1,6 +1,6 @@
 /* Target interface for Intel GT based on level-zero for gdbserver.
 
-   Copyright (C) 2020-2022 Free Software Foundation, Inc.
+   Copyright (C) 2020-2023 Free Software Foundation, Inc.
 
    This file is part of GDB.
 

@@ -24,6 +24,30 @@
 #include "source.h"
 #include "mi-getopt.h"
 
+/* Look for a symtab with filename NAME.  Prioritize the one with a non-empty
+   linetable.  If there were no matching symtabs with non-empty linetables,
+   return the first matching the filename, or nullptr if no match.  */
+static symtab *
+lookup_symtab_prioritize_non_empty_linetable (const char *name)
+{
+  symtab *result = nullptr;
+  iterate_over_symtabs (name, [&] (symtab *s)
+    {
+      if (result == nullptr)
+	result = s;
+
+      if (s->linetable () == nullptr || s->linetable ()->nitems == 0)
+	{
+	  /* Keep looking for a non-empty linetable.  */
+	  return false;
+	}
+      result = s;
+      return true;
+    });
+
+  return result;
+}
+
 /* Print the list of all pc addresses and lines of code for the
    provided (full or base) source file name.  The entries are sorted
    in ascending PC order.  */
@@ -41,9 +65,12 @@ mi_cmd_symbol_list_lines (const char *command, char **argv, int argc)
     error (_("-symbol-list-lines: Usage: SOURCE_FILENAME"));
 
   filename = argv[0];
-  s = lookup_symtab (filename);
 
-  if (s == NULL)
+  /* An object file might contain several symtabs for the same filename.
+     We prioritize one with a non-empty linetable.  */
+  s = lookup_symtab_prioritize_non_empty_linetable (filename);
+
+  if (s == nullptr)
     error (_("-symbol-list-lines: Unknown source file name."));
 
   /* Now, dump the associated line table.  The pc addresses are

@@ -1,0 +1,81 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests -symbol-list-lines MI command.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-1D.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	mi_clean_restart $binfile
+
+	if {![mi_runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set line_before_kernel [gdb_get_line_number "line-before-kernel"]
+	set kernel_first_line [gdb_get_line_number "kernel-first-line"]
+	mi_tbreak "$srcfile:$kernel_first_line" "set BP at kernel"
+	mi_continue_to_line "$srcfile:$line_before_kernel" \
+	    "continue to before kernel"
+
+	set non_empty_lines_pattern \
+	    "\\^done,lines=\\\[(\{pc=\"$hex\",line=\"$decimal\"\},?)+\\\]"
+
+	# Test after the stop on a solib event.
+	send_gdb "-gdb-set stop-on-solib-events 1\n"
+	gdb_expect 10 {
+	    -re "\\^done.*$mi_gdb_prompt$" { }
+	}
+	mi_send_resuming_command "exec-continue" "continue to solib event"
+	mi_expect_stop "solib-event" "" "" "" "" \
+	    [list "" "added=\\\[library=\[^\r\n\]+\\\]"] \
+	    "stop at solib event"
+	mi_gdb_test "-symbol-list-lines $srcfile" $non_empty_lines_pattern \
+	    "-symbol-list-line after solib-event"
+
+	send_gdb "-gdb-set stop-on-solib-events 0\n"
+	gdb_expect 10 {
+	    -re "\\^done.*$mi_gdb_prompt$" { }
+	}
+
+	# Test after the stop at a BP.
+	mi_send_resuming_command "exec-continue" "continue to the bp at kernel"
+	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" "$kernel_first_line" \
+	    [list ".*" ".*" ".*"] "stop at breakpoint"
+	mi_gdb_test "-symbol-list-lines $srcfile" $non_empty_lines_pattern \
+	    "-symbol-list-lines at BP"
+    }
+}

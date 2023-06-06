@@ -4562,6 +4562,21 @@ process_serial_event (void)
 	  cs.own_buf[0] = '\0';
 	}
       break;
+    case 'e':
+      require_running_or_break (cs.own_buf);
+      if (cs.current_traceframe >= 0)
+	{
+	  /* This packet is not supported in this mode.  */
+	  write_enn (cs.own_buf);
+	}
+      else
+	{
+	  if (!set_desired_thread ())
+	    write_enn (cs.own_buf);
+	  else
+	    output_expedite_registers (cs.own_buf);
+	}
+      break;
     case 'g':
       require_running_or_break (cs.own_buf);
       if (cs.current_traceframe >= 0)

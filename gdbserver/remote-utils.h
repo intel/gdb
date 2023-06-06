@@ -43,6 +43,10 @@ void check_remote_input_interrupt_request (void);
 void prepare_resume_reply (char *buf, ptid_t ptid,
 			   const target_waitstatus &status);
 
+/* Output the expedited registers of the current thread into BUF
+   as a list of 'regno:value;' pairs.  */
+void output_expedite_registers (char *buf);
+
 const char *decode_address_to_semicolon (CORE_ADDR *addrp, const char *start);
 void decode_address (CORE_ADDR *addrp, const char *start, int len);
 

@@ -1302,6 +1302,24 @@ prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
 
 /* See remote-utils.h.  */
 
+void
+output_expedite_registers (char *buf)
+{
+  /* We are being asked to return only the expedite regs.  Do not
+     fetch the registers alltogether.  */
+  regcache *regcache = get_thread_regcache (current_thread, false);
+  const char **regp = current_target_desc ()->expedite_regs;
+
+  while (*regp)
+    {
+      buf = outreg (regcache, find_regno (regcache->tdesc, *regp), buf);
+      regp ++;
+    }
+  *buf = '\0';
+}
+
+/* See remote-utils.h.  */
+
 const char *
 decode_m_packet_params (const char *from, CORE_ADDR *mem_addr_ptr,
 			unsigned int *len_ptr, const char end_marker,

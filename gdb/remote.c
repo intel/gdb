@@ -133,6 +133,7 @@ enum {
   PACKET_qSymbol,
   PACKET_P,
   PACKET_p,
+  PACKET_e,
   PACKET_Z0,
   PACKET_Z1,
   PACKET_Z2,
@@ -354,6 +355,7 @@ struct packet_reg
   long regnum; /* GDB's internal register number.  */
   LONGEST pnum; /* Remote protocol register number.  */
   bool in_g_packet; /* Always part of G packet.  */
+  bool in_e_packet; /* Part of the E packet (expedited registers).  */
   /* long size in bytes;  == register_size (target_gdbarch (), regnum);
      at present.  */
   /* char *name; == gdbarch_register_name (target_gdbarch (), regnum);
@@ -1142,6 +1144,9 @@ public: /* Remote specific methods.  */
   int send_g_packet ();
   void process_g_packet (struct regcache *regcache);
   void fetch_registers_using_g (struct regcache *regcache);
+
+  void fetch_registers_using_e (regcache *regcache);
+
   int store_register_using_P (const struct regcache *regcache,
 			      packet_reg *reg);
   void store_registers_using_G (const struct regcache *regcache);
@@ -8126,6 +8131,7 @@ Packet: '%s'\n"),
 Packet: '%s'\n"),
 			   hex_string (pnum), p, buf);
 
+		  reg->in_e_packet = true;
 		  cached_reg.num = reg->regnum;
 		  cached_reg.data = (gdb_byte *)
 		    xmalloc (register_size (event->arch, reg->regnum));
@@ -8985,6 +8991,88 @@ remote_target::fetch_registers_using_g (struct regcache *regcache)
   process_g_packet (regcache);
 }
 
+/* Fetch the expedited registers.  */
+
+void
+remote_target::fetch_registers_using_e (regcache *regcache)
+{
+  if (m_features.packet_support (PACKET_e) == PACKET_DISABLE)
+    return;
+
+  remote_state *rs = get_remote_state ();
+
+  char *wbuf = rs->buf.data ();
+  wbuf[0] = 'e';
+  wbuf[1] = '\0';
+
+  putpkt (rs->buf);
+  getpkt (&rs->buf, 0);
+
+  switch (packet_ok (rs->buf, &m_features.m_protocol_packets[PACKET_e]))
+    {
+    case PACKET_OK:
+      break;
+    case PACKET_UNKNOWN:
+    case PACKET_ERROR:
+      /* We do not raise an error here, so that we try 'g'
+	 and 'p' further.  */
+      return;
+    }
+
+  gdbarch *gdbarch = regcache->arch ();
+  remote_arch_state *rsa = rs->get_remote_arch_state (gdbarch);
+  const char *buf = rs->buf.data ();
+
+  while (*buf != '\0')
+    {
+      /* Parse a register value.  The format is 'n...:r...;', where
+	 n... = register number
+	 r... = register contents.  */
+      const char *buf_col = strchr (buf, ':');
+      if ((buf_col == nullptr) || (buf_col == buf))
+	error (_("Remote response is badly formatted: %s"
+		 "\nhere: %s"), rs->buf.data (), buf);
+
+      ULONGEST pnum;
+      const char *buf_temp = unpack_varlen_hex (buf, &pnum);
+      if (buf_temp != buf_col)
+	{
+	  /* Not a number.  */
+	  error (_("Remote response does not contain a number at: %s"),
+		 buf);
+	}
+
+      packet_reg *reg = packet_reg_from_pnum (gdbarch, rsa, pnum);
+      if (reg == nullptr)
+	error (_("Remote sent bad register number %s at %s"),
+	       hex_string (pnum), buf);
+
+      reg->in_e_packet = true;
+
+      int reg_size = register_size (gdbarch, reg->regnum);
+      buf = buf_temp + 1;
+      if (*buf == 'x')
+	regcache->raw_supply (reg->regnum, nullptr);
+      else
+	{
+	  std::vector<gdb_byte> value;
+	  value.reserve (reg_size);
+
+	  int data_size = hex2bin (buf, value.data (), reg_size);
+	  if (data_size < reg_size)
+	    error (_("Remote reply is too short: %s"), buf);
+
+	  regcache->raw_supply (reg->regnum, value.data ());
+	}
+
+      buf += 2 * reg_size;
+      if (*buf != ';')
+	error (_("Remote response does not contain a ';' at %s"), buf);
+
+      buf++;
+    }
+}
+
 /* Make the remote selected traceframe match GDB's selected
    traceframe.  */
 
@@ -9025,7 +9113,17 @@ remote_target::fetch_registers (struct regcache *regcache, int regnum)
 
       gdb_assert (reg != NULL);
 
-      /* If this register might be in the 'g' packet, try that first -
+      /* If we believe this register is included in an 'e' packet, try
+	 it first.  */
+      if (reg->in_e_packet)
+	{
+	  reg->in_e_packet = false;
+	  fetch_registers_using_e (regcache);
+	  if (reg->in_e_packet)
+	    return;
+	}
+
+      /* If this register might be in the 'g' packet, try that next;
 	 we are likely to read more than one register.  If this is the
 	 first 'g' packet, we might be overly optimistic about its
 	 contents, so fall back to 'p'.  */
@@ -15659,6 +15757,9 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
 
   add_packet_config_cmd (&remote_protocol_packets[PACKET_p],
 			 "p", "fetch-register", 1);
+
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_e],
+			 "e", "fetch-expedited-registers", 1);
 
   add_packet_config_cmd (&remote_protocol_packets[PACKET_Z0],
 			 "Z0", "software-breakpoint", 0);

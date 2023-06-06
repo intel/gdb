@@ -1320,6 +1320,20 @@ prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
 
 /* See remote-utils.h.  */
 
+void
+output_expedite_registers (char *buf)
+{
+  regcache *regcache = get_thread_regcache (current_thread);
+
+  for (const std::string &expedited_reg : regcache->tdesc->expedite_regs)
+    buf = outreg (regcache, find_regno (regcache->tdesc,
+					expedited_reg.c_str ()), buf);
+
+  *buf = '\0';
+}
+
+/* See remote-utils.h.  */
+
 const char *
 decode_m_packet_params (const char *from, CORE_ADDR *mem_addr_ptr,
 			unsigned int *len_ptr, const char end_marker,

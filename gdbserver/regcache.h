@@ -101,6 +101,10 @@ public:
   /* Discard the cache without storing the registers to the target.  */
   void discard ();
 
+  /* Convert the register N's value to a string in the currently
+     specified remote format.  */
+  void register_to_string (int n, char *buf);
+
   /* Convert all registers to a string in the currently specified remote
      format.  */
   void registers_to_string (char *buf);

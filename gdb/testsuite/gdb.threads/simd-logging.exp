@@ -114,8 +114,11 @@ foreach device $sycl_device_list {
 	    "print \$_simd_lane = 5"
 
 	# Extract thread which is running, but has inferior number $odd_branch_inf (thread on gpu).
+	#
+	# Frame arguments are irrelevant.  Ignore them for faster results.
+	set wpfa "with print frame-arguments none -- "
 	set running_thread "invalid"
-	gdb_test_multiple "info threads" "extract running thread" {
+	gdb_test_multiple "${wpfa}info threads" "extract running thread" {
 	    -re "$odd_branch_inf\.($decimal)${fill}Thread ($thread_id)${fill}\\\(running\\\)" {
 		if {$running_thread eq "invalid"} {
 		    set running_thread $expect_out(1,string)

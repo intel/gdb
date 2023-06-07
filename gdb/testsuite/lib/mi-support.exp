@@ -1314,7 +1314,7 @@ proc mi_expect_stop { reason func args file line extra test } {
     }
 
     if { $reason == "solib-event" } {
-	set pattern "\\*stopped,reason=\"solib-event\",thread-id=\"$decimal\",stopped-threads=$any\r\n($thread_selected_re|$breakpoint_re)*$prompt_re"
+	set pattern "\\*stopped,reason=\"solib-event\",${after_reason}thread-id=\"$decimal\",stopped-threads=$any\r\n($thread_selected_re|$breakpoint_re)*$prompt_re"
 	verbose -log "mi_expect_stop: expecting: $pattern"
 	gdb_expect {
 	    -re "$pattern" {

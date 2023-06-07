@@ -121,7 +121,10 @@ foreach device $sycl_device_list {
 	set inf_id [get_integer_valueof "\$_inferior" 0 "get plain inferior id"]
 
 	# The first thread must be the only remaining device thread.
-	gdb_test "info threads -stopped $inf_id.*" \
+	#
+	# Frame arguments are irrelevant.  Ignore them for faster results.
+	set wpfa "with print frame-arguments none -- "
+	gdb_test "${wpfa}info threads -stopped $inf_id.*" \
 	    [multi_line \
 		"Id\[^\r\n\]+Target Id\[^\r\n\]+Frame\[^\r\n\]*" \
 		"  $first_thread:\[^\r\n\]+$srcfile:$bp_then"] \

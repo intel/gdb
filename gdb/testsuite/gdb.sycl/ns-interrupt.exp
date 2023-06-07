@@ -90,7 +90,11 @@ foreach device $sycl_device_list {
 	# Put the output of info threads into the log for debugging purposes.
 	# The thread list may be very long.  Use gdb_test_multiple to avoid
 	# overfilling the buffer.
-	gdb_test_multiple "info threads" "first info threads for logging" {
+	#
+	# Frame arguments are irrelevant.  Ignore them for faster results.
+	set wpfa "with print frame-arguments none -- "
+	gdb_test_multiple "${wpfa}info threads" \
+	    "first info threads for logging" {
 	    -re "\[^\r\n\]+\r\n" {
 		exp_continue
 	    }
@@ -111,7 +115,8 @@ foreach device $sycl_device_list {
 	}
 
 	# Once more, for the log.
-	gdb_test_multiple "info threads" "second info threads for logging" {
+	gdb_test_multiple "${wpfa}info threads" \
+	    "second info threads for logging" {
 	    -re "\[^\r\n\]+\r\n" {
 		exp_continue
 	    }

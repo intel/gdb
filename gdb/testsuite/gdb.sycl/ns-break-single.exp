@@ -58,7 +58,8 @@ proc test {device location dim0val {condition ""}} {
     set num_stopped_threads 0
     set stopped_thread_id ""
     set tid_re "$decimal\(\.$decimal\)?"
-    gdb_test_multiple "info threads" "thread states" -lbl {
+    set wpfa "with print frame-arguments none -- "
+    gdb_test_multiple "${wpfa}info threads" "thread states" -lbl {
 	-re "\r\n. ($tid_re)\[^\r\n\]* at ${srcfile}:$bp" {
 	    set stopped_thread_id $expect_out(1,string)
 	    incr num_stopped_threads

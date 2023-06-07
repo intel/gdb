@@ -240,25 +240,28 @@ find_register_by_number (const struct target_desc *tdesc, int n)
 #ifndef IN_PROCESS_AGENT
 
 void
+regcache::register_to_string (int n, char *buf)
+{
+  int reg_size = register_size (tdesc, n);
+
+  if (register_status[n] == REG_VALID
+      || register_status[n] == REG_DIRTY)
+    bin2hex (register_data (n), buf, reg_size);
+  else
+    memset (buf, 'x', reg_size * 2);
+
+  buf += reg_size * 2;
+  *buf = '\0';
+}
+
+void
 regcache::registers_to_string (char *buf)
 {
-  unsigned char *regs = registers;
   for (int i = 0; i < tdesc->reg_defs.size (); ++i)
     {
-      if (register_status[i] == REG_VALID
-	  || register_status[i] == REG_DIRTY)
-	{
-	  bin2hex (regs, buf, register_size (tdesc, i));
-	  buf += register_size (tdesc, i) * 2;
-	}
-      else
-	{
-	  memset (buf, 'x', register_size (tdesc, i) * 2);
-	  buf += register_size (tdesc, i) * 2;
-	}
-      regs += register_size (tdesc, i);
+      register_to_string (i, buf);
+      buf += register_size (tdesc, i) * 2;
     }
-  *buf = '\0';
 }
 
 void
@@ -513,8 +516,7 @@ collect_register_as_string (struct regcache *regcache, int n, char *buf)
     }
 #endif
 
-  bin2hex (regcache->register_data (n), buf,
-	   register_size (regcache->tdesc, n));
+  regcache->register_to_string (n, buf);
 }
 
 void

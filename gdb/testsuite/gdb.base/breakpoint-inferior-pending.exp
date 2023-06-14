@@ -1,0 +1,95 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test that a breakpoint can be created pending on a non-existing inferior.
+
+standard_testfile
+
+# Check if start command is supported.
+require !use_gdb_stub
+
+if {[prepare_for_testing "failed to prepare" $testfile $srcfile debug]} {
+    return -1
+}
+
+set bp_loc [gdb_get_line_number "break-here"]
+
+# Set a breakpoint to inferior 2 before it even exists.
+# Check if turning off breakpoint pending is ok.
+gdb_test_no_output "set breakpoint pending off"
+gdb_test "break $bp_loc inferior 2" "No such inferior"
+
+# Verify no breakpoint was set.
+gdb_test "info break" "No breakpoints or watchpoints."
+
+# With breakpoint pending set to auto, we expect a confirmation prompt.
+gdb_test_no_output "set breakpoint pending auto"
+gdb_breakpoint "$bp_loc inferior 2" {allow-pending}
+
+gdb_test "info break" \
+    "1 +breakpoint     keep y.*PENDING.* +$bp_loc +inferior +2.*stop only in inferior 2" \
+    "one pending breakpoint info on inferior 2"
+
+# Now add the 2nd inferior.
+gdb_test "add-inferior"
+gdb_test "inferior 2"
+gdb_file_cmd $binfile
+if {[gdb_run_cmd] < 0} {
+    fail "run inferior 2"
+    return
+}
+
+gdb_test_multiple "" "run inferior 2 until bp" {
+    -re -wrap "Breakpoint .*$srcfile:$bp_loc.*" {
+	pass $gdb_test_name
+    }
+}
+
+gdb_test "info threads" \
+    ".*2.1.*$srcfile:$bp_loc.*" \
+    "current thread inside inferior 2"
+
+# Remove all breakpoints for a clean slate.
+delete_breakpoints
+
+set bp_loc [gdb_get_line_number "dummy-function"]
+
+# Set a breakpoint on a location that could be hit by an existing inferior
+# if setting a pending breakpoint on non-existing inferior has issues.
+gdb_breakpoint "$bp_loc inferior 999" {allow-pending}
+gdb_test "info break" \
+    "2 +breakpoint     keep y.*PENDING.* +$bp_loc +inferior +999.*stop only in inferior 999" \
+    "non-existing inferior breakpoint"
+
+# Also set a breakpoint on a location that will be hit by inferior 2.  This will
+# not be a pending breakpoint.
+set bp_loc [gdb_get_line_number "stop-here"]
+gdb_breakpoint "$bp_loc inferior 2"
+
+# Breakpoint hit should be at "stop-here" line.
+gdb_continue_to_breakpoint $bp_loc  ".*stop-here.*"
+
+# Inferior thread should be right.
+gdb_test "thread" "Current thread is 2\.1.*" "inferior thread as expected"
+
+# Check hit counts on breakpoints.
+gdb_test_sequence "info breakpoints" "no hit count non-existing inferior" {
+	"\[\r\n\]Num     Type           Disp Enb Address +What"
+	"\[\r\n\]2       breakpoint.*<PENDING>.*inferior 999"
+	"\[\r\n\]3       breakpoint"
+	"\[\r\n\]\tbreakpoint already hit 1 time"
+}
+
+gdb_continue_to_end

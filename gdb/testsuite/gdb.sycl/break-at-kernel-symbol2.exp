@@ -71,16 +71,6 @@ foreach device $sycl_device_list {
 	    continue
 	}
 
-	# On GPU, stop at the solib load event to insert the BP.
-	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
-	    set before_kernel [gdb_get_line_number "line-before-kernel"]
-	    gdb_breakpoint "$srcfile:$before_kernel" {temporary}
-	    gdb_continue_to_breakpoint "before kernel" ".*$srcfile:$before_kernel.*"
-	    gdb_test_no_output "set stop-on-solib-events 1"
-	    gdb_test "continue" "Stopped due to shared library event.*" \
-		"continue until solib load"
-	}
-
 	gdb_breakpoint $kernel_symbol {allow-pending}
 	set symbol_bpnum [get_integer_valueof "\$bpnum" 0 "get symbol bpnum"]
 

@@ -2788,8 +2788,10 @@ insert_bp_location (struct bp_location *bl,
       std::string stb = breakpoint_location_to_buffer (bl);
       gdb_printf (gdb_stdlog,
 		  "breakpoints: insert_bp_location (%s) at address %s"
-		  " %s\n", host_address_to_string (bl),
-		  paddress (bl->gdbarch, bl->address), stb.c_str ());
+		  " %s inferior %u\n",
+		  host_address_to_string (bl),
+		  paddress (bl->gdbarch, bl->address), stb.c_str (),
+		  bl->owner->inferior);
     }
 
   /* Note we don't initialize bl->target_info, as that wipes out
@@ -3210,6 +3212,15 @@ update_inserted_breakpoint_locations (void)
     }
 }
 
+/* Used when a breakpoint for a specific inferior is
+   created that does not yet exist.  */
+
+static bool
+breakpoint_inferior_pending (const breakpoint *b)
+{
+  return (b->inferior > 0) && (b->loc == nullptr);
+}
+
 /* Used when starting or continuing the program.  */
 
 static void
@@ -3250,6 +3261,15 @@ insert_breakpoint_locations (void)
       if (!gdbarch_has_global_breakpoints (target_gdbarch ())
 	  && (inferior_ptid == null_ptid || !target_has_execution ()))
 	continue;
+
+      if (breakpoint_inferior_pending (bl->owner)
+	  && bl->owner->inferior != current_inferior ()->num)
+	{
+	  infrun_debug_printf ("not inserting pending inferior %d for "
+			       "wrong inferior %d.",
+			       bl->owner->inferior, current_inferior ()->num);
+	  continue;
+	}
 
       val = insert_bp_location (bl, &tmp_error_stream, &disabled_breaks,
 				    &hw_breakpoint_error, &hw_bp_error_explained_already);
@@ -3837,7 +3857,12 @@ create_exception_master_breakpoint (void)
 static bool
 breakpoint_location_spec_empty_p (const struct breakpoint *b)
 {
-  return (b->locspec != nullptr && b->locspec->empty_p ());
+  /* If a non-existing inferior is pending we want to
+     keep the breakpoint alive for future lookups.  Otherwise
+     the breakpoint could get disabled/deleted by the caller.  */
+  return !breakpoint_inferior_pending (b)
+	 && b->locspec != nullptr
+	 && b->locspec->empty_p ();
 }
 
 void
@@ -9061,13 +9086,14 @@ static void
 find_condition_and_thread (const char *tok, CORE_ADDR pc,
 			   gdb::unique_xmalloc_ptr<char> *cond_string,
 			   int *thread, int *simd_lane_num, int *task,
-			   int *inferior,
+			   int *inferior, bool *inferior_pending,
 			   gdb::unique_xmalloc_ptr<char> *rest)
 {
   cond_string->reset ();
   *thread = -1;
   *task = 0;
   *inferior = 0;
+  *inferior_pending = false;
   rest->reset ();
   bool force = false;
 
@@ -9144,8 +9170,11 @@ find_condition_and_thread (const char *tok, CORE_ADDR pc,
 	  *inferior = strtol (tok, &tmptok, 0);
 	  if (tok == tmptok)
 	    error (_("Junk after inferior keyword."));
-	  if (find_inferior_id (*inferior) == nullptr)
+	  if (pending_break_support == AUTO_BOOLEAN_FALSE
+	      && find_inferior_id (*inferior) == nullptr)
 	    error (_("Unknown inferior %d."), *inferior);
+	  else
+	    *inferior_pending = true;
 	  tok = tmptok;
 	}
       else if (rest)
@@ -9169,6 +9198,7 @@ find_condition_and_thread_for_sals (const std::vector<symtab_and_line> &sals,
 				    gdb::unique_xmalloc_ptr<char> *cond_string,
 				    int *thread, int *simd_lane_num, int *task,
 				    int *inferior,
+				    bool *inferior_pending,
 				    gdb::unique_xmalloc_ptr<char> *rest)
 {
   int num_failures = 0;
@@ -9179,6 +9209,7 @@ find_condition_and_thread_for_sals (const std::vector<symtab_and_line> &sals,
       int simd_lane = -1;
       int task_id = 0;
       int inf_num = 0;
+      bool inf_pending = false;
       gdb::unique_xmalloc_ptr<char> remaining;
 
       /* Here we want to parse 'arg' to separate condition from thread
@@ -9191,12 +9222,13 @@ find_condition_and_thread_for_sals (const std::vector<symtab_and_line> &sals,
 	{
 	  find_condition_and_thread (input, sal.pc, &cond, &thread_id,
 				     &simd_lane, &task_id, &inf_num,
-				     &remaining);
+				     &inf_pending, &remaining);
 	  *cond_string = std::move (cond);
 	  *thread = thread_id;
 	  *simd_lane_num = simd_lane;
 	  *task = task_id;
 	  *inferior = inf_num;
+	  *inferior_pending = inf_pending;
 	  *rest = std::move (remaining);
 	  break;
 	}
@@ -9298,6 +9330,7 @@ create_breakpoint (struct gdbarch *gdbarch,
   bool pending = false;
   int task = 0;
   int inferior = 0;
+  bool inferior_pending = false;
   int prev_bkpt_count = breakpoint_count;
   gdb::unique_xmalloc_ptr<char> cond_string_copy;
   gdb::unique_xmalloc_ptr<char> extra_string_copy;
@@ -9321,7 +9354,8 @@ create_breakpoint (struct gdbarch *gdbarch,
 
 	  find_condition_and_thread_for_sals (lsal.sals, extra_string,
 					      &cond, &thread, &simd_lane,
-					      &task, &inferior, &rest);
+					      &task, &inferior,
+					      &inferior_pending, &rest);
 	  cond_string_copy = std::move (cond);
 	  extra_string_copy = std::move (rest);
 	}
@@ -9380,7 +9414,10 @@ create_breakpoint (struct gdbarch *gdbarch,
 	  /* If pending breakpoint support is auto query and the user
 	     selects no, then simply return the error code.  */
 	  if (pending_break_support == AUTO_BOOLEAN_AUTO
-	      && !nquery (_("Make %s pending on future shared library load? "),
+	      && !nquery ((inferior_pending == false)
+			  ? _("Make %s pending on future shared"
+			      " library load? ")
+			  : _("Make %s pending on future inferior addition? "),
 			  bptype_string (type_wanted)))
 	    return 0;
 
@@ -12267,8 +12304,7 @@ code_breakpoint::decode_location_spec (location_spec *locspec,
   if (inferior > 0)
     {
       struct inferior *inf = find_inferior_id (inferior);
-      gdb_assert (inf != nullptr);
-      if (inf->pspace != search_pspace)
+      if (inf == nullptr || inf->pspace != search_pspace)
 	throw_error (NOT_FOUND_ERROR, "No suitable location for the inferior");
     }
 
@@ -13150,6 +13186,12 @@ update_breakpoint_locations (code_breakpoint *b,
 
       switch_to_program_space_and_thread (sal.pspace);
 
+      /* Inferior pending breakpoints don't allow a location on any other
+	 inferior than the requested one.  */
+      if (breakpoint_inferior_pending (b)
+	  && b->inferior != current_inferior ()->num)
+	continue;
+
       new_loc = b->add_location (sal);
 
       /* Reparse conditions, they might contain references to the
@@ -13278,7 +13320,8 @@ code_breakpoint::location_spec_to_sals (location_spec *locspec,
 	     have separate 'warning emitted' flag.  Since this
 	     happens only when a binary has changed, I don't know
 	     which approach is better.  */
-	  enable_state = bp_disabled;
+	  if (!breakpoint_inferior_pending (this))
+	    enable_state = bp_disabled;
 	  throw;
 	}
 
@@ -13293,11 +13336,13 @@ code_breakpoint::location_spec_to_sals (location_spec *locspec,
 	{
 	  gdb::unique_xmalloc_ptr<char> local_cond, local_extra;
 	  int local_thread, local_simd_lane_num, local_task, local_inferior;
+	  bool local_inferior_pending;
 
 	  find_condition_and_thread_for_sals (sals, extra_string.get (),
 					      &local_cond, &local_thread,
 					      &local_simd_lane_num,
 					      &local_task, &local_inferior,
+					      &local_inferior_pending,
 					      &local_extra);
 	  gdb_assert (cond_string == nullptr);
 	  if (local_cond != nullptr)

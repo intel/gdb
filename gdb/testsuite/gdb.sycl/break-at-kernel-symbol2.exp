@@ -77,10 +77,6 @@ foreach device $sycl_device_list {
 	    gdb_breakpoint "$srcfile:$before_kernel" {temporary}
 	    gdb_continue_to_breakpoint "before kernel" ".*$srcfile:$before_kernel.*"
 	    gdb_test_no_output "set stop-on-solib-events 1"
-	    if {[is_level_zero_debug_api]} {
-		kfail "JIRA DOQG/2748" "stop-on-solib-events hangs"
-		continue
-	    }
 	    gdb_test "continue" "Stopped due to shared library event.*" \
 		"continue until solib load"
 	    kfail "JIRA DOQG/2492" "stop-on-solib-events needed for kernel symbol BP"
@@ -127,9 +123,6 @@ foreach device $sycl_device_list {
 		    verbose -log "body: $num_body_hits, symbol: $num_symbol_hits"
 		}
 		-re "$gdb_prompt $" {
-		    if {[is_level_zero_debug_api]} {
-			setup_kfail "JIRA DOQG/2748" "*-*-*"
-		    }
 		    fail "hit bps"
 		}
 	    }

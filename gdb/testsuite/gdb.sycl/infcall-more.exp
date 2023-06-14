@@ -200,17 +200,7 @@ foreach device $sycl_device_list {
 		    gdb_test "print integer_grf_args(7, 6, 5)" "= 210" \
 			"infcall at else-branch"
 		}
-		-re ".*$inferior_exited_re normally.*${gdb_prompt} $" {
-		    if {[require_sycl_device $device "gpu" "Intel*"]
-			||[is_level_zero_debug_api]} {
-			kfail "IGDB/3900" "Program exited unexpectedly."
-		    }
-		}
 	    }
-	}
-	if {[require_sycl_device $device "gpu" "Intel*"]
-	    ||[is_level_zero_debug_api]} {
-	    setup_kfail "IGDB/3900" "*-*-*"
 	}
 	gdb_assert {$branches_step == 2} "stepped into both branches"
     }

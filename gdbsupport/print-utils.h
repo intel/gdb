@@ -22,7 +22,7 @@
 
 /* How many characters (including the terminating null byte) fit in a
    cell.  */
-#define PRINT_CELL_SIZE 50
+#define PRINT_CELL_SIZE 100
 
 /* %u for ULONGEST.  The result is stored in a circular static buffer,
    NUMCELLS deep.  */

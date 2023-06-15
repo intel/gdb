@@ -85,7 +85,8 @@ struct tp_emask
 };
 
 static std::string print_thread_id_string (thread_info *, unsigned long,
-					   int current_lane = -1);
+					   int current_lane = -1,
+					   const bool print_warning = false);
 
 /* Returns true if THR is the current thread.  */
 
@@ -1857,16 +1858,56 @@ show_inferior_qualified_tids (void)
   return inf != inferior_list.end ();
 }
 
+/* Implementation to print the thread ID of a single thread.
+
+   Performs truncation of the thread's lane mask if the full
+   lane mask does not fit into the print buffer.
+   PRINT_WARNING enables a warning if the output is truncated
+   and is disabled by default.
+
+   If CURRENT_LANE is > -1, the thread's active lane is printed
+   with a preceding '*'.  This is disabled by default.  */
 static std::string
 print_thread_id_string (thread_info *thr, unsigned long lane_mask,
-			int current_lane)
+			int current_lane, const bool print_warning)
 {
   std::string lanes_str;
+  std::string result;
 
  if (lane_mask != 0)
     lanes_str = ":" + make_ranges_from_mask (lane_mask, current_lane);
 
-  return std::to_string (thr->per_inf_num) + lanes_str;
+  if (show_inferior_qualified_tids ())
+    result = std::to_string (thr->inf->num) + "."
+      + std::to_string (thr->per_inf_num) + lanes_str;
+  else
+    result = std::to_string (thr->per_inf_num) + lanes_str;
+
+  /* Test if the thread's ID, possibly including a lane mask, fits into
+     the print buffer.  Truncate the lane mask if the full thread ID
+     does not fit.  */
+  if (result.length () < PRINT_CELL_SIZE)
+    return result;
+
+  int pos = result.size ();
+  while (result.length () >= PRINT_CELL_SIZE)
+    {
+      pos = result.find_last_of (' ', pos - 1);
+      gdb_assert (pos != std::string::npos);
+      result.resize (pos);
+      result += " ...]";
+    }
+
+  if (!print_warning)
+    return result;
+
+  if (show_inferior_qualified_tids ())
+    warning (_("Truncating thread %d.%d's lane mask."),
+	     thr->inf->num, thr->per_inf_num);
+  else
+    warning (_("Truncating thread %d's lane mask."), thr->per_inf_num);
+
+  return result;
 }
 
 static std::string
@@ -1890,7 +1931,8 @@ print_thread_id (thread_info *thr, unsigned long lane_mask, int current_lane)
 {
   char *s = get_print_cell ();
   xsnprintf (s, PRINT_CELL_SIZE, "%s",
-	     print_thread_id_string (thr, lane_mask, current_lane).c_str ());
+	     print_thread_id_string (thr, lane_mask, current_lane,
+				     true).c_str ());
 
   return s;
 }

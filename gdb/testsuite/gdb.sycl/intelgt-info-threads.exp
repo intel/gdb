@@ -1,0 +1,82 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests whether info threads command correctly displays SIMD lanes on
+# intelgt devices.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	# Set breakpoint inside the kernel.
+	set line [gdb_get_line_number "then-branch"]
+
+	gdb_breakpoint $line
+
+	# Hit the kernel breakpoint.
+	gdb_continue_to_breakpoint "kernel" ".*$srcfile:$line.*"
+
+	# Frame arguments are irrelevant.  Ignore them for faster results.
+	set wpfa "with print frame-arguments none -- "
+
+	set stopped_threads [get_stopped_threads $srcfile $line]
+	set stopped_threads [lsort -unique $stopped_threads]
+
+	verbose -log "stopped_threads threads: $stopped_threads"
+
+	# For each stopped thread, check the thread's active SIMD lanes.
+	#
+	# The output is expected to match the pattern
+	#   * <inferior id>.<thread id>:<lane id>
+	#   * <inferior id>.<thread id>:[<array of lane ids>]
+	#
+	# A warning is not expected as the active SIMD lane mask fits
+	# into the print buffer of size PRINT_CELL_SIZE.
+	foreach thread $stopped_threads {
+	    gdb_test_multiple "${wpfa}info thread $thread" "Test info thread $thread" {
+		-re -wrap "\\\*?$thread:\\\*?$decimal\[^\r\n\]* at $srcfile:$line" {
+		    pass $gdb_test_name
+		}
+		-re -wrap "\\\*?$thread:\\\[\(\\\*?$decimal\\\s?\)+\\\]\[^\r\n\]* at $srcfile:$line" {
+		    pass $gdb_test_name
+		}
+	    }
+	}
+    }
+}

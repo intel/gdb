@@ -921,7 +921,7 @@ extern bool threads_are_executing (process_stratum_target *targ);
    "executing and resumed"		-> "running"
    "exited"				-> "exited"
 
-   On GPUs, threads may exist but not currently be available, e.g. because
+   On GPUs, threads may exist but not currently be availalbe, e.g. because
    they are idle or are executing a dispatch of another process.  We call
    them unavailable and we model them as executing but not resumed.  From
    the front-end perspective, they are stopped.  From the target

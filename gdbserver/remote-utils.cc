@@ -1060,7 +1060,7 @@ prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
   client_state &cs = get_client_state ();
   threads_debug_printf ("Writing resume reply for %s: %s",
 			target_pid_to_str (ptid).c_str (),
-			target_waitkind_str (status.kind ()));
+			status.to_string ().c_str ());
 
   switch (status.kind ())
     {

@@ -603,8 +603,7 @@ intelgt_ze_target::read_memory (thread_info *tp, CORE_ADDR memaddr,
   if (addr_space == (unsigned int) ZET_DEBUG_MEMORY_SPACE_TYPE_DEFAULT)
     addr_space = intelgt_decode_tagged_address (memaddr);
 
-  return ze_target::read_memory (current_thread, memaddr, myaddr, len,
-				 addr_space);
+  return ze_target::read_memory (tp, memaddr, myaddr, len, addr_space);
 }
 
 int

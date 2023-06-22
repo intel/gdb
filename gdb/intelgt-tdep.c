@@ -2035,6 +2035,7 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
 
   /* Construct the dummy CALLA instruction.  */
   gdb_byte calla_inst[intelgt::MAX_INST_LENGTH];
+  memset (calla_inst, 0, intelgt::MAX_INST_LENGTH);
 
   constexpr uint32_t calla_opcode = 0x2b;
   calla_inst[0] = calla_opcode;
@@ -2044,8 +2045,9 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
   error ("Inferior call feature is not available: libiga64 is missing.");
 #endif /* defined (HAVE_LIBIGA64)  */
 
-  /* Location of the CallMask field in the framedesc register.  */
-  constexpr uint32_t dst_subreg = 4;
+  /* Location of the CallMask field in the framedesc register (subreg 0)
+     and the Src0.IsImm field (bit 46).  */
+  constexpr uint32_t dst_subreg = 0x04;
   calla_inst[6] = dst_subreg;
   /* Destination register number for the CALLA instruction.  */
   uint32_t dst_reg = data->framedesc_base_regnum ();

@@ -110,7 +110,11 @@ enum btrace_function_flag
 
   /* Indicates that at least one auxiliary instruction is in the current
      function segment.  */
-  BFUN_CONTAINS_AUX = (1 << 2)
+  BFUN_CONTAINS_AUX = (1 << 2),
+
+  /* Indicates that at least one instruction not of type BTRACE_INSN_AUX
+     is in the current function segment.  */
+  BFUN_CONTAINS_NON_AUX = (1 << 3)
 };
 DEF_ENUM_FLAGS_TYPE (enum btrace_function_flag, btrace_function_flags);
 

@@ -34,16 +34,23 @@ if {[build_executable "failed to compile $srcfile" \
 set devices_count 0
 
 # Run all tests
-proc test_multi_device {} {
+proc test_multi_device {subdevices_as_root} {
     global srcfile devices_count
 
     set num_devices_check [gdb_get_line_number "num-devices-check"]
     set devices_driver_check [gdb_get_line_number "devices-driver-check"]
     gdb_breakpoint $num_devices_check {temporary}
     gdb_breakpoint $devices_driver_check {temporary}
+
+    if {$subdevices_as_root == 1} {
+	setup_kfail "JIRA GSD/3885" "*-*-*"
+    }
     gdb_continue_to_breakpoint "num devices check" \
 	".*$srcfile:$num_devices_check.*"
 
+    if {$subdevices_as_root == 1} {
+	setup_kfail "JIRA GSD/3885" "*-*-*"
+    }
     set num_devices [get_integer_valueof "num_devices" 0]
 
     # No need to run the tests twice with the same DEVICES_COUNT.
@@ -107,7 +114,7 @@ foreach device $sycl_device_list {
 	    if {![runto_main [sycl_get_device_args $device]]} {
 		continue
 	    }
-	    test_multi_device
+	    test_multi_device $ReturnSubDevicesAsApiDevices
 	}
     }
 }

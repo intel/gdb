@@ -53,9 +53,15 @@ foreach device $sycl_device_list {
 	gdb_continue_to_breakpoint "hit the BP in-between kernels" \
 	    ".*$srcfile:$inbetween.*"
 
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    setup_kfail "JIRA IGDB/3998" "*-*-*"
+	}
 	gdb_continue_to_breakpoint "hit the BP in kernel 2" \
 	    ".*$srcfile:$kernel_2.*"
 
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    setup_kfail "JIRA IGDB/3998" "*-*-*"
+	}
 	gdb_continue_to_breakpoint "hit the BP post-kernel" \
 	    ".*$srcfile:$post_kernel.*"
     }

@@ -643,6 +643,18 @@ ftrace_update_function (struct btrace_thread_info *btinfo, CORE_ADDR pc)
 
 	    break;
 	  }
+
+	case BTRACE_INSN_AUX:
+	  /* An aux insn couldn't have switched the function.  But the
+	     segment might not have had a symbol name resolved yet, as events
+	     might not have an IP.  Use the current IP in that case and update
+	     the name.  */
+	  if (bfun->sym == nullptr && bfun->msym == nullptr)
+	    {
+	      bfun->sym = fun;
+	      bfun->msym = mfun;
+	    }
+	  return bfun;
 	}
     }
 
@@ -669,6 +681,8 @@ ftrace_update_insns (struct btrace_function *bfun, const btrace_insn &insn)
 
   if (insn.iclass == BTRACE_INSN_AUX)
     bfun->flags |= BFUN_CONTAINS_AUX;
+  else
+    bfun->flags |= BFUN_CONTAINS_NON_AUX;
 
   if (record_debug > 1)
     ftrace_debug (bfun, "update insn");
@@ -1222,7 +1236,37 @@ handle_pt_aux_insn (btrace_thread_info *btinfo, btrace_function *bfun,
   ftrace_update_insns (bfun, insn);
 }
 
+/* Check if the last function segment contains real instructions, and not
+   only auxiliary instructions.  */
+
+static bool
+ftrace_last_bfun_contains_non_aux (btrace_thread_info *btinfo)
+{
+  if (btinfo->functions.empty ())
+    return false;
+
+  return ((btinfo->functions.back ().flags & BFUN_CONTAINS_NON_AUX) != 0);
+}
 #endif /* defined (HAVE_PT_INSN_EVENT) */
+
+#if (LIBIPT_VERSION >= 0x201)
+/* Translate an interrupt vector to a mnemonic string as defined for x86.
+   Returns nullptr if there is none.  */
+
+static const char *
+decode_interrupt_vector (const uint8_t vector)
+{
+  static const char *mnemonic[]
+    = { "#de", "#db", nullptr, "#bp", "#of", "#br", "#ud", "#nm",
+	"#df", "#mf", "#ts", "#np", "#ss", "#gp", "#pf", nullptr,
+	"#mf", "#ac", "#mc", "#xm", "#ve", "#cp" };
+
+  if (vector < (sizeof (mnemonic) / sizeof (mnemonic[0])))
+    return mnemonic[vector];
+
+  return nullptr;
+}
+#endif /* defined (LIBIPT_VERSION >= 0x201) */
 
 /* Handle instruction decode events (libipt-v2).  */
 
@@ -1237,6 +1281,7 @@ handle_pt_insn_events (struct btrace_thread_info *btinfo,
       struct btrace_function *bfun;
       struct pt_event event;
       uint64_t offset;
+      CORE_ADDR ip = 0;
 
       status = pt_insn_event (decoder, &event, sizeof (event));
       if (status < 0)
@@ -1251,7 +1296,16 @@ handle_pt_insn_events (struct btrace_thread_info *btinfo,
 	  if (event.status_update != 0)
 	    break;
 
-	  if (event.variant.enabled.resumed == 0 && !btinfo->functions.empty ())
+	  /* Only create a new gap if the last function segment contains
+	     non-aux instructions.  We could be at the beginning of the
+	     recording and could already have handled one or more events,
+	     like ptev_iret, that created aux insns.  In that case we don't
+	     want to create a gap or print a warning.  Note that if the last
+	     function segment contains only aux insns, we are guaranteed
+	     to be at the beginning of a recording or after a gap.  See
+	     handle_pt_aux_insn ().  */
+	  if (event.variant.enabled.resumed == 0
+	      && ftrace_last_bfun_contains_non_aux (btinfo))
 	    {
 	      bfun = ftrace_new_gap (btinfo, BDE_PT_NON_CONTIGUOUS, gaps);
 
@@ -1275,7 +1329,6 @@ handle_pt_insn_events (struct btrace_thread_info *btinfo,
 #if defined (HAVE_STRUCT_PT_EVENT_VARIANT_PTWRITE)
 	case ptev_ptwrite:
 	  {
-	    uint64_t ip = 0;
 	    std::optional<std::string> ptw_string;
 
 	    /* Lookup the ip if available.  */
@@ -1298,6 +1351,34 @@ handle_pt_insn_events (struct btrace_thread_info *btinfo,
 	    break;
 	  }
 #endif /* defined (HAVE_STRUCT_PT_EVENT_VARIANT_PTWRITE) */
+
+#if (LIBIPT_VERSION >= 0x201)
+	case ptev_interrupt:
+	  {
+	    std::string aux_string = std::string (_("interrupt: vector = "))
+	      + hex_string (event.variant.interrupt.vector);
+
+	    const char *decoded
+	      = decode_interrupt_vector (event.variant.interrupt.vector);
+	    if (decoded != nullptr)
+	      aux_string += std::string (" (") + decoded + ")";
+
+	    if (event.variant.interrupt.has_cr2 != 0)
+	      {
+		aux_string += std::string (", cr2 = ")
+		  + hex_string (event.variant.interrupt.cr2);
+	      }
+
+	    if (event.ip_suppressed == 0)
+	      {
+		ip = event.variant.interrupt.ip;
+		aux_string += std::string (", ip = ") + hex_string (ip);
+	      }
+
+	    handle_pt_aux_insn (btinfo, bfun, aux_string, ip);
+	    break;
+	  }
+#endif /* defined (LIBIPT_VERSION >= 0x201) */
 	}
     }
 #endif /* defined (HAVE_PT_INSN_EVENT) */

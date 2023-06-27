@@ -1518,6 +1518,35 @@ handle_pt_insn_events (struct btrace_thread_info *btinfo,
 	    handle_pt_aux_insn (btinfo, bfun, aux_string, ip);
 	    break;
 	  }
+
+	case ptev_uintr:
+	  {
+	    std::string aux_string = std::string (_("uintr: vector = "))
+				     + hex_string (event.variant.uintr.vector);
+
+	    if (event.ip_suppressed == 0)
+	      {
+		ip = event.variant.uintr.ip;
+		aux_string += std::string (", ip = ") + hex_string (ip);
+	      }
+
+	    handle_pt_aux_insn (btinfo, bfun, aux_string, ip);
+	    break;
+	  }
+
+	case ptev_uiret:
+	  {
+	    std::string aux_string = std::string (_("uiret"));
+
+	    if (event.ip_suppressed == 0)
+	      {
+		ip = event.variant.uiret.ip;
+		aux_string += std::string (": ip = ") + hex_string (ip);
+	      }
+
+	    handle_pt_aux_insn (btinfo, bfun, aux_string, ip);
+	    break;
+	  }
 #endif /* defined (LIBIPT_VERSION >= 0x201) */
 	}
     }

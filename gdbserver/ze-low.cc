@@ -2710,59 +2710,9 @@ ze_target::pause_all (bool freeze)
   if (frozen > 1)
     return;
 
-  unsigned long nresumed = 0;
-  for (ze_device_info *device : devices)
-    {
-      dprintf ("device %lu's nresumed=%ld%s",
-	       device->ordinal, device->nresumed,
-	       ((device->nresumed == device->nthreads) ? " (all)" : ""));
-      nresumed += device->nresumed;
-    }
+  /* Interrupting all threads on devices that have any resumed threads.
 
-  /* Check if we can exit early.  This saves us from iterating over
-     the threads.  */
-  if (nresumed == 0)
-    {
-      /* Clear all low-priority events.  */
-      for_each_thread ([] (thread_info *tp)
-	{
-	  if (!ze_has_priority_waitstatus (tp))
-	    (void) ze_move_waitstatus (tp);
-	});
-      return;
-    }
-
-  /* Unavailable threads may become available and hence respond to our
-     interrupt request.  To ensure that we are actually waiting for an
-     unavailable thread's response, set the state to unknown and have it
-     changed by fetch_events.
-
-     This allows us to distinguish an older unavailable state from the
-     current state at the time of our interrupt request.
-
-     We skip changing the threads' exec_state and sending an interrupt
-     if no threads are running on the device.  */
-  for_each_thread ([] (thread_info *tp)
-    {
-      ze_device_info *device = ze_thread_device (tp);
-      if (device == nullptr || device->nresumed == 0)
-	return;
-
-      enum ze_thread_exec_state_t state = ze_exec_state (tp);
-      if (state != ze_thread_state_unavailable)
-	return;
-
-      ze_thread_info *zetp = ze_thread (tp);
-      gdb_assert (zetp != nullptr);
-
-      zetp->exec_state = ze_thread_state_unknown;
-    });
-
-  /* We start by interrupting all threads on all devices.
-
-     Threads that are already stopped will be ignored and, in case all
-     threads were already stopped on a device, we'd handle the resulting
-     error in ze_interrupt.  */
+     Threads that are already stopped will be ignored by the interrupt.  */
   ze_device_thread_t all = ze_thread_id_all ();
   for (ze_device_info *device : devices)
     {
@@ -2776,41 +2726,27 @@ ze_target::pause_all (bool freeze)
 	ze_interrupt (*device, all);
     }
 
-  /* Fetch events until each thread is either stopped or unavailable.
-
-     We could use a worklist to only poll threads that are not stopped,
-     yet.  I'm not sure this speeds up waiting, though, and I wouldn't
-     expect more than two iterations, anyway.  */
-  thread_info *thread = nullptr;
+  /* Fetch events until no device has any resumed threads left.  */
+  uint64_t nresumed = 0;
   do {
+    nresumed = 0;
     for (ze_device_info *device : devices)
       {
 	gdb_assert (device != nullptr);
+
+	/* Ignore devices we're not modelling as processes.  */
+	if (device->process == nullptr)
+	  continue;
+
+	/* Event processing maintains the number of resumed threads.  */
 	fetch_events (*device);
+	nresumed += device->nresumed;
       }
-
-    thread = find_thread ([] (thread_info *tp)
-      {
-	enum ze_thread_exec_state_t state = ze_exec_state (tp);
-	switch (state)
-	  {
-	  case ze_thread_state_stopped:
-	  case ze_thread_state_held:
-	  case ze_thread_state_unavailable:
-	    return false;
-
-	  case ze_thread_state_running:
-	  case ze_thread_state_unknown:
-	    return true;
-	  }
-
-	internal_error (_("bad execution state: %d."), state);
-      });
-  } while (thread != nullptr);
+  }
+  while (nresumed != 0);
 
   /* Fetching events may have set some pending events.  Clear all
-     low-priority events.  We do not intend 'wait' to pick them
-     later.  */
+     low-priority events.  We do not intend 'wait' to pick them later.  */
   for_each_thread ([] (thread_info *tp)
     {
       if (!ze_has_priority_waitstatus (tp))

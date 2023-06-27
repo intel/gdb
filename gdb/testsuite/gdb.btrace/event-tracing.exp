@@ -37,7 +37,9 @@ gdb_test "continue" "Program received signal SIGSEGV, Segmentation fault.*"
 # Test printing of at least one INTERRUPT event.
 gdb_test "record function-call-history" [multi_line \
   "$decimal\tmain" \
+  "\t  \\\[iret(: ip = $hex)?\\\]" \
   "\t  \\\[interrupt: vector = 0x1 \\\(#db\\\), ip = $hex\\\]" \
+  "\t  \\\[iret(: ip = $hex)?\\\]" \
   "$decimal\tcall1" \
   "$decimal\tmain" \
   "\t  \\\[interrupt: vector = 0xe \\\(#pf\\\), cr2 = 0x0, ip = $hex\\\]"

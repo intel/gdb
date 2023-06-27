@@ -1380,6 +1380,20 @@ handle_pt_insn_events (struct btrace_thread_info *btinfo,
 	    handle_pt_aux_insn (btinfo, bfun, aux_string, ip);
 	    break;
 	  }
+
+	case ptev_iret:
+	  {
+	    std::string aux_string = std::string (_("iret"));
+
+	    if (event.ip_suppressed == 0)
+	      {
+		ip = event.variant.iret.ip;
+		aux_string += std::string (": ip = ") + hex_string (ip);
+	      }
+
+	    handle_pt_aux_insn (btinfo, bfun, aux_string, ip);
+	    break;
+	  }
 #endif /* defined (LIBIPT_VERSION >= 0x201) */
 	}
     }

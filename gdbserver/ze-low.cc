@@ -2780,13 +2780,6 @@ ze_target::unpause_all (bool unfreeze)
      Note that in the presence of unavailable threads, removing threads
      races with threads becoming available and reporting events.  */
 
-  /* In both cases, we start by fetching latest events.  */
-  for (ze_device_info *device : devices)
-    {
-      gdb_assert (device != nullptr);
-      fetch_events (*device);
-    }
-
   /* We do not expect to see any low priority pending event.  Do a
      sanity check.  */
   for_each_thread ([] (thread_info *tp)

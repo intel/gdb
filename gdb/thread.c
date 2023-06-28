@@ -1286,17 +1286,22 @@ thread_target_id_str (thread_info *tp)
 
 /* Print one row in info thread table.
    TP is the thread related to the printed row.
-   ACTIVE shows whether we print active lanes now.
    CURRENT shows whether we print the current lane of the current thread.
-   DISPLAY_MASK lanes, which should be printed, have bit 1 in the mask.
    OPTS is the command options.  */
 
 static void
-print_thread_row (struct ui_out *uiout, thread_info *tp,
-		  bool is_active, bool is_current, unsigned int display_mask,
+print_thread_row (ui_out *uiout, thread_info *tp, bool is_current,
 		  info_threads_opts opts)
 {
   ui_out_emit_tuple tuple_emitter (uiout, NULL);
+
+  unsigned int display_mask = 0x0;
+  int selected_lane = -1;
+  if (tp->state == THREAD_STOPPED && tp->has_simd_lanes ())
+    {
+      display_mask = tp->active_simd_lanes_mask ();
+      selected_lane = is_current ? tp->current_simd_lane () : -1;
+    }
 
   if (!uiout->is_mi_like_p ())
     {
@@ -1305,7 +1310,10 @@ print_thread_row (struct ui_out *uiout, thread_info *tp,
       else
 	uiout->field_skip ("current");
 
-      uiout->field_string ("id-in-tg", print_thread_id (tp, display_mask));
+      uiout->field_string ("id-in-tg",
+			   print_thread_id (tp,
+					    display_mask,
+					    selected_lane));
     }
 
   if (opts.show_global_ids || uiout->is_mi_like_p ())
@@ -1507,10 +1515,6 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	uiout->table_body ();
       }
 
-    int selected_lane = ((current_thread != nullptr)
-			 && (current_thread->state == THREAD_STOPPED)
-			 ? current_thread->current_simd_lane () : -1);
-
     for (inferior *inf : all_inferiors ())
       for (thread_info *tp : inf->threads ())
 	{
@@ -1525,61 +1529,8 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	  /* Switch to the thread (and inferior / target).  */
 	  switch_to_thread (tp);
 
-	  /* We cannot access the thread's active SIMD lanes mask if it
-	     isn't stopped.  Just print a single row for such threads.  */
-	  bool current = (tp == current_thread);
-	  if (tp->state != THREAD_STOPPED)
-	    {
-	      print_thread_row (uiout, tp, false, current, 0x0, opts);
-	      continue;
-	    }
-
-	  unsigned int active_lanes_mask = tp->active_simd_lanes_mask ();
-	  if (active_lanes_mask != 0)
-	    {
-	      /* The thread has at least one active lane.  */
-
-	      /* SIMD lanes, which we are going to display are non-zero
-		 in this mask.  */
-	      unsigned int active_lanes_to_display = active_lanes_mask;
-	      unsigned int selected_lane_mask = 0x0;
-
-	      /* In MI we do not distinguish the current thread and lane.  */
-	      if (current && !uiout->is_mi_like_p ())
-		{
-		  /* If it is the current thread, then we need to print its
-		     current SIMD lane in a separate row.  The current lane
-		     might be inactive.  */
-
-		  gdb_assert (current_thread != nullptr);
-		  current_thread->set_current_simd_lane (selected_lane);
-		  selected_lane_mask = 0x1 << selected_lane;
-
-		  bool is_lane_active
-		    = ::is_simd_lane_active (active_lanes_mask,
-					     tp->current_simd_lane ());
-		  print_thread_row (uiout, tp, is_lane_active, true,
-				    selected_lane_mask, opts);
-
-		  /* Do not show the current lane of the current thread
-		     for the second time.  */
-		  active_lanes_to_display &= (~selected_lane_mask);
-		}
-
-	      /* Print other active lanes if any.  */
-	      if (active_lanes_to_display != 0)
-		print_thread_row (uiout, tp, true, false,
-				  active_lanes_to_display, opts);
-
-	      /* We do not print inactive SIMD lanes for threads with non-zero
-		 active mask.  */
-	    }
-	  else
-	    {
-	      /* All lanes are inactive.  We print one row for such a thread,
-		 and do not show any SIMD lanes.  */
-	      print_thread_row (uiout, tp, false, current, 0x0, opts);
-	    }
+	  /* Print single row.  */
+	  print_thread_row (uiout, tp, (tp == current_thread), opts);
 	}
 
     /* This end scope restores the current thread and the frame

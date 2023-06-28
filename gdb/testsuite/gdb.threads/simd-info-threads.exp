@@ -61,19 +61,11 @@ foreach device $sycl_device_list {
 
 	set cur_thread [get_current_thread "first line"]
 
-	# Current thread should be presented with 2 lines.
+	# Current thread should be presented with 1 line but in [*0 1-7]
+	# notation.
 	gdb_test "info thread $cur_thread" \
-	    "\\\*.*$cur_thread:0 .* at $srcfile:$first_line.*\[^\r\n\]\
-	    $cur_thread:\\\[1-$decimal\\\].* at $srcfile:$first_line.*" \
+	    "\\\*.*$cur_thread:\\\[\\\*0 1-$decimal\\\].* at $srcfile:$first_line.*" \
 	    "info about current thread"
-
-	set second_thread [get_another_stopped_thread $srcfile $first_line $cur_thread]
-
-	# Other thread should be presented via 1 line.
-	gdb_test "info thread $second_thread" \
-	    "$second_thread:\\\[0-$decimal\\\].* at $srcfile:$first_line.*" \
-	    "info about other thread"
-
 
 	set hit_even_branch false
 	set hit_odd_branch false
@@ -87,8 +79,7 @@ foreach device $sycl_device_list {
 		    set hit_even_branch true
 		    set cur_thread [get_current_thread "even branch"]
 		    gdb_test "$test $cur_thread" \
-			"\\\*.*$cur_thread:0 .* at $srcfile:$even_branch.*\
-			$cur_thread:\\\[2 4 6.*\\\].* at $srcfile:$even_branch"\
+			"\\\*.*$cur_thread:\\\[\\\*0 2 4 6.*\\\].* at $srcfile:$even_branch" \
 			".*$test in even branch"
 		}
 		-re ".*$srcfile:$odd_branch.*\r\n$gdb_prompt" {
@@ -96,22 +87,8 @@ foreach device $sycl_device_list {
 		    set hit_odd_branch true
 		    set cur_thread [get_current_thread "odd branch"]
 		    gdb_test "$test $cur_thread" \
-			"\\\*.*$cur_thread:1 .* at $srcfile:$odd_branch.*\
-			$cur_thread:\\\[3 5 7.*\\\].* at $srcfile:$odd_branch.*"\
+			"\\\*.*$cur_thread:\\\[\\\*1 3 5 7.*\\\].* at $srcfile:$odd_branch.*" \
 			"$test in odd branch"
-		}
-		-re ".*$srcfile:$function.*\r\n$gdb_prompt" {
-		    # Check that SIMD lane in frame is set correctly.
-		    set hit_function true
-		    set cur_thread [get_current_thread "function"]
-		    gdb_test_multiple "$test $cur_thread" "$test in function" {
-			-re "\\\*.*$cur_thread:0.*to_number=($decimal).*at $srcfile:$function.*$cur_thread:\\\[1.*\\\].*to_number=($decimal).* at $srcfile:$function.*\r\n$gdb_prompt" {
-			    set arg_of_current_lane $expect_out(1,string)
-			    set arg_of_next_lane $expect_out(2,string)
-			    gdb_assert {$arg_of_current_lane != $arg_of_next_lane}\
-				"$test in function"
-			}
-		    }
 		}
 		-re "$gdb_prompt" {
 		    break

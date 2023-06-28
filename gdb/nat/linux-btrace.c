@@ -679,6 +679,17 @@ linux_enable_pt (ptid_t ptid, const struct btrace_config_pt *conf)
       tinfo->conf.pt.ptwrite = conf->ptwrite;
     }
 
+  if (conf->event_tracing)
+    {
+      if (linux_supports_pt_feature ("event_trace"))
+	{
+	  tinfo->attr.config |= 0x1ull << linux_read_pt_config_bit ("event");
+	  tinfo->conf.pt.event_tracing = conf->event_tracing;
+	}
+      else
+	error (_("Event tracing for record btrace pt is not supported."));
+    }
+
   errno = 0;
   scoped_fd fd (syscall (SYS_perf_event_open, &tinfo->attr, pid, -1, -1, 0));
   if (fd.get () < 0)

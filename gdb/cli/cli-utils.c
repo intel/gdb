@@ -498,30 +498,40 @@ validate_flags_qcs (const char *which_command, qcs_flags *flags)
 /* See documentation in cli-utils.h.  */
 
 std::string
-make_ranges_from_sorted_vector (const std::vector<int> &numbers)
+make_ranges_from_set (const std::set<int> &numbers,
+		      int current)
 {
-  gdb_assert (std::is_sorted (numbers.begin (), numbers.end ()));
   std::string result;
 
   if (numbers.empty ())
     return result;
 
-  std::vector<int>::const_iterator start = numbers.begin ();
-  result = std::to_string(*start);
+  std::set<int>::const_iterator start = numbers.begin ();
+  if (*start == current)
+    result = "*";
+  result += std::to_string (*start);
+
+  if (*start == current)
+    {
+      start++;
+      if (start == numbers.end ())
+	return result;
+      result += " " + std::to_string (*start);
+    }
 
   int previous_value = *start;
   bool has_brackets = false;
 
-  for (auto it = start + 1; it != numbers.end(); it++)
+  for (auto it = std::next (start, 1); it != numbers.end (); it++)
     {
-      if ((previous_value + 1) < *it)
-        {
-	  /*The current range ends.  */
+      if ((previous_value + 1) < *it || current == *it)
+	{
+	  /* The range ends.  */
 	  has_brackets = true;
 
 	  if (*start != previous_value)
 	    {
-	      /* The previous value is the end of the current range.  */
+	      /* The previous value is the end of a range.  */
 	      result += "-" + std::to_string (previous_value);
 	    }
 	  else
@@ -530,17 +540,30 @@ make_ranges_from_sorted_vector (const std::vector<int> &numbers)
 		 already included in the result.  */
 	    }
 
-	  /* The current value is the beginning of a new range.  */
-          start = it;
-          result += " " + std::to_string (*start);
-        }
+	  /* The value is the beginning of a new range.  */
+	  start = it;
+	  if (*start == current)
+	    {
+	      result += " *" + std::to_string (*start);
+	      it++;
+	      if (it == numbers.end ())
+		break;
+	      start = it;
+	    }
+	  result += " " + std::to_string (*start);
+	}
+
       previous_value = *it;
     }
 
-  if (*start != previous_value)
+  if (*start < previous_value)
     {
       /* Close the last range.  */
-      result += "-" + std::to_string (previous_value);
+      if (*start != current)
+	result += "-";
+      else
+	result += " ";
+      result += std::to_string (previous_value);
       has_brackets = true;
     }
 
@@ -548,4 +571,18 @@ make_ranges_from_sorted_vector (const std::vector<int> &numbers)
     result = "[" + result + "]";
 
   return result;
+}
+
+/* See documentation in cli-utils.h.  */
+
+std::string
+make_ranges_from_mask (unsigned long mask, int current)
+{
+  std::set<int> s;
+  for (int bitnum = 0; mask != 0; mask >>= 1, bitnum++)
+    {
+      if ((mask & 0x1) != 0x0)
+	s.insert (bitnum);
+    }
+  return make_ranges_from_set (s, current);
 }

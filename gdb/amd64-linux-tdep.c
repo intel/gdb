@@ -52,6 +52,8 @@
 
 #include <sstream>
 
+/* Bit 63 is used to select between a kernel-space and user-space address.  */
+#define VA_RANGE_SELECT_BIT_MASK  0x8000000000000000UL
 #define DEFAULT_TAG_MASK 0xffffffffffffffffULL
 
 /* Mapping between the general-purpose registers in `struct user'
@@ -1876,10 +1878,21 @@ amd64_untag_mask ()
 static CORE_ADDR
 amd64_adjust_addr_wpt (struct gdbarch *gdbarch, CORE_ADDR addr)
 {
+  /* The topmost bit tells us if we have a kernel-space address or a user-space
+     address.  */
+  const bool kernel_address = (addr & VA_RANGE_SELECT_BIT_MASK) != 0;
+
+  CORE_ADDR mask = amd64_untag_mask ();
   /* Clear insignificant bits of a target address using the untag mask.
      The untag mask preserves the topmost bit, which distinguishes user space
      from kernel space address.  */
-  return (addr & amd64_untag_mask ());
+  addr &= mask;
+
+  /* Sign-extend if we have a kernel-space address.  */
+  if (kernel_address)
+    addr |= ~mask;
+
+  return addr;
 }
 
 static void

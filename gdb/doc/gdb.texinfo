@@ -3958,19 +3958,27 @@ indicating each thread's global thread ID:
 If SIMD lanes are supported, the list of currently active SIMD lanes is
 added to the Id column.  Only active SIMD lanes are shown.  If thread
 does not have any active SIMD lanes, it is marked as @var{inactive}.
-The currently selected SIMD lane of the current thread resides
-in a separate row marked with @samp{*}.  Note that the frame is shared
-between all SIMD lanes within a thread, however, values of function
-arguments might vary.
+The currently selected SIMD lane of the current thread is marked with a
+@samp{*} within the range output in square brackets.  In case there is only a
+single lane, the brackets as well as the separate @samp{*} are dropped.  Note
+that the frame is shared between all SIMD lanes within a thread, however,
+values of function arguments might vary.
 
 @smallexample
 (@value{GDBP}) info threads
-  Id        GId  Target Id             Frame
-* 1.1:0     1    process 35 thread 13  main (argc=1, argv=0x7ffffff8)
-  1.1:[1-7] 1    process 35 thread 13  main (argc=1, argv=0x7ffffff8)
-  1.2:[0-7] 3    process 35 thread 23  0x34e5 in sigpause ()
-  1.3:[0-7] 4    process 35 thread 27  0x34e5 in sigpause ()
-  2.1:[0-7] 2    process 65 thread 1   main (argc=1, argv=0x7ffffff8)
+  Id               Target Id             Frame
+* 1.1:[0-1 *2 3-7] process 35 thread 13  main (argc=1, argv=0x7ffffff8)
+  1.2:[0-7]        process 35 thread 23  0x34e5 in sigpause ()
+  1.3:[0-7]        process 35 thread 27  0x34e5 in sigpause ()
+  2.1:[0-7]        process 65 thread 1   main (argc=1, argv=0x7ffffff8)
+@end smallexample
+
+If thread 1.1 has only lane 0 as the active lane, we see:
+
+@smallexample
+(@value{GDBP}) info threads
+  Id    Target Id             Frame
+* 1.1:0 process 35 thread 13  main (argc=1, argv=0x7ffffff8)
 @end smallexample
 
 On Solaris, you can display more information about user threads with a

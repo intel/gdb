@@ -774,18 +774,20 @@ extern int show_inferior_qualified_tids (void);
 /* Return a string version of THR's thread ID.  If there are multiple
    inferiors, then this prints the inferior-qualifier form, otherwise
    it only prints the thread number.  The result is stored in a
-   circular static buffer, NUMCELLS deep.  If LANES vector is specified
-   then also append its beautified content to the end.
-   LANES should be sorted.  */
+   circular static buffer, NUMCELLS deep.  If LANES mask is specified
+   then also append its beautified content to the end.  CURRENT_LANE
+   indicates that an asterisk shall be prepended to that lane.  */
 const char *print_thread_id (struct thread_info *thr,
-			     std::vector<int> *lanes = nullptr);
+			     unsigned long lane_mask = 0,
+			     int current_lane = -1);
 
 /* Like print_thread_id, but always prints the inferior-qualified form,
    even when there is only a single inferior.  If LANES vector is specified
    then also append its beautified content to the end.
    LANES should be sorted.  */
 const char *print_full_thread_id (struct thread_info *thr,
-				  std::vector<int> *lanes = nullptr);
+				  unsigned long lane_mask = 0,
+				  int current_lane = -1);
 
 /* Boolean test for an already-known ptid.  */
 extern bool in_thread_list (process_stratum_target *targ, ptid_t ptid);

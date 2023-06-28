@@ -6882,12 +6882,12 @@ print_one_breakpoint_location (struct breakpoint *b,
       else
 	{
 	  struct thread_info *thr = find_thread_global_id (b->thread);
-	  std::vector<int> lanes;
+	  unsigned int lane_mask = 0x0;
 
 	  if (b->simd_lane_num >= 0)
-	    lanes.push_back (b->simd_lane_num);
+	    lane_mask = 1 << b->simd_lane_num;
 
-	  uiout->field_fmt ("thread", "%s", print_thread_id (thr, &lanes));
+	  uiout->field_fmt ("thread", "%s", print_thread_id (thr, lane_mask));
 	}
       uiout->text ("\n");
     }
@@ -12346,19 +12346,13 @@ ordinary_breakpoint::print_it (const bpstat *bs) const
       if (inferior_thread ()->has_simd_lanes ()
 	  && inferior_thread ()->is_active ())
 	{
-	  std::vector<int> hit_lanes;
-	  for_active_lanes (bs->hit_lane_mask, [&] (int lane)
-	    {
-	      hit_lanes.push_back (lane);
-	      return true;
-	    });
-
-	  if (hit_lanes.size () > 1)
+	  if (bs->hit_lane_mask != 0x0
+	      && (bs->hit_lane_mask & (bs->hit_lane_mask - 1)) != 0x0)
 	    uiout->text ("with SIMD lanes ");
 	  else
 	    uiout->text ("with SIMD lane ");
 
-	  uiout->text (make_ranges_from_sorted_vector (hit_lanes).c_str ());
+	  uiout->text (make_ranges_from_mask (bs->hit_lane_mask).c_str ());
 	  uiout->text (", ");
 	}
     }

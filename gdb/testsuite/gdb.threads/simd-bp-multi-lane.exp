@@ -108,7 +108,7 @@ foreach device $sycl_device_list {
 	foreach iter {1 2 3} {
 	    with_test_prefix "iteration $iter" {
 		gdb_test_multiple "continue" "continue to conditional BP" {
-		    -re "\\\[4-7\\\].*$srcfile:$line_dim0_defined.*$gdb_prompt" {
+		    -re "\\\[.*4-7\\\].*$srcfile:$line_dim0_defined.*$gdb_prompt" {
 			# The current SIMD lane has to be 4, not 6.
 			gdb_test "thread" ".*:4.*" \
 			    "Check lane after hit 2 BPs with conditions."

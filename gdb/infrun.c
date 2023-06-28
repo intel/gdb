@@ -9345,12 +9345,13 @@ normal_stop ()
 		    return std::string {};
 		} ();
 
-	      std::vector<int> lanes;
+	      unsigned int current_lane_mask = 0;
 	      if (has_simd_lanes && (lanes_mask != 0x0))
-		lanes.push_back (current_thread->current_simd_lane ());
+		current_lane_mask = 1 << current_simd_lane;
 
 	      gdb_printf (_("[Switching to thread %s (%s%s)]\n"),
-			  print_thread_id (current_thread, &lanes),
+			  print_thread_id (current_thread,
+					   current_lane_mask),
 			  target_pid_to_str (inferior_ptid).c_str (),
 			  state.c_str ());
 	      annotate_thread_changed ();

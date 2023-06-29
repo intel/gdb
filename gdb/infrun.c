@@ -3116,16 +3116,10 @@ maybe_set_commit_resumed_all_targets ()
 {
   scoped_restore_current_thread restore_thread;
 
-  for (inferior *inf : all_non_exited_inferiors ())
+  for (auto *proc_target : all_non_exited_process_targets ())
     {
-      process_stratum_target *proc_target = inf->process_target ();
-
       if (proc_target->commit_resumed_state)
-	{
-	  /* We already set this in a previous iteration, via another
-	     inferior sharing the process_stratum target.  */
-	  continue;
-	}
+	continue;
 
       /* If the target has no resumed threads, it would be useless to
 	 ask it to commit the resumed threads.  */
@@ -3149,7 +3143,7 @@ maybe_set_commit_resumed_all_targets ()
 	  continue;
 	}
 
-      switch_to_inferior_no_thread (inf);
+      switch_to_target_no_thread (proc_target);
 
       if (target_has_pending_events ())
 	{
@@ -3173,14 +3167,12 @@ maybe_call_commit_resumed_all_targets ()
 {
   scoped_restore_current_thread restore_thread;
 
-  for (inferior *inf : all_non_exited_inferiors ())
+  for (auto *proc_target : all_non_exited_process_targets ())
     {
-      process_stratum_target *proc_target = inf->process_target ();
-
       if (!proc_target->commit_resumed_state)
 	continue;
 
-      switch_to_inferior_no_thread (inf);
+      switch_to_target_no_thread (proc_target);
 
       infrun_debug_printf ("calling commit_resumed for target %s",
 			   proc_target->shortname());

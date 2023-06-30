@@ -7183,6 +7183,20 @@ remote_target::commit_resumed ()
     {
       remote_thread_info *priv = get_remote_thread_info (tp);
 
+      /* If there is a pending event in the queue for a thread we are
+	 about to resume, we cannot send a wildcard vCont that would
+	 apply to that thread.  Mark the state as NOT_RESUMED.  The
+	 pending stop event would be handled later.  */
+      if (priv->get_resume_state () == resume_state::RESUMED_PENDING_VCONT)
+	{
+	  remote_state *rs = get_remote_state ();
+	  for (const auto &stop_reply : rs->stop_reply_queue)
+	    {
+	      if (stop_reply->ptid == tp->ptid)
+		priv->set_not_resumed ();
+	    }
+	}
+
       /* If a thread of a process is not meant to be resumed, then we
 	 can't wildcard that process.  */
       if (priv->get_resume_state () == resume_state::NOT_RESUMED)

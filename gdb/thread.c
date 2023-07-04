@@ -1372,7 +1372,7 @@ print_thread_row (ui_out *uiout, thread_info *tp, bool is_current,
 		 arguments at least for the first one.  The current lane will
 		 be set back by restore_lane.  */
 	      int bit = 0;
-	      while ((display_mask & (1 << bit)) != 0x0)
+	      while ((display_mask & (1 << bit)) == 0x0)
 		bit++;
 	      tp->set_current_simd_lane (bit);
 	    }

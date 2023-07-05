@@ -95,5 +95,16 @@ foreach device $sycl_device_list {
 		}
 	    }
 	}
+
+	# Test that no errors are in frame values.
+	gdb_test_multiple "info threads -stopped" "check for frame errors" {
+	    -re -wrap "<error reading.*" {
+		fail $gdb_test_name
+	    }
+	    -re -wrap "" {
+		pass $gdb_test_name
+	    }
+	}
+
     }
 }

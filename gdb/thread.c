@@ -1482,9 +1482,14 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	    if (tp->has_simd_lanes ())
 	      {
 		unsigned int active_mask = tp->active_simd_lanes_mask ();
+		int selected_lane = -1;
+		if (tp->state == THREAD_STOPPED)
+		  selected_lane = tp->current_simd_lane ();
 		if (active_mask != 0)
 		  curr_th_col_width
-		    = print_thread_id_string (tp, active_mask).size ();
+		    = print_thread_id_string (tp,
+					      active_mask,
+					      selected_lane).size ();
 	      }
 	    th_col_width = std::max (th_col_width, curr_th_col_width);
 

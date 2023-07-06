@@ -152,6 +152,9 @@ public:
      to parsing the thread part.  */
   void skip_simd_lane_range ();
 
+  /* In SIMD lane state return end of the range.  */
+  unsigned int simd_lane_range_end ();
+
   /* True if the TID last parsed was explicitly inferior-qualified.
      IOW, whether the spec specified an inferior number
      explicitly.  */

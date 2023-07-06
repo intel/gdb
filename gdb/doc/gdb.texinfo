@@ -3972,20 +3972,30 @@ threads.
 @anchor{thread apply all}
 @kindex thread apply
 @cindex apply command to several threads
-@item thread apply [@var{thread-id-list} | all [-ascending]| all-lanes [-ascending]] [@var{flag}]@dots{} @var{command}
+@item thread apply [@var{thread-id-list} [-unavailable] | all [-ascending][-unavailable] | all-lanes [-ascending][-unavailable]] [@var{flag}]@dots{} @var{command}
 The @code{thread apply} command allows you to apply the named
-@var{command} to one or more threads.  If SIMD lanes are supported,
+@var{command} to one or more available threads.  If SIMD lanes are supported,
 the command is applied to all active SIMD lanes within a thread.
 Specify the threads that you want affected using the thread ID list
 syntax (@pxref{thread ID lists}), specify @code{all} to apply
-to all threads, or specify @code{all-lanes} to apply the command to all active
-SIMD lanes in all threads.  To apply a command to all threads in descending
-order, type @kbd{thread apply all @var{command}}.  To apply a command
-to all threads in ascending order, type @kbd{thread apply all -ascending @var{command}}.
-To apply a command to all active lanes in descending order, type
-@kbd{thread apply all-lanes @var{command}}.  To apply a command to all
+to available threads, or specify @code{all-lanes} to apply the command to
+all active SIMD lanes in available threads.  To apply a command to
+threads in descending order, type @kbd{thread apply all @var{command}}.  To
+apply a command to threads in ascending order, type
+@kbd{thread apply all -ascending @var{command}}.
+To apply a command to active lanes in descending order, type
+@kbd{thread apply all-lanes @var{command}}.  To apply a command to
 active lanes in ascending order, type
 @kbd{thread apply all-lanes -ascending @var{command}}.
+
+The commands default to applying only to available threads.  To also apply
+a command to unavailable threads, type
+@itemize @bullet
+@item @kbd{thread apply @var{thread-id-list} -unavailable @var{command}}
+@item @kbd{thread apply all -unavailable @var{command}} or
+@item @kbd{thread apply all-lanes -unavailable @var{command}}
+@end itemize
+respectively.
 
 The @var{flag} arguments control what output to produce and how to handle
 errors raised when applying @var{command} to a thread.  @var{flag}

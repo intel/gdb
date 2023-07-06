@@ -437,6 +437,7 @@ proc_with_prefix test-thread-apply {} {
 		"-c"
 		"-q"
 		"-s"
+		"-unavailable"
 	    }
 	} else {
 	    # "-ascending" only works with "all".
@@ -444,6 +445,7 @@ proc_with_prefix test-thread-apply {} {
 		"-c"
 		"-q"
 		"-s"
+		"-unavailable"
 	    }
 	}
 

@@ -49,6 +49,11 @@ info threads [-gid] [-stopped] [ID]...
   the stopped threads to be printed.  The flag can be useful to get a
   reduced list when there is a large number of unstopped threads.
 
+thread apply thread-list|all|all-lanes -unavailable
+  Command now defaults to applying only to available threads.  To
+  restore previous behaviour of applying also to unavailable
+  threads the option "-unavailable" is added.
+
 * Add convenience variable `$_simd_lane`.
 
 * MI changes

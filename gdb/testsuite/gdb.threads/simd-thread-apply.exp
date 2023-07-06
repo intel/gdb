@@ -359,6 +359,21 @@ foreach device $sycl_device_list {
 
 	check_lanes "after apply all" $inf $t_1 $t_2 $t_3 $t_4
 
+	# Check thread apply all -unavailable.
+	thread_apply "all -unavailable" "$inf.$t_4:5 $inf.$t_3:4 $inf.$t_2:3 $inf.$t_1:2" \
+	    "" "$decimal\.${decimal}(:$decimal)?"
+
+	check_lanes "after apply all -unavailable" $inf $t_1 $t_2 $t_3 $t_4
+
+	# Check that only iterating over available threads with default option.
+	gdb_test_multiple "thread apply all bt 1" "no unavailable threads" -lbl {
+	    -re ".*unavailable.*\r\n" {
+		fail $gdb_test_name
+	    }
+	    -re -wrap "" {
+	    }
+	}
+
 	thread_apply "all-lanes" \
 	    [lreverse "$all_lanes_1 $all_lanes_2 $all_lanes_3 $all_lanes_4"] \
 	    "all-lanes" "$decimal\.${decimal}(:$decimal)?"

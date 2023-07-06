@@ -378,6 +378,34 @@ proc get_stopped_threads {srcfile line {msg "get stopped threads"}} {
     return $stopped_threads
 }
 
+# Returns the ID of any unavailable thread.  The returned thread ID is in the
+# format of (<inferior number>.<thread number>) and SIMD lane information is
+# omitted.
+# Returns "none" if no thread ID is found with given parameters.
+proc get_one_unavailable_thread {{msg ""}} {
+    global gdb_prompt decimal
+
+    if [string match "" $msg] {
+	set msg "get unavailable thread"
+    }
+
+    set unavailable_thread "none"
+    gdb_test_multiple "info threads" $msg -lbl {
+	-re "\r\n. ($decimal\(\.$decimal\)?)\[^\r\n\]* .*\\(unavailable\\)" {
+	    if {$unavailable_thread eq "none"} {
+		set unavailable_thread $expect_out(1,string)
+	    }
+	    exp_continue
+	}
+	-re -wrap "" {
+	    gdb_assert {$unavailable_thread ne "none"} $gdb_test_name
+	}
+    }
+
+    return $unavailable_thread
+}
+
+
 # Returns 1 if the target device is selected via OFFLOAD_DEVICE_GROUP
 # and OFFLOAD_GPU_ID, 0 otherwise.
 # device contains ";" separated following information:

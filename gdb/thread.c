@@ -2058,6 +2058,13 @@ Call COMMAND for all threads in ascending order.\n\
 The default is descending order."),
 };
 
+static const gdb::option::flag_option_def<> unavailable_option_def = {
+  "unavailable",
+  N_("\
+Call COMMAND also for all unavailable threads.\n\
+The default is to not enumerate unavailable threads."),
+};
+
 /* The qcs command line flags for the "thread apply" commands.  Keep
    this in sync with the "frame apply" commands.  */
 
@@ -2084,23 +2091,28 @@ static const gdb::option::option_def thr_qcs_flags_option_defs[] = {
 /* Create an option_def_group for the "thread apply all" options, with
    ASCENDING and FLAGS as context.  */
 
-static inline std::array<gdb::option::option_def_group, 2>
+static inline std::array<gdb::option::option_def_group, 3>
 make_thread_apply_all_options_def_group (bool *ascending,
+					 bool *unavailable,
 					 qcs_flags *flags)
 {
   return {{
     { {ascending_option_def.def ()}, ascending},
-    { {thr_qcs_flags_option_defs}, flags },
+    { {unavailable_option_def.def ()}, unavailable},
+    { {thr_qcs_flags_option_defs}, flags},
   }};
 }
 
 /* Create an option_def_group for the "thread apply" options, with
    FLAGS as context.  */
 
-static inline gdb::option::option_def_group
-make_thread_apply_options_def_group (qcs_flags *flags)
+static inline std::array<gdb::option::option_def_group, 2>
+make_thread_apply_options_def_group (bool *unavailable, qcs_flags *flags)
 {
-  return {{thr_qcs_flags_option_defs}, flags};
+  return {{
+    { {unavailable_option_def.def ()}, unavailable},
+    { {thr_qcs_flags_option_defs}, flags},
+  }};
 }
 
 /* Apply a GDB command to a list of threads and SIMD lanes.  List syntax
@@ -2134,9 +2146,11 @@ thread_apply_all_command_1 (const char *cmd, int from_tty,
 			    simd_lane_kind lane_kind)
 {
   bool ascending = false;
+  bool unavailable = false;
   qcs_flags flags;
 
   auto group = make_thread_apply_all_options_def_group (&ascending,
+							&unavailable,
 							&flags);
   gdb::option::process_options
     (&cmd, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group);
@@ -2186,7 +2200,8 @@ thread_apply_all_command_1 (const char *cmd, int from_tty,
 	{
 	  thread_info *tp = saved.tp.get ();
 
-	  if (!switch_to_thread_if_alive (tp))
+	  if ((!unavailable && tp->is_unavailable ())
+	       || !switch_to_thread_if_alive (tp))
 	    continue;
 
 	  scoped_restore_current_simd_lane restore_simd_lane {tp};
@@ -2283,7 +2298,7 @@ thread_apply_command_completer (cmd_list_element *ignore,
   tracker.advance_custom_word_point_by (cmd - text);
   text = cmd;
 
-  const auto group = make_thread_apply_options_def_group (nullptr);
+  const auto group = make_thread_apply_options_def_group (nullptr, nullptr);
   if (gdb::option::complete_options
       (tracker, &text, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group))
     return;
@@ -2299,6 +2314,7 @@ thread_apply_all_command_completer (cmd_list_element *ignore,
 				    const char *text, const char *word)
 {
   const auto group = make_thread_apply_all_options_def_group (nullptr,
+							      nullptr,
 							      nullptr);
   if (gdb::option::complete_options
       (tracker, &text, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group))
@@ -2331,6 +2347,7 @@ thread_apply_command (const char *tidlist, int from_tty)
 {
   qcs_flags flags;
   const char *cmd = NULL;
+  bool unavailable;
 
   if (inferior_ptid == null_ptid)
     error (_("The program is not being run."));
@@ -2350,7 +2367,7 @@ thread_apply_command (const char *tidlist, int from_tty)
 
   cmd = parser.cur_tok ();
 
-  auto group = make_thread_apply_options_def_group (&flags);
+  auto group = make_thread_apply_options_def_group (&unavailable, &flags);
   gdb::option::process_options
     (&cmd, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group);
 
@@ -2393,7 +2410,8 @@ thread_apply_command (const char *tidlist, int from_tty)
       if (inf != NULL)
 	tp = find_thread_id (inf, thr_num);
 
-      if (parser.in_thread_star_range ())
+      bool in_thread_star_range = parser.in_thread_star_range ();
+      if (in_thread_star_range)
 	{
 	  if (inf == NULL)
 	    {
@@ -2410,7 +2428,7 @@ thread_apply_command (const char *tidlist, int from_tty)
 	    parser.skip_range ();
 
 	  /* Be quiet about unknown threads numbers.  */
-	  if (tp == NULL)
+	  if (tp == nullptr || (!unavailable && tp->is_unavailable ()))
 	    continue;
 	}
 
@@ -2420,6 +2438,21 @@ thread_apply_command (const char *tidlist, int from_tty)
 	    warning (_("Unknown thread %d.%d"), inf_num, thr_num);
 	  else
 	    warning (_("Unknown thread %d"), thr_num);
+	  continue;
+	}
+
+      if (!unavailable && tp->is_unavailable ())
+	{
+	  if (is_simd_from_star
+	      || (!in_thread_star_range && parser.in_simd_lane_state ()))
+	    {
+	      warning (_ ("%d.%d:%d is unknown.  Thread %d.%d is unavailable."),
+		       inf_num, thr_num, simd_lane_num, inf_num, thr_num);
+	      parser.skip_simd_lane_range ();
+	    }
+	  else if (!in_thread_star_range)
+	    warning (_ ("Thread %s is unavailable."), print_thread_id (tp));
+
 	  continue;
 	}
 
@@ -3132,7 +3165,8 @@ aborts \"thread apply\".\n\
 Options:\n\
 %OPTIONS%"
 
-  const auto thread_apply_opts = make_thread_apply_options_def_group (nullptr);
+  const auto thread_apply_opts = make_thread_apply_options_def_group (nullptr,
+								      nullptr);
 
   static std::string thread_apply_help = gdb::option::build_help (_("\
 Apply a command to a list of threads.\n\
@@ -3150,7 +3184,7 @@ THREAD_APPLY_OPTION_HELP),
   set_cmd_completer_handle_brkchars (c, thread_apply_command_completer);
 
   const auto thread_apply_all_opts
-    = make_thread_apply_all_options_def_group (nullptr, nullptr);
+    = make_thread_apply_all_options_def_group (nullptr, nullptr, nullptr);
 
   static std::string thread_apply_all_help = gdb::option::build_help (_("\
 Apply a command to all threads.\n\

@@ -191,12 +191,12 @@ foreach device $sycl_device_list {
 
 	# Test warning if we try to apply a command to a specific lane on an executing
 	# thread.
-	gdb_test "thread apply :3 thread" \
+	gdb_test "thread apply :3 -unavailable thread" \
 	    "warning: Thread $odd_branch_inf\.$running_thread is executing, cannot check SIMD lane status: Cannot apply command on SIMD lane" \
 	    "thread apply warning for an executing thread if run for a specific lane."
 
 	# Test warning if we try to apply a command on lanes.
-	gdb_test "thread apply :* thread" \
+	gdb_test "thread apply :* -unavailable thread" \
 	    "warning: Thread $odd_branch_inf\.$running_thread is executing, cannot check SIMD lane status: Cannot apply command on SIMD lane" \
 	    "thread apply warning for an executing thread if run for lanes."
     }

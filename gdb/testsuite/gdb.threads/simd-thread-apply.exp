@@ -65,8 +65,12 @@ proc thread_apply_raw {context match_ctxs ignore_re warning_re cmd_prefix \
 		       message} {
     global decimal gdb_prompt
 
+    verbose -log "context: \"$context\""
     verbose -log "match_ctxs: \"$match_ctxs\""
     verbose -log "ignore_re: \"$ignore_re\""
+    verbose -log "warning_re: \"$warning_re\""
+    verbose -log "cmd_prefix: \"$cmd_prefix\""
+    verbose -log "message: \"$message\""
 
     set fill "\[^\r\n\]+"
     set tid_re "($decimal\.$decimal:$decimal|$decimal\.$decimal)"
@@ -102,7 +106,19 @@ proc thread_apply_raw {context match_ctxs ignore_re warning_re cmd_prefix \
 	    }
 	    exp_continue
 	}
-	-re "^warning: SIMD lane ($decimal) is inactive in thread ($decimal\.$decimal)\r\n" {
+	-re "^warning: SIMD lane ($decimal) is unavailable in thread ($decimal\.$decimal)\r\n" {
+	    set lane $expect_out(1,string)
+	    set tid $expect_out(2,string)
+
+	    if {[regexp $warning_re "$tid:$lane"]} {
+		verbose -log "matched warning for: $tid:$lane"
+	    } else {
+		verbose -log "unmatched warning for: $tid:$lane"
+		incr num_unmatched
+	    }
+	    exp_continue
+	}
+	-re "^warning: SIMD lanes \\\[($decimal\-$decimal)\\\] are unavailable in thread ($decimal\.$decimal)\r\n" {
 	    set lane $expect_out(1,string)
 	    set tid $expect_out(2,string)
 
@@ -127,10 +143,11 @@ proc thread_apply_raw {context match_ctxs ignore_re warning_re cmd_prefix \
 # Convenience wrapper for the raw function.
 proc thread_apply {context match_ctxs {message ""} \
 		       {ignore_re "none"} {warning_re "none"}} {
+    set unavailable_option "-unavailable"
     thread_apply_raw $context $match_ctxs $ignore_re $warning_re \
-	""   $message
+	"$unavailable_option" $message
     thread_apply_raw $context $match_ctxs $ignore_re $warning_re \
-	"-c" $message
+	"-c $unavailable_option" $message
 }
 
 # Check that the 'thread apply' command gives an error.
@@ -203,6 +220,21 @@ proc check_lanes {where inf t_1 t_2 t_3 t_4} {
 	"thread $inf.$t_1 $where"
 }
 
+# Check only one warning is output.
+proc check_one_warning {t_1 msg} {
+    set number_of_warnings 0
+    gdb_test_multiple "thread apply $t_1:* thread" $msg -lbl {
+	-re ".*warning.*\r\n" {
+	    incr number_of_warnings
+	    if {$number_of_warnings > 1} {
+		fail $gdb_test_name
+	    }
+	}
+	-re -wrap "" {
+	}
+    }
+}
+
 foreach device $sycl_device_list {
     clean_restart "${binfile}"
     with_test_prefix [sycl_get_device_prefix $device] {
@@ -257,6 +289,17 @@ foreach device $sycl_device_list {
 	    thread_apply_error "$prefix:3-\$one" "inverted range"
 	    thread_apply_error "$prefix:128" "Incorrect SIMD lane number: 128."
 	}
+
+	# SIMD lane range exceeds range
+	thread_apply_error ":0-128" ".*SIMD lanes .*128.*are unavailable in thread.*"
+
+	# Check that only one warning is output.
+	set unav_t [get_one_unavailable_thread]
+	verbose -log "unavailable thread: $unav_t"
+	check_one_warning "$unav_t:*" "One warning for wildcard lane"
+	check_one_warning "$unav_t:1" "One warning for specific lane"
+	check_one_warning "$unav_t:3-7" "One warning for lane range"
+	check_one_warning "$unav_t:512" "One warning for outside lane mask range"
 
 	# Point goes after the colon.
 	thread_apply_invalid "3:2.1"
@@ -359,6 +402,21 @@ foreach device $sycl_device_list {
 
 	check_lanes "after apply all" $inf $t_1 $t_2 $t_3 $t_4
 
+	# Check thread apply all -unavailable.
+	thread_apply "all -unavailable" "$inf.$t_4:5 $inf.$t_3:4 $inf.$t_2:3 $inf.$t_1:2" \
+	    "" "$decimal\.${decimal}(:$decimal)?"
+
+	check_lanes "after apply all -unavailable" $inf $t_1 $t_2 $t_3 $t_4
+
+	# Check that only iterating over available threads with default option.
+	gdb_test_multiple "thread apply all bt 1" "no unavailable threads" -lbl {
+	    -re ".*unavailable.*\r\n" {
+		fail $gdb_test_name
+	    }
+	    -re -wrap "" {
+	    }
+	}
+
 	thread_apply "all-lanes" \
 	    [lreverse "$all_lanes_1 $all_lanes_2 $all_lanes_3 $all_lanes_4"] \
 	    "all-lanes" "$decimal\.${decimal}(:$decimal)?"
@@ -409,9 +467,9 @@ foreach device $sycl_device_list {
 
 	# Only even lanes are active.
 	thread_apply_error ":1" \
-	    "warning: SIMD lane 1 is inactive in thread $cur_thread"
+	    "warning: SIMD lane 1 is unavailable in thread $cur_thread"
 	thread_apply_error ":3" \
-	    "warning: SIMD lane 3 is inactive in thread $cur_thread"
+	    "warning: SIMD lane 3 is unavailable in thread $cur_thread"
 
 	set msg " at even branch "
 	thread_apply ":4" "$cur_thread:4" $msg

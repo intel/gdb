@@ -60,20 +60,22 @@ proc compare_id {name pretty} {
 
 proc check_ids {wg_dim_size} {
     global decimal
-    # Find threads from workgroups {0, 0, 0} and {1, 2, 3}.
-    # We will test only them.
     set threads_to_test {}
+    set workgroups_to_test {}
     set name "thread_workgroup"
-    gdb_test_multiple "thread apply * -q -s printf \"%d.%d {%d, %d, %d}\\n\",\$_inferior,\$_thread,${name}2,${name}1,${name}0" "find threads to test" {
-	-re "\r\n($decimal\.$decimal) \\{0, 0, 0\\}" {
-	    lappend threads_to_test $expect_out(1,string)
-	    exp_continue
-	}
-	-re "\r\n($decimal\.$decimal) \\{1, 2, 0\\}" {
-	    lappend threads_to_test $expect_out(1,string)
-	    exp_continue
-	}
-	-re "\r\n$decimal\.$decimal \\{$decimal, $decimal, $decimal\\}" {
+    gdb_test_multiple "thread apply * -q -s printf \"%d.%d %d, %d, %d\\n\",\$_inferior,\$_thread,${name}2,${name}1,${name}0" "find threads to test" {
+	-re "\r\n($decimal\.$decimal) ($decimal, $decimal, $decimal)" {
+	    set workgroup $expect_out(2,string)
+	    # Check if we found a new not-yet met workgroup.
+	    # If we do not yet have two workgroups to test, add it to the list.
+	    if {([lsearch $workgroups_to_test $workgroup] == -1)
+		 && ([llength $workgroups_to_test] < 2)} {
+		lappend workgroups_to_test $workgroup
+	    }
+	    # If workgroup belongs to our list, add the thread to the list of threads to test.
+	    if {[lsearch $workgroups_to_test $workgroup] != -1} {
+		lappend threads_to_test $expect_out(1,string)
+	    }
 	    exp_continue
 	}
 	-re -wrap "" {

@@ -131,7 +131,12 @@ Continuing with GPU-debugging disabled.
         """Run gdb.execute with to_string option set to True to capture the
         output from gdbserver.  In case of exception, highlight the error."""
         try:
-            gdb.execute(f"{command}", False, capture_output)
+            output = gdb.execute(f"{command}", False, capture_output)
+            # Do not suppress warnings, print them in YELLOW color.
+            if capture_output:
+                for line in output.splitlines():
+                    if line.startswith("warning:"):
+                        print(f"\033[93m{line}\033[0m")
             return True
         except gdb.error as gdb_exception:
             IntelgtErrorReport.exit_intelgt_session(exception=gdb_exception)

@@ -3132,7 +3132,10 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
   /* Take the best guess in case IGA_VERSION is still invalid.  */
   if (iga_version == IGA_GEN_INVALID)
-    iga_version = IGA_XE_HPC;
+    {
+      warning (_("Intel GT device id is unrecognized"));
+      iga_version = IGA_XE_HPC;
+    }
 
   data->iga_version = iga_version;
   const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);

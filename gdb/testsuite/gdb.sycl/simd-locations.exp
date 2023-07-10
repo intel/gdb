@@ -31,7 +31,7 @@ if {[build_executable "failed to compile $srcfile" \
 }
 
 proc test_bp_1 {device} {
-    global decimal
+    global decimal hex
 
     gdb_test "print wi" " = .*"
     gdb_test "print lid" " = .*"
@@ -52,15 +52,15 @@ proc test_bp_1 {device} {
     }
     gdb_test_expr_eq "acs\[lid\].c" "cs" "" "${kfail}"
 
-    # LCS may be implemented as reference.  Skip some output.
+    # LCS should be a reference here, as the lambda capture is by reference.
     if {[require_sycl_device "$device" "gpu" "Intel*"]} {
 	setup_kfail "JIRA DOQG/2081" "*-*-*"
     }
-    gdb_test "print lcs" " = .* 4"
+    gdb_test "print lcs" " = \\(uint16_t &\\) @$hex: 4"
 }
 
 proc test_bp_2 {device {lane 0} } {
-    global decimal
+    global decimal hex
 
     gdb_test "print wi" " = .*"
     gdb_test "print lid" " = .*"
@@ -88,11 +88,11 @@ proc test_bp_2 {device {lane 0} } {
     }
     gdb_test_expr_eq "aout\[gid\]" "out" "" "${kfail}"
 
-    # LCS may be implemented as reference.  Skip some output.
+    # LCS should be a reference here, as the lambda capture is by reference.
     if {[require_sycl_device "$device" "gpu" "Intel*"]} {
 	setup_kfail "JIRA DOQG/2081" "*-*-*"
     }
-    gdb_test "print lcs" " = .* 4"
+    gdb_test "print lcs" " = \\(uint16_t &\\) @$hex: 4"
     gdb_test "print cs" " = 4"
 }
 

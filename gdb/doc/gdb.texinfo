@@ -31413,19 +31413,19 @@ executable code.
 @end smallexample
 
 When @code{on}, async records @code{=thread-selected}, @code{*stopped}
-and @code{*running} are suppressed.  When @code{off} all async records
+and @code{*running} are suppressed.  When @code{off}, all async records
 are shown as usual.  The default value is @code{off}.  This setting might
 be useful for IDEs to avoid refreshing thread views on events that are
 not shown to the end user.
 
 @subsubheading @value{GDBN} Command
 
-The corresponding @value{GDBN} CLI command,
+The corresponding @value{GDBN} CLI command
 is @samp{set suppress-mi-notifications}.  To suppress CLI notifications
 use @samp{set suppress-cli-notifications}.
 
 @subsubheading Example
-@smallexample
+@example
 -gdb-set suppress-mi-notifications on
 ^done
 (gdb)
@@ -31455,7 +31455,7 @@ inferior 1
 *running,thread-id="all"
 (gdb)
 *stopped,reason="end-stepping-range",frame=@{addr="0x000055555555514f",func="main",args=[],file="/home/local/main.c",fullname="/home/local/main.c",line="25",arch="i386:x86-64"@},thread-id="1",stopped-threads="all",core="16"
-@end smallexample
+@end example
 
 @node GDB/MI Breakpoint Information
 @subsection @sc{gdb/mi} Breakpoint Information

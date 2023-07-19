@@ -1393,6 +1393,13 @@ decode_M_packet (const char *from, CORE_ADDR *mem_addr_ptr,
   hex2bin (from, *to_p, *len_ptr);
 }
 
+void
+decode_x_packet (const char *from, CORE_ADDR *mem_addr_ptr,
+		 unsigned int *len_ptr, unsigned int *addr_space)
+{
+  decode_m_packet_params (from, mem_addr_ptr, len_ptr, '\0', addr_space);
+}
+
 int
 decode_X_packet (const char *from, int packet_len, CORE_ADDR *mem_addr_ptr,
 		 unsigned int *len_ptr, unsigned char **to_p,
@@ -1548,12 +1555,13 @@ look_up_one_symbol (const char *name, CORE_ADDR *addrp, int may_ask_gdb)
      while it figures out the address of the symbol.  */
   while (1)
     {
+      CORE_ADDR mem_addr;
+      unsigned char *mem_buf;
+      unsigned int mem_len, addr_space;
+      int new_len = -1;
+
       if (cs.own_buf[0] == 'm')
 	{
-	  CORE_ADDR mem_addr;
-	  unsigned char *mem_buf;
-	  unsigned int mem_len, addr_space;
-
 	  decode_m_packet (&cs.own_buf[1], &mem_addr, &mem_len, &addr_space);
 	  mem_buf = (unsigned char *) xmalloc (mem_len);
 	  if (read_inferior_memory (mem_addr, mem_buf, mem_len,
@@ -1565,9 +1573,43 @@ look_up_one_symbol (const char *name, CORE_ADDR *addrp, int may_ask_gdb)
 	  if (putpkt (cs.own_buf) < 0)
 	    return -1;
 	}
+      else if (cs.own_buf[0] == 'x')
+	{
+	  decode_x_packet (&cs.own_buf[1], &mem_addr, &mem_len, &addr_space);
+	  mem_buf = (unsigned char *) xmalloc (mem_len);
+	  if (read_inferior_memory (mem_addr, mem_buf, mem_len,
+				    addr_space) == 0)
+	    {
+	      gdb_byte *buffer = (gdb_byte *) cs.own_buf;
+	      *buffer++ = 'b';
+
+	      int out_len_units;
+	      new_len = remote_escape_output (mem_buf, mem_len, 1,
+					      buffer,
+					      &out_len_units,
+					      PBUFSIZ);
+	      new_len++; /* For the 'b' marker.  */
+
+	      if (out_len_units != mem_len)
+		{
+		  write_enn (cs.own_buf);
+		  new_len = -1;
+		}
+	      else
+		suppress_next_putpkt_log ();
+	    }
+	  else
+	    write_enn (cs.own_buf);
+
+	  free (mem_buf);
+	  int res = ((new_len == -1)
+		     ? putpkt (cs.own_buf)
+		     : putpkt_binary (cs.own_buf, new_len));
+	  if (res < 0)
+	    return -1;
+	}
       else if (cs.own_buf[0] == 'v')
 	{
-	  int new_len = -1;
 	  handle_v_requests (cs.own_buf, len, &new_len);
 	  if (new_len != -1)
 	    putpkt_binary (cs.own_buf, new_len);
@@ -1642,11 +1684,13 @@ relocate_instruction (CORE_ADDR *to, CORE_ADDR oldloc)
      wait for the qRelocInsn "response".  That requires re-entering
      the main loop.  For now, this is an adequate approximation; allow
      GDB to access memory.  */
-  while (cs.own_buf[0] == 'm' || cs.own_buf[0] == 'M' || cs.own_buf[0] == 'X')
+  while (cs.own_buf[0] == 'm' || cs.own_buf[0] == 'M'
+	 || cs.own_buf[0] == 'X' || cs.own_buf[0] == 'x')
     {
       CORE_ADDR mem_addr;
       unsigned char *mem_buf = NULL;
       unsigned int mem_len, addr_space;
+      int new_len = -1;
 
       if (cs.own_buf[0] == 'm')
 	{
@@ -1655,6 +1699,34 @@ relocate_instruction (CORE_ADDR *to, CORE_ADDR oldloc)
 	  if (read_inferior_memory (mem_addr, mem_buf, mem_len,
 				    addr_space) == 0)
 	    bin2hex (mem_buf, cs.own_buf, mem_len);
+	  else
+	    write_enn (cs.own_buf);
+	}
+      else if (cs.own_buf[0] == 'x')
+	{
+	  decode_x_packet (&cs.own_buf[1], &mem_addr, &mem_len, &addr_space);
+	  mem_buf = (unsigned char *) xmalloc (mem_len);
+	  if (read_inferior_memory (mem_addr, mem_buf, mem_len,
+				    addr_space) == 0)
+	    {
+	      gdb_byte *buffer = (gdb_byte *) cs.own_buf;
+	      *buffer++ = 'b';
+
+	      int out_len_units;
+	      new_len = remote_escape_output (mem_buf, mem_len, 1,
+					      buffer,
+					      &out_len_units,
+					      PBUFSIZ);
+	      new_len++; /* For the 'b' marker.  */
+
+	      if (out_len_units != mem_len)
+		{
+		  write_enn (cs.own_buf);
+		  new_len = -1;
+		}
+	      else
+		suppress_next_putpkt_log ();
+	    }
 	  else
 	    write_enn (cs.own_buf);
 	}
@@ -1679,7 +1751,11 @@ relocate_instruction (CORE_ADDR *to, CORE_ADDR oldloc)
 	    write_enn (cs.own_buf);
 	}
       free (mem_buf);
-      if (putpkt (cs.own_buf) < 0)
+
+      int res = ((new_len == -1)
+		 ? putpkt (cs.own_buf)
+		 : putpkt_binary (cs.own_buf, new_len));
+      if (res < 0)
 	return -1;
       len = getpkt (cs.own_buf);
       if (len < 0)

@@ -156,8 +156,6 @@ std::unordered_map<std::string, implicit_args_value_pair> implicit_args_cache;
 static implicit_args_value_pair &
 intelgt_implicit_args_find_value_pair (gdbarch *gdbarch, thread_info *tp);
 
-static bool is_a_promotable_small_struct (type *arg_type, int max_size);
-
 /* Read and write vectors on the stack while considering the SIMD
    vectorization.
 
@@ -599,6 +597,8 @@ intelgt_skip_prologue (gdbarch *gdbarch, CORE_ADDR start_pc)
   /* Could not find the end of prologue using SAL.  */
   return start_pc;
 }
+
+static bool is_a_promotable_small_struct (type *arg_type, int max_size);
 
 /* Implementation of gdbarch's return_value method.  */
 

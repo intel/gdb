@@ -157,8 +157,6 @@ static implicit_args_value_pair &
 intelgt_implicit_args_find_value_pair (gdbarch *gdbarch, thread_info *tp);
 
 static bool is_a_promotable_small_struct (type *arg_type, int max_size);
-static unsigned int get_field_total_memory (type *struct_type,
-					    int field_index);
 
 /* Read and write vectors on the stack while considering the SIMD
    vectorization.

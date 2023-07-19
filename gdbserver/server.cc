@@ -2726,6 +2726,9 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
       strcat (own_buf, ";vAck:library+");
       strcat (own_buf, ";vAck:in-memory-library+");
 
+      /* Binary memory read support.  */
+      strcat (own_buf, ";x+");
+
       /* Z points support.  */
       strcat (own_buf, z_type_supported ('0') ? ";Z0+" : ";Z0-");
       strcat (own_buf, z_type_supported ('1') ? ";Z1+" : ";Z1-");
@@ -4650,6 +4653,24 @@ process_serial_event (void)
 	write_ok (cs.own_buf);
       else
 	write_enn (cs.own_buf);
+      break;
+    case 'x':
+      {
+	require_running_or_break (cs.own_buf);
+	decode_m_packet (&cs.own_buf[1], &mem_addr, &len, &addr_space);
+	int res = gdb_read_memory (mem_addr, mem_buf, len, addr_space);
+	if (res < 0)
+	  write_enn (cs.own_buf);
+	else
+	  {
+	    int out_len_units;
+	    new_packet_len
+	      = remote_escape_output (mem_buf, res, 1,
+				      (gdb_byte *) cs.own_buf,
+				      &out_len_units, PBUFSIZ);
+	    suppress_next_putpkt_log ();
+	  }
+      }
       break;
     case 'X':
       require_running_or_break (cs.own_buf);

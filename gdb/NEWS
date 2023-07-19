@@ -144,6 +144,13 @@ e
   the transfer overhead between GDB and the remote target when the
   complete register file of a thread is large.
 
+x
+
+  Given ADDR and LENGTH, fetch LENGTH units from the memory at address
+  ADDR and send the fetched data in binary format.  This packet is
+  equivalent to 'm', except that the data in the response are in
+  binary format.
+
 *** Changes in GDB 14
 
 * GDB now supports the AArch64 Scalable Matrix Extension 2 (SME2), which

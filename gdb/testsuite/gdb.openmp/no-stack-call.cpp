@@ -37,7 +37,7 @@ main (int argc, char *argv[])
   for (int i = 0; i < DIM0; i++)
     {
       #pragma omp target teams distribute parallel for map(to: in_arr) map(from: out_arr)
-      for (int j = 0; j < DIM1; j++)
+      for (int j = 0; j < DIM1; j++) /* second-for-header */
 	{
 	  const int idx = i * DIM1 + j;
 	  int element = in_arr[idx];

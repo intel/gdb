@@ -5319,16 +5319,19 @@ stop_all_threads (const char *reason, inferior *inf)
 	      if (target_is_non_stop_p ())
 		continue;
 
-	      if (!target->threads_executing
-		  || (interrupt_requested.find (target)
-		      != interrupt_requested.end ()))
+	      if (!target->threads_executing)
+		continue;
+
+	      if (interrupt_requested.find (target)
+		  == interrupt_requested.end ())
 		{
-		  /* No need to send an interrupt.  */
-		  continue;
+		  target_stop (minus_one_ptid);
+		  interrupt_requested.insert (target);
 		}
 
-	      target_stop (minus_one_ptid);
-	      interrupt_requested.insert (target);
+	      /* We either just sent an interrupt or had already sent
+		 one but have not received a stop event, yet.  Keep
+		 waiting.  */
 	      ++waits_needed;
 	    }
 

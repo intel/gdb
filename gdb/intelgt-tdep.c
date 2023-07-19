@@ -156,9 +156,6 @@ std::unordered_map<std::string, implicit_args_value_pair> implicit_args_cache;
 static implicit_args_value_pair &
 intelgt_implicit_args_find_value_pair (gdbarch *gdbarch, thread_info *tp);
 
-/* The 'gdbarch_data' stuff specific for this architecture.  */
-
-static int intelgt_pseudo_register_num (gdbarch*, const char*);
 static bool is_a_promotable_small_struct (type *arg_type, int max_size);
 static unsigned int get_field_total_memory (type *struct_type,
 					    int field_index);
@@ -380,6 +377,8 @@ intelgt_get_current_machine_code ()
   bfd *abfd = obj->obfd.get ();
   return get_elf_backend_data (abfd)->elf_machine_code;
 }
+
+/* The 'gdbarch_data' stuff specific for this architecture.  */
 
 struct intelgt_gdbarch_data
 {

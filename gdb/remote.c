@@ -129,6 +129,7 @@ enum packet_result
 enum {
   PACKET_vCont = 0,
   PACKET_X,
+  PACKET_x,
   PACKET_R,
   PACKET_qSymbol,
   PACKET_P,
@@ -5761,6 +5762,7 @@ static const struct protocol_feature remote_protocol_features[] = {
     PACKET_vAck_library },
   { "vAck:in-memory-library", PACKET_DISABLE, remote_supported_packet,
     PACKET_vAck_in_memory_library },
+  { "x", PACKET_DISABLE, remote_supported_packet, PACKET_x },
   { "Z0", PACKET_SUPPORT_UNKNOWN, remote_supported_packet, PACKET_Z0 },
   { "Z1", PACKET_SUPPORT_UNKNOWN, remote_supported_packet, PACKET_Z1 },
   { "Z2", PACKET_SUPPORT_UNKNOWN, remote_supported_packet, PACKET_Z2 },
@@ -9745,10 +9747,27 @@ remote_target::remote_read_bytes_1 (CORE_ADDR memaddr, gdb_byte *myaddr,
   todo_units = std::min (len_units,
 			 (ULONGEST) (buf_size_bytes / unit_size) / 2);
 
-  /* Construct "m"<memaddr>","<len>".  */
+  /* Determine which packet format to use.  */
+  char packet_format = 'm';
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_ERROR_SWITCH
+  switch (m_features.packet_support (PACKET_x))
+    {
+    case PACKET_ENABLE:
+      packet_format = 'x';
+      break;
+    case PACKET_DISABLE:
+      packet_format = 'm';
+      break;
+    case PACKET_SUPPORT_UNKNOWN:
+      internal_error (_("remote_read_bytes_1: bad internal state"));
+    }
+DIAGNOSTIC_POP
+
+  /* Construct "m/x"<memaddr>","<len>".  */
   memaddr = remote_address_masked (memaddr);
   p = rs->buf.data ();
-  *p++ = 'm';
+  *p++ = packet_format;
   p += hexnumstr (p, (ULONGEST) memaddr);
 
   if (addr_space != 0)
@@ -9772,15 +9791,27 @@ remote_target::remote_read_bytes_1 (CORE_ADDR memaddr, gdb_byte *myaddr,
   p += hexnumstr (p, (ULONGEST) todo_units);
   *p = '\0';
   putpkt (rs->buf);
-  getpkt (&rs->buf, 0);
+  int packet_len = getpkt_sane (&rs->buf, 0);
+  if (packet_len < 0)
+    return TARGET_XFER_E_IO;
+
   if (rs->buf[0] == 'E'
       && isxdigit (rs->buf[1]) && isxdigit (rs->buf[2])
       && rs->buf[3] == '\0')
     return TARGET_XFER_E_IO;
-  /* Reply describes memory byte by byte, each byte encoded as two hex
-     characters.  */
+
   p = rs->buf.data ();
-  decoded_bytes = hex2bin (p, myaddr, todo_units * unit_size);
+  if (packet_format == 'x')
+    decoded_bytes = remote_unescape_input ((const gdb_byte *) p,
+					   packet_len, myaddr,
+					   todo_units * unit_size);
+  else
+    {
+      /* Reply describes memory byte by byte, each byte encoded as two hex
+	 characters.  */
+      decoded_bytes = hex2bin (p, myaddr, todo_units * unit_size);
+    }
+
   /* Return what we have.  Let higher layers handle partial reads.  */
   *xfered_len_units = (ULONGEST) (decoded_bytes / unit_size);
   return (*xfered_len_units != 0) ? TARGET_XFER_OK : TARGET_XFER_EOF;
@@ -15731,6 +15762,9 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
 
   add_packet_config_cmd (&remote_protocol_packets[PACKET_X],
 			 "X", "binary-download", 1);
+
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_x],
+			 "x", "binary-read", 0);
 
   add_packet_config_cmd (&remote_protocol_packets[PACKET_vCont],
 			 "vCont", "verbose-resume", 0);

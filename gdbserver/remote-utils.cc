@@ -1383,6 +1383,13 @@ decode_M_packet (const char *from, CORE_ADDR *mem_addr_ptr,
   hex2bin (from, *to_p, *len_ptr);
 }
 
+void
+decode_x_packet (const char *from, CORE_ADDR *mem_addr_ptr,
+		 unsigned int *len_ptr, unsigned int *addr_space)
+{
+  decode_m_packet_params (from, mem_addr_ptr, len_ptr, '\0', addr_space);
+}
+
 int
 decode_X_packet (const char *from, int packet_len, CORE_ADDR *mem_addr_ptr,
 		 unsigned int *len_ptr, unsigned char **to_p,

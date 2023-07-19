@@ -42461,6 +42461,32 @@ and placing breakpoints.
 responses by supplying an appropriate @samp{qSupported} feature
 (@pxref{qSupported}) for each type that it supports.
 
+@item x @var{addr}@r{[}@@@var{addr_space}@r{]},@var{length}
+@cindex @samp{x} packet
+Read @var{length} addressable memory units starting at address @var{addr}
+(@pxref{addressable memory unit}) in address space @var{addr_space}.  Note
+that @var{addr} may not be aligned to any particular boundary.  If
+@var{addr_space} is omitted, the default address space (zero) is used.
+
+The stub need not use any particular size or alignment when gathering
+data from memory for the response; even if @var{addr} is word-aligned
+and @var{length} is a multiple of the word size, the stub is free to
+use byte accesses, or not.  For this reason, this packet may not be
+suitable for accessing memory-mapped I/O devices.
+@cindex alignment of remote memory accesses
+@cindex size of remote memory accesses
+@cindex memory, alignment and size of remote accesses
+
+Reply:
+@table @samp
+@item @var{XX@dots{}}
+Memory contents as binary data (@pxref{Binary Data}).
+The reply may contain fewer addressable memory units than requested if the
+server was able to read only part of the region of memory.
+@item E @var{NN}
+for an error
+@end table
+
 @item X @var{addr}@r{[}@@@var{addr_space}@r{]},@var{length}:@var{XX@dots{}}
 @anchor{X packet}
 @cindex @samp{X} packet

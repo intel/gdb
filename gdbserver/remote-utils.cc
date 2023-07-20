@@ -1228,7 +1228,7 @@ prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
 		strcat (buf, ";");
 		buf += strlen (buf);
 
-		core = target_core_of_thread (ptid);
+		core = the_target->core_of_thread (ptid);
 
 		if (core != -1)
 		  {

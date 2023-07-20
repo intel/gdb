@@ -71,19 +71,19 @@ foreach device $sycl_device_list {
 	}
 
 	with_test_prefix "via sycl pointers" {
-	    setup_kfail "GSD/4611" "*-*-*"
+	    setup_kfail "JIRA GSD/4611" "*-*-*"
 	    gdb_test "print *d_local_ptr" "= 42"
 
-	    setup_kfail "GSD/4611" "*-*-*"
+	    setup_kfail "JIRA GSD/4611" "*-*-*"
 	    gdb_test_no_output "set *d_local_ptr = 44"
 
-	    setup_kfail "GSD/4611" "*-*-*"
+	    setup_kfail "JIRA GSD/4611" "*-*-*"
 	    gdb_test "print *r_local_ptr" "= 44"
 
-	    setup_kfail "GSD/4611" "*-*-*"
+	    setup_kfail "JIRA GSD/4611" "*-*-*"
 	    gdb_test_no_output "set *r_local_ptr = 46"
 
-	    setup_kfail "GSD/4611" "*-*-*"
+	    setup_kfail "JIRA GSD/4611" "*-*-*"
 	    gdb_test "print local_mem\[0\]" "= 46" "test write"
 	}
 
@@ -99,7 +99,7 @@ foreach device $sycl_device_list {
 	}
 
 	with_test_prefix "test SLM int via pointer in SLM" {
-	    setup_kfail "GSD/4611" "*-*-*"
+	    setup_kfail "JIRA GSD/4611" "*-*-*"
 	    gdb_test "print *local_mem_ptr\[0\]" "= 46" "read"
 	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test_no_output "set *local_mem_ptr\[0\] = 434"

@@ -1827,7 +1827,7 @@ handle_qxfer_threads_worker (thread_info *thread, std::string *buffer)
   const char *name = the_target->thread_name (ptid);
   int handle_len;
   gdb_byte *handle;
-  bool handle_status = target_thread_handle (ptid, &handle, &handle_len);
+  bool handle_status = the_target->thread_handle (ptid, &handle, &handle_len);
 
   /* If this is a fork or vfork child (has a fork parent), GDB does not yet
      know about this process, and must not know about it until it gets the

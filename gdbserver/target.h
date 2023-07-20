@@ -692,9 +692,6 @@ target_read_btrace_conf (struct btrace_target_info *tinfo,
 ptid_t mywait (ptid_t ptid, struct target_waitstatus *ourstatus,
 	       target_wait_flags options, int connected_wait);
 
-#define target_core_of_thread(ptid)		\
-  the_target->core_of_thread (ptid)
-
 #define target_thread_handle(ptid, handle, handle_len) \
   the_target->thread_handle (ptid, handle, handle_len)
 

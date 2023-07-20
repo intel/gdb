@@ -1798,7 +1798,7 @@ handle_qxfer_threads_worker (thread_info *thread, struct buffer *buffer)
 {
   ptid_t ptid = ptid_of (thread);
   char ptid_s[100];
-  int core = target_core_of_thread (ptid);
+  int core = the_target->core_of_thread (ptid);
   char core_s[21];
   const char *name = the_target->thread_name (ptid);
   int handle_len;

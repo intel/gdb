@@ -39,19 +39,31 @@ proc run_test {} {
     gdb_breakpoint "$kernel_function" {allow-pending} \
 	"set a breakpoint at a function name of a stripped kernel"
     set bpnum [get_integer_valueof "\$bpnum" 0 "get symbol bpnum"]
+    if {![is_level_zero_zebinary]} {
+	setup_kfail "JIRA IGDB/4060" "*-*-*"
+    }
     gdb_continue_to_breakpoint "Continue to function breakpoint" \
 	"$kernel_function.*"
+    if {![is_level_zero_zebinary]} {
+	setup_kfail "JIRA IGDB/4060" "*-*-*"
+    }
     gdb_test "disassemble" [multi_line \
 	"Dump of assembler code for function .*get_dim.*:" \
 	"(\[\\s=>\]+$hex .*)+" \
 	"End of assembler dump." \
 	] "run disassemble without debug info"
+    if {![is_level_zero_zebinary]} {
+	setup_kfail "JIRA IGDB/4060" "*-*-*"
+    }
     gdb_test "info sharedlibrary" [multi_line \
 	"($hex\\s+$hex\\s+Yes \\(\\*\\)\\s+<in-memory@$hex-$hex>)+" \
 	"\\(\\*\\): Shared library is missing debugging information." \
 	] "no symbols are loaded in the shared lib"
     gdb_test_no_output "delete $bpnum" "delete bp from the kernel"
-    continue_sycl_program_to_termination
+    # Temporarily restricting this due to IGDB-4060.
+    if {[is_level_zero_zebinary]} {
+	continue_sycl_program_to_termination
+    }
 }
 
 foreach device $sycl_device_list {

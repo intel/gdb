@@ -240,6 +240,23 @@ proc is_level_zero_debug_api {} {
     }
 }
 
+# Return non-zero, if the ZE binary is being used.
+
+proc is_level_zero_zebinary {} {
+    global env
+
+    if {![info exists env(IGC_EnableZEBinary)]} {
+	return 1
+    }
+
+    set env_var $env(IGC_EnableZEBinary)
+    if {[string is integer $env_var]} {
+	return [expr $env_var ne "0"]
+    } else {
+	return 1
+    }
+}
+
 # Return non-zero, if the OS distro is SLES.
 
 gdb_caching_proc is_sles_distro {

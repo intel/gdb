@@ -49,24 +49,24 @@ foreach device $sycl_device_list {
 
 	# Test reading and writing
 	with_test_prefix "via variable" {
-	    setup_kfail "IGDB/3942" "*-*-*"
+	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test "print local_mem\[0\]" "= 1"
-	    setup_kfail "IGDB/3942" "*-*-*"
+	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test_no_output "set local_mem\[0\] = 42"
-	    setup_kfail "IGDB/3942" "*-*-*"
+	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test "print local_mem\[0\]" "= 42" "test write"
 	}
 
 	with_test_prefix "via generic pointer" {
-	    setup_kfail "IGDB/3942" "*-*-*"
+	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test "print *generic_ptr" "= 2" "read"
 	    if {[require_sycl_device "$device" "gpu" "Intel*Arc*Graphics"]} {
-		setup_kfail "IGDB/3942" "*-*-*"
+		setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    }
 	    gdb_test_no_output "set *generic_ptr = 43"
-	    setup_kfail "IGDB/3942" "*-*-*"
+	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test "print *generic_ptr" "= 43" "test write"
-	    setup_kfail "IGDB/3942" "*-*-*"
+	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test "print local_mem\[1\]" "= 43" "sanity test write"
 	}
 
@@ -88,57 +88,57 @@ foreach device $sycl_device_list {
 	}
 
 	with_test_prefix "test global int via pointer in SLM" {
-	    setup_kfail "IGDB/3942" "*-*-*"
+	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test "print *local_mem_ptr\[1\]" "= 421" "read"
-	    setup_kfail "IGDB/3942" "*-*-*"
+	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test_no_output "set *local_mem_ptr\[1\] = 434"
-	    setup_kfail "IGDB/3942" "*-*-*"
+	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test "print *local_mem_ptr\[1\]" "= 434" "test write"
-	    setup_kfail "IGDB/3942" "*-*-*"
+	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test "print generic_var" "= 434" "sanity test write"
 	}
 
 	with_test_prefix "test SLM int via pointer in SLM" {
 	    setup_kfail "GSD/4611" "*-*-*"
 	    gdb_test "print *local_mem_ptr\[0\]" "= 46" "read"
-	    setup_kfail "IGDB/3942" "*-*-*"
+	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test_no_output "set *local_mem_ptr\[0\] = 434"
-	    setup_kfail "IGDB/3942" "*-*-*"
+	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test "print *local_mem_ptr\[0\]" "= 434" "test write"
-	    setup_kfail "IGDB/3942" "*-*-*"
+	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test "print local_mem\[0\]" "= 434" "sanity test write"
 	}
 
 	# These tests need to run on the intelgt target to be able to use @slm.
 	if {[is_level_zero_debug_api] && [require_sycl_device "$device" "gpu" "Intel*"]} {
 	    with_test_prefix "via address" {
-		setup_kfail "IGDB/3942" "*-*-*"
+		setup_kfail "JIRA IGDB/3942" "*-*-*"
 		set addr [get_hexadecimal_valueof "&local_mem\[0\]" 0]
-		setup_kfail "IGDB/3942" "*-*-*"
+		setup_kfail "JIRA IGDB/3942" "*-*-*"
 		gdb_test "print *(@slm int*) $addr" "= 434"
-		setup_kfail "IGDB/3942" "*-*-*"
+		setup_kfail "JIRA IGDB/3942" "*-*-*"
 		gdb_test_no_output "set *(@slm int*) $addr = 433"
-		setup_kfail "IGDB/3942" "*-*-*"
+		setup_kfail "JIRA IGDB/3942" "*-*-*"
 		gdb_test "print *(@slm int*) $addr" "= 433" "test write"
-		setup_kfail "IGDB/3942" "*-*-*"
+		setup_kfail "JIRA IGDB/3942" "*-*-*"
 		gdb_test "print local_mem\[0\]" "= 433" "sanity test write"
 	    }
 	}
 
-	setup_kfail "IGDB/3942" "*-*-*"
+	setup_kfail "JIRA IGDB/3942" "*-*-*"
 	# Test find command.
 	set start_addr [get_hexadecimal_valueof "&(local_mem\[0\])" "start address"]
-	setup_kfail "IGDB/3942" "*-*-*"
+	setup_kfail "JIRA IGDB/3942" "*-*-*"
 	set addr [get_hexadecimal_valueof "&(local_mem\[2\])" "slm address"]
 
 	# This need to run on the intelgt target to be able to use @slm.
 	if {[is_level_zero_debug_api] && [require_sycl_device "$device" "gpu" "Intel*"]} {
-	    setup_kfail "IGDB/3942" "*-*-*"
+	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test "find $start_addr, +sizeof(int\[3\]), (@slm int) 3" \
 		"${addr}.*${one_pattern_found}" \
 		"find type pattern"
 	}
-	setup_kfail "IGDB/3942" "*-*-*"
+	setup_kfail "JIRA IGDB/3942" "*-*-*"
 	gdb_test "find generic_ptr, +sizeof(int\[3\]), 3" \
 	    "${addr}.*${one_pattern_found}" \
 	    "find address pattern with generic pointer"

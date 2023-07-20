@@ -704,9 +704,6 @@ ptid_t mywait (ptid_t ptid, struct target_waitstatus *ourstatus,
 #define target_core_of_thread(ptid)		\
   the_target->core_of_thread (ptid)
 
-#define target_thread_name(ptid)                                \
-  the_target->thread_name (ptid)
-
 #define target_thread_handle(ptid, handle, handle_len) \
   the_target->thread_handle (ptid, handle, handle_len)
 

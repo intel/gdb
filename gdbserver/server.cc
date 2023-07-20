@@ -2120,7 +2120,7 @@ handle_qxfer_threads_worker (thread_info *thread, std::string *buffer)
   std::string id_str = target_thread_id_str (thread);
   int handle_len;
   gdb_byte *handle;
-  bool handle_status = target_thread_handle (ptid, &handle, &handle_len);
+  bool handle_status = the_target->thread_handle (ptid, &handle, &handle_len);
 
   /* If this is a (v)fork/clone child (has a (v)fork/clone parent),
      GDB does not yet know about this thread, and must not know about

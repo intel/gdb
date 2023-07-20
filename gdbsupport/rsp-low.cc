@@ -163,7 +163,7 @@ bin2hex (const gdb_byte *bin, int count)
 static int
 needs_escaping (gdb_byte b)
 {
-  return b == '$' || b == '#' || b == '}' || b == '*';
+  return b == '$' || b == '#' || b == '}' || b == '*' || b == 'E';
 }
 
 /* See rsp-low.h.  */

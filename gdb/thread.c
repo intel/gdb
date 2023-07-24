@@ -920,6 +920,11 @@ thread_alive (thread_info *tp)
 bool
 switch_to_thread_if_alive (thread_info *thr)
 {
+  gdb_assert (thr != nullptr);
+
+  if (is_current_thread (thr))
+    return true;
+
   scoped_restore_current_thread restore_thread;
 
   /* Switch inferior first, so that we're looking at the right target

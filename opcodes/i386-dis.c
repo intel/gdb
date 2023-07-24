@@ -1148,6 +1148,8 @@ enum
   PREFIX_VEX_0F3872,
   PREFIX_VEX_0F38B0_W_0,
   PREFIX_VEX_0F38B1_W_0,
+  PREFIX_VEX_0F38D2_W_0,
+  PREFIX_VEX_0F38D3_W_0,
   PREFIX_VEX_0F38F5_L_0,
   PREFIX_VEX_0F38F6_L_0,
   PREFIX_VEX_0F38F7_L_0,
@@ -1573,6 +1575,8 @@ enum
   VEX_W_0F38B4,
   VEX_W_0F38B5,
   VEX_W_0F38CF,
+  VEX_W_0F38D2,
+  VEX_W_0F38D3,
   VEX_W_0F3A00_L_1,
   VEX_W_0F3A01_L_1,
   VEX_W_0F3A02,
@@ -4140,6 +4144,20 @@ static const struct dis386 prefix_table[][4] = {
     { "vbcstnesh2ps", { XM, Mw }, 0 },
   },
  
+  /* PREFIX_VEX_0F38D2_W_0 */
+  {
+    { "vpdpwuud",	{ XM, Vex, EXx }, 0 },
+    { "vpdpwsud",	{ XM, Vex, EXx }, 0 },
+    { "vpdpwusd",	{ XM, Vex, EXx }, 0 },
+  },
+
+  /* PREFIX_VEX_0F38D3_W_0 */
+  {
+    { "vpdpwuuds",	{ XM, Vex, EXx }, 0 },
+    { "vpdpwsuds",	{ XM, Vex, EXx }, 0 },
+    { "vpdpwusds",	{ XM, Vex, EXx }, 0 },
+  },
+
   /* PREFIX_VEX_0F38F5_L_0 */
   {
     { "bzhiS",		{ Gdq, Edq, VexGdq }, 0 },
@@ -6576,8 +6594,8 @@ static const struct dis386 vex_table[][256] = {
     /* d0 */
     { Bad_Opcode },
     { Bad_Opcode },
-    { Bad_Opcode },
-    { Bad_Opcode },
+    { VEX_W_TABLE (VEX_W_0F38D2) },
+    { VEX_W_TABLE (VEX_W_0F38D3) },
     { Bad_Opcode },
     { Bad_Opcode },
     { Bad_Opcode },
@@ -7882,6 +7900,14 @@ static const struct dis386 vex_w_table[][2] = {
   {
     /* VEX_W_0F38CF */
     { "%XEvgf2p8mulb", { XM, Vex, EXx }, PREFIX_DATA },
+  },
+  {
+    /* VEX_W_0F38D2 */
+    { PREFIX_TABLE (PREFIX_VEX_0F38D2_W_0) },
+  },
+  {
+    /* VEX_W_0F38D3 */
+    { PREFIX_TABLE (PREFIX_VEX_0F38D3_W_0) },
   },
   {
     /* VEX_W_0F3A00_L_1 */

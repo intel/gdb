@@ -192,7 +192,8 @@ thread_info::is_unavailable ()
 {
   /* We cannot access registers of an unavailable thread.
      Try to read PC to check whether the thread is available.  */
-  return regcache_read_pc_protected (get_thread_regcache (this)) == 0;
+  return (state == THREAD_EXITED
+	  || regcache_read_pc_protected (get_thread_regcache (this)) == 0);
 }
 
 

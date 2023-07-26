@@ -72,6 +72,13 @@ foreach device $sycl_device_list {
 		    -re "else-branch.*$gdb_prompt" {
 			pass "$gdb_test_name else"
 		    }
+		    timeout {
+			if {[require_sycl_device "$device" "gpu" "Intel*Arc*Graphics"]} {
+			    kfail "JIRA GSD/5250" "$gdb_test_name (timeout)"
+			} else {
+			    fail "$gdb_test_name (timeout)"
+			}
+		    }
 		    -re "$gdb_prompt" {
 			fail "$gdb_test_name"
 		    }

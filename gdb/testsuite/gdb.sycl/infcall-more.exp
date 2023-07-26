@@ -200,6 +200,13 @@ foreach device $sycl_device_list {
 		    gdb_test "print integer_grf_args(7, 6, 5)" "= 210" \
 			"infcall at else-branch"
 		}
+		timeout {
+		    if {[require_sycl_device "$device" "gpu" "Intel*Arc*Graphics"]} {
+			kfail "JIRA GSD/5250" "$gdb_test_name (timeout)"
+		    } else {
+			fail "$gdb_test_name (timeout)"
+		    }
+		}
 	    }
 	}
 	gdb_assert {$branches_step == 2} "stepped into both branches"

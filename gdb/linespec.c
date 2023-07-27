@@ -4016,7 +4016,25 @@ decode_digits_list_mode (struct linespec_state *self,
       set_current_program_space (pspace);
 
       /* Simplistic search just for the list command.  */
-      val.symtab = find_line_symtab (elt, val.line, NULL, NULL);
+      symtab *matching_symtab
+	= find_line_symtab (elt, val.line, nullptr, nullptr);
+
+      auto it = std::find_if (values.begin (), values.end (),
+			      [&] (const symtab_and_line &sal)
+				{
+				  return sal.symtab == matching_symtab;
+				});
+
+      /* Don't add a symtab_and_line (sal) object if there is already a sal
+	 object pointing to that symtab, as this will lead to duplicate line
+	 information shown for the "info line" command.  This can happen in
+	 case the DWARF contains debug_line entries without line information
+	 in addition to debug_line entries containing line information.  */
+      if (it != values.end ())
+	continue;
+
+      val.symtab = matching_symtab;
+
       if (val.symtab == NULL)
 	val.symtab = elt;
       val.pspace = pspace;

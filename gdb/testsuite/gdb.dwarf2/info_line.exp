@@ -1,0 +1,87 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test for the output of the info line command in case of empty line-tables
+# in the debug information.
+
+load_lib dwarf.exp
+
+standard_testfile .c .S
+
+set asm_file [standard_output_file $srcfile2]
+Dwarf::assemble $asm_file {
+    global srcdir subdir srcfile
+    declare_labels lines_label
+
+    cu {} {
+	compile_unit {
+	    {DW_AT_name     $srcdir/$subdir/$srcfile}
+	} {
+	    subprogram {
+		{name main}
+	    }
+	}
+    }
+    lines {} lines_label {
+    }
+}
+
+if { [prepare_for_testing "failed to prepare" ${testfile} \
+    [list $srcfile $asm_file] {debug}] } {
+    return -1
+}
+
+if ![runto_main] {
+    return -1
+}
+
+# Test number of line-tables.
+set num_non_empty_tables 0
+set num_empty_tables 0
+gdb_test_multiple "maint info line-table info_line" "" {
+    -re "linetable: \\(\\(struct linetable \\*\\) 0x0\\):\r\nNo line table.\r\n" {
+	incr num_empty_tables
+	exp_continue
+    }
+    -re "linetable: \\(\\(struct linetable \\*\\) $hex\\):\r\n" {
+	incr num_non_empty_tables
+	exp_continue
+    }
+    -re "$gdb_prompt $" {
+	pass "$gdb_test_name"
+    }
+}
+gdb_assert {$num_non_empty_tables == 1} "number non-empty line tables"
+gdb_assert {$num_empty_tables == 1} "number empty line tables"
+
+set query_info_line_location [gdb_get_line_number "INFOLINE"]
+
+# Test number of line results.
+set num_line_results 0
+set fill "\[^\r\n\]*"
+gdb_test_multiple "info line $query_info_line_location" "" {
+    -re "Line number $query_info_line_location is out of range for$fill.\r\n" {
+	fail "$gdb_test_name"
+    }
+    -re "Line $query_info_line_location of$fill.\r\n" {
+	incr num_line_results
+	exp_continue
+    }
+    -re "$gdb_prompt $" {
+	pass "$gdb_test_name"
+    }
+}
+
+gdb_assert {$num_line_results == 1} "number of line results"

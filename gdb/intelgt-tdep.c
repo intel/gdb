@@ -360,18 +360,43 @@ intelgt_get_current_machine_code ()
 {
   regcache *regcache = get_current_regcache ();
   CORE_ADDR pc = regcache_read_pc (regcache);
-  const block *block = block_for_pc (pc);
 
-  if (block == nullptr)
-    error (_("Cannot read block for PC 0x%lx."), pc);
+  obj_section *section = find_pc_section (pc);
+  if (section != nullptr)
+    {
+      gdb_assert (section->objfile != nullptr);
 
-  objfile *obj = block_objfile (block);
+      bfd *abfd = section->objfile->obfd.get ();
+      const elf_backend_data *ebd = get_elf_backend_data (abfd);
+      if (ebd == nullptr)
+	error (_("Cannot find elf backend data: PC %s."),
+	       paddress (regcache->arch (), pc));
+      return ebd->elf_machine_code;
+    }
 
-  if (obj == nullptr)
-    error (_("Cannot find object file for block containg PC 0x%lx."), pc);
+  /* If the PC does not belong to any section (e.g. the PC is in the scratch
+     area when the infcall returns), we look if all the ELF files
+     agree on the machine code.  */
+  int global_machine_code = EM_NONE;
+  for (objfile *obj : current_program_space->objfiles ())
+    {
+      bfd *abfd = obj->obfd.get ();
+      const elf_backend_data *ebd = get_elf_backend_data (abfd);
+      if (ebd == nullptr)
+	error (_("Cannot find elf backend data: objfile %s."),
+	       paddress (regcache->arch (), obj->addr_low));
 
-  bfd *abfd = obj->obfd.get ();
-  return get_elf_backend_data (abfd)->elf_machine_code;
+      if (global_machine_code == EM_NONE)
+	global_machine_code = ebd->elf_machine_code;
+      else if (ebd->elf_machine_code != global_machine_code)
+	{
+	  dprintf ("All ELF files did not agree on the machine code");
+	  global_machine_code = EM_NONE;
+	  break;
+	}
+    }
+
+  return global_machine_code;
 }
 
 /* The 'gdbarch_data' stuff specific for this architecture.  */

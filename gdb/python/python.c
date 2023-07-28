@@ -2037,7 +2037,7 @@ do_start_initialization ()
     return false;
 
   char *intel_pythonhome = getenv ("INTEL_PYTHONHOME");
-  if (intel_pythonhome != NULL)
+  if (!python_ignore_environment && intel_pythonhome != NULL)
     {
       auto wintel_pythonhome = Py_DecodeLocale (intel_pythonhome, NULL);
       if (wintel_pythonhome != NULL)

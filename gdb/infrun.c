@@ -7376,6 +7376,12 @@ process_event_stop_test (struct execution_control_state *ecs)
 
       if (in_trampoline)
 	{
+	  if (execution_direction == EXEC_REVERSE)
+	    {
+	      keep_going (ecs);
+	      return;
+	    }
+
 	  real_stop_pc = find_function_trampoline_target (stop_pc);
 
 	  for (int i = 0; i < MAX_TRAMPOLINE_CHAIN_SIZE

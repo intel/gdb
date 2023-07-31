@@ -9027,8 +9027,10 @@ normal_stop (void)
 		{
 		  target_terminal::ours_for_output ();
 
-		  gdb_printf (_("[%s became inactive]\n"),
-			      target_pid_to_str (inferior_ptid).c_str ());
+		  ptid_t ptid = current_thread->ptid;
+		  gdb_printf (_("[Thread %s (%s) became inactive]\n"),
+			      print_thread_id (current_thread),
+			      target_pid_to_str (ptid).c_str ());
 		}
 	    }
 	  else if ((previous_thread_focus.emask == 0x0 && lanes_mask != 0x0)

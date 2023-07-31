@@ -127,10 +127,11 @@ proc thread_apply_raw {context match_ctxs ignore_re warning_re cmd_prefix \
 # Convenience wrapper for the raw function.
 proc thread_apply {context match_ctxs {message ""} \
 		       {ignore_re "none"} {warning_re "none"}} {
+    set unavailable_option "-unavailable"
     thread_apply_raw $context $match_ctxs $ignore_re $warning_re \
-	""   $message
+	"$unavailable_option" $message
     thread_apply_raw $context $match_ctxs $ignore_re $warning_re \
-	"-c" $message
+	"-c $unavailable_option" $message
 }
 
 # Check that the 'thread apply' command gives an error.

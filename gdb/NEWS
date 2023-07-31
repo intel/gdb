@@ -104,6 +104,15 @@ x
   equivalent to 'm', except that the data in the response are in
   binary format.
 
+* Changed remote packets
+
+qXfer:threads:read
+
+  The XML that is sent as a response can now include an "id_str"
+  attribute for a thread element.  The attribute indicates what GDB
+  should print as the target ID of the thread, for example in the
+  "info threads" command or when switching to the thread.
+
 *** Changes in GDB 13
 
 * MI version 1 is deprecated, and will be removed in GDB 14.

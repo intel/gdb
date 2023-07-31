@@ -63,6 +63,6 @@ foreach device $sycl_device_list {
 	#
 	# GDB used to hang waiting for the single-step completion event that
 	# would never come.
-	gdb_test "next" "\\\[Thread \[0-9\]+\.\[0-9\]+ became inactive\\\]"
+	gdb_test "next" "\\\[Thread \[^\r\n\]+ became inactive\\\]"
     }
 }

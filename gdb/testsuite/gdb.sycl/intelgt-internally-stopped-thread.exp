@@ -45,8 +45,6 @@ proc test_spin_thread {spin_thread} {
     gdb_continue_to_breakpoint "spin thread hits the bp" \
 	".*$srcfile:$bp_else.*"
 
-    set thread_id [get_integer_valueof "\$_thread" 0 "get plain thread id"]
-
     # Resuming the spin thread at this point would make it finish the
     # kernel.  We would appear to hang because the other threads did not
     # resume.  We should be able to interrupt and see that the current
@@ -60,7 +58,7 @@ proc test_spin_thread {spin_thread} {
     sleep 4
     send_gdb "\003"
     gdb_test_multiple "" "spin thread becomes inactive" {
-	-re -wrap ".Thread $decimal\.$thread_id became inactive." {
+	-re -wrap "Thread $spin_thread (\[^\r\n\]+) became inactive." {
 	    pass $gdb_test_name
 	}
     }

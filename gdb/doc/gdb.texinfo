@@ -48428,7 +48428,7 @@ the following structure:
 @smallexample
 <?xml version="1.0"?>
 <threads>
-    <thread id="id" core="0" name="name" handle="XX...">
+    <thread id="id" core="0" name="name" handle="XX..." id_str="...">
     ... description ...
     </thread>
 </threads>
@@ -48441,7 +48441,10 @@ the thread was last executing on.  The @samp{name} attribute, if
 present, specifies the human-readable name of the thread.  The content
 of the of @samp{thread} element is interpreted as human-readable
 auxiliary information.  The @samp{handle} attribute, if present,
-is a hex encoded representation of the thread handle.
+is a hex encoded representation of the thread handle.  The @samp{id_str}
+attribute, if present, specifies what @value{GDBN} should print as
+the target ID of the thread (e.g.@: in the @samp{info threads}
+command or when switching to the thread).
 
 
 @node Traceframe Info Format

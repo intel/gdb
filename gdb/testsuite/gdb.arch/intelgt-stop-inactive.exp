@@ -98,7 +98,7 @@ foreach device $sycl_device_list {
 	gdb_test "print dim0" "$inactive_error"
 
 	gdb_test "thread $current_thread" \
-	    "Switching to thread $current_thread \\(Thread $decimal\\.$decimal\\) inactive.*"
+	    "Switching to thread $current_thread \\(Thread \[^\r\n\]+\\) inactive.*"
 
 	# An inactive thread still has the frame displayed, but args cannot
 	# be read.

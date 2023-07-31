@@ -48428,7 +48428,7 @@ the following structure:
 @smallexample
 <?xml version="1.0"?>
 <threads>
-    <thread id="id" core="0" name="name">
+    <thread id="id" core="0" name="name" handle="XX...">
     ... description ...
     </thread>
 </threads>

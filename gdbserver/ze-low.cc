@@ -2927,3 +2927,15 @@ ze_target::ack_in_memory_library (process_info *process,
   dprintf ("[%s;%s) acknowledged.", core_addr_to_string_nz (begin),
 	   core_addr_to_string_nz (end));
 }
+
+std::string
+ze_target::thread_id_str (thread_info *thread)
+{
+  const ze_thread_info *zetp = ze_thread (thread);
+  gdb_assert (zetp != nullptr);
+
+  std::stringstream id_str;
+  id_str << "Th " << ze_thread_id_str (zetp->id);
+
+  return id_str.str ();
+}

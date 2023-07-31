@@ -401,6 +401,8 @@ public:
   void ack_in_memory_library (process_info *process, CORE_ADDR begin,
 			      CORE_ADDR end) override;
 
+  std::string thread_id_str (thread_info *thread) override;
+
 private:
   typedef std::list<ze_device_info *> devices_t;
 

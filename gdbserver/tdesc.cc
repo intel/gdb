@@ -21,6 +21,8 @@
 
 #ifndef IN_PROCESS_AGENT
 
+unsigned int target_desc::tdescs_allocated = 0;
+
 target_desc::~target_desc ()
 {
   xfree ((char *) arch);

@@ -1057,6 +1057,32 @@ outreg (struct regcache *regcache, int regno, char *buf)
   return buf;
 }
 
+/* See remote-utils.h.  */
+
+unsigned int
+get_tdesc_rsp_id (const target_desc *tdesc)
+{
+  client_state &cs = get_client_state ();
+  unsigned int i = tdesc->id;
+
+  cs.tdescs[i] = tdesc;
+
+  return i;
+}
+
+/* See remote-utils.h.  */
+
+const target_desc *
+get_tdesc_from_rsp_id (unsigned int id)
+{
+  client_state &cs = get_client_state ();
+
+  auto it = cs.tdescs.find (id);
+  gdb_assert (it != cs.tdescs.end ());
+
+  return it->second;
+}
+
 void
 prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
 {
@@ -1190,6 +1216,17 @@ prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
 	else if (cs.hwbreak_feature && target_stopped_by_hw_breakpoint ())
 	  {
 	    sprintf (buf, "hwbreak:;");
+	    buf += strlen (buf);
+	  }
+
+	/* Tdesc tag needs to come before expedite regs.  */
+	if (current_thread->tdesc != nullptr
+	    && current_thread->tdesc != current_process ()->tdesc)
+	  {
+	    sprintf (buf, "tdesc:");
+	    buf += strlen (buf);
+	    sprintf (buf, "%x", get_tdesc_rsp_id (current_thread->tdesc));
+	    strcat (buf, ";");
 	    buf += strlen (buf);
 	  }
 

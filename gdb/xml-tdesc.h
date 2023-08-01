@@ -38,6 +38,12 @@ const struct target_desc *file_read_description_xml (const char *filename);
 
 const struct target_desc *target_read_description_xml (struct target_ops *);
 
+/* Read an XML target description with the given ID using OPS.  Parse it, and
+   return the parsed description.  */
+
+const struct target_desc *target_read_description_xml (struct target_ops *ops,
+						       ULONGEST id);
+
 /* Fetches an XML target description using OPS, processing includes,
    but not parsing it.  Used to dump whole tdesc as a single XML file.
    Returns the description on success, and a disengaged optional

@@ -67,7 +67,7 @@ foreach device $sycl_device_list {
 	gdb_test "inferior 1" "Switching to inferior 1.*" "first switch"
 	gdb_test "continue" \
 	    [multi_line "Continuing." \
-		"\\\[Switching to Thread $fill lane 0\\\]" \
+		"\\\[Switching to thread $fill lane 0.\\\]" \
 		"" \
 		"Thread $fill$srcfile:$kernel_bp2.*"] \
 	    "continue to kernel bp 2"
@@ -84,7 +84,7 @@ foreach device $sycl_device_list {
 	gdb_test "continue" \
 	    [multi_line "Continuing." \
 		"Result is 42" \
-		"\\\[Switching to Thread $fill\\\]" \
+		"\\\[Switching to thread $fill\\\]" \
 		"" \
 		"Thread $fill$srcfile:$postkernel_bp2.*"] \
 	    "continue to post-kernel bp 2"

@@ -11,3 +11,4 @@
 
 <!ATTLIST thread id CDATA #REQUIRED>
 <!ATTLIST thread core CDATA #IMPLIED>
+<!ATTLIST thread tdesc CDATA #IMPLIED>

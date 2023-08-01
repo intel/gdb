@@ -126,6 +126,10 @@ regcache *get_thread_regcache (thread_info *thread, bool fetch = true);
 
 void regcache_invalidate_thread (struct thread_info *);
 
+/* Invalidate and release the register cache of the given THREAD.  */
+
+void free_register_cache_thread (struct thread_info *thread);
+
 /* Invalidate cached registers for all threads of the given process.  */
 
 void regcache_invalidate_pid (int pid);

@@ -134,13 +134,24 @@ copy_target_description (struct target_desc *dest,
   dest->xmltarget = src->xmltarget;
 }
 
+/* See tdesc.h.  */
+
+const struct target_desc *
+get_thread_target_desc (const struct thread_info *thread)
+{
+  if (thread->tdesc != nullptr)
+    return thread->tdesc;
+
+  return get_thread_process (thread)->tdesc;
+}
+
 const struct target_desc *
 current_target_desc (void)
 {
   if (current_thread == NULL)
     return &default_description;
 
-  return current_process ()->tdesc;
+  return get_thread_target_desc (current_thread);
 }
 
 /* An empty structure.  */

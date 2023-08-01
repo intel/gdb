@@ -39,11 +39,11 @@ get_thread_regcache (struct thread_info *thread, bool fetch)
      have.  */
   if (regcache == NULL)
     {
-      struct process_info *proc = get_thread_process (thread);
+      const target_desc *tdesc = get_thread_target_desc (thread);
 
-      gdb_assert (proc->tdesc != NULL);
+      gdb_assert (tdesc != nullptr);
 
-      regcache = new struct regcache (proc->tdesc);
+      regcache = new struct regcache (tdesc);
       set_thread_regcache_data (thread, regcache);
       regcache->thread = thread;
     }
@@ -311,7 +311,9 @@ find_regno (const struct target_desc *tdesc, const char *name)
   internal_error ("Unknown register %s requested", name);
 }
 
-static void
+/* See regcache.h.  */
+
+void
 free_register_cache_thread (struct thread_info *thread)
 {
   struct regcache *regcache = thread_regcache_data (thread);

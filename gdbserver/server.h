@@ -58,6 +58,7 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap);
 #include "target.h"
 #include "mem-break.h"
 #include "gdbsupport/environ.h"
+#include <map>
 
 /* Target-specific functions */
 
@@ -216,6 +217,11 @@ struct client_state
   /* Track supported packets.  */
   bool vack_library_supported = false;
   bool vack_in_memory_library_supported = false;
+
+  /* The target descriptions that have been communicated to the client.  The
+     index of a target description in this vector is the ID used to reference it
+     in the remote protocol.  */
+  std::map<ULONGEST, const target_desc *> tdescs;
 };
 
 client_state &get_client_state ();

@@ -80,6 +80,10 @@ struct thread_info
 
   /* Branch trace target information for this thread.  */
   struct btrace_target_info *btrace = nullptr;
+
+  /* Target description for this thread.  Only present if it's different
+     from the one in process_info.  */
+  const struct target_desc *tdesc = nullptr;
 };
 
 extern std::list<thread_info *> all_threads;

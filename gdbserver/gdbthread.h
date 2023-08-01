@@ -83,6 +83,10 @@ struct thread_info
 
   /* Thread options GDB requested with QThreadOptions.  */
   gdb_thread_options thread_options = 0;
+
+  /* Target description for this thread.  Only present if it's different
+     from the one in process_info.  */
+  const struct target_desc *tdesc = nullptr;
 };
 
 extern std::list<thread_info *> all_threads;

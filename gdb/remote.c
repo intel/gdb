@@ -78,6 +78,7 @@
 #include <unordered_map>
 #include "async-event.h"
 #include "gdbsupport/selftest.h"
+#include "xml-tdesc.h"
 
 /* The remote target.  */
 
@@ -579,6 +580,16 @@ public:
     return serial_can_async_p (this->remote_desc);
   }
 
+  /* Add new ID to the target description list.  The corresponding XML will be
+     requested soon.  */
+  void add_tdesc_id (ULONGEST id);
+
+  /* Get the target description corresponding to remote protocol ID.  */
+  const target_desc *get_tdesc (ULONGEST id) const;
+
+  /* Get the target descriptions we don't know about from the target.  */
+  void fetch_unknown_tdescs (remote_target *remote);
+
 public: /* data */
 
   /* A buffer to use for incoming packets, and its current size.  The
@@ -736,6 +747,10 @@ private:
      support multi-process.  */
   std::unordered_map<struct gdbarch *, remote_arch_state>
     m_arch_states;
+
+  /* The target descriptions that have been received from the target.  The key
+     is the ID used to reference it in the remote protocol.  */
+  std::unordered_map<ULONGEST, const target_desc *> m_tdescs;
 };
 
 static const target_info remote_target_info = {
@@ -1525,6 +1540,9 @@ struct stop_reply : public notif_event
      part of their normal status mechanism (as another roundtrip to
      fetch them is avoided).  */
   std::vector<cached_reg_t> regcache;
+
+  /* The target description ID communicated in the stop reply packet.  */
+  std::optional<ULONGEST> tdesc_id;
 
   enum target_stop_reason stop_reason;
 
@@ -4170,6 +4188,9 @@ struct thread_item
 
   /* The thread handle associated with the thread.  */
   gdb::byte_vector thread_handle;
+
+  /* The ID of the thread's target description, if provided.  */
+  std::optional<ULONGEST> tdesc_id;
 };
 
 /* Context passed around to the various methods listing remote
@@ -4178,6 +4199,12 @@ struct thread_item
 
 struct threads_listing_context
 {
+  threads_listing_context (remote_target *remote)
+    : m_remote (remote)
+  {}
+
+  DISABLE_COPY_AND_ASSIGN (threads_listing_context);
+
   /* Return true if this object contains an entry for a thread with ptid
      PTID.  */
 
@@ -4214,6 +4241,9 @@ struct threads_listing_context
 
   /* The threads found on the remote target.  */
   std::vector<thread_item> items;
+
+  /* The remote target associated with this context.  */
+  remote_target *m_remote;
 };
 
 static int
@@ -4298,6 +4328,13 @@ start_thread (struct gdb_xml_parser *parser,
   attr = xml_find_attribute (attributes, "handle");
   if (attr != NULL)
     item.thread_handle = hex2bin ((const char *) attr->value.get ());
+
+  attr = xml_find_attribute (attributes, "tdesc");
+  if (attr != NULL)
+    {
+      item.tdesc_id = *(ULONGEST *) attr->value.get ();
+      data->m_remote->get_remote_state ()->add_tdesc_id (*item.tdesc_id);
+    }
 }
 
 static void
@@ -4318,6 +4355,7 @@ const struct gdb_xml_attribute thread_attributes[] = {
   { "name", GDB_XML_AF_OPTIONAL, NULL, NULL },
   { "id_str", GDB_XML_AF_OPTIONAL, NULL, NULL },
   { "handle", GDB_XML_AF_OPTIONAL, NULL, NULL },
+  { "tdesc", GDB_XML_AF_OPTIONAL, gdb_xml_parse_attr_ulongest, NULL },
   { NULL, GDB_XML_AF_NONE, NULL, NULL }
 };
 
@@ -4355,6 +4393,7 @@ remote_target::remote_get_threads_with_qxfer (threads_listing_context *context)
 	{
 	  gdb_xml_parse_quick (_("threads"), "threads.dtd",
 			       threads_elements, xml->data (), context);
+	  get_remote_state ()->fetch_unknown_tdescs (this);
 	}
 
       return 1;
@@ -4422,7 +4461,7 @@ has_single_non_exited_thread (inferior *inf)
 void
 remote_target::update_thread_list ()
 {
-  struct threads_listing_context context;
+  struct threads_listing_context context (this);
   int got_list = 0;
 
   /* We have a few different mechanisms to fetch the thread list.  Try
@@ -8204,6 +8243,36 @@ strprefix (const char *p, const char *pend, const char *prefix)
   return *prefix == '\0';
 }
 
+void
+remote_state::add_tdesc_id (ULONGEST id)
+{
+  /* Check whether the ID was already added.  */
+  if (m_tdescs.find (id) != m_tdescs.cend ())
+    return;
+
+  m_tdescs[id] = nullptr;
+}
+
+const target_desc *
+remote_state::get_tdesc (ULONGEST id) const
+{
+  auto found = m_tdescs.find (id);
+
+  /* Check if the given ID was already provided.  */
+  if (found == m_tdescs.cend ())
+    return nullptr;
+
+  return found->second;
+}
+
+void
+remote_state::fetch_unknown_tdescs (remote_target *remote)
+{
+  for (auto &pair : m_tdescs)
+    if (pair.second == nullptr)
+      m_tdescs[pair.first] = target_read_description_xml (remote, pair.first);
+}
+
 /* Parse the stop reply in BUF.  Either the function succeeds, and the
    result is stored in EVENT, or throws an error.  */
 
@@ -8365,6 +8434,14 @@ Packet: '%s'\n"),
 	    {
 	      event->ws.set_thread_created ();
 	      p = strchrnul (p1 + 1, ';');
+	    }
+	  else if (strprefix (p, p1, "tdesc"))
+	    {
+	      ULONGEST tdesc_id;
+
+	      p = unpack_varlen_hex (++p1, &tdesc_id);
+	      event->rs->add_tdesc_id (tdesc_id);
+	      event->tdesc_id = tdesc_id;
 	    }
 	  else
 	    {

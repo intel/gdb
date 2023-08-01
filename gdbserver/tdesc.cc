@@ -20,6 +20,8 @@
 
 #ifndef IN_PROCESS_AGENT
 
+unsigned int target_desc::tdescs_allocated = 0;
+
 bool target_desc::operator== (const target_desc &other) const
 {
   if (reg_defs != other.reg_defs)

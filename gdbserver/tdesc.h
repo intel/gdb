@@ -91,6 +91,11 @@ void init_target_desc (struct target_desc *tdesc,
 		       const char **expedite_regs,
 		       enum gdb_osabi osabi);
 
+/* Return the target description corresponding to the given THREAD.  */
+
+const struct target_desc *
+  get_thread_target_desc (const struct thread_info *thread);
+
 /* Return the current inferior's target description.  Never returns
    NULL.  */
 

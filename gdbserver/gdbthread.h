@@ -91,11 +91,16 @@ struct thread_info : public intrusive_list_node<thread_info>
 
   /* Thread options GDB requested with QThreadOptions.  */
   gdb_thread_options thread_options = 0;
-  
+
+  /* Target description for this thread.  Only present if it's different
+     from the one in process_info.  */
+  const struct target_desc *tdesc = nullptr;
+
 private:
   process_info *m_process;
   std::unique_ptr<struct regcache> m_regcache = nullptr;
   void *m_target_data;
+
 };
 
 /* Return a pointer to the first thread, or NULL if there isn't one.  */

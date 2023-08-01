@@ -43839,6 +43839,10 @@ If @var{n} is @samp{core}, then @var{r} is the hexadecimal number of
 the core on which the stop event was detected.
 
 @item
+If @var{n} is @samp{tdesc}, then @var{r} is the hexadecimal number of
+the target description ID (@pxref{Target Description ID}).
+
+@item
 If @var{n} is a recognized @dfn{stop reason}, it describes a more
 specific event that stopped the target.  The currently defined stop
 reasons are listed below.  The @var{aa} should be @samp{05}, the trap
@@ -48481,7 +48485,7 @@ the following structure:
 @smallexample
 <?xml version="1.0"?>
 <threads>
-    <thread id="id" core="0" name="name" handle="XX..." id_str="...">
+    <thread id="id" core="0" name="name" tdesc="0" handle="XX..." id_str="...">
     ... description ...
     </thread>
 </threads>
@@ -48491,8 +48495,10 @@ Each @samp{thread} element must have the @samp{id} attribute that
 identifies the thread (@pxref{thread-id syntax}).  The
 @samp{core} attribute, if present, specifies which processor core
 the thread was last executing on.  The @samp{name} attribute, if
-present, specifies the human-readable name of the thread.  The content
-of the of @samp{thread} element is interpreted as human-readable
+present, specifies the human-readable name of the thread.  The
+@samp{tdesc} attribute, if present, specifies the target description
+ID of the thread (@pxref{Target Description ID}).  The content of
+the @samp{thread} element is interpreted as human-readable
 auxiliary information.  The @samp{handle} attribute, if present,
 is a hex encoded representation of the thread handle.  The @samp{id_str}
 attribute, if present, specifies what @value{GDBN} should print as
@@ -48706,6 +48712,8 @@ descriptions are accurate, and that @value{GDBN} understands them.
 target descriptions.  @xref{Expat}.
 
 @menu
+* Target Description ID::           Referencing different descriptions in the
+                                    remote protocol.
 * Retrieving Descriptions::         How descriptions are fetched from a target.
 * Target Description Format::       The contents of a target description.
 * Predefined Target Types::         Standard types available for target
@@ -48713,6 +48721,14 @@ target descriptions.  @xref{Expat}.
 * Enum Target Types::               How to define enum target types.
 * Standard Target Features::        Features @value{GDBN} knows about.
 @end menu
+
+@node Target Description ID
+@section Target Description ID
+
+In cases where a remote target supports threads having different
+target descriptions than their parent process, the remote protocol
+assigns a non-negative integer to each target description to reference
+it in the communication between the host and the target.
 
 @node Retrieving Descriptions
 @section Retrieving Descriptions
@@ -48725,6 +48741,11 @@ qXfer}).  The @var{annex} in the @samp{qXfer} packet will be
 @samp{target.xml}.  The contents of the @samp{target.xml} annex are an
 XML document, of the form described in @ref{Target Description
 Format}.
+
+If target description IDs are being used (@pxref{Target Description ID}),
+@value{GDBN} can retrieve a target description with a given ID by using
+@samp{target-id-ID.xml} as the @var{annex}, where @var{ID} is the
+non-negative integer identifier of the desired target description.
 
 Alternatively, you can specify a file to read for the target description.
 If a file is set, the target will not be queried.  The commands to

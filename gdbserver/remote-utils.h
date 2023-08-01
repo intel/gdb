@@ -98,4 +98,13 @@ void non_critical_error (const char *format, ...);
    and exit.  */
 void critical_error (int code, const char *format, ...);
 
+/* Return the ID as used in the remote protocol for the given target
+   descriptor.  */
+
+unsigned int get_tdesc_rsp_id (const target_desc *tdesc);
+
+/* Return the target description corresponding to the remote protocol ID.  */
+
+const target_desc *get_tdesc_from_rsp_id (unsigned int id);
+
 #endif /* GDBSERVER_REMOTE_UTILS_H */

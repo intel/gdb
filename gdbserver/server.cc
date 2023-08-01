@@ -1043,7 +1043,15 @@ handle_general_set (char *own_buf)
 static const char *
 get_features_xml (const char *annex)
 {
-  const struct target_desc *desc = current_target_desc ();
+  const struct target_desc *desc;
+  unsigned int id;
+
+  if (strcmp (annex, "target.xml") == 0)
+    desc = current_target_desc ();
+  else if (sscanf (annex, "target-id-%u.xml", &id) == 1)
+    desc = get_tdesc_from_rsp_id (id);
+  else
+    desc = nullptr;
 
   /* `desc->xmltarget' defines what to return when looking for the
      "target.xml" file.  Its contents can either be verbatim XML code
@@ -1053,7 +1061,7 @@ get_features_xml (const char *annex)
      This variable is set up from the auto-generated
      init_registers_... routine for the current target.  */
 
-  if (strcmp (annex, "target.xml") == 0)
+  if (desc != nullptr)
     {
       const char *ret = tdesc_get_features_xml (desc);
 
@@ -1856,6 +1864,11 @@ handle_qxfer_threads_worker (thread_info *thread, std::string *buffer)
 
   if (!id_str.empty ())
     string_xml_appendf (*buffer, " id_str=\"%s\"", id_str.c_str ());
+
+  if (thread->tdesc != nullptr
+      && thread->tdesc != get_thread_process (thread)->tdesc)
+    string_xml_appendf (*buffer, " tdesc=\"%u\"",
+			get_tdesc_rsp_id (thread->tdesc));
 
   if (handle_status)
     {

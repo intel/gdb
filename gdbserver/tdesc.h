@@ -64,7 +64,7 @@ struct target_desc final : tdesc_element
 
 public:
   target_desc ()
-    : registers_size (0)
+    : registers_size (0), id (tdescs_allocated++)
   {}
 
   ~target_desc ();
@@ -78,6 +78,12 @@ public:
 #endif
 
   void accept (tdesc_element_visitor &v) const override;
+
+  /* Every tdesc instance has it's own id based on this static counter.  */
+  static unsigned int tdescs_allocated;
+
+  /* Unique ID allocated during construction via tdescs_allocated.  */
+  unsigned int id;
 };
 
 /* Copy target description SRC to DEST.  */

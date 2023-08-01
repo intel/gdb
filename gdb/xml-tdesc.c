@@ -736,14 +736,13 @@ fetch_available_features_from_target (const char *name, target_ops *ops)
 }
 
 
-/* Read an XML target description using OPS.  Parse it, and return the
-   parsed description.  */
+/* Actual implementation of the target_read_description_xml variants.  */
 
-const struct target_desc *
-target_read_description_xml (struct target_ops *ops)
+static const struct target_desc *
+target_read_description_xml (struct target_ops *ops, const char *desc_name)
 {
   gdb::optional<gdb::char_vector> tdesc_str
-    = fetch_available_features_from_target ("target.xml", ops);
+    = fetch_available_features_from_target (desc_name, ops);
   if (!tdesc_str)
     return NULL;
 
@@ -753,6 +752,24 @@ target_read_description_xml (struct target_ops *ops)
     };
 
   return tdesc_parse_xml (tdesc_str->data (), fetch_another);
+}
+
+/* See xml-tdesc.h.  */
+
+const struct target_desc *
+target_read_description_xml (struct target_ops *ops)
+{
+  return target_read_description_xml (ops, "target.xml");
+}
+
+/* See xml-tdesc.h.  */
+
+const struct target_desc *
+target_read_description_xml (struct target_ops *ops, ULONGEST id)
+{
+  std::string desc_name = string_printf ("target-id-%" PRIu64 ".xml", id);
+
+  return target_read_description_xml (ops, desc_name.c_str ());
 }
 
 /* Fetches an XML target description using OPS,  processing

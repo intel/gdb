@@ -128,7 +128,11 @@ ack_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end)
     = std::find_if (dlls.begin (), dlls.end (),
 		    [begin, end] (const dll_info &dll)
 	{
-	  return ((dll.begin == begin) && (dll.end == end));
+	  /* For root devices with multiple sub-devices, modules with
+	     identical start/end addresses may be received for different
+	     sub-devices.  Therefore we check for the 'NEED_ACK' flag in
+	     the search, too.  */
+	  return ((dll.begin == begin) && (dll.end == end) && dll.need_ack);
 	});
 
   if (it != dlls.end ())

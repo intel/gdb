@@ -92,7 +92,7 @@ intelgt_uint_reg_type (uint32_t bitsize)
 static void
 intelgt_add_regset (tdesc_feature *feature, long &regnum,
 		    const char *prefix, uint32_t count, const char *group,
-		    uint32_t bitsize, const char *type)
+		    uint32_t bitsize, const char *type, expedite_t &expedite)
 {
   for (uint32_t reg = 0; reg < count; ++reg)
     {
@@ -867,11 +867,11 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
     case ZET_DEBUG_REGSET_TYPE_GRF_INTEL_GPU:
       feature = tdesc_create_feature (tdesc, intelgt::feature_grf);
 
+      expedite.push_back ("r0");
       intelgt_add_regset (feature, regnum, "r", regprop.count, "GRF",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize));
-
-      expedite.push_back ("r0");
+			  intelgt_uint_reg_type (regprop.bitSize),
+			  expedite);
       break;
 
     case ZET_DEBUG_REGSET_TYPE_ADDR_INTEL_GPU:
@@ -879,7 +879,8 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       intelgt_add_regset (feature, regnum, "a", regprop.count, "ADDR",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize));
+			  intelgt_uint_reg_type (regprop.bitSize),
+			  expedite);
       break;
 
     case ZET_DEBUG_REGSET_TYPE_FLAG_INTEL_GPU:
@@ -887,7 +888,8 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       intelgt_add_regset (feature, regnum, "f", regprop.count, "FLAG",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize));
+			  intelgt_uint_reg_type (regprop.bitSize),
+			  expedite);
       break;
 
     case ZET_DEBUG_REGSET_TYPE_CE_INTEL_GPU:
@@ -908,21 +910,21 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
     case ZET_DEBUG_REGSET_TYPE_SR_INTEL_GPU:
       feature = tdesc_create_feature (tdesc, intelgt::feature_sr);
 
+      expedite.push_back ("sr0");
       intelgt_add_regset (feature, regnum, "sr", regprop.count, "SR",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize));
-
-      expedite.push_back ("sr0");
+			  intelgt_uint_reg_type (regprop.bitSize),
+			  expedite);
       break;
 
     case ZET_DEBUG_REGSET_TYPE_CR_INTEL_GPU:
       feature = tdesc_create_feature (tdesc, intelgt::feature_cr);
 
+      expedite.push_back ("cr0");
       intelgt_add_regset (feature, regnum, "cr", regprop.count, "CR",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize));
-
-      expedite.push_back ("cr0");
+			  intelgt_uint_reg_type (regprop.bitSize),
+			  expedite);
       break;
 
     case ZET_DEBUG_REGSET_TYPE_TDR_INTEL_GPU:
@@ -930,7 +932,8 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       intelgt_add_regset (feature, regnum, "tdr", regprop.count, "TDR",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize));
+			  intelgt_uint_reg_type (regprop.bitSize),
+			  expedite);
       break;
 
     case ZET_DEBUG_REGSET_TYPE_ACC_INTEL_GPU:
@@ -938,7 +941,8 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       intelgt_add_regset (feature, regnum, "acc", regprop.count, "ACC",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize));
+			  intelgt_uint_reg_type (regprop.bitSize),
+			  expedite);
       break;
 
     case ZET_DEBUG_REGSET_TYPE_MME_INTEL_GPU:
@@ -946,7 +950,8 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       intelgt_add_regset (feature, regnum, "mme", regprop.count, "MME",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize));
+			  intelgt_uint_reg_type (regprop.bitSize),
+			  expedite);
       break;
 
     case ZET_DEBUG_REGSET_TYPE_SP_INTEL_GPU:

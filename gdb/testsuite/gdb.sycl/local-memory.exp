@@ -42,10 +42,55 @@ foreach device $sycl_device_list {
 	set line1 [gdb_get_line_number "BP1"]
 	set line2 [gdb_get_line_number "BP2"]
 	set line3 [gdb_get_line_number "BP3"]
+	set line4 [gdb_get_line_number "BP4"]
 	gdb_breakpoint $line1 {temporary}
 	gdb_breakpoint $line2 {temporary}
 	gdb_breakpoint $line3 {temporary}
-	gdb_continue_to_breakpoint "1d slm BP1" ".*$srcfile:$line1.*"
+	gdb_breakpoint $line4 {temporary}
+	gdb_continue_to_breakpoint "slm BP1" ".*$srcfile:$line1.*"
+
+	with_test_prefix "via variable in parallel_for_work_group" {
+	    setup_kfail "JIRA IGC/5012" "*-*-*"
+	    gdb_test "print local_var" "= 32"
+	    setup_kfail "JIRA IGC/5012" "*-*-*"
+	    gdb_test_no_output "set local_var = 42"
+	    setup_kfail "JIRA IGC/5012" "*-*-*"
+	    gdb_test "print local_var" "= 42" "test write"
+	    # These tests need to run on the intelgt target to use @slm.
+	    if {[is_level_zero_debug_api]
+		 && [require_sycl_device "$device" "gpu" "Intel*"]} {
+		setup_kfail "JIRA IGC/5012" "*-*-*"
+		gdb_test "ptype local_var" "type = @slm int"
+	    }
+	}
+
+	with_test_prefix "via pointer in parallel_for_work_group" {
+	    setup_kfail "JIRA IGC/5012" "*-*-*"
+	    gdb_test "print *local_ptr" "= 42"
+	    setup_kfail "JIRA IGC/5012" "*-*-*"
+	    gdb_test_no_output "set *local_ptr = 32"
+	    setup_kfail "JIRA IGC/5012" "*-*-*"
+	    gdb_test "print *local_ptr" "= 32" "test write"
+	    # Note that local_ptr is a generic pointer in SLM, which is why
+	    # this is not "@slm int * @slm".
+	    if {[is_level_zero_debug_api]
+		 && [require_sycl_device "$device" "gpu" "Intel*"]} {
+		setup_kfail "JIRA IGC/5012" "*-*-*"
+		gdb_test "ptype local_ptr" "type = int \\* @slm"
+	    }
+	}
+
+	with_test_prefix "via reference in parallel_for_work_group" {
+	    setup_kfail "JIRA GSD/6199" "*-*-*"
+	    gdb_test "print local_ref" "= 32"
+	    setup_kfail "JIRA GSD/6199" "*-*-*"
+	    gdb_test_no_output "set local_ref = 31"
+	    setup_kfail "JIRA GSD/6199" "*-*-*"
+	    gdb_test "print local_ref" "= 31" "test write"
+	    gdb_test "ptype local_ref" "type = int &"
+	}
+
+	gdb_continue_to_breakpoint "slm BP2" ".*$srcfile:$line2.*"
 
 	# Test reading and writing
 	with_test_prefix "via variable" {
@@ -71,19 +116,19 @@ foreach device $sycl_device_list {
 	}
 
 	with_test_prefix "via sycl pointers" {
-	    setup_kfail "JIRA GSD/4611" "*-*-*"
+	    setup_kfail "JIRA IGDB/4062" "*-*-*"
 	    gdb_test "print *d_local_ptr" "= 42"
 
-	    setup_kfail "JIRA GSD/4611" "*-*-*"
+	    setup_kfail "JIRA IGDB/4062" "*-*-*"
 	    gdb_test_no_output "set *d_local_ptr = 44"
 
-	    setup_kfail "JIRA GSD/4611" "*-*-*"
+	    setup_kfail "JIRA IGDB/4062" "*-*-*"
 	    gdb_test "print *r_local_ptr" "= 44"
 
-	    setup_kfail "JIRA GSD/4611" "*-*-*"
+	    setup_kfail "JIRA IGDB/4062" "*-*-*"
 	    gdb_test_no_output "set *r_local_ptr = 46"
 
-	    setup_kfail "JIRA GSD/4611" "*-*-*"
+	    setup_kfail "JIRA IGDB/4062" "*-*-*"
 	    gdb_test "print local_mem\[0\]" "= 46" "test write"
 	}
 
@@ -96,10 +141,14 @@ foreach device $sycl_device_list {
 	    gdb_test "print *local_mem_ptr\[1\]" "= 434" "test write"
 	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test "print generic_var" "= 434" "sanity test write"
+	    # Check that we didn't assign this an "@slm" tag.  It isn't in SLM,
+	    # but likely shares the same basic integer type in DWARF with
+	    # local_var.
+	    gdb_test "ptype generic_var" "type = int"
 	}
 
 	with_test_prefix "test SLM int via pointer in SLM" {
-	    setup_kfail "JIRA GSD/4611" "*-*-*"
+	    setup_kfail "JIRA IGDB/4062" "*-*-*"
 	    gdb_test "print *local_mem_ptr\[0\]" "= 46" "read"
 	    setup_kfail "JIRA IGDB/3942" "*-*-*"
 	    gdb_test_no_output "set *local_mem_ptr\[0\] = 434"
@@ -109,8 +158,9 @@ foreach device $sycl_device_list {
 	    gdb_test "print local_mem\[0\]" "= 434" "sanity test write"
 	}
 
-	# These tests need to run on the intelgt target to be able to use @slm.
-	if {[is_level_zero_debug_api] && [require_sycl_device "$device" "gpu" "Intel*"]} {
+	# These tests need to run on the intelgt target to use @slm.
+	if {[is_level_zero_debug_api]
+	    && [require_sycl_device "$device" "gpu" "Intel*"]} {
 	    with_test_prefix "via address" {
 		setup_kfail "JIRA IGDB/3942" "*-*-*"
 		set addr [get_hexadecimal_valueof "&local_mem\[0\]" 0]
@@ -138,22 +188,26 @@ foreach device $sycl_device_list {
 		"${addr}.*${one_pattern_found}" \
 		"find type pattern"
 	}
+
+	# This will take the tagged generic ptr address, which is why we need
+	# to set addr again.
+	set addr [get_hexadecimal_valueof "&(generic_ptr\[2\])" "slm address"]
 	setup_kfail "JIRA IGDB/3942" "*-*-*"
 	gdb_test "find generic_ptr, +sizeof(int\[3\]), 3" \
 	    "${addr}.*${one_pattern_found}" \
 	    "find address pattern with generic pointer"
 
-	gdb_continue_to_breakpoint "1d slm BP2" ".*$srcfile:$line2.*"
+	gdb_continue_to_breakpoint "slm BP3" ".*$srcfile:$line3.*"
 
 	# Test reading and writing after the generic pointer has switched the
 	# address space it is pointing to.
 	with_test_prefix "via generic pointer after switching address space" {
-	    gdb_test "print *generic_ptr" "= 44" "read"
+	    gdb_test "print *generic_ptr" "= 46" "read"
 	    gdb_test_no_output "set *generic_ptr = 444"
 	    gdb_test "print *generic_ptr" "= 444" "test write"
 	}
 
-	gdb_continue_to_breakpoint "1d slm BP3" ".*$srcfile:$line3.*"
+	gdb_continue_to_breakpoint "slm BP4" ".*$srcfile:$line4.*"
 
 	# Test watchpoints in SLM.
 	gdb_test "watch *generic_ptr" \

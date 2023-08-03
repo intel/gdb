@@ -40,7 +40,10 @@ main (int argc, char *argv[])
 	    local_mem[0] = input[0];
 	    local_mem[1] = input[1];
 	    local_mem[2] = input[2];
-	    int local_var = 33;
+	    int local_var = 32;
+	    int *local_ptr = &local_var;
+	    int &local_ref = local_var;
+	    *local_ptr = 33; /* BP1. */
 
 	    wg.parallel_for_work_item ([&] (sycl::h_item<1> wi)
 	      {
@@ -55,11 +58,13 @@ main (int argc, char *argv[])
 		  = local_mem_ptr.get_multi_ptr<sycl::access::decorated::no> ();
 
 		int *generic_ptr = &local_mem[1];
-		generic_var = 11 + local_var; /* BP1. */
+		*local_ptr += 1;
+		local_ref += 1;
+		generic_var = 11 + local_var; /* BP2. */
 		generic_ptr = &generic_var;
-		generic_var = 3; /* BP2. */
+		generic_var = 3; /* BP3. */
 		generic_ptr = &local_mem[2];
-		generic_var = 4; /* BP3. */
+		generic_var = 4; /* BP4. */
 		*generic_ptr += local_mem[2];
 		generic_var = 5;
 	      });

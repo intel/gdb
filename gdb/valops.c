@@ -1047,12 +1047,8 @@ read_value_memory (struct value *val, LONGEST bit_offset,
   if (gdbarch_address_space_from_type_flags_p (arch))
     {
       struct type *t1 = check_typedef (value_type (val));
-      if (!t1->is_pointer_or_reference ())
-	{
-	  addr_space
-	    = gdbarch_address_space_from_type_flags (arch,
-						     t1->instance_flags ());
-	}
+      addr_space
+	= gdbarch_address_space_from_type_flags (arch, t1->instance_flags ());
     }
 
   while (xfered_total < length)

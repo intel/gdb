@@ -19195,6 +19195,38 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 		  add_ada_export_symbol (sym, name, linkagename, cu,
 					 list_to_add);
 		}
+
+	      /* Intel extension for share local memory (SLM):
+		 The Intel GPU compiler uses DW_AT_address_class at variable
+		 level to distinguish variables located in SLM.  Until there
+		 is better support for address spaces in DWARF.  */
+	      if (cu->producer
+		  && strstr (cu->producer, "clang based Intel(R) oneAPI"))
+		{
+		  attribute *attr_address_class
+		    = dwarf2_attr (die, DW_AT_address_class, cu);
+		  struct gdbarch *gdbarch = objfile->arch ();
+
+		  if (attr_address_class != nullptr
+		      && gdbarch_address_class_type_flags_p (gdbarch))
+		    {
+		      int addr_class
+			= attr_address_class->constant_value (DW_ADDR_none);
+
+		      const int addr_size = cu->header.addr_size;
+		      type_instance_flags type_flags
+			  = gdbarch_address_class_type_flags (gdbarch,
+							      addr_size,
+							      addr_class);
+
+		      gdb_assert
+			  ((type_flags & ~TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL)
+			    == 0);
+
+		      sym->set_type (make_type_with_address_space (sym->type (),
+								   type_flags));
+		    }
+		}
 	    }
 	  else
 	    {

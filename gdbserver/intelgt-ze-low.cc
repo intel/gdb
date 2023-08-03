@@ -1013,7 +1013,8 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       intelgt_add_regset (feature, regnum, "dbg", regprop.count, "DBG",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize));
+			  intelgt_uint_reg_type (regprop.bitSize),
+			  expedite);
       break;
 
     case ZET_DEBUG_REGSET_TYPE_FC_INTEL_GPU:

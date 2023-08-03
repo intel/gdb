@@ -70,7 +70,7 @@ struct tdesc_reg : tdesc_element
 {
   tdesc_reg (struct tdesc_feature *feature, const std::string &name_,
 	     int regnum, int save_restore_, const char *group_,
-	     int bitsize_, const char *type_);
+	     int bitsize_, const char *type_, bool is_expedited_);
 
   virtual ~tdesc_reg () = default;
 
@@ -110,6 +110,9 @@ struct tdesc_reg : tdesc_element
   /* The target-described type corresponding to TYPE, if found.  */
   struct tdesc_type *tdesc_type;
 
+  /* Whether this register is announced as an expedited reg.  */
+  bool is_expedited;
+
   void accept (tdesc_element_visitor &v) const override
   {
     v.visit (this);
@@ -122,7 +125,8 @@ struct tdesc_reg : tdesc_element
        && save_restore == other.save_restore
        && bitsize == other.bitsize
        && group == other.group
-       && type == other.type);
+       && type == other.type
+       && is_expedited == other.is_expedited);
   }
 
   bool operator!= (const tdesc_reg &other) const
@@ -437,7 +441,8 @@ void tdesc_add_enum_value (tdesc_type_with_fields *type, int value,
 /* Create a register in feature FEATURE.  */
 void tdesc_create_reg (struct tdesc_feature *feature, const char *name,
 		       int regnum, int save_restore, const char *group,
-		       int bitsize, const char *type);
+		       int bitsize, const char *type,
+		       bool is_expedited = false);
 
 /* Return the tdesc in string XML format.  */
 

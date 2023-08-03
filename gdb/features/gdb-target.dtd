@@ -39,6 +39,7 @@
 	bitsize		CDATA	#REQUIRED
 	regnum		CDATA	#IMPLIED
 	save-restore	(yes | no) 'yes'
+	expedited	(yes | no) #IMPLIED
 	type		CDATA	'int'
 	group		CDATA	#IMPLIED
 	>

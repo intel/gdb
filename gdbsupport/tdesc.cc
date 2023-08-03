@@ -22,12 +22,13 @@
 
 tdesc_reg::tdesc_reg (struct tdesc_feature *feature, const std::string &name_,
 		      int regnum, int save_restore_, const char *group_,
-		      int bitsize_, const char *type_)
+		      int bitsize_, const char *type_, bool is_expedited_)
   : name (name_), target_regnum (regnum),
     save_restore (save_restore_),
     group (group_ != NULL ? group_ : ""),
     bitsize (bitsize_),
-    type (type_ != NULL ? type_ : "<unknown>")
+    type (type_ != NULL ? type_ : "<unknown>"),
+    is_expedited (is_expedited_)
 {
   /* If the register's type is target-defined, look it up now.  We may not
      have easy access to the containing feature when we want it later.  */
@@ -142,10 +143,10 @@ tdesc_named_type (const struct tdesc_feature *feature, const char *id)
 void
 tdesc_create_reg (struct tdesc_feature *feature, const char *name,
 		  int regnum, int save_restore, const char *group,
-		  int bitsize, const char *type)
+		  int bitsize, const char *type, bool is_expedited)
 {
   tdesc_reg *reg = new tdesc_reg (feature, name, regnum, save_restore,
-				  group, bitsize, type);
+				  group, bitsize, type, is_expedited);
 
   feature->registers.emplace_back (reg);
 }
@@ -396,6 +397,9 @@ void print_xml_feature::visit (const tdesc_reg *r)
 
   if (r->save_restore == 0)
     string_appendf (tmp, " save-restore=\"no\"");
+
+  if (r->is_expedited)
+    string_appendf (tmp, " expedited=\"yes\"");
 
   string_appendf (tmp, "/>");
 

@@ -223,6 +223,10 @@ tdesc_start_reg (struct gdb_xml_parser *parser,
   else
     save_restore = 1;
 
+  bool is_expedited = false;
+  if (ix < length && strcmp (attributes[ix].name, "expedited") == 0)
+    is_expedited = (* (ULONGEST *) attributes[ix++].value.get ()) == 1;
+
   if (strcmp (type, "int") != 0
       && strcmp (type, "float") != 0
       && tdesc_named_type (data->current_feature, type) == NULL)
@@ -230,7 +234,7 @@ tdesc_start_reg (struct gdb_xml_parser *parser,
 		   name, type);
 
   tdesc_create_reg (data->current_feature, name, regnum, save_restore, group,
-		    bitsize, type);
+		    bitsize, type, is_expedited);
 
   data->next_regnum = regnum + 1;
 }
@@ -550,6 +554,8 @@ static const struct gdb_xml_attribute reg_attributes[] = {
   { "type", GDB_XML_AF_OPTIONAL, NULL, NULL },
   { "group", GDB_XML_AF_OPTIONAL, NULL, NULL },
   { "save-restore", GDB_XML_AF_OPTIONAL,
+    gdb_xml_parse_attr_enum, gdb_xml_enums_boolean },
+  { "expedited", GDB_XML_AF_OPTIONAL,
     gdb_xml_parse_attr_enum, gdb_xml_enums_boolean },
   { NULL, GDB_XML_AF_NONE, NULL, NULL }
 };

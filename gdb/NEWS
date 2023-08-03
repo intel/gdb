@@ -160,6 +160,13 @@ qXfer:features:read:target.xml
   that can be used for passing information when the remote inferior
   represents a device, e.g.  a GPU.
 
+qXfer:features:read:target.xml
+
+  The XML that is sent as a response can now include an "expedited"
+  attribute for a "reg" element.  The attribute indicates whether the
+  register is expedited.  Such registers are included in replies to
+  the 'e' packet and also in thread stop replies.
+
 qXfer:threads:read
 
   The XML that is sent as a response can now include an "id_str"

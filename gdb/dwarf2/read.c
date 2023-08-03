@@ -21137,6 +21137,29 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 		}
 	      else
 		list_to_add = cu->list_in_scope;
+
+	      /* Intel extension: We use DW_AT_address_class at variable level
+		 to distinguish variables located in SLM.  */
+	      attribute *attr_address_class
+		= dwarf2_attr (die, DW_AT_address_class, cu);
+
+	      if (attr_address_class != nullptr
+		  && gdbarch_address_class_type_flags_p (gdbarch))
+		{
+		  int addr_class
+		    = attr_address_class->constant_value (DW_ADDR_none);
+
+		  type_instance_flags type_flags
+		      = gdbarch_address_class_type_flags (gdbarch,
+							  cu->header.addr_size,
+							  addr_class);
+
+		  gdb_assert
+		    ((type_flags & ~TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL) == 0);
+
+		  sym->set_type (make_type_with_address_space (sym->type (),
+							       type_flags));
+		}
 	    }
 	  else
 	    {

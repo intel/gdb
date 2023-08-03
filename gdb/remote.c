@@ -1783,6 +1783,9 @@ map_regcache_remote_table (struct gdbarch *gdbarch, struct packet_reg *regs)
       remote_regs[regnum]->in_g_packet = true;
       remote_regs[regnum]->offset = offset;
       offset += register_size (gdbarch, remote_regs[regnum]->regnum);
+
+      remote_regs[regnum]->in_e_packet
+	= tdesc_register_is_expedited (gdbarch, regnum);
     }
 
   return offset;

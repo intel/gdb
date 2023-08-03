@@ -47899,6 +47899,7 @@ Each register is represented as an element with this form:
      bitsize="@var{size}"
      @r{[}regnum="@var{num}"@r{]}
      @r{[}save-restore="@var{save-restore}"@r{]}
+     @r{[}expedited="@var{expedited}"@r{]}
      @r{[}type="@var{type}"@r{]}
      @r{[}group="@var{group}"@r{]}/>
 @end smallexample
@@ -47929,6 +47930,11 @@ calls; this must be either @code{yes} or @code{no}.  The default is
 @code{yes}, which is appropriate for most registers except for
 some system control registers; this is not related to the target's
 ABI.
+
+@item expedited
+Whether the register is expedited; this must be either @code{yes} or
+@code{no}.  The default is @code{no}, which is appropriate for most
+registers.
 
 @item type
 The type of the register.  It may be a predefined type, a type

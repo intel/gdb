@@ -113,6 +113,13 @@ qXfer:threads:read
   should print as the target ID of the thread, for example in the
   "info threads" command or when switching to the thread.
 
+qXfer:features:read:target.xml
+
+  The XML that is sent as a response can now include an "expedited"
+  attribute for a "reg" element.  The attribute indicates whether the
+  register is expedited.  Such registers are included in replies to
+  the 'e' packet and also in thread stop replies.
+
 *** Changes in GDB 13
 
 * MI version 1 is deprecated, and will be removed in GDB 14.

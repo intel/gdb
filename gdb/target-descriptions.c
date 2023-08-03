@@ -1103,6 +1103,19 @@ tdesc_register_reggroup_p (struct gdbarch *gdbarch, int regno,
   return default_register_reggroup_p (gdbarch, regno, reggroup);
 }
 
+/* See target-descriptions.h.  */
+
+bool
+tdesc_register_is_expedited (gdbarch *gdbarch, int regno)
+{
+  tdesc_reg *treg = tdesc_find_register (gdbarch, regno);
+
+  if (treg == nullptr)
+    return false;
+
+  return treg->is_expedited;
+}
+
 /* Record architecture-specific functions to call for pseudo-register
    support.  */
 
@@ -1621,7 +1634,8 @@ public:
       gdb_printf ("\"%s\", ", reg->group.c_str ());
     else
       gdb_printf ("NULL, ");
-    gdb_printf ("%d, \"%s\");\n", reg->bitsize, reg->type.c_str ());
+    gdb_printf ("%d, \"%s\"", reg->bitsize, reg->type.c_str ());
+    gdb_printf ("%s);\n", reg->is_expedited ? ", true" : "");
   }
 
 protected:
@@ -1764,7 +1778,8 @@ public:
       gdb_printf ("\"%s\", ", reg->group.c_str ());
     else
       gdb_printf ("NULL, ");
-    gdb_printf ("%d, \"%s\");\n", reg->bitsize, reg->type.c_str ());
+    gdb_printf ("%d, \"%s\"", reg->bitsize, reg->type.c_str ());
+    gdb_printf ("%s);\n", reg->is_expedited ? ", true" : "");
 
     m_next_regnum++;
   }

@@ -241,6 +241,10 @@ const std::string tdesc_find_device_info_attribute
 int tdesc_register_in_reggroup_p (struct gdbarch *gdbarch, int regno,
 				  const struct reggroup *reggroup);
 
+/* Query whether REGNUM is declared as an expedited register.  */
+
+bool tdesc_register_is_expedited (gdbarch *gdbarch, int regno);
+
 /* Methods for constructing a target description.  */
 
 void set_tdesc_architecture (struct target_desc *,

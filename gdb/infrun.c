@@ -2097,11 +2097,6 @@ static const char *const scheduler_enums[] = {
   nullptr
 };
 
-static struct {
-  /* If true, scheduler locking is on during inferior calls.  */
-  bool eval = true;
-} scheduler_locking;
-
 #if not defined (USE_WIN32API)
 static const char *scheduler_mode = schedlock_replay;
 #else
@@ -2157,7 +2152,6 @@ ptid_t
 user_visible_resume_ptid (int step)
 {
   ptid_t resume_ptid;
-  thread_info *tp = inferior_thread ();
 
   if (non_stop)
     {
@@ -2166,8 +2160,7 @@ user_visible_resume_ptid (int step)
       resume_ptid = inferior_ptid;
     }
   else if ((scheduler_mode == schedlock_on)
-	   || (scheduler_mode == schedlock_step && step)
-	   || (scheduler_locking.eval && tp->control.in_infcall))
+	   || (scheduler_mode == schedlock_step && step))
     {
       /* User-settable 'scheduler' mode requires solo thread
 	 resume.  */
@@ -2930,7 +2923,8 @@ thread_still_needs_step_over (struct thread_info *tp)
   return what;
 }
 
-/* Returns true if scheduler locking applies to thread TP.  */
+/* Returns true if scheduler locking applies.  STEP indicates whether
+   we're about to do a step/next-like command to a thread.  */
 
 static bool
 schedlock_applies (struct thread_info *tp)
@@ -2940,8 +2934,7 @@ schedlock_applies (struct thread_info *tp)
 	      && tp->control.stepping_command)
 	  || (scheduler_mode == schedlock_replay
 	      && target_record_will_replay (minus_one_ptid,
-					    execution_direction))
-	   || (scheduler_locking.eval && tp->control.in_infcall));
+					    execution_direction)));
 }
 
 /* Set process_stratum_target::COMMIT_RESUMED_STATE in all target
@@ -10001,14 +9994,6 @@ infrun_thread_ptid_changed ()
 
 #endif /* GDB_SELF_TEST */
 
-static void
-show_schedlock_eval (struct ui_file *file, int from_tty,
-		     struct cmd_list_element *c, const char *value)
-{
-  gdb_printf (file, _("Scheduler locking during expression "
-		      "evaluations is %s.\n"), value);
-}
-
 void _initialize_infrun ();
 void
 _initialize_infrun ()
@@ -10208,17 +10193,6 @@ replay == scheduler locked in replay mode and unlocked during normal execution."
 			set_schedlock_func,	/* traps on target vector */
 			show_scheduler_mode,
 			&setlist, &showlist);
-
-  add_setshow_boolean_cmd ("scheduler-locking-eval", class_run,
-			  &scheduler_locking.eval, _("\
-Set mode for locking scheduler during expression evaluations."), _("\
-Show mode for locking scheduler during expression evaluations."), _("\
-off == no locking (threads may preempt during expression evaluations).\n\
-on  == no thread except the current thread may run during expression\n\
-       evaluations."),
-			  NULL,
-			  show_schedlock_eval,
-			  &setlist, &showlist);
 
   add_setshow_boolean_cmd ("schedule-multiple", class_run, &sched_multi, _("\
 Set mode for resuming threads of all processes."), _("\

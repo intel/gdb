@@ -32,10 +32,6 @@ show suppress-mi-notifications
 maint jit dump
   Dump an in-memory JIT object into a file.
 
-set|show scheduler-locking-eval (on|off)
-  The new setting allows a user to lock scheduler during inferior calls.
-  It can be set in parallel to scheduler-locking step or replay mode.
-
 info devices
   Show additional information about inferiors which are considered
   devices by GDB.  For devices, the description displayed by 'info

@@ -75,8 +75,13 @@ intelgt_add_regset (tdesc_feature *feature, long &regnum, const char *prefix,
     {
       std::string name = std::string (prefix) + std::to_string (reg);
 
+      bool is_expedited = false;
+      for (const char *exp_reg : expedite)
+	if (name == exp_reg)
+	  is_expedited = true;
+
       tdesc_create_reg (feature, name.c_str (), regnum++, is_writable, group,
-			bitsize, type);
+			bitsize, type, is_expedited);
     }
 }
 
@@ -907,12 +912,13 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       feature = tdesc_create_feature (tdesc, intelgt::feature_ce);
 
+      expedite.push_back ("ce");
+
       tdesc_create_reg (feature, "ce", regnum++, regset.is_writeable, "arf",
 			regprop.bitSize,
 			intelgt_uint_reg_type (feature, regprop.bitSize,
-					       32u));
-
-      expedite.push_back ("ce");
+					       32u),
+			true /* expedited */);
       break;
 
     case ZET_DEBUG_REGSET_TYPE_SR_INTEL_GPU:
@@ -1006,15 +1012,19 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 	    };
 	    int reg = 0;
 	    for (; (reg < regprop.count) && (sbaregs[reg] != nullptr); ++reg)
-	      tdesc_create_reg (feature, sbaregs[reg], regnum++,
-				regset.is_writeable, "virtual",
-				regprop.bitSize, regtype);
+	      {
+		bool is_expedited = false;
+		if ((strcmp (sbaregs[reg], "genstbase") == 0)
+		    || (strcmp (sbaregs[reg], "isabase") == 0))
+		  {
+		    is_expedited = true;
+		    expedite.push_back (sbaregs[reg]);
+		  }
 
-	    if (regprop.count >= 1)
-	      expedite.push_back ("genstbase");
-
-	    if (regprop.count >= 5)
-	      expedite.push_back ("isabase");
+		tdesc_create_reg (feature, sbaregs[reg], regnum++,
+				  regset.is_writeable, "virtual",
+				  regprop.bitSize, regtype, is_expedited);
+	      }
 	  }
 	  break;
 

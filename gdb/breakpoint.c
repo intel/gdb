@@ -1749,6 +1749,10 @@ one_breakpoint_xfer_memory (gdb_byte *readbuf, gdb_byte *writebuf,
 	 address.  */
       bp = gdbarch_breakpoint_from_pc (gdbarch, &addr, &placed_size);
 
+      /* Some architectures do not have dedicated INSN for breakpoints.  */
+      if (placed_size == 0)
+	return;
+
       /* Update the final write buffer with this inserted
 	 breakpoint's INSN.  */
       memcpy (writebuf + bp_addr - memaddr, bp + bptoffset, bp_size);

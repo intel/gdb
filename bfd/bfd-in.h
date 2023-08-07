@@ -355,12 +355,14 @@ struct stab_info
 /* Direct I/O routines, for programs which know more about the object
    file than BFD does.  Use higher level routines if possible.  */
 
-extern bfd_size_type bfd_bread (void *, bfd_size_type, bfd *);
-extern bfd_size_type bfd_bwrite (const void *, bfd_size_type, bfd *);
-extern int bfd_seek (bfd *, file_ptr, int);
-extern file_ptr bfd_tell (bfd *);
+extern bfd_size_type bfd_bread (void *, bfd_size_type, bfd *)
+ATTRIBUTE_WARN_UNUSED_RESULT;
+extern bfd_size_type bfd_bwrite (const void *, bfd_size_type, bfd *)
+ATTRIBUTE_WARN_UNUSED_RESULT;
+extern int bfd_seek (bfd *, file_ptr, int) ATTRIBUTE_WARN_UNUSED_RESULT;
+extern file_ptr bfd_tell (bfd *) ATTRIBUTE_WARN_UNUSED_RESULT;
 extern int bfd_flush (bfd *);
-extern int bfd_stat (bfd *, struct stat *);
+extern int bfd_stat (bfd *, struct stat *) ATTRIBUTE_WARN_UNUSED_RESULT;
 
 extern bool bfd_cache_close
   (bfd *abfd);

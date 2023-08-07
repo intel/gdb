@@ -550,7 +550,8 @@ FUNCTION
 SYNOPSIS
 	void *bfd_mmap (bfd *abfd, void *addr, bfd_size_type len,
 			int prot, int flags, file_ptr offset,
-			void **map_addr, bfd_size_type *map_len);
+			void **map_addr, bfd_size_type *map_len)
+			ATTRIBUTE_WARN_UNUSED_RESULT;
 
 DESCRIPTION
 	Return mmap()ed region of the file, if possible and implemented.

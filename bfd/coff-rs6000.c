@@ -2109,8 +2109,12 @@ xcoff_write_armap_big (bfd *abfd, unsigned int elength ATTRIBUTE_UNUSED,
 	    }
 	}
 
-      bfd_bwrite (symbol_table, symbol_table_size, abfd);
-
+      if (bfd_bwrite (symbol_table, symbol_table_size, abfd)
+	  != symbol_table_size)
+	{
+	  free (symbol_table);
+	  return false;
+	}
       free (symbol_table);
 
       prevoff = nextoff;
@@ -2189,8 +2193,12 @@ xcoff_write_armap_big (bfd *abfd, unsigned int elength ATTRIBUTE_UNUSED,
 	    }
 	}
 
-      bfd_bwrite (symbol_table, symbol_table_size, abfd);
-
+      if (bfd_bwrite (symbol_table, symbol_table_size, abfd)
+	  != symbol_table_size)
+	{
+	  free (symbol_table);
+	  return false;
+	}
       free (symbol_table);
 
       PRINT20 (fhdr->symoff64, nextoff);
@@ -4117,7 +4125,10 @@ xcoff_generate_rtinit  (bfd *abfd, const char *init, const char *fini,
       string_table_size += 4;
       string_table = (bfd_byte *) bfd_zmalloc (string_table_size);
       if (string_table == NULL)
-	return false;
+	{
+	  free (data_buffer);
+	  return false;
+	}
 
       val = string_table_size;
       bfd_h_put_32 (abfd, val, &string_table[0]);
@@ -4267,18 +4278,21 @@ xcoff_generate_rtinit  (bfd *abfd, const char *init, const char *fini,
   filehdr.f_symptr = scnhdr.s_relptr + scnhdr.s_nreloc * RELSZ;
 
   bfd_coff_swap_filehdr_out (abfd, &filehdr, filehdr_ext);
-  bfd_bwrite (filehdr_ext, FILHSZ, abfd);
   bfd_coff_swap_scnhdr_out (abfd, &scnhdr, scnhdr_ext);
-  bfd_bwrite (scnhdr_ext, SCNHSZ, abfd);
-  bfd_bwrite (data_buffer, data_buffer_size, abfd);
-  bfd_bwrite (reloc_ext, scnhdr.s_nreloc * RELSZ, abfd);
-  bfd_bwrite (syment_ext, filehdr.f_nsyms * SYMESZ, abfd);
-  bfd_bwrite (string_table, string_table_size, abfd);
+  bool ret = true;
+  if (bfd_bwrite (filehdr_ext, FILHSZ, abfd) != FILHSZ
+      || bfd_bwrite (scnhdr_ext, SCNHSZ, abfd) != SCNHSZ
+      || bfd_bwrite (data_buffer, data_buffer_size, abfd) != data_buffer_size
+      || (bfd_bwrite (reloc_ext, scnhdr.s_nreloc * RELSZ, abfd)
+	  != scnhdr.s_nreloc * RELSZ)
+      || (bfd_bwrite (syment_ext, filehdr.f_nsyms * SYMESZ, abfd)
+	  != (bfd_size_type) filehdr.f_nsyms * SYMESZ)
+      || bfd_bwrite (string_table, string_table_size, abfd) != string_table_size)
+    ret = false;
 
+  free (string_table);
   free (data_buffer);
-  data_buffer = NULL;
-
-  return true;
+  return ret;
 }
 
 

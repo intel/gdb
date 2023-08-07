@@ -1091,7 +1091,8 @@ print_contents (bfd *abfd)
   if (verbose)
     printf ("\n<%s>\n\n", bfd_get_filename (abfd));
 
-  bfd_seek (abfd, (file_ptr) 0, SEEK_SET);
+  if (bfd_seek (abfd, 0, SEEK_SET) != 0)
+    bfd_fatal (bfd_get_filename (abfd));
 
   size = buf.st_size;
   while (ncopied < size)
@@ -1189,7 +1190,8 @@ extract_file (bfd *abfd)
     fatal (_("internal stat error on %s"), bfd_get_filename (abfd));
   size = buf.st_size;
 
-  bfd_seek (abfd, (file_ptr) 0, SEEK_SET);
+  if (bfd_seek (abfd, 0, SEEK_SET) != 0)
+    bfd_fatal (bfd_get_filename (abfd));
 
   output_file = NULL;
   if (size == 0)

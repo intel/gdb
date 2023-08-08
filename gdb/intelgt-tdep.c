@@ -2611,6 +2611,8 @@ get_iga_version (unsigned int device_id)
       case 0x56A9:
       case 0x56B0:
       case 0x56B1:
+      case 0x56B2:
+      case 0x56B3:
       case 0x56C0:
       case 0x56C1:
       case 0x56CF:

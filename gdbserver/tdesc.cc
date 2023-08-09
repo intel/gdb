@@ -85,7 +85,13 @@ init_target_desc (struct target_desc *tdesc,
 
   /* Make sure PBUFSIZ is large enough to hold a full register
      packet.  */
+#ifndef IN_PROCESS_AGENT
+  gdb_assert (2 * tdesc->registers_size + 32 <= target_query_pbuf_size ());
+#else
+  /* We don't have target.h for IPA.  */
   gdb_assert (2 * tdesc->registers_size + 32 <= PBUFSIZ);
+#endif
+
 
 #ifndef IN_PROCESS_AGENT
   /* Drop the contents of the previous vector, if any.  */

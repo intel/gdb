@@ -28,6 +28,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "gdbsupport/fileio.h"
+#include <string>
 
 struct fd_list
 {
@@ -54,11 +55,17 @@ safe_fromhex (char a, int *nibble)
 
 /* Filenames are hex encoded, so the maximum we can handle is half the
    packet buffer size.  Cap to PATH_MAX, if it is shorter.  */
-#if !defined (PATH_MAX) || (PATH_MAX > (PBUFSIZ / 2 + 1))
-#  define HOSTIO_PATH_MAX (PBUFSIZ / 2 + 1)
+static int
+hostio_path_max ()
+{
+#if !defined (PATH_MAX)
+  return target_query_pbuf_size () / 2 + 1;
 #else
-#  define HOSTIO_PATH_MAX PATH_MAX
+  return (PATH_MAX > (target_query_pbuf_size () / 2 + 1))
+	 ? target_query_pbuf_size () / 2 + 1
+	 : PATH_MAX;
 #endif
+}
 
 static int
 require_filename (char **pp, char *filename)
@@ -74,7 +81,7 @@ require_filename (char **pp, char *filename)
       int nib1, nib2;
 
       /* Don't allow overflow.  */
-      if (count >= HOSTIO_PATH_MAX - 1)
+      if (count >= hostio_path_max () - 1)
 	return -1;
 
       if (safe_fromhex (p[0], &nib1)
@@ -222,7 +229,7 @@ hostio_reply_with_data (char *own_buf, char *buffer, int len,
   sprintf (own_buf, "F%x;", len);
   output_index = strlen (own_buf);
 
-  out_maxlen = PBUFSIZ;
+  out_maxlen = target_query_pbuf_size ();
 
   for (input_index = 0; input_index < len; input_index++)
     {
@@ -298,7 +305,7 @@ handle_setfs (char *own_buf)
 static void
 handle_open (char *own_buf)
 {
-  char filename[HOSTIO_PATH_MAX];
+  std::vector<char> filename (hostio_path_max ());
   char *p;
   int fileio_flags, fileio_mode, flags, fd;
   mode_t mode;
@@ -306,7 +313,7 @@ handle_open (char *own_buf)
 
   p = own_buf + strlen ("vFile:open:");
 
-  if (require_filename (&p, filename)
+  if (require_filename (&p, filename.data ())
       || require_comma (&p)
       || require_int (&p, &fileio_flags)
       || require_comma (&p)
@@ -322,9 +329,10 @@ handle_open (char *own_buf)
   /* We do not need to convert MODE, since the fileio protocol
      uses the standard values.  */
   if (hostio_fs_pid != 0)
-    fd = the_target->multifs_open (hostio_fs_pid, filename, flags, mode);
+    fd = the_target->multifs_open (hostio_fs_pid, filename.data (), flags,
+				   mode);
   else
-    fd = open (filename, flags, mode);
+    fd = open (filename.data (), flags, mode);
 
   if (fd == -1)
     {
@@ -367,8 +375,8 @@ handle_pread (char *own_buf, int *new_packet_len)
      too much because of escaping, but this is handled below.  */
   if (max_reply_size == -1)
     {
-      sprintf (own_buf, "F%x;", PBUFSIZ);
-      max_reply_size = PBUFSIZ - strlen (own_buf);
+      sprintf (own_buf, "F%x;", target_query_pbuf_size ());
+      max_reply_size = target_query_pbuf_size () - strlen (own_buf);
     }
   if (len > max_reply_size)
     len = max_reply_size;
@@ -527,13 +535,13 @@ handle_close (char *own_buf)
 static void
 handle_unlink (char *own_buf)
 {
-  char filename[HOSTIO_PATH_MAX];
+  std::vector<char> filename (hostio_path_max ());
   char *p;
   int ret;
 
   p = own_buf + strlen ("vFile:unlink:");
 
-  if (require_filename (&p, filename)
+  if (require_filename (&p, filename.data ())
       || require_end (p))
     {
       hostio_packet_error (own_buf);
@@ -541,9 +549,9 @@ handle_unlink (char *own_buf)
     }
 
   if (hostio_fs_pid != 0)
-    ret = the_target->multifs_unlink (hostio_fs_pid, filename);
+    ret = the_target->multifs_unlink (hostio_fs_pid, filename.data ());
   else
-    ret = unlink (filename);
+    ret = unlink (filename.data ());
 
   if (ret == -1)
     {
@@ -557,13 +565,14 @@ handle_unlink (char *own_buf)
 static void
 handle_readlink (char *own_buf, int *new_packet_len)
 {
-  char filename[HOSTIO_PATH_MAX], linkname[HOSTIO_PATH_MAX];
+  std::vector<char> filename (hostio_path_max ());
+  std::vector<char> linkname (hostio_path_max ());
   char *p;
   int ret, bytes_sent;
 
   p = own_buf + strlen ("vFile:readlink:");
 
-  if (require_filename (&p, filename)
+  if (require_filename (&p, filename.data ())
       || require_end (p))
     {
       hostio_packet_error (own_buf);
@@ -571,11 +580,11 @@ handle_readlink (char *own_buf, int *new_packet_len)
     }
 
   if (hostio_fs_pid != 0)
-    ret = the_target->multifs_readlink (hostio_fs_pid, filename,
-					linkname,
-					sizeof (linkname) - 1);
+    ret = the_target->multifs_readlink (hostio_fs_pid, filename.data (),
+					linkname.data (),
+					linkname.size () - 1);
   else
-    ret = readlink (filename, linkname, sizeof (linkname) - 1);
+    ret = readlink (filename.data (), linkname.data (), linkname.size ());
 
   if (ret == -1)
     {
@@ -583,7 +592,8 @@ handle_readlink (char *own_buf, int *new_packet_len)
       return;
     }
 
-  bytes_sent = hostio_reply_with_data (own_buf, linkname, ret, new_packet_len);
+  bytes_sent = hostio_reply_with_data (own_buf, linkname.data (), ret,
+				       new_packet_len);
 
   /* If the response does not fit into a single packet, do not attempt
      to return a partial response, but simply fail.  */

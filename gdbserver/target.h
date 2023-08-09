@@ -542,6 +542,9 @@ public:
   /* Create an identification string if implemented.  Else returns
      "Process PID".  */
   virtual const std::string id_str (process_info *process);
+
+  /* Query packet buffer size.  */
+  virtual int query_pbuf_size ();
 };
 
 extern process_stratum_target *the_target;
@@ -735,6 +738,13 @@ target_ack_in_memory_library (process_info *process,  CORE_ADDR begin,
 			      CORE_ADDR end)
 {
   the_target->ack_in_memory_library (process, begin, end);
+}
+
+static inline int
+target_query_pbuf_size ()
+{
+  gdb_assert (the_target != nullptr);
+  return the_target->query_pbuf_size ();
 }
 
 /* Read LEN bytes from MEMADDR in ADDR_SPACE into the buffer MYADDR.

@@ -1350,6 +1350,10 @@ struct target_ops
     /* Return the x86 XSAVE extended state area layout.  */
     virtual x86_xsave_layout fetch_x86_xsave_layout ()
       TARGET_DEFAULT_RETURN (x86_xsave_layout ());
+
+    /* Query PBUFSIZ from target instead of hard-coded #define'ing it.  */
+    virtual int query_pbuf_size ()
+      TARGET_DEFAULT_RETURN (PBUFSIZ);
   };
 
 /* Deleter for std::unique_ptr.  See comments in
@@ -2602,5 +2606,8 @@ extern void target_ack_library (const char *name);
 
 /* See target_ops::ack_in_memory_library.  */
 extern void target_ack_in_memory_library (CORE_ADDR begin, CORE_ADDR end);
+
+/* See target_ops::query_pbuf_size.  */
+extern int target_query_pbuf_size ();
 
 #endif /* !defined (TARGET_H) */

@@ -255,17 +255,12 @@ proc make_cli_in_mi_re { command cli_in_mi_mode mode event inf cli_thread
 # Return the current value of the "scheduler-locking" parameter.
 
 proc show_scheduler_locking { } {
-    global gdb_prompt
-    global expect_out
-
-    set any "\[^\r\n\]*"
-
     set test "show scheduler-locking"
-    gdb_test_multiple $test $test {
-	-re ".*Mode for locking scheduler during execution is \"(${any})\".\r\n$gdb_prompt " {
-	    pass $test
-	    return $expect_out(1,string)
-	}
+    set schedlock [get_scheduler_locking $test]
+
+    if {$schedlock ne "unknown"} {
+	pass $test
+	return $schedlock
     }
 
     error "Couldn't get current scheduler-locking value."
@@ -342,7 +337,10 @@ proc test_continue_to_start { mode inf } {
 		}
 
 		# Restore scheduler-locking to its original value.
-		gdb_test_no_output "set scheduler-locking $previous_schedlock_val"
+		gdb_test_no_output "set scheduler-locking replay run [lindex $previous_schedlock_val 0]"
+		gdb_test_no_output "set scheduler-locking replay step [lindex $previous_schedlock_val 1]"
+		gdb_test_no_output "set scheduler-locking run [lindex $previous_schedlock_val 2]"
+		gdb_test_no_output "set scheduler-locking step [lindex $previous_schedlock_val 3]"
 	    } else { # $mode == "non-stop"
 		# Put a thread-specific breakpoint for thread 2 of the current
 		# inferior.  We don't put a breakpoint for thread 3, since we

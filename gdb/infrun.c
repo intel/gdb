@@ -77,6 +77,7 @@
 #include "extension.h"
 #include "disasm.h"
 #include "interps.h"
+#include "cli/cli-decode.h"
 
 /* Prototypes for local functions */
 
@@ -112,6 +113,12 @@ static void restart_threads (struct thread_info *event_thread,
 static bool start_step_over (void);
 
 static bool step_over_info_valid_p (void);
+
+/* Command lists for the scheduler locking.  */
+static cmd_list_element *schedlock_set_cmdlist;
+static cmd_list_element *schedlock_show_cmdlist;
+static cmd_list_element *schedlock_set_replay_cmdlist;
+static cmd_list_element *schedlock_show_replay_cmdlist;
 
 /* Asynchronous signal handler registered as event loop source for
    when we have pending events ready to be passed to the core.  */
@@ -2265,7 +2272,8 @@ struct schedlock_options
 
     operator bool () const { return value; }
     const char *c_str () const { return value ? "on" : "off"; }
-    /* Set new value.  Return true, if the value has changed.  */
+    /* Set new value.  Return true, if the value has changed.
+       Also notifies the observer, if the value has changed.  */
     bool set (bool new_value);
   };
 
@@ -2292,6 +2300,9 @@ schedlock_options::option::set (bool new_value)
   if (value != new_value)
     {
       value = new_value;
+      std::string param_name = "scheduler-locking " + name;
+
+      interps_notify_param_changed (param_name.c_str (), c_str ());
       return true;
     }
 
@@ -2312,15 +2323,6 @@ static const char schedlock_off[] = "off";
 static const char schedlock_on[] = "on";
 static const char schedlock_step[] = "step";
 static const char schedlock_replay[] = "replay";
-static const char *const scheduler_enums[] = {
-  schedlock_off,
-  schedlock_on,
-  schedlock_step,
-  schedlock_replay,
-  nullptr
-};
-
-static const char *scheduler_mode = schedlock_replay;
 
 schedlock schedlock {{{"run", false}, {"step", false}},
 		     {{"replay run", true}, {"replay step", true}}};
@@ -2341,35 +2343,89 @@ set_schedlock_shortcut_option (const char *shortcut)
   /* Check that we got a valid shortcut option.  */
   gdb_assert (is_on || is_step || is_replay || is_off);
 
-  schedlock.normal.run.set (is_on);
-  schedlock.normal.step.set (is_on || is_step);
-  schedlock.replay.run.set (is_on || is_replay);
-  schedlock.replay.step.set (is_on || is_replay || is_step);
+  bool any_changed = schedlock.normal.run.set (is_on);
+  any_changed = schedlock.normal.step.set (is_on || is_step) || any_changed;
+  any_changed = schedlock.replay.run.set (is_on || is_replay) || any_changed;
+  any_changed = schedlock.replay.step.set (is_on || is_replay || is_step)
+    || any_changed;
+
+  /* If at least one parameter has changed, notify the observer
+     in the old-fashioned way.  */
+  if (any_changed)
+    interps_notify_param_changed ("scheduler-locking", shortcut);
+}
+
+/* Default callback for set methods of scheduler locking options.
+   Checks that the scheduler locking is supported.
+   If no, it reverts all options to "off" and throws an error.  */
+
+static void
+set_schedlock_callback (const char *args, int from_tty, cmd_list_element *c)
+{
+  if (target_can_lock_scheduler ())
+    return;
+
+  /* Set scheduler locking off and error out.  */
+  set_schedlock_shortcut_option (schedlock_off);
+  error (_("Target '%s' cannot support this command."), target_shortname ());
+}
+
+/* Support for shortcut schedlock options: "on", "off", "step", "replay".  */
+
+static void
+set_schedlock_step (const char *args, int from_tty, cmd_list_element *c)
+{
+  if (!args || !*args)
+    set_schedlock_shortcut_option (schedlock_step);
+  set_schedlock_callback (args, from_tty, nullptr);
 }
 
 static void
-show_scheduler_mode (struct ui_file *file, int from_tty,
-		     struct cmd_list_element *c, const char *value)
+set_schedlock_replay (const char *args, int from_tty)
 {
-  gdb_printf (file,
-	      _("Mode for locking scheduler "
-		"during execution is \"%s\".\n"),
-	      value);
+  set_schedlock_shortcut_option (schedlock_replay);
+  set_schedlock_callback (args, from_tty, nullptr);
 }
 
 static void
-set_schedlock_func (const char *args, int from_tty, struct cmd_list_element *c)
+set_schedlock_on (const char *args, int from_tty)
 {
-  if (!target_can_lock_scheduler ())
-    {
-      scheduler_mode = schedlock_off;
-      /* Set scheduler locking off.  */
-      set_schedlock_shortcut_option (schedlock_off);
-      error (_("Target '%s' cannot support this command."),
-	     target_shortname ());
-    }
+  set_schedlock_shortcut_option (schedlock_on);
+  set_schedlock_callback (args, from_tty, nullptr);
+}
 
-  set_schedlock_shortcut_option (scheduler_mode);
+static void
+set_schedlock_off (const char *args, int from_tty)
+{
+  set_schedlock_shortcut_option (schedlock_off);
+  set_schedlock_callback (args, from_tty, nullptr);
+}
+
+/* Default method to show a single option of scheduler locking.  */
+
+static void
+show_schedlock_option (ui_file *file, int from_tty,
+		       cmd_list_element *c, const char *value)
+{
+  gdb_assert (c->prefix != nullptr);
+  const char *mode;
+  if (strcmp (c->prefix->name, "replay") == 0)
+    mode = "replay mode";
+  else if (strcmp (c->prefix->name, "scheduler-locking") == 0)
+    mode = "normal execution";
+  else
+    gdb_assert_not_reached ("Unexpected command prefix.");
+
+  const char *type;
+  if (strcmp (c->name, "step") == 0)
+    type = "stepping commands";
+  else if (strcmp (c->name, "run") == 0)
+    type = "non-stepping commands";
+  else
+    gdb_assert_not_reached ("Unexpected command name.");
+
+  gdb_printf (file, _("\"%s\"\tScheduler locking for %s is "
+		      "\"%s\" during the %s.\n"), value, type, value, mode);
 }
 
 /* True if execution commands resume all threads of all processes by
@@ -8230,14 +8286,6 @@ switch_back_to_stepped_thread (struct execution_control_state *ecs)
 	  return true;
 	}
 
-      /* If scheduler locking applies even if not stepping, there's no
-	 need to walk over threads.  Above we've checked whether the
-	 current thread is stepping.  If some other thread not the
-	 event thread is stepping, then it must be that scheduler
-	 locking is not in effect.  */
-      if (schedlock_applies_to_thread (ecs->event_thread))
-	return false;
-
       /* Otherwise, we no longer expect a trap in the current thread.
 	 Clear the trap_expected flag before switching back -- this is
 	 what keep_going does as well, if we call it.  */
@@ -10635,20 +10683,91 @@ By default, the debugger will use the same inferior."),
 			show_follow_exec_mode_string,
 			&setlist, &showlist);
 
-  add_setshow_enum_cmd ("scheduler-locking", class_run, 
-			scheduler_enums, &scheduler_mode, _("\
-Set mode for locking scheduler during execution."), _("\
-Show mode for locking scheduler during execution."), _("\
-off    == no locking (threads may preempt at any time)\n\
-on     == full locking (no thread except the current thread may run)\n\
-	  This applies to both normal execution and replay mode.\n\
-step   == scheduler locked during stepping commands (step, next, stepi, nexti).\n\
-	  In this mode, other threads may run during other commands.\n\
-	  This applies to both normal execution and replay mode.\n\
-replay == scheduler locked in replay mode and unlocked during normal execution."),
-			set_schedlock_func,	/* traps on target vector */
-			show_scheduler_mode,
+  /* Commands for set/show scheduler-locking.  */
+
+  add_setshow_prefix_cmd ("scheduler-locking", class_run, _("\
+Scheduler locking settings.\n\
+Configure scheduler locking settings in various conditions."), _("\
+Show scheduler locking settings in various conditions."),
+			&schedlock_set_cmdlist,
+			&schedlock_show_cmdlist,
 			&setlist, &showlist);
+
+  add_setshow_boolean_cmd ("run", class_run, &schedlock.normal.run.value, _("\
+Scheduler locking for non-stepping commands during normal execution."), _("\
+Show scheduler locking for non-stepping commands during normal execution."),
+			   _("\
+Controls scheduler locking for non-stepping commands during normal execution.\n\
+Commands include continue, until, finish.  The setting does not affect \
+stepping."),
+			   set_schedlock_callback,
+			   show_schedlock_option,
+			   &schedlock_set_cmdlist,
+			   &schedlock_show_cmdlist);
+
+  add_setshow_boolean_cmd ("step", class_run, &schedlock.normal.step.value, _("\
+Scheduler locking for stepping commands.  W/o arguments locks the scheduler \
+for stepping."), _("\
+Show scheduler locking for stepping commands during normal execution."), _("\
+If argument \"on\" or \"off\", sets scheduler locking behavior for stepping\n\
+commands only during normal execution.\n\
+Commands include step, next, stepi, nexti."),
+			   set_schedlock_step,
+			   show_schedlock_option,
+			   &schedlock_set_cmdlist,
+			   &schedlock_show_cmdlist);
+
+  /* Commands for set/show scheduler-locking in replay mode.
+     The base command adds support for the shortcut
+       set scheduler-locking replay
+     command.  */
+
+  add_setshow_prefix_cmd ("replay", class_run, _("\
+Scheduler locking settings for replay mode.\n\
+Configure scheduler locking in various conditions such as during continuing\n\
+or stepping."),
+("Show scheduler locking in replay mode."),
+			&schedlock_set_replay_cmdlist,
+			&schedlock_show_replay_cmdlist,
+			&schedlock_set_cmdlist,
+			&schedlock_show_cmdlist);
+  add_prefix_cmd ("replay", class_run, set_schedlock_replay, _("\
+Scheduler locking settings for replay mode. \
+W/o arguments completely locks the scheduler in replay mode."),
+		  &schedlock_set_replay_cmdlist,
+	   0, &schedlock_set_cmdlist);
+
+  add_setshow_boolean_cmd ("run", class_run, &schedlock.replay.run.value, _("\
+Set scheduler locking for non-stepping commands in replay mode."), _("\
+Show scheduler locking for non-stepping commands in replay mode."), _("\
+Controls scheduler locking for non-stepping commands in replay mode.\n\
+Commands include continue, until, finish.  The setting does not affect \
+stepping."),
+			   set_schedlock_callback,
+			   show_schedlock_option,
+			   &schedlock_set_replay_cmdlist,
+			   &schedlock_show_replay_cmdlist);
+
+  add_setshow_boolean_cmd ("step", class_run, &schedlock.replay.step.value, _("\
+Set scheduler locking for stepping commands in replay mode."), _("\
+Show scheduler locking for stepping commands in replay mode."), _("\
+Controls scheduler locking for stepping commands in replay mode.\n\
+Commands include step, next, stepi, nexti."),
+			   set_schedlock_callback,
+			   show_schedlock_option,
+			   &schedlock_set_replay_cmdlist,
+			   &schedlock_show_replay_cmdlist);
+
+/* Commands "set scheduler-locking on" and "set scheduler-locking off"
+   are provided for backward compatibility.  */
+  c = add_cmd ("on", class_run, set_schedlock_on, _("\
+[Shortcut] Full locking (no thread except the current thread may run).\n\
+This applies to both normal execution and replay mode."),
+	   &schedlock_set_cmdlist);
+
+  c = add_cmd ("off", class_run, set_schedlock_off, _("\
+[Shortcut] No locking (threads may preempt at any time)."),
+	   &schedlock_set_cmdlist);
 
   add_setshow_boolean_cmd ("schedule-multiple", class_run, &sched_multi, _("\
 Set mode for resuming threads of all processes."), _("\

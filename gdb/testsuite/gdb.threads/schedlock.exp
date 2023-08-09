@@ -94,7 +94,8 @@ proc get_current_thread { description } {
 # Make sure we're stopped in the loop, in one of the non-main threads.
 
 proc goto_loop { msg } {
-    gdb_breakpoint [concat [gdb_get_line_number "schedlock.exp: main loop"] " if arg != 0"]
+    global srcfile
+    gdb_breakpoint [concat "$srcfile:" [gdb_get_line_number "schedlock.exp: main loop"] " if arg != 0"]
 
     set test "return to loop"
     if {$msg != ""} {
@@ -264,16 +265,21 @@ with_test_prefix "schedlock=on: cmd=continue" {
 }
 
 # Test stepping/nexting with different modes of scheduler locking.
-proc test_step { schedlock cmd call_function } {
+# Do scheduler-locking off setting before the test if PRESET_SCHEDLOCK_OFF is 1.
+# LOCKED defines whether we expect the thread to be locked.  If -1, then
+# determine it first.
+proc test_step { schedlock cmd call_function { preset_schedlock_off 1 } { locked -1 } } {
     global NUM
 
-    gdb_test_no_output "set scheduler-locking off"
+    if {$preset_schedlock_off} {
+	gdb_test_no_output "set scheduler-locking off"
+    }
     goto_loop ""
 
     set curthread [get_current_thread "before"]
 
     # No need to set to off again.  This avoids a duplicate message.
-    if {$schedlock != "off"} {
+    if {$preset_schedlock_off && $schedlock != "off"} {
 	gdb_test_no_output "set scheduler-locking $schedlock"
     }
 
@@ -284,16 +290,17 @@ proc test_step { schedlock cmd call_function } {
 
     step_ten_loops $cmd
 
-    if { $schedlock == "on" || $schedlock == "step" } {
-	set locked 1
-    } else {
-	set locked 0
+    if { $locked == -1 } {
+	if { $schedlock == "on" || $schedlock == "step"} {
+	    set locked 1
+	} else {
+	    set locked 0
+	}
     }
-
     check_result $cmd $curthread $before_args $locked
 }
 
-# Test stepping/nexting with different modes of scheduler locking.
+# Test stepping/nexting with different shortcut modes of scheduler locking.
 foreach schedlock {"off" "step" "on"} {
     with_test_prefix "schedlock=$schedlock" {
 	with_test_prefix "cmd=step" {
@@ -309,6 +316,58 @@ foreach schedlock {"off" "step" "on"} {
 		    test_step $schedlock "next" $call_function
 		}
 	    }
+	}
+    }
+}
+
+proc test_schedlock_opts {run step} {
+    set test "show scheduler-locking"
+    if {[get_scheduler_locking $test [list "off" "off" $run $step]] eq "unknown"} {
+	fail $test
+    } else {
+	pass $test
+    }
+
+    set locked 0
+    if {$step eq "on"} {
+	set locked 1
+    }
+
+    # Stepping tests.
+    with_test_prefix "cmd=step" {
+	test_step "" "step" 0 0 $locked
+    }
+    with_test_prefix "cmd=next" {
+	foreach call_function {0 1} {
+	    with_test_prefix "call_function=$call_function" {
+		test_step "" "next" $call_function 0 $locked
+	    }
+	}
+    }
+
+    # Continuing tests.
+    set locked 0
+    if {$run eq "on"} {
+	set locked 1
+    }
+    with_test_prefix "cmd=continue" {
+	# Use whichever we stopped in.
+	set curthread [get_current_thread "before"]
+	set cont_args [get_args "before"]
+	my_continue "continue"
+	check_result "continue" $curthread $cont_args $locked
+    }
+}
+
+gdb_test_no_output "set scheduler-locking off"
+
+# Test different options of scheduler locking.
+foreach run {"off" "on"} {
+    foreach step {"off" "on"} {
+	with_test_prefix "run=$run step=$step" {
+	    gdb_test_no_output "set scheduler-locking run $run"
+	    gdb_test_no_output "set scheduler-locking step $step"
+	    test_schedlock_opts $run $step
 	}
     }
 }

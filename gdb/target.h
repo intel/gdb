@@ -1418,6 +1418,10 @@ struct target_ops
     virtual void displaced_step_restore_all_in_ptid (inferior *parent_inf,
 						     ptid_t child_ptid)
       TARGET_DEFAULT_FUNC (default_displaced_step_restore_all_in_ptid);
+
+    /* Query PBUFSIZ from target instead of hard-coded #define'ing it.  */
+    virtual int query_pbuf_size ()
+      TARGET_DEFAULT_RETURN (PBUFSIZ);
   };
 
 /* Deleter for std::unique_ptr.  See comments in
@@ -2687,5 +2691,8 @@ extern void target_ack_library (const char *name);
 
 /* See target_ops::ack_in_memory_library.  */
 extern void target_ack_in_memory_library (CORE_ADDR begin, CORE_ADDR end);
+
+/* See target_ops::query_pbuf_size.  */
+extern int target_query_pbuf_size ();
 
 #endif /* GDB_TARGET_H */

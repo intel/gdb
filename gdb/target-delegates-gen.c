@@ -205,6 +205,7 @@ struct dummy_target : public target_ops
   displaced_step_prepare_status displaced_step_prepare (thread_info *arg0, CORE_ADDR &arg1) override;
   displaced_step_finish_status displaced_step_finish (thread_info *arg0, const target_waitstatus &arg1) override;
   void displaced_step_restore_all_in_ptid (inferior *arg0, ptid_t arg1) override;
+  int query_pbuf_size () override;
 };
 
 struct debug_target : public target_ops
@@ -388,6 +389,7 @@ struct debug_target : public target_ops
   displaced_step_prepare_status displaced_step_prepare (thread_info *arg0, CORE_ADDR &arg1) override;
   displaced_step_finish_status displaced_step_finish (thread_info *arg0, const target_waitstatus &arg1) override;
   void displaced_step_restore_all_in_ptid (inferior *arg0, ptid_t arg1) override;
+  int query_pbuf_size () override;
 };
 
 void
@@ -4568,4 +4570,27 @@ debug_target::displaced_step_restore_all_in_ptid (inferior *arg0, ptid_t arg1)
 	      this->beneath ()->shortname (),
 	      target_debug_print_inferior_p (arg0).c_str (),
 	      target_debug_print_ptid_t (arg1).c_str ());
+}
+int
+target_ops::query_pbuf_size ()
+{
+  return this->beneath ()->query_pbuf_size ();
+}
+
+int
+dummy_target::query_pbuf_size ()
+{
+  return PBUFSIZ;
+}
+
+int
+debug_target::query_pbuf_size ()
+{
+  target_debug_printf_nofunc ("-> %s->query_pbuf_size (...)", this->beneath ()->shortname ());
+  int result
+    = this->beneath ()->query_pbuf_size ();
+  target_debug_printf_nofunc ("<- %s->query_pbuf_size () = %s",
+	      this->beneath ()->shortname (),
+	      target_debug_print_int (result).c_str ());
+  return result;
 }

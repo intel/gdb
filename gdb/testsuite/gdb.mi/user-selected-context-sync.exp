@@ -337,7 +337,8 @@ proc test_continue_to_start { mode inf } {
 		}
 
 		# Restore scheduler-locking to its original value.
-		foreach opt {"non-step" "replay non-step" "replay step" "step"} {
+		foreach opt {"continue" "eval" "replay continue" \
+				 "replay eval" "replay step" "step"} {
 		    gdb_test_no_output \
 			"set scheduler-locking $opt [dict get $previous_schedlock $opt]"
 		}

@@ -235,7 +235,7 @@ proc check_result { cmd before_thread before_args locked } {
     set num_other_threads 0
     for {set i 0} {$i < $NUM} {incr i} {
 	if {[lindex $before_args $i] == [lindex $after_args $i]} {
-	    if {$i == $before_thread} {
+	    if {$i == $before_thread && $cmd ne "infcall"} {
 		fail "$test (didn't run)"
 	    }
 	} else {
@@ -327,9 +327,9 @@ foreach schedlock {"off" "step" "on"} {
     }
 }
 
-proc test_schedlock_opts {run step} {
+proc test_schedlock_opts {eval run step} {
     set test "show scheduler-locking"
-    if {[get_scheduler_locking $test [list "off" "off" $run $step]] eq "unknown"} {
+    if {[get_scheduler_locking $test [list $eval "off" "off" "off" $run $step]] eq "unknown"} {
 	fail $test
     } else {
 	pass $test
@@ -364,6 +364,25 @@ proc test_schedlock_opts {run step} {
 	my_continue "continue"
 	check_result "continue" $curthread $cont_args $locked
     }
+
+    # Infcall tests.
+    set locked 0
+    if {$eval eq "on"} {
+	set locked 1
+    }
+    with_test_prefix "cmd=infcall" {
+	# Use whichever we stopped in.
+	set curthread [get_current_thread "before-infcall"]
+	set cont_args [get_args "before-infcall"]
+
+	for {set i 0} {[expr $i < 10]} {set i [expr $i + 1]} {
+	    with_test_prefix "infcall #$i" { 
+		gdb_test "print some_function()" ".*"
+	    }
+	}
+
+	check_result "infcall" $curthread $cont_args $locked
+    }
 }
 
 gdb_test_no_output "set scheduler-locking off"
@@ -371,10 +390,13 @@ gdb_test_no_output "set scheduler-locking off"
 # Test different options of scheduler locking.
 foreach run {"off" "on"} {
     foreach step {"off" "on"} {
-	with_test_prefix "run=$run step=$step" {
-	    gdb_test_no_output "set scheduler-locking run $run"
-	    gdb_test_no_output "set scheduler-locking step $step"
-	    test_schedlock_opts $run $step
+	foreach eval {"off" "on"} {
+	    with_test_prefix "run=$run step=$step eval=$eval" {
+		gdb_test_no_output "set scheduler-locking eval $eval"
+		gdb_test_no_output "set scheduler-locking run $run"
+		gdb_test_no_output "set scheduler-locking step $step"
+		test_schedlock_opts $eval $run $step
+	    }
 	}
     }
 }

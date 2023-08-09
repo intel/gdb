@@ -97,9 +97,9 @@ static void resume (gdb_signal sig);
 
 struct schedlock_options;
 static bool schedlock_applies_to_thread (thread_info *tp);
-static bool schedlock_applies (bool step);
+static bool schedlock_applies (bool step, thread_info *tp = nullptr);
 static bool schedlock_applies_to_opts (const schedlock_options &opts,
-				       bool step);
+				       bool step, thread_info *tp = nullptr);
 
 static void wait_for_inferior (inferior *inf);
 
@@ -2123,8 +2123,8 @@ struct schedlock_options
   };
 
   schedlock_options () = delete;
-  schedlock_options (option run, option step)
-    :  run (std::move (run)), step (std::move (step))
+  schedlock_options (option eval, option run, option step)
+    : eval (std::move (eval)), run (std::move (run)), step (std::move (step))
   {}
 
   /* Forbid accidential copying.  */
@@ -2133,7 +2133,9 @@ struct schedlock_options
   schedlock_options (schedlock_options &&) = default;
   schedlock_options &operator= (schedlock_options &&) = default;
 
-  /* If true, the scheduler is locked during non-stepping.  */
+  /* If true, the scheduler is locked during inferior calls.  */
+  option eval;
+  /* If true, the scheduler is locked during continuing.  */
   option run;
   /* If true, the scheduler is locked during stepping.  */
   option step;
@@ -2170,8 +2172,18 @@ static const char schedlock_on[] = "on";
 static const char schedlock_step[] = "step";
 static const char schedlock_replay[] = "replay";
 
-schedlock schedlock {{{"run", false}, {"step", false}},
-		     {{"replay run", true}, {"replay step", true}}};
+schedlock schedlock {
+  {
+    {"eval", false},
+    {"run", false},
+    {"step", false}
+  },
+  {
+    {"replay eval", true},
+    {"replay run", true},
+    {"replay step", true}
+  }
+};
 
 /* A helper function to set scheduler locking shortcuts:
    set scheduler-locking on: all options are on.
@@ -2191,9 +2203,11 @@ set_schedlock_shortcut_option (const char *shortcut)
 
   bool any_changed = schedlock.normal.run.set (is_on) || any_changed;
   any_changed = schedlock.normal.step.set (is_on || is_step) || any_changed;
+  any_changed = schedlock.normal.eval.set (is_on) || any_changed;
   any_changed = schedlock.replay.run.set (is_on || is_replay) || any_changed;
   any_changed = schedlock.replay.step.set (is_on || is_replay || is_step)
     || any_changed;
+  any_changed = schedlock.replay.eval.set (is_on || is_replay) || any_changed;
 
   /* If at least one parameter has changed, notify the observer
      in the old-fashioned way.  */
@@ -2267,7 +2281,9 @@ show_schedlock_option (ui_file *file, int from_tty,
   if (strcmp (c->name, "step") == 0)
     type = "stepping commands";
   else if (strcmp (c->name, "run") == 0)
-    type = "non-stepping commands";
+    type = "continuing commands";
+  else if (strcmp (c->name, "eval") == 0)
+    type = "expression evaluation";
   else
     gdb_assert_not_reached ("Unexpected command name.");
 
@@ -2313,7 +2329,7 @@ user_visible_resume_ptid (int step)
 	 individually.  */
       resume_ptid = inferior_ptid;
     }
-  else if (schedlock_applies (step))
+  else if (schedlock_applies (step, tp))
     {
       /* User-settable 'scheduler' mode requires solo thread
 	 resume.  */
@@ -3070,13 +3086,20 @@ thread_still_needs_step_over (struct thread_info *tp)
 
 /* Return true if OPTS lock the scheduler.
    STEP indicates whether a thread is about to step.
+   While the stepping info we take from STEP argument, the inferior call
+   state we get from the thread TP.
    Note, this does not take into the account the mode (replay or
    normal execution).  */
 
 static bool
-schedlock_applies_to_opts (const schedlock_options &opts, bool step)
+schedlock_applies_to_opts (const schedlock_options &opts, bool step,
+			   thread_info *tp)
 {
-  return ((opts.run && !step) || (opts.step && step));
+  bool in_infcall = (tp != nullptr) && tp->control.in_infcall;
+
+  return ((opts.run && !step && !in_infcall)
+	  || (opts.step && step)
+	  || (opts.eval && in_infcall));
 }
 
 /* Returns true if scheduler locking applies to TP.  */
@@ -3085,19 +3108,19 @@ static bool
 schedlock_applies_to_thread (thread_info *tp)
 {
   bool step = (tp != nullptr) && tp->control.stepping_command;
-  return schedlock_applies (step);
+  return schedlock_applies (step, tp);
 }
 
-/* Returns true if scheduler locking applies.  STEP indicates whether
-   we're about to do a step/next-like command.  */
+/* Returns true if scheduler locking applies to thread TP.
+   STEP indicates whether we're about to do a step/next-like command.  */
 
 static bool
-schedlock_applies (bool step)
+schedlock_applies (bool step, thread_info *tp)
 {
   bool is_replay = target_record_will_replay (minus_one_ptid,
 					      execution_direction);
   schedlock_options &opts = is_replay ? schedlock.replay : schedlock.normal;
-  return schedlock_applies_to_opts (opts, step);
+  return schedlock_applies_to_opts (opts, step, tp);
 }
 
 /* Set process_stratum_target::COMMIT_RESUMED_STATE in all target
@@ -10345,12 +10368,11 @@ Show scheduler locking settings in various conditions."),
 			&setlist, &showlist);
 
   add_setshow_boolean_cmd ("run", class_run, &schedlock.normal.run.value, _("\
-Scheduler locking for non-stepping commands during normal execution."), _("\
-Show scheduler locking for non-stepping commands during normal execution."),
-			   _("\
-Controls scheduler locking for non-stepping commands during normal execution.\n\
-Commands include continue, until, finish.  The setting does not affect \
-stepping."),
+Scheduler locking for continuing commands during normal execution."), _("\
+Show scheduler locking for continuing commands during normal execution."), _("\
+Controls scheduler locking for continuing commands during normal execution.\n\
+Commands include continue, until, finish.  The setting does not affect\n\
+stepping and expression evaluation."),
 			   set_schedlock_callback,
 			   show_schedlock_option,
 			   &schedlock_set_cmdlist,
@@ -10364,6 +10386,16 @@ If argument \"on\" or \"off\", sets scheduler locking behavior for stepping\n\
 commands only during normal execution.\n\
 Commands include step, next, stepi, nexti."),
 			   set_schedlock_step,
+			   show_schedlock_option,
+			   &schedlock_set_cmdlist,
+			   &schedlock_show_cmdlist);
+
+  add_setshow_boolean_cmd ("eval", class_run, &schedlock.normal.eval.value, _("\
+Scheduler locking for expression evaluation during normal execution."), _("\
+Show scheduler locking for expression evaluation during normal execution."),
+			   _("\
+Controls scheduler locking for expression evaluation during normal execution."),
+			   set_schedlock_callback,
 			   show_schedlock_option,
 			   &schedlock_set_cmdlist,
 			   &schedlock_show_cmdlist);
@@ -10389,11 +10421,11 @@ W/o arguments completely locks the scheduler in replay mode."),
 	   0, &schedlock_set_cmdlist);
 
   add_setshow_boolean_cmd ("run", class_run, &schedlock.replay.run.value, _("\
-Set scheduler locking for non-stepping commands in replay mode."), _("\
-Show scheduler locking for non-stepping commands in replay mode."), _("\
-Controls scheduler locking for non-stepping commands in replay mode.\n\
-Commands include continue, until, finish.  The setting does not affect \
-stepping."),
+Set scheduler locking for continuing commands in replay mode."), _("\
+Show scheduler locking for continuing commands in replay mode."), _("\
+Controls scheduler locking for continuing commands in replay mode.\n\
+Commands include continue, until, finish.  The setting does not affect\n\
+stepping and expression evaluation."),
 			   set_schedlock_callback,
 			   show_schedlock_option,
 			   &schedlock_set_replay_cmdlist,
@@ -10404,6 +10436,15 @@ Set scheduler locking for stepping commands in replay mode."), _("\
 Show scheduler locking for stepping commands in replay mode."), _("\
 Controls scheduler locking for stepping commands in replay mode.\n\
 Commands include step, next, stepi, nexti."),
+			   set_schedlock_callback,
+			   show_schedlock_option,
+			   &schedlock_set_replay_cmdlist,
+			   &schedlock_show_replay_cmdlist);
+
+  add_setshow_boolean_cmd ("eval", class_run, &schedlock.replay.eval.value, _("\
+Set scheduler locking for expression evaluation in replay mode."), _("\
+Show scheduler locking for expression evaluation in replay mode."), _("\
+Controls scheduler locking for expression evaluation in replay mode."),
 			   set_schedlock_callback,
 			   show_schedlock_option,
 			   &schedlock_set_replay_cmdlist,

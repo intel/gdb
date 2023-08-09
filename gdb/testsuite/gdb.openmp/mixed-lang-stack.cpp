@@ -43,7 +43,7 @@ private:
   float yyy = 10.5;
 };
 
-extern void mixed_func_1d (int a, float b, double c, const char *string);
+extern void mixed_func_1d (int a, float b, const char *string);
 static void mixed_func_1i (derived_type obj);
 
 extern "C"
@@ -53,10 +53,10 @@ extern "C"
 
 #pragma omp declare target
   void
-  mixed_func_1c (int a, float b, double c, _Complex float d)
+  mixed_func_1c (int a, float b, _Complex float d)
   {
     const char *string = "this is a string from C++";
-    mixed_func_1d (a, b, c, string);
+    mixed_func_1d (a, b, string);
   }
 #pragma omp end declare target
 
@@ -76,7 +76,7 @@ extern "C"
 
 #pragma omp declare target
 void
-mixed_func_1d (int a, float b, double c, const char *string)
+mixed_func_1d (int a, float b, const char *string)
 {
   mixed_func_1e_ ();
 }

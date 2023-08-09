@@ -14,7 +14,7 @@
 ! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 module type_module
-  use, intrinsic :: iso_c_binding, only: c_int, c_float, c_double
+  use, intrinsic :: iso_c_binding, only: c_int, c_float
   type, bind(C) :: MyType
      real(c_float) :: a
      real(c_float) :: b
@@ -25,7 +25,7 @@ program mixed_stack_main
   implicit none
 
   ! Set up some locals.
-  INTEGER :: a, b, c
+  INTEGER :: a, b
   a = 1
 
   ! Call a Fortran function, on host.
@@ -45,7 +45,7 @@ subroutine mixed_func_1a ()
   !$omp target map(to: d)
   !$omp teams num_teams(1) thread_limit(1)
     ! Call a Fortran function, on target.
-    call mixed_func_1b (1, 2.0, 3D0, d)
+    call mixed_func_1b (1, 2.0, d)
   !$omp end teams
   !$omp end target
 
@@ -53,7 +53,7 @@ subroutine mixed_func_1a ()
   call mixed_func_1f (obj)
 end subroutine mixed_func_1a
 
-subroutine mixed_func_1b(a, b, c, d)
+subroutine mixed_func_1b(a, b, d)
   !$omp declare target(mixed_func_1b, mixed_func_1c)
 
   integer :: a
@@ -62,20 +62,19 @@ subroutine mixed_func_1b(a, b, c, d)
   complex(kind=4) :: d
 
   interface
-     subroutine mixed_func_1c (a, b, c, d) bind(C)
-       use, intrinsic :: iso_c_binding, only: c_int, c_float, c_double
-       use, intrinsic :: iso_c_binding, only: c_float_complex, c_char
+     subroutine mixed_func_1c (a, b, d) bind(C)
+       use, intrinsic :: iso_c_binding, only: c_int, c_float
+       use, intrinsic :: iso_c_binding, only: c_float_complex
        use type_module
        implicit none
        integer(c_int), value, intent(in) :: a
        real(c_float), value, intent(in) :: b
-       real(c_double), value, intent(in) :: c
        complex(c_float_complex), value, intent(in) :: d
      end subroutine mixed_func_1c
   end interface
 
   ! Call a C++ function (via an extern "C" wrapper), on target.
-  call mixed_func_1c (a, b, c, d)
+  call mixed_func_1c (a, b, d)
 end subroutine mixed_func_1b
 
 subroutine mixed_func_1f (g)

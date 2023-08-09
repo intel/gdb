@@ -7323,19 +7323,54 @@ On some OSes, you can modify @value{GDBN}'s default behavior by
 locking the OS scheduler to allow only a single thread to run.
 
 @table @code
-@item set scheduler-locking @var{mode}
+
+@item set scheduler-locking @var{type} [@code{on}|@code{off}]
+@cindex scheduler locking type
+@cindex lock scheduler
+Set the scheduler locking settings.  It applies to normal execution,
+record mode, and replay mode.  The scheduler locking can be set separately
+for stepping and non-stepping commands.
+
+@table @code
+@item replay run
+When @code{on} the scheduler is locked for non-stepping commands during
+replay mode.  For commands like @samp{continue}, @samp{until}, @samp{finish},
+or expression evaluation only the current thread may run.
+
+@item replay step
+When @code{on} the scheduler is locked for stepping commands during replay
+mode.  This mode optimizes for single-stepping; only the current thread is
+resumed while you are stepping, so that the focus of debugging does not change
+unexpectedly.
+
+@item run
+When @code{on} the scheduler is locked for non-stepping commands during
+normal execution and record modes.  For commands like @samp{continue},
+@samp{until}, @samp{finish}, or expression evaluation only the current
+thread may run.
+
+@item step
+When @code{on} the scheduler is locked for stepping commands during
+normal execution and record modes.  This mode optimizes for single-stepping;
+only the current thread is resumed while you are stepping, so that the focus
+of debugging does not change unexpectedly.
+
+@end table
+
+@item set scheduler-locking @var{shortcut-mode}
 @cindex scheduler locking mode
 @cindex lock scheduler
-Set the scheduler locking mode.  It applies to normal execution,
-record mode, and replay mode.  @var{mode} can be one of
-the following:
+One can choose to not set the scheduler locking settings individually but use
+the following predefined shortcut modes.
 
 @table @code
 @item off
-There is no locking and any thread may run at any time.
+There is no locking and any thread may run at any time.  This is equivalent to
+setting all options to @code{off}.
 
 @item on
-Only the current thread may run when the inferior is resumed.
+Only the current thread may run when the inferior is resumed.  This is
+equivalent to setting all options to @code{on}.
 
 @item step
 Behaves like @code{on} when stepping, and @code{off} otherwise.
@@ -7350,9 +7385,18 @@ another thread hits a breakpoint during its timeslice, @value{GDBN}
 does not change the current thread away from the thread that you are
 debugging.
 
+This is equivalent to set @samp{scheduler-locking step} and
+@samp{scheduler-locking replay step} to @code{on}, while other settings
+are @code{off}.
+
 @item replay
 Behaves like @code{on} in replay mode, and @code{off} in either record
 mode or during normal execution.  This is the default mode.
+
+This is equivalent to set @samp{scheduler-locking replay run} and
+@samp{scheduler-locking replay step} to @code{on}, while other settings
+are @code{off}.
+
 @end table
 
 @item show scheduler-locking
@@ -33449,7 +33493,7 @@ the end or beginning of a replay log if one is being used.
 @end itemize
 In all-stop mode (@pxref{All-Stop
 Mode}), may resume only one thread, or all threads, depending on the
-value of the @samp{scheduler-locking} variable.  If @samp{--all} is
+value of the @samp{scheduler-locking} variables.  If @samp{--all} is
 specified, all threads (in all inferiors) will be resumed.  The @samp{--all} option is
 ignored in all-stop mode.  If the @samp{--thread-group} options is
 specified, then all threads in that thread group are resumed.

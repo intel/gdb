@@ -22,6 +22,23 @@ $_workitem_global_id
 
 * New commands
 
+set scheduler-locking replay run | replay step | run | step (on|off)
+show scheduler-locking (replay run | replay step | run | step)
+  Extend the scheduler locking settings with a set of set/show
+  commands, which can be used individually to control the scheduler during
+  various commands.
+    'replay run' -- when on, the scheduler is locked during non-stepping
+    commands in replay mode.
+    'replay step' -- when on, the scheduler is locked during stepping
+    commands in replay mode.
+    'run' -- when on, the scheduler is locked during non-stepping commands
+    in normal mode.
+    'step' -- when on, the scheduler is locked during stepping commands
+    in normal mode.
+  The older scheduler locking settings can be used as shortcuts, their behavior
+  is not changed.
+  The output of "show scheduler-locking" has changed to support the new settings.
+
 set suppress-mi-notifications (on|off)
 show suppress-mi-notifications
   This controls whether printing the notifications is suppressed for MI.

@@ -337,10 +337,12 @@ proc test_continue_to_start { mode inf } {
 		}
 
 		# Restore scheduler-locking to its original value.
-		gdb_test_no_output "set scheduler-locking replay run [lindex $previous_schedlock_val 0]"
-		gdb_test_no_output "set scheduler-locking replay step [lindex $previous_schedlock_val 1]"
-		gdb_test_no_output "set scheduler-locking run [lindex $previous_schedlock_val 2]"
-		gdb_test_no_output "set scheduler-locking step [lindex $previous_schedlock_val 3]"
+		gdb_test_no_output "set scheduler-locking eval [lindex $previous_schedlock_val 0]"
+		gdb_test_no_output "set scheduler-locking replay eval [lindex $previous_schedlock_val 1]"
+		gdb_test_no_output "set scheduler-locking replay run [lindex $previous_schedlock_val 2]"
+		gdb_test_no_output "set scheduler-locking replay step [lindex $previous_schedlock_val 3]"
+		gdb_test_no_output "set scheduler-locking run [lindex $previous_schedlock_val 4]"
+		gdb_test_no_output "set scheduler-locking step [lindex $previous_schedlock_val 5]"
 	    } else { # $mode == "non-stop"
 		# Put a thread-specific breakpoint for thread 2 of the current
 		# inferior.  We don't put a breakpoint for thread 3, since we

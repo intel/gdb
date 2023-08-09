@@ -7410,10 +7410,18 @@ record mode, and replay mode.  The scheduler locking can be set separately
 for stepping and non-stepping commands.
 
 @table @code
+@item eval
+When @code{on} the scheduler is locked for expression evaluation during
+normal execution and record modes, such that only the current thread may run.
+
+@item replay eval
+When @code{on} the scheduler is locked for expression evaluation during
+replay mode, such that only the current thread may run.
+
 @item replay run
-When @code{on} the scheduler is locked for non-stepping commands during
-replay mode.  For commands like @samp{continue}, @samp{until}, @samp{finish},
-or expression evaluation only the current thread may run.
+When @code{on} the scheduler is locked for continuing commands during
+replay mode.  For commands like @samp{continue}, @samp{until} or @samp{finish}
+only the current thread may run.
 
 @item replay step
 When @code{on} the scheduler is locked for stepping commands during replay
@@ -7422,10 +7430,9 @@ resumed while you are stepping, so that the focus of debugging does not change
 unexpectedly.
 
 @item run
-When @code{on} the scheduler is locked for non-stepping commands during
+When @code{on} the scheduler is locked for continuing commands during
 normal execution and record modes.  For commands like @samp{continue},
-@samp{until}, @samp{finish}, or expression evaluation only the current
-thread may run.
+@samp{until}, or @samp{finish} only the current thread may run.
 
 @item step
 When @code{on} the scheduler is locked for stepping commands during

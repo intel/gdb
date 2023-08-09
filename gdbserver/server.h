@@ -103,11 +103,6 @@ extern int in_queued_stop_replies (ptid_t ptid);
    is chosen to fill up a packet (the headers account for the 32).  */
 #define MAXBUFBYTES(N) (((N)-32)/2)
 
-/* Buffer sizes for transferring memory, registers, etc.   Set to a constant
-   value to accommodate multiple register formats.  This value must be at least
-   as large as the largest register set supported by gdbserver.  */
-#define PBUFSIZ 131104
-
 /* Definition for an unknown syscall, used basically in error-cases.  */
 #define UNKNOWN_SYSCALL (-1)
 
@@ -131,9 +126,27 @@ extern unsigned long signal_pid;
 
 struct client_state
 {
-  client_state ():
-    own_buf ((char *) xmalloc (PBUFSIZ + 1)) 
-  {}
+  client_state () = default;
+
+  client_state (const client_state& other) = delete;
+  client_state (const client_state&& other) = delete;
+  client_state& operator=(const client_state& other) = delete;
+  client_state& operator=(const client_state&& other) noexcept = delete;
+
+  virtual ~client_state ()
+  {
+    xfree (own_buf);
+  }
+
+  /* Lazily allocate own_buf.  This buffer is allocated one time only as soon
+     as we can query the target for the size information.  */
+  void alloc_own_buf ()
+  {
+    /* We are asserting because we initially expect no allocation.  */
+    gdb_assert (own_buf == nullptr);
+    own_buf = (char *) xmalloc (target_query_pbuf_size () + 1);
+    gdb_assert (own_buf != nullptr);
+  }
 
   /* The thread set with an `Hc' packet.  `Hc' is deprecated in favor of
      `vCont'.  Note the multi-process extensions made `vCont' a
@@ -185,7 +198,7 @@ struct client_state
   struct target_waitstatus last_status;
   ptid_t last_ptid;
 
-  char *own_buf;
+  char *own_buf = nullptr;
 
   /* If true, then GDB has requested noack mode.  */
   int noack_mode = 0;

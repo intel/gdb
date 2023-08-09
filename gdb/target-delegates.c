@@ -201,6 +201,7 @@ struct dummy_target : public target_ops
   bool store_memtags (CORE_ADDR arg0, size_t arg1, const gdb::byte_vector &arg2, int arg3) override;
   bool is_address_tagged (gdbarch *arg0, CORE_ADDR arg1) override;
   x86_xsave_layout fetch_x86_xsave_layout () override;
+  int query_pbuf_size () override;
 };
 
 struct debug_target : public target_ops
@@ -380,6 +381,7 @@ struct debug_target : public target_ops
   bool store_memtags (CORE_ADDR arg0, size_t arg1, const gdb::byte_vector &arg2, int arg3) override;
   bool is_address_tagged (gdbarch *arg0, CORE_ADDR arg1) override;
   x86_xsave_layout fetch_x86_xsave_layout () override;
+  int query_pbuf_size () override;
 };
 
 void
@@ -4461,5 +4463,30 @@ debug_target::fetch_x86_xsave_layout ()
   target_debug_printf_nofunc ("<- %s->fetch_x86_xsave_layout () = %s",
 	      this->beneath ()->shortname (),
 	      target_debug_print_x86_xsave_layout (result).c_str ());
+  return result;
+}
+
+int
+target_ops::query_pbuf_size ()
+{
+  return this->beneath ()->query_pbuf_size ();
+}
+
+int
+dummy_target::query_pbuf_size ()
+{
+  return PBUFSIZ;
+}
+
+int
+debug_target::query_pbuf_size ()
+{
+  int result;
+  gdb_printf (gdb_stdlog, "-> %s->query_pbuf_size (...)\n", this->beneath ()->shortname ());
+  result = this->beneath ()->query_pbuf_size ();
+  gdb_printf (gdb_stdlog, "<- %s->query_pbuf_size (", this->beneath ()->shortname ());
+  gdb_puts (") = ", gdb_stdlog);
+  target_debug_print_int (result);
+  gdb_puts ("\n", gdb_stdlog);
   return result;
 }

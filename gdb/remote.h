@@ -56,10 +56,10 @@ extern void getpkt (remote_target *remote,
 		    char **buf, long *sizeof_buf, int forever);
 
 /* Send a packet to the remote machine, with error checking.  The data
-   of the packet is in BUF.  The string in BUF can be at most PBUFSIZ
-   - 5 to account for the $, # and checksum, and for a possible /0 if
-   we are debugging (remote_debug) and want to print the sent packet
-   as a string.  */
+   of the packet is in BUF.  The string in BUF can be at most
+   target_query_pbuf_size () - 5 to account for the $, # and checksum,
+   and for a possible /0 if we are debugging (remote_debug) and want to
+   print the sent packet as a string.  */
 
 extern int putpkt (remote_target *remote, const char *buf);
 

@@ -94,9 +94,11 @@ static bool maybe_software_singlestep (struct gdbarch *gdbarch);
 
 static void resume (gdb_signal sig);
 
+struct schedlock_options;
 static bool schedlock_applies_to_thread (thread_info *tp);
-
 static bool schedlock_applies (bool step);
+static bool schedlock_applies_to_opts (const schedlock_options &opts,
+				       bool step);
 
 static void wait_for_inferior (inferior *inf);
 
@@ -2087,7 +2089,69 @@ infrun_thread_ptid_changed (process_stratum_target *target,
     inferior_ptid = new_ptid;
 }
 
-
+/* A structure to hold scheduler locking settings for
+   a mode, replay or normal.  */
+struct schedlock_options
+{
+  struct option {
+    const std::string name;
+    bool value;
+
+    option () = delete;
+    option (std::string name, bool value)
+      : name (name), value (value)
+    {}
+
+    /* Forbid accidential copying.  */
+    option (const option &) = delete;
+    option operator= (const option &) = delete;
+    option (option &&) = default;
+    option &operator= (option &&) = default;
+
+    operator bool () const { return value; }
+    const char *c_str () const { return value ? "on" : "off"; }
+    /* Set new value.  Return true, if the value has changed.  */
+    bool set (bool new_value);
+  };
+
+  schedlock_options () = delete;
+  schedlock_options (option run, option step)
+    :  run (std::move (run)), step (std::move (step))
+  {}
+
+  /* Forbid accidential copying.  */
+  schedlock_options (const schedlock_options &) = delete;
+  schedlock_options operator= (const schedlock_options &) = delete;
+  schedlock_options (schedlock_options &&) = default;
+  schedlock_options &operator= (schedlock_options &&) = default;
+
+  /* If true, the scheduler is locked during non-stepping.  */
+  option run;
+  /* If true, the scheduler is locked during stepping.  */
+  option step;
+};
+
+bool
+schedlock_options::option::set (bool new_value)
+{
+  if (value != new_value)
+    {
+      value = new_value;
+      return true;
+    }
+
+  return false;
+}
+
+struct schedlock
+{
+  schedlock (schedlock_options opt, schedlock_options replay_opt)
+    : normal (std::move (opt)), replay (std::move (replay_opt))
+  {}
+
+  schedlock_options normal;
+  schedlock_options replay;
+};
 
 static const char schedlock_off[] = "off";
 static const char schedlock_on[] = "on";
@@ -2102,6 +2166,31 @@ static const char *const scheduler_enums[] = {
 };
 
 static const char *scheduler_mode = schedlock_replay;
+
+schedlock schedlock {{{"run", false}, {"step", false}},
+		     {{"replay run", true}, {"replay step", true}}};
+
+/* A helper function to set scheduler locking shortcuts:
+   set scheduler-locking on: all options are on.
+   set scheduler-locking off: all options are off.
+   set scheduler-locking replay: only replay options are on.
+   set scheduler-locking step: only "step" and "replay step" are on.  */
+
+static void
+set_schedlock_shortcut_option (const char *shortcut)
+{
+  bool is_on = (shortcut == schedlock_on);
+  bool is_step = (shortcut == schedlock_step);
+  bool is_replay = (shortcut == schedlock_replay);
+  bool is_off = (shortcut == schedlock_off);
+  /* Check that we got a valid shortcut option.  */
+  gdb_assert (is_on || is_step || is_replay || is_off);
+
+  schedlock.normal.run.set (is_on);
+  schedlock.normal.step.set (is_on || is_step);
+  schedlock.replay.run.set (is_on || is_replay);
+  schedlock.replay.step.set (is_on || is_replay || is_step);
+}
 
 static void
 show_scheduler_mode (struct ui_file *file, int from_tty,
@@ -2119,9 +2208,13 @@ set_schedlock_func (const char *args, int from_tty, struct cmd_list_element *c)
   if (!target_can_lock_scheduler ())
     {
       scheduler_mode = schedlock_off;
+      /* Set scheduler locking off.  */
+      set_schedlock_shortcut_option (schedlock_off);
       error (_("Target '%s' cannot support this command."),
 	     target_shortname ());
     }
+
+  set_schedlock_shortcut_option (scheduler_mode);
 }
 
 /* True if execution commands resume all threads of all processes by
@@ -2837,7 +2930,7 @@ clear_proceed_status (int step)
      This is a convenience feature to not require the user to explicitly
      stop replaying the other threads.  We're assuming that the user's
      intent is to resume tracing the recorded process.  */
-  if (!non_stop && scheduler_mode == schedlock_replay
+  if (!non_stop && schedlock_applies_to_opts (schedlock.replay, step)
       && target_record_is_replaying (minus_one_ptid)
       && !target_record_will_replay (user_visible_resume_ptid (step),
 				     execution_direction))
@@ -2917,6 +3010,17 @@ thread_still_needs_step_over (struct thread_info *tp)
   return what;
 }
 
+/* Return true if OPTS lock the scheduler.
+   STEP indicates whether a thread is about to step.
+   Note, this does not take into the account the mode (replay or
+   normal execution).  */
+
+static bool
+schedlock_applies_to_opts (const schedlock_options &opts, bool step)
+{
+  return ((opts.run && !step) || (opts.step && step));
+}
+
 /* Returns true if scheduler locking applies to TP.  */
 
 static bool
@@ -2932,11 +3036,10 @@ schedlock_applies_to_thread (thread_info *tp)
 static bool
 schedlock_applies (bool step)
 {
-  return (scheduler_mode == schedlock_on
-	  || (scheduler_mode == schedlock_step && step)
-	  || (scheduler_mode == schedlock_replay
-	      && target_record_will_replay (minus_one_ptid,
-					    execution_direction)));
+  bool is_replay = target_record_will_replay (minus_one_ptid,
+					      execution_direction);
+  schedlock_options &opts = is_replay ? schedlock.replay : schedlock.normal;
+  return schedlock_applies_to_opts (opts, step);
 }
 
 /* Set process_stratum_target::COMMIT_RESUMED_STATE in all target

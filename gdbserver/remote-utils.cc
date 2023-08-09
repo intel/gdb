@@ -1587,7 +1587,7 @@ look_up_one_symbol (const char *name, CORE_ADDR *addrp, int may_ask_gdb)
 	      new_len = remote_escape_output (mem_buf, mem_len, 1,
 					      buffer,
 					      &out_len_units,
-					      PBUFSIZ);
+					      target_query_pbuf_size ());
 	      new_len++; /* For the 'b' marker.  */
 
 	      if (out_len_units != mem_len)
@@ -1716,7 +1716,7 @@ relocate_instruction (CORE_ADDR *to, CORE_ADDR oldloc)
 	      new_len = remote_escape_output (mem_buf, mem_len, 1,
 					      buffer,
 					      &out_len_units,
-					      PBUFSIZ);
+					      target_query_pbuf_size ());
 	      new_len++; /* For the 'b' marker.  */
 
 	      if (out_len_units != mem_len)

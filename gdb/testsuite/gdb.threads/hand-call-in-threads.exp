@@ -68,7 +68,9 @@ gdb_test "continue" \
 # Before we start making hand function calls, turn on scheduler locking.
 
 gdb_test_no_output "set scheduler-locking on" "enable scheduler locking"
-gdb_test "show scheduler-locking" ".* locking scheduler .* is \"on\"." "show scheduler locking on"
+set test "show scheduler-locking on"
+gdb_assert {[get_scheduler_locking $test {"on" "on" "on" "on"}] ne "unknown"} \
+    $test
 
 # Now hand-call a function in each thread, having the function
 # stop without returning.
@@ -139,7 +141,9 @@ gdb_test_multiple "maint print dummy-frames" "all dummies popped" {
 
 # Before we resume the full program, turn off scheduler locking.
 gdb_test_no_output "set scheduler-locking off" "disable scheduler locking"
-gdb_test "show scheduler-locking" ".* locking scheduler .* is \"off\"." "show scheduler locking off"
+set test "show scheduler-locking off"
+gdb_assert {[get_scheduler_locking $test {"off" "off" "off" "off"}] ne "unknown"} \
+    $test
 
 # Continue one last time, the program should exit normally.
 #

@@ -70,7 +70,8 @@ gdb_test "continue" \
 gdb_test_no_output "set scheduler-locking on" "enable scheduler locking"
 set test "show scheduler-locking on"
 gdb_assert {[get_scheduler_locking $test \
-		 [dict create "non-step" "on" "replay non-step" "on" \
+		 [dict create "continue" "on" "eval" "on" \
+		      "replay continue" "on" "replay eval" "on" \
 		      "replay step" "on" "step" "on"]] ne "unknown"} $test
 
 # Now hand-call a function in each thread, having the function
@@ -144,7 +145,8 @@ gdb_test_multiple "maint print dummy-frames" "all dummies popped" {
 gdb_test_no_output "set scheduler-locking off" "disable scheduler locking"
 set test "show scheduler-locking off"
 gdb_assert {[get_scheduler_locking $test \
-		 [dict create "non-step" "off" "replay non-step" "off" \
+		 [dict create "continue" "off" "eval" "off" \
+		      "replay continue" "off" "replay eval" "off" \
 		      "replay step" "off" "step" "off"]] ne "unknown"} $test
 
 # Continue one last time, the program should exit normally.

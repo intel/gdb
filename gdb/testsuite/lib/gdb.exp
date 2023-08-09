@@ -9436,7 +9436,8 @@ proc get_scheduler_locking {{test ""} {expected ""}} {
 	set test "reading current scheduler-locking mode"
     }
 
-    set opts {"non-step" "replay non-step" "replay step" "step"}
+    set opts {"continue" "eval" "replay continue" "replay eval" \
+		  "replay step" "step"}
 
     # Fill the missing entries in EXPECTED list.
     foreach opt $opts {

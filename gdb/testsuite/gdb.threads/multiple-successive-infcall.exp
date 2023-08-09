@@ -51,7 +51,8 @@ gdb_continue_to_breakpoint "testmarker01"
 gdb_test_no_output "set scheduler-locking on"
 set test "show scheduler-locking"
 gdb_assert {[get_scheduler_locking $test \
-		 [dict create "non-step" "on" "replay non-step" "on" \
+		 [dict create "continue" "on" "eval" "on" \
+		      "replay continue" "on" "replay eval" "on" \
 		      "replay step" "on" "step" "on"]] ne "unknown"} $test
 
 foreach_with_prefix thread {5 4 3 2 1}  {

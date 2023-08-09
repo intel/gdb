@@ -50,7 +50,7 @@ gdb_breakpoint [gdb_get_line_number "testmarker01"]
 gdb_continue_to_breakpoint "testmarker01"
 gdb_test_no_output "set scheduler-locking on"
 set test "show scheduler-locking"
-gdb_assert {[get_scheduler_locking $test {"on" "on" "on" "on"}] ne "unknown"} \
+gdb_assert {[get_scheduler_locking $test {"on" "on" "on" "on" "on" "on"}] ne "unknown"} \
 		$test
 
 foreach_with_prefix thread {5 4 3 2 1}  {

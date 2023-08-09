@@ -9087,17 +9087,19 @@ proc get_scheduler_locking {{test ""} {expected ""}} {
     set any "\[^\r\n\]+"
     set on_off "\(?:on|off\)"
 
-    set i [expr 4 - [llength $expected]]
+    set i [expr 6 - [llength $expected]]
     while {$i > 0} {
 	incr i -1
 	lappend expected $on_off
     }
     set schedlock_regex \
 	[multi_line \
-	     "${any}replay run: +\"\([lindex $expected 0]\)\"${any}non-stepping${any}replay${any}" \
-	     "${any}replay step: +\"\([lindex $expected 1]\)\"${any}stepping${any}replay${any}" \
-	     "${any}run: +\"\([lindex $expected 2]\)\"${any}non-stepping${any}normal execution${any}" \
-	     "${any}step: +\"\([lindex $expected 3]\)\"${any}stepping${any}normal execution${any}"]
+	     "${any}eval: +\"\([lindex $expected 0]\)\"${any}expression evaluation${any}normal execution${any}" \
+	     "${any}replay eval: +\"\([lindex $expected 1]\)\"${any}expression evaluation${any}replay${any}" \
+	     "${any}replay run: +\"\([lindex $expected 2]\)\"${any}continuing${any}replay${any}" \
+	     "${any}replay step: +\"\([lindex $expected 3]\)\"${any}stepping${any}replay${any}" \
+	     "${any}run: +\"\([lindex $expected 4]\)\"${any}continuing${any}normal execution${any}" \
+	     "${any}step: +\"\([lindex $expected 5]\)\"${any}stepping${any}normal execution${any}"]
 
     set current_schedule_locking_mode "unknown"
     gdb_test_multiple "show scheduler-locking" $test {
@@ -9106,7 +9108,9 @@ proc get_scheduler_locking {{test ""} {expected ""}} {
 		[list $expect_out(1,string) \
 		     $expect_out(2,string) \
 		     $expect_out(3,string) \
-		     $expect_out(4,string)]
+		     $expect_out(4,string) \
+		     $expect_out(5,string) \
+		     $expect_out(6,string)]
 	}
 	-re -wrap "" {}
 	timeout {}
@@ -9136,15 +9140,15 @@ gdb_caching_proc target_supports_scheduler_locking {} {
 
     set test "reading current scheduler-locking mode"
     set current_schedule_locking_mode [get_scheduler_locking $test]
-    if { $current_scheduler_locking eq "unknown" } {
+    if { $current_schedule_locking_mode eq "unknown" } {
 	set supports_schedule_locking 0
     }
 
     if { $supports_schedule_locking == -1 } {
 	set test "checking for scheduler-locking support"
 
-	# Try to set scheduler-locking run.
-	gdb_test_multiple "set scheduler-locking  run [lindex $current_schedule_locking_mode 0]" $test {
+	# Try to set scheduler-locking eval.
+	gdb_test_multiple "set scheduler-locking eval [lindex $current_schedule_locking_mode 0]" $test {
 	    -re "Target '\[^'\]+' cannot support this command\..*$gdb_prompt $" {
 		set supports_schedule_locking 0
 	    }

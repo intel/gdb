@@ -140,13 +140,13 @@ notif_push (struct notif_server *np, struct notif_event *new_event)
      about it, by sending a corresponding notification.  */
   if (is_first_event)
     {
-      char buf[PBUFSIZ];
-      char *p = buf;
+      std::vector<char> buf (target_query_pbuf_size ());
+      char *p = buf.data ();
 
-      xsnprintf (p, PBUFSIZ, "%s:", np->notif_name);
+      xsnprintf (p, target_query_pbuf_size (), "%s:", np->notif_name);
       p += strlen (p);
 
       np->write (new_event, p);
-      putpkt_notif (buf);
+      putpkt_notif (buf.data ());
     }
 }

@@ -172,13 +172,17 @@ static struct btrace_config current_btrace_conf;
 
 /* The client remote protocol state. */
 
-static client_state g_client_state;
-
 client_state &
 get_client_state ()
 {
-  client_state &cs = g_client_state;
-  return cs;
+  static client_state g_client_state;
+
+  /* Lazily allocate ownbuf as clientstate is only ever used once a target is
+     available.  */
+  if (the_target != nullptr && g_client_state.own_buf == nullptr)
+      g_client_state.alloc_own_buf ();
+
+  return g_client_state;
 }
 
 
@@ -438,7 +442,7 @@ write_qxfer_response (char *buf, const gdb_byte *data, int len, int is_more)
     buf[0] = 'l';
 
   return remote_escape_output (data, len, 1, (unsigned char *) buf + 1,
-			       &out_len, PBUFSIZ - 2) + 1;
+			       &out_len, target_query_pbuf_size () - 2) + 1;
 }
 
 /* Handle btrace enabling in BTS format.  */
@@ -630,7 +634,7 @@ create_fetch_memtags_reply (char *reply, const gdb::byte_vector &tags)
   packet += bin2hex (tags.data (), tags.size ());
 
   /* Check if the reply is too big for the packet to handle.  */
-  if (PBUFSIZ < packet.size ())
+  if (target_query_pbuf_size () < packet.size ())
     return false;
 
   strcpy (reply, packet.c_str ());
@@ -2239,8 +2243,8 @@ handle_qxfer (char *own_buf, int packet_len, int *new_packet_len_p)
 
 	      /* Read one extra byte, as an indicator of whether there is
 		 more.  */
-	      if (len > PBUFSIZ - 2)
-		len = PBUFSIZ - 2;
+	      if (len > target_query_pbuf_size () - 2)
+		len = target_query_pbuf_size () - 2;
 	      data = (unsigned char *) malloc (len + 1);
 	      if (data == NULL)
 		{
@@ -2613,7 +2617,7 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 	       "QStartupWithShell+;QEnvironmentHexEncoded+;"
 	       "QEnvironmentReset+;QEnvironmentUnset+;"
 	       "QSetWorkingDir+",
-	       PBUFSIZ - 1);
+	       target_query_pbuf_size () - 1);
 
       if (target_supports_catch_syscall ())
 	strcat (own_buf, ";QCatchSyscalls+");
@@ -2839,7 +2843,7 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
   /* Handle "monitor" commands.  */
   if (startswith (own_buf, "qRcmd,"))
     {
-      char *mon = (char *) malloc (PBUFSIZ);
+      char *mon = (char *) malloc (target_query_pbuf_size ());
       int len = strlen (own_buf + 6);
 
       if (mon == NULL)
@@ -4228,7 +4232,7 @@ captured_main (int argc, char *argv[])
   if (target_supports_tracepoints ())
     initialize_tracepoint ();
 
-  mem_buf = (unsigned char *) xmalloc (PBUFSIZ);
+  mem_buf = (unsigned char *) xmalloc (target_query_pbuf_size ());
 
   if (selftest)
     {
@@ -4669,10 +4673,10 @@ process_serial_event (void)
 	else
 	  {
 	    int out_len_units;
-	    new_packet_len
-	      = remote_escape_output (mem_buf, res, 1,
-				      (gdb_byte *) cs.own_buf,
-				      &out_len_units, PBUFSIZ);
+	    new_packet_len = remote_escape_output (mem_buf, res, 1,
+						   (gdb_byte *) cs.own_buf,
+						   &out_len_units,
+						   target_query_pbuf_size ());
 	    suppress_next_putpkt_log ();
 	  }
       }

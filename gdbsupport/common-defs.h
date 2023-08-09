@@ -224,4 +224,9 @@
 #define HAVE_USEFUL_SBRK 1
 #endif
 
+/* The default packet buffer size for transferring memory, registers, etc.  If a
+ * target needs a bigger (or smaller) buffer, it should implement the target op
+ * query_pbuf_size ().  */
+#define PBUFSIZ 131104
+
 #endif /* GDBSUPPORT_COMMON_DEFS_H */

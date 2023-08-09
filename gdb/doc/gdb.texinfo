@@ -7471,35 +7471,47 @@ locking the OS scheduler to allow only a single thread to run.
 @cindex lock scheduler
 Set the scheduler locking settings.  It applies to normal execution,
 record mode, and replay mode.  You can configure scheduler locking separately
-for stepping and non-stepping commands.  Examples of stepping commands are:
-@samp{step}, @samp{stepi}, @samp{next}.  Examples of non-stepping commands are
-@samp{continue}, @samp{finish}, @samp{jump}, @samp{until}, @samp{return} or
-inferior function calls.
+for continuing and stepping commands, as well as function calls.
+Examples of stepping commands are: @samp{step}, @samp{stepi}, @samp{next}.
+Examples of continuing commands are @samp{continue}, @samp{finish},
+@samp{jump}, @samp{until}, @samp{return}.
 
 The following @var{type}-settings are available:
 
 @table @code
-@item non-step
-When @code{on}, the scheduler is locked for non-stepping commands during
-normal execution and record modes.  For non-stepping commands other threads
+@item continue
+When @code{on}, the scheduler is locked for continuing commands during
+normal execution and record modes.  For continuing commands other threads
 may not preempt the current thread.  This setting is @code{off} by default.
 
-@item replay non-step
-When @code{on}, the scheduler is locked for non-stepping commands during
-replay mode.  For non-stepping commands other threads may not preempt
+@item eval
+When @code{on}, the scheduler is locked for function calls during normal
+execution and record modes, such that other threads may not preempt
+the current thread during the inferior call.  This setting is @code{off}
+by default.
+
+@item replay continue
+When @code{on}, the scheduler is locked for continuing commands during
+replay mode.  For continuing commands other threads may not preempt
 the current thread.  This setting is @code{on} by default.
+
+@item replay eval
+When @code{on}, the scheduler is locked for function calls during replay
+mode, such that other threads may not preempt the current thread during
+the inferior call.  This setting is @code{on} by default.
 
 @item replay step
 When @code{on}, the scheduler is locked for stepping commands during replay
 mode.  While stepping, other threads may not preempt the current thread,
 so that the focus of debugging does not change unexpectedly.  This setting
-is @code{on} by default.
+is @code{on} by default.  This setting is @code{on} by default.
 
 @item step
 When @code{on}, the scheduler is locked for stepping commands during
 normal execution and record modes.  While stepping, other threads may not
 preempt the current thread, so that the focus of debugging does not change
-unexpectedly.  This setting is @code{off} by default.
+unexpectedly.  This setting is @code{off} by default.  This setting is
+@code{off} by default.
 
 @end table
 
@@ -7542,9 +7554,9 @@ are @code{off}.
 Behaves like @code{on} in replay mode, and @code{off} in either record
 mode or during normal execution.  This is the default mode.
 
-This is equivalent to set @samp{scheduler-locking replay non-step} and
-@samp{scheduler-locking replay step} to @code{on}, while other settings
-are @code{off}.
+This is equivalent to set @samp{scheduler-locking replay continue},
+@samp{scheduler-locking replay eval} and @samp{scheduler-locking replay step}
+to @code{on}, while other settings are @code{off}.
 
 @end table
 

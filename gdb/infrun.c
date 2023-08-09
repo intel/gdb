@@ -2097,11 +2097,7 @@ static const char *const scheduler_enums[] = {
   nullptr
 };
 
-#if not defined (USE_WIN32API)
 static const char *scheduler_mode = schedlock_replay;
-#else
-static const char *scheduler_mode = schedlock_step;
-#endif
 
 static void
 show_scheduler_mode (struct ui_file *file, int from_tty,

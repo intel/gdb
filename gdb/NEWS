@@ -222,15 +222,20 @@ list .
 set scheduler-locking <command type> (on|off)
 show scheduler-locking <command type>
   where <command-type> is one of the following:
-    non-step | replay non-step | replay step | step.
-  Extend the scheduler locking settings with a set of set/show
-  commands, which can be used individually to control the scheduler during
-  stepping and non-stepping commands. Stepping commands include step, stepi, next.
-  Non-stepping commands include continue, finish, until, jump, return.
-    'non-step' -- when on, the scheduler is locked during non-stepping commands
+    continue | eval | replay continue | replay eval | replay step | step
+  Extend the scheduler locking settings with a set of set/show commands,
+  which can be used individually to control the scheduler during stepping,
+  continuing and evaluating commands.  Stepping commands include step, stepi,
+  next.  Continuing commands include continue, finish, until, jump, return.
+  The evaluating commands are those which invoke inferior calls.
+    'continue' -- when on, the scheduler is locked during continuing commands
     in normal mode.
-    'replay non-step' -- when on, the scheduler is locked during non-stepping
+    'eval' -- when on, the scheduler is locked during inferior calls in
+    normal mode.
+    'replay continue' -- when on, the scheduler is locked during continuing
     commands in replay mode.
+    'replay eval' -- when on, the scheduler is locked during inferior calls
+    in replay mode.
     'replay step' -- when on, the scheduler is locked during stepping
     commands in replay mode.
     'step' -- when on, the scheduler is locked during stepping commands

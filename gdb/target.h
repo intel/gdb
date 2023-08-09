@@ -1341,6 +1341,10 @@ struct target_ops
     virtual bool store_memtags (CORE_ADDR address, size_t len,
 				const gdb::byte_vector &tags, int type)
       TARGET_DEFAULT_NORETURN (tcomplain ());
+
+    /* Query PBUFSIZ from target instead of hard-coded #define'ing it.  */
+    virtual int query_pbuf_size ()
+      TARGET_DEFAULT_RETURN (PBUFSIZ);
   };
 
 /* Deleter for std::unique_ptr.  See comments in
@@ -2596,5 +2600,8 @@ extern void target_ack_library (const char *name);
 
 /* See target_ops::ack_in_memory_library.  */
 extern void target_ack_in_memory_library (CORE_ADDR begin, CORE_ADDR end);
+
+/* See target_ops::query_pbuf_size.  */
+extern size_t target_query_pbuf_size ();
 
 #endif /* !defined (TARGET_H) */

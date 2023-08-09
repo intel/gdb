@@ -871,3 +871,12 @@ process_stratum_target::id_str (process_info *process)
   gdb_assert (process != nullptr);
   return string_printf ("Process %d", process->pid);
 }
+
+int
+process_stratum_target::query_pbuf_size ()
+{
+  /* Buffer sizes for transferring memory, registers, etc.  The target decides
+     how big this needs to be but this value must be at least as large as the
+     largest register set supported by gdbserver.  */
+  return PBUFSIZ;
+}

@@ -4022,8 +4022,8 @@ cmd_qtbuffer (char *own_buf)
     num = tot - offset;
 
   /* Trim to available packet size.  */
-  if (num >= (PBUFSIZ - 16) / 2 )
-    num = (PBUFSIZ - 16) / 2;
+  if (num >= (target_query_pbuf_size () - 16) / 2)
+    num = (target_query_pbuf_size () - 16) / 2;
 
   bin2hex (tbp, own_buf, num);
 }

@@ -219,6 +219,26 @@ list .
   lines.  This makes it more obvious that there is no information, as opposed
   to implying there is no inferior loaded.
 
+set scheduler-locking <command type> (on|off)
+show scheduler-locking <command type>
+  where <command-type> is one of the following:
+    non-step | replay non-step | replay step | step.
+  Extend the scheduler locking settings with a set of set/show
+  commands, which can be used individually to control the scheduler during
+  stepping and non-stepping commands. Stepping commands include step, stepi, next.
+  Non-stepping commands include continue, finish, until, jump, return.
+    'non-step' -- when on, the scheduler is locked during non-stepping commands
+    in normal mode.
+    'replay non-step' -- when on, the scheduler is locked during non-stepping
+    commands in replay mode.
+    'replay step' -- when on, the scheduler is locked during stepping
+    commands in replay mode.
+    'step' -- when on, the scheduler is locked during stepping commands
+    in normal mode.
+  The older scheduler locking settings can be used as shortcuts, their behavior
+  is preserved.
+  The output of "show scheduler-locking" has changed to support the new settings.
+
 * New commands
 
 info missing-debug-handler

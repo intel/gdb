@@ -36,9 +36,9 @@ foreach extension $openmp_languages_list {
     foreach device_info "${device_list}" {
 	with_test_prefix [init_openmp_device $device_info $extension] {
 
-	    if {[string equal $extension cpp]
+	    if {[string equal $extension f90]
 		&& [require_openmp_device "GPU"]} {
-		kfail "JIRA GSD/5249" "Skipping the test to avoid unnecessary timeouts."
+		kfail "JIRA GSD/5250" "Skipping the test to avoid unnecessary timeouts."
 		continue
 	    }
 

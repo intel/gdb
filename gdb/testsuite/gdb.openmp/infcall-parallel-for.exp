@@ -51,6 +51,9 @@ foreach extension $openmp_languages_list {
 		    ".*$srcfile:$last_line.*"
 
 		if {$extension eq "f90"} {
+		    if {[require_openmp_device "GPU"]} {
+			setup_kfail "JIRA IGDB/4099" "*-*-*"
+		    }
 		    gdb_test "print update_val\(in_elem, 100\).eqv.in_elem2" ".TRUE."\
 			"thread invariant, $j"
 		} else {

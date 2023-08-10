@@ -43,10 +43,19 @@ foreach device $sycl_device_list {
 	# Check a kernel invariant for a thread.
 	gdb_continue_to_breakpoint "kernel" ".*$srcfile:$last_line.*"
 
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    setup_kfail "JIRA  GSD/7396" "*-*-*"
+	}
 	gdb_test "print gid0 == item.get_global_id()\[0\]" "true" \
 	    "thread invariant for gid0"
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    setup_kfail "JIRA GSD/7396" "*-*-*"
+	}
 	gdb_test "print gid1 == item.get_global_id()\[1\]" "true" \
 	    "thread invariant for gid1"
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    setup_kfail "JIRA GSD/7396" "*-*-*"
+	}
 	gdb_test "print gid2 == item.get_global_id()\[2\]" "true" \
 	    "thread invariant for gid2"
     }

@@ -29,6 +29,8 @@
 #include <vector>
 #include <list>
 
+/* Ze-low target's packet buffer size.  */
+#define ZE_TARGET_PBUFSIZ 33808
 
 /* Information about register sets reported in target descriptions.
 
@@ -407,6 +409,9 @@ public:
   std::string thread_id_str (thread_info *thread) override;
 
   const std::string id_str (process_info *process) override;
+
+  /* Query packet buffer size.  */
+  int query_pbuf_size () override { return ZE_TARGET_PBUFSIZ; }
 
 private:
   typedef std::list<ze_device_info *> devices_t;

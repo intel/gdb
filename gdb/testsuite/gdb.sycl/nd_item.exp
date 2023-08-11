@@ -33,11 +33,6 @@ if {[build_executable "failed to compile $srcfile" \
 foreach device $sycl_device_list {
     clean_restart "${binfile}"
     with_test_prefix [sycl_get_device_prefix $device] {
-	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
-	    unsupported "test is not supported on Intel GPUs"
-	    continue
-	}
-
 	if {![runto_main [sycl_get_device_args $device]]} {
 	    continue
 	}

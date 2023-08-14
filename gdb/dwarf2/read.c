@@ -18591,6 +18591,12 @@ cooked_indexer::index_dies (cutu_reader *reader,
 
       if (linkage_name != nullptr)
 	{
+	  /* With the exception of Fortran, we only want this to be "main"
+	     if it has a linkage name but not an ordinary name.  */
+	  if (name != nullptr
+	      && !((m_language == language_fortran)
+		   && strcmp_iw (name, "main") == 0))
+	    flags = flags & ~IS_MAIN;
 	  /* Set the IS_LINKAGE on for everything except when functions
 	     have linkage name present but name is absent.  */
 	  if (name != nullptr

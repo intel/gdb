@@ -247,8 +247,7 @@ protected:
 
   target_desc *create_tdesc
     (ze_device_info *dinfo,
-     const std::vector<zet_debug_regset_properties_t> &,
-     const ze_pci_ext_properties_t &) override;
+     const std::vector<zet_debug_regset_properties_t> &) override;
 
   target_stop_reason get_stop_reason (thread_info *, gdb_signal &) override;
 
@@ -433,8 +432,7 @@ intelgt_ze_target::is_device_supported
 target_desc *
 intelgt_ze_target::create_tdesc
   (ze_device_info *dinfo,
-   const std::vector<zet_debug_regset_properties_t> &regset_properties,
-   const ze_pci_ext_properties_t &pci_properties)
+   const std::vector<zet_debug_regset_properties_t> &regset_properties)
 {
   const ze_device_properties_t &properties = dinfo->properties;
 

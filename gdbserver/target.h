@@ -538,6 +538,10 @@ public:
   /* Acknowledge an in-memory library reported by address.  */
   virtual void ack_in_memory_library (process_info *process, CORE_ADDR begin,
 				      CORE_ADDR end);
+
+  /* Create an identification string if implemented.  Else returns
+     "Process PID".  */
+  virtual const std::string id_str (process_info *process);
 };
 
 extern process_stratum_target *the_target;

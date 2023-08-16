@@ -2326,11 +2326,16 @@ static const char schedlock_on[] = "on";
 static const char schedlock_step[] = "step";
 static const char schedlock_replay[] = "replay";
 
+/* On Windows set scheduler locking to step by default.  */
 schedlock schedlock {
   {
-    {"eval", false},
+    {"eval", true},
     {"run", false},
+#if not defined (USE_WIN32API)
     {"step", false}
+#else
+    {"step", true}
+#endif
   },
   {
     {"replay eval", true},

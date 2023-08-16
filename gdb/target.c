@@ -3616,8 +3616,13 @@ target_announce_detach (int from_tty)
   pid = inferior_ptid.pid ();
   exec_file = get_exec_file (0);
   if (exec_file == nullptr)
-    gdb_printf ("Detaching from pid %s\n",
-		target_pid_to_str (ptid_t (pid)).c_str ());
+    {
+      inferior *inf = current_inferior ();
+      gdb_assert (inf != nullptr);
+
+      gdb_printf ("Detaching from %s\n",
+		  inferior_pid_to_str (inf).c_str ());
+    }
   else
     gdb_printf (_("Detaching from program: %s, %s\n"), exec_file,
 		target_pid_to_str (ptid_t (pid)).c_str ());

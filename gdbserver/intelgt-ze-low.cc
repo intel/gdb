@@ -284,8 +284,7 @@ protected:
 
   target_desc *create_tdesc
     (ze_device_info *dinfo,
-     const std::vector<zet_debug_regset_properties_t> &,
-     const ze_pci_ext_properties_t &) override;
+     const std::vector<zet_debug_regset_properties_t> &) override;
 
   target_stop_reason get_stop_reason (thread_info *, gdb_signal &) override;
 
@@ -470,8 +469,7 @@ intelgt_ze_target::is_device_supported
 target_desc *
 intelgt_ze_target::create_tdesc
   (ze_device_info *dinfo,
-   const std::vector<zet_debug_regset_properties_t> &regset_properties,
-   const ze_pci_ext_properties_t &pci_properties)
+   const std::vector<zet_debug_regset_properties_t> &regset_properties)
 {
   const ze_device_properties_t &properties = dinfo->properties;
 
@@ -495,12 +493,7 @@ intelgt_ze_target::create_tdesc
     tdesc_add_device_attribute (tdesc.get (), "subdevice_id",
 				std::to_string (properties.subdeviceId));
 
-  tdesc_add_device_attribute (tdesc.get (), "pci_slot",
-			      string_printf ("%02" PRIx32 ":%02" PRIx32
-					     ".%" PRId32,
-					     pci_properties.address.bus,
-					     pci_properties.address.device,
-					     pci_properties.address.function));
+  tdesc_add_device_attribute (tdesc.get (), "pci_slot", dinfo->pci_slot);
 
   std::string device_uuid = device_uuid_str (
     dinfo->properties.uuid.id, sizeof (dinfo->properties.uuid.id));

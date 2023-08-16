@@ -864,3 +864,10 @@ process_stratum_target::get_ipa_tdesc_idx ()
 {
   return 0;
 }
+
+const std::string
+process_stratum_target::id_str (process_info *process)
+{
+  gdb_assert (process != nullptr);
+  return string_printf ("Process %d", process->pid);
+}

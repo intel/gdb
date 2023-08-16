@@ -1253,7 +1253,8 @@ handle_detach (char *own_buf)
       return;
     }
 
-  fprintf (stderr, "Detaching from process %d\n", process->pid);
+  fprintf (stderr, "Detached from %s\n",
+	   the_target->id_str (process).c_str ());
   stop_tracing ();
 
   /* We'll need this after PROCESS has been destroyed.  */

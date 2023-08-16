@@ -133,6 +133,9 @@ struct ze_device_info
 
   /* Number of interrupts sent to this target.  */
   unsigned long ninterrupts = 0;
+
+  /* Device name built from PCI properties and subdevice ID.  */
+  std::string device_name;
 };
 
 /* A thread's resume state.
@@ -402,6 +405,8 @@ public:
 			      CORE_ADDR end) override;
 
   std::string thread_id_str (thread_info *thread) override;
+
+  const std::string id_str (process_info *process) override;
 
 private:
   typedef std::list<ze_device_info *> devices_t;

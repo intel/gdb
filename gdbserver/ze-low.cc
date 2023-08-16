@@ -1261,6 +1261,14 @@ ze_target::attach_to_device (uint32_t pid, ze_device_handle_t device)
       pci_properties.address.function = 0;
     }
 
+  /* Generate device name for display.  */
+  dinfo->device_name = string_printf ("device [%02u:%02u.%d]",
+				      pci_properties.address.bus,
+				      pci_properties.address.device,
+				      pci_properties.address.function);
+  if ((properties.flags & ZE_DEVICE_PROPERTY_FLAG_SUBDEVICE) != 0)
+    dinfo->device_name += string_printf (".%d", properties.subdeviceId);
+
   target_desc *tdesc = create_tdesc (properties, regsets,
 				     pci_properties,
 				     dinfo->regsets,
@@ -2937,4 +2945,18 @@ ze_target::thread_id_str (thread_info *thread)
   id_str << "Thread " << ze_thread_id_str (zetp->id);
 
   return id_str.str ();
+}
+
+const std::string
+ze_target::id_str (process_info *process)
+{
+  gdb_assert (process != nullptr);
+
+  process_info_private *zeproc = process->priv;
+  gdb_assert (zeproc != nullptr);
+
+  ze_device_info *device = zeproc->device;
+  gdb_assert (device != nullptr);
+
+  return device->device_name;
 }

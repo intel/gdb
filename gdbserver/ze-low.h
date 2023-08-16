@@ -403,6 +403,8 @@ public:
 
   std::string thread_id_str (thread_info *thread) override;
 
+  const std::string id_str (process_info *process) override;
+
 private:
   typedef std::list<ze_device_info *> devices_t;
 
@@ -447,8 +449,7 @@ protected:
      corresponding regset information.  */
   virtual target_desc *create_tdesc
     (ze_device_info *dinfo,
-     const std::vector<zet_debug_regset_properties_t> &,
-     const ze_pci_ext_properties_t &) = 0;
+     const std::vector<zet_debug_regset_properties_t> &) = 0;
 
   /* Return whether TP is at a breakpoint.  */
   virtual bool is_at_breakpoint (thread_info *tp) = 0;

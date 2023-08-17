@@ -1999,20 +1999,20 @@ print_resume_info (const thread_resume &rinfo)
   switch (rinfo.kind)
     {
     case resume_continue:
-      dprintf ("received 'continue' resume request for (%d, %ld, %ld)",
-	       rptid.pid (), rptid.lwp (), rptid.tid ());
+      dprintf ("received 'continue' resume request for (%s)",
+	       rptid.to_string ().c_str ());
       return;
 
     case resume_step:
-      dprintf ("received 'step' resume request for (%d, %ld, %ld)"
+      dprintf ("received 'step' resume request for (%s)"
 	       " in range [0x%" PRIx64 ", 0x%" PRIx64 ")",
-	       rptid.pid (), rptid.lwp (), rptid.tid (),
+	       rptid.to_string ().c_str (),
 	       rinfo.step_range_start, rinfo.step_range_end);
       return;
 
     case resume_stop:
-      dprintf ("received 'stop' resume request for (%d, %ld, %ld)",
-	       rptid.pid (), rptid.lwp (), rptid.tid ());
+      dprintf ("received 'stop' resume request for (%s)",
+	       rptid.to_string ().c_str ());
       return;
     }
 

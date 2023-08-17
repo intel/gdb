@@ -335,7 +335,7 @@ intelgt_ze_target::stopped_by_sw_breakpoint ()
 
   if (zetp->exec_state != ze_thread_state_stopped)
     {
-      dprintf ("not-stopped thread %d.%ld", ptid.pid (), ptid.tid ());
+      dprintf ("not-stopped thread %s", ptid.to_string ().c_str ());
       return false;
     }
 

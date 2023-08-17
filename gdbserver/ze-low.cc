@@ -1983,8 +1983,8 @@ ze_target::mark_eventing_threads (ptid_t resume_ptid, resume_kind rkind)
       num_eventing++;
     });
 
-  dprintf ("there are %ld eventing threads for ptid %d.%ld", num_eventing,
-	   resume_ptid.pid (), resume_ptid.lwp ());
+  dprintf ("there are %zu eventing threads for ptid %s", num_eventing,
+	   resume_ptid.to_string ().c_str ());
 
   return num_eventing;
 }

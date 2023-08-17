@@ -824,8 +824,8 @@ intelgt_ze_target::prepare_thread_resume (thread_info *tp)
   intelgt_write_cr0 (regcache, 1, cr0[1]);
   intelgt_write_cr0 (regcache, 2, cr0[2]);
 
-  dprintf ("thread %d.%ld (%s) resumed, cr0.0=%" PRIx32 " .1=%" PRIx32
-	   " .2=%" PRIx32 ".", tp->id.pid (), tp->id.lwp (),
+  dprintf ("thread %s (%s) resumed, cr0.0=%" PRIx32 " .1=%" PRIx32
+	   " .2=%" PRIx32 ".", tp->id.to_string ().c_str (),
 	   ze_thread_id_str (zetp->id).c_str (), cr0[0], cr0[1], cr0[2]);
 }
 

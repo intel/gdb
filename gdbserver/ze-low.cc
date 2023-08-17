@@ -2041,8 +2041,8 @@ normalize_resume_infos (thread_resume *resume_info, size_t n)
 	{
 	  /*  Clear out the signal.  Our target does not accept
 	      signals.  */
-	  warning (_("Ignoring signal on resume request for %d.%ld"),
-		   rinfo.thread.pid (), rinfo.thread.lwp ());
+	  warning (_("Ignoring signal on resume request for %s"),
+		   rinfo.thread.to_string ().c_str ());
 	  rinfo.sig = 0;
 	}
     }

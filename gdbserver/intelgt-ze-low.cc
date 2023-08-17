@@ -559,7 +559,7 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 	      ze_device_thread_t zeid = ze_thread_id (tp);
 
 	      dprintf ("applying #18020355813 workaround for thread "
-		       "%d.%ld (%s)", tp->id.pid (), tp->id.lwp (),
+		       "%s (%s)", tp->id.to_string ().c_str (),
 		       ze_thread_id_str (zeid).c_str ());
 	      break;
 	    }

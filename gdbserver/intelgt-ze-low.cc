@@ -663,8 +663,8 @@ intelgt_ze_target::is_at_eot (thread_info *tp)
     {
       ze_device_thread_t zeid = ze_thread_id (tp);
 
-      warning (_("error reading memory for thread %d.%ld (%s) at 0x%"
-		 PRIx64), tp->id.pid (), tp->id.lwp (),
+      warning (_("error reading memory for thread %s (%s) at 0x%"
+		 PRIx64), tp->id.to_string ().c_str (),
 	       ze_thread_id_str (zeid).c_str (), pc);
       return false;
     }

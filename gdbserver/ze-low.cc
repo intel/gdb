@@ -2837,8 +2837,8 @@ ze_target::unpause_all (bool unfreeze)
 	{
 	  ze_device_thread_t ze_id = ze_thread_id (tp);
 	  target_waitkind wkind = ze_thread (tp)->waitstatus.kind ();
-	  warning (_("thread %d.%ld (%s) has unexpected waitstatus %s."),
-		   tp->id.pid (), tp->id.lwp (),
+	  warning (_("thread %s (%s) has unexpected waitstatus %s."),
+		   tp->id.to_string ().c_str (),
 		   ze_thread_id_str (ze_id).c_str (),
 		   target_waitkind_str (wkind));
 	}

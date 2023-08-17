@@ -1566,8 +1566,8 @@ ze_target::fetch_events (ze_device_info &device)
 		    if ((reason == TARGET_STOPPED_BY_NO_REASON)
 			&& (signal == GDB_SIGNAL_0))
 		      {
-			dprintf ("silently resuming thread %d.%ld (%s)",
-				 tp->id.pid (), tp->id.lwp (),
+			dprintf ("silently resuming thread %s (%s)",
+				 tp->id.to_string ().c_str (),
 				 ze_thread_id_str (zetp->id).c_str ());
 
 			zetp->waitstatus.set_ignore ();

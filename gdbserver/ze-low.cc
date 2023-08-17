@@ -1970,9 +1970,8 @@ ze_target::mark_eventing_threads (ptid_t resume_ptid, resume_kind rkind)
 	  /* The BP is gone.  Clear the waitstatus, too.  */
 	  target_waitstatus waitstatus = ze_move_waitstatus (tp);
 	  if (waitstatus.kind () != TARGET_WAITKIND_STOPPED)
-	    warning (_("thread %d.%ld has waitstatus %s, "
-		       "expected 'STOPPED'."),
-		     tp->id.pid (), tp->id.lwp (),
+	    warning (_("thread %s has waitstatus %s, expected 'STOPPED'."),
+		     tp->id.to_string ().c_str (),
 		     waitstatus.to_string ().c_str ());
 	  return;
 	}

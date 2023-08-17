@@ -1039,8 +1039,8 @@ ze_prepare_for_stopping (thread_info *tp)
       return true;
 
     case ze_thread_state_unknown:
-      warning (_("thread %d.%ld has unknown execution "
-		 "state"), tp->id.pid (), tp->id.lwp ());
+      warning (_("thread %s has unknown execution state"),
+	       tp->id.to_string ().c_str ());
       return false;
     }
 

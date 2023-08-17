@@ -691,8 +691,8 @@ intelgt_ze_target::erratum_18020355813 (thread_info *tp)
     {
       ze_device_thread_t zeid = ze_thread_id (tp);
 
-      warning (_("error getting process for thread %d.%ld (%s)"),
-	       tp->id.pid (), tp->id.lwp (),
+      warning (_("error getting process for thread %s (%s)"),
+	       tp->id.to_string ().c_str (),
 	       ze_thread_id_str (zeid).c_str ());
       return false;
     }

@@ -4129,8 +4129,10 @@ find_function_trampoline_target (CORE_ADDR pc)
 	    }
 	  else
 	    {
+	      symtab_and_line cursal = get_current_source_symtab_and_line ();
 	      if (find_minimal_symbol_address (physname, &target_address,
-					       nullptr) != 0)
+					       cursal.symtab->compunit ()
+					       ->objfile ()) != 0)
 		target_address = 0;
 	    }
 	}

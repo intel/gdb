@@ -19,12 +19,13 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <stdint.h>
 
 void *thread_function(void *arg); /* Pointer to function executed by each thread */
 
 #define NUM 1
 
-unsigned int args[NUM+1];
+uint64_t args[NUM+1];
 
 int main() {
     int res;
@@ -72,7 +73,7 @@ volatile int call_function = 0;
 
 void *thread_function(void *arg) {
     int my_number =  (long) arg;
-    int *myp = (int *) &args[my_number];
+    int64_t *myp = (int64_t *) &args[my_number];
 
     /* Don't run forever.  Run just short of it :)  */
     while (*myp > 0)

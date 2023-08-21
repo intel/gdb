@@ -66,6 +66,9 @@ foreach extension $openmp_languages_list {
 	    if {${extension} eq "cpp" && [omp_is_level_zero_debug_api]} {
 		setup_kfail "JIRA DOQG/3397" "*-*-*"
 	    }
+	    if {${extension} eq "f90" && [require_openmp_device "CPU"]} {
+		setup_kfail "JIRA CMPLRLLVM/50771" "*-*-*"
+	    }
 	    continue_openmp_program_to_termination ""
 	}
     }

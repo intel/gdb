@@ -52,8 +52,8 @@ foreach extension $openmp_languages_list {
 	    gdb_breakpoint $inside
 	    gdb_continue_to_breakpoint "inside" ".*$srcfile:$inside.*"
 
-	    if {${extension} eq "f90" && [require_openmp_device "CPU"]} {
-		setup_kfail "JIRA CMPLRLLVM/29442" "*-*-*"
+	    if {[require_openmp_device "CPU"]} {
+		setup_kfail "JIRA DOQG/2346" "*-*-*"
 	    }
 	    if {${extension} eq "f90" && [require_openmp_device "GPU"]} {
 		setup_kfail "JIRA DOQG/3138" "*-*-*"

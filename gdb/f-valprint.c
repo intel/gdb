@@ -558,6 +558,8 @@ f_language::value_print_inner (struct value *val, struct ui_file *stream,
 			   field_name);
 		  field = value_of_variable (sym.symbol, sym.block);
 		}
+	      else if (type->field (index).is_static ())
+		field = value_static_field (type, index);
 	      else
 		field = value_field (val, index);
 

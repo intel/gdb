@@ -90,9 +90,6 @@ proc run_tests {lang exe} {
 	set to_end "\[^\r\n\]+"
 
 	with_test_prefix "fortran(host/target)->cpp(target)" {
-	    if {$lang == "fortran" && [require_openmp_device "CPU"]} {
-		setup_kfail "JIRA IGDB/4096" "*-*-*"
-	    }
 	    gdb_test "bt -frame-arguments all" [multi_line \
 		    "#0\\s+breakpt \\(\\) at $to_end" \
 		    "#1\\s+$hex in mixed_func_1e \\(\\) at $to_end" \
@@ -129,9 +126,6 @@ proc run_tests {lang exe} {
 	with_test_prefix "cpp(host/target)->fortran(target)" {
 	    gdb_continue_to_breakpoint "breakpt"
 	    set 1i_args "obj=\[^\r\n\]+"
-	    if {$lang == "fortran" && [require_openmp_device "CPU"]} {
-		setup_kfail "JIRA IGDB/4096" "*-*-*"
-	    }
 	    gdb_test "bt -frame-arguments all" [multi_line \
 		    "#0\\s+breakpt \\(\\) at $to_end" \
 		    "#1\\s+$hex in mixed_func_1e \\(\\) at $to_end" \

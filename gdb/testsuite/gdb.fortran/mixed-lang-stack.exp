@@ -110,7 +110,7 @@ proc run_tests { lang } {
 	if { $lang == "fortran" } {
 	    set obj_pattern " = \\( base_one = \\( num1 = 1, num2 = 2, num3 = 3 \\), base_two = \\( string = $hex 'Something in C\\+\\+\\\\000', val = 3.5 \\), xxx = 9, yyy = 10.5 \\)"
 	} else {
-	    set obj_pattern " = \\{<base_one> = \\{num1 = 1, num2 = 2, num3 = 3\\}, <base_two> = \\{string = $hex \"Something in C\\+\\+\", val = 3.5\\}, xxx = 9, yyy = 10.5\\}"
+	    set obj_pattern " = \\{<base_one> = \\{static num1 = 1, num2 = 2, num3 = 3\\}, <base_two> = \\{string = $hex \"Something in C\\+\\+\", val = 3.5\\}, xxx = 9, yyy = 10.5\\}"
 	}
 	gdb_test "print obj" "${obj_pattern}"
 

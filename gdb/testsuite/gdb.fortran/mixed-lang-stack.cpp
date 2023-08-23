@@ -18,10 +18,12 @@
 
 class base_one
 {
-  int num1 = 1;
+  static int num1;
   int num2 = 2;
   int num3 = 3;
 };
+
+int base_one::num1 = 1;
 
 class base_two
 {

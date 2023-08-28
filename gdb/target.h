@@ -2602,6 +2602,6 @@ extern void target_ack_library (const char *name);
 extern void target_ack_in_memory_library (CORE_ADDR begin, CORE_ADDR end);
 
 /* See target_ops::query_pbuf_size.  */
-extern size_t target_query_pbuf_size ();
+extern int target_query_pbuf_size ();
 
 #endif /* !defined (TARGET_H) */

@@ -22,11 +22,11 @@
 #include <unistd.h>
 #include <x86gprintrin.h>
 
-#define UINTR_HANDLER_REG_SYSCALL 442
-#define UINTR_HANDLER_UNREG_SYSCALL 443
-#define UINTR_CREATE_FD_SYSCALL 444
-#define UINTR_SEND_REG_SYSCALL 445
-#define UINTR_SEND_UNREG_SYSCALL 446
+#define UINTR_HANDLER_REG_SYSCALL 471
+#define UINTR_HANDLER_UNREG_SYSCALL 472
+#define UINTR_CREATE_FD_SYSCALL 473
+#define UINTR_SEND_REG_SYSCALL 474
+#define UINTR_SEND_UNREG_SYSCALL 475
 
 unsigned long uintr_received;
 unsigned int uintr_fd;

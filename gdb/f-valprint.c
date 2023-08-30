@@ -495,7 +495,8 @@ f_language::value_print_inner (struct value *val, struct ui_file *stream,
 	  /* For a pointer to char or unsigned char, also print the string
 	     pointed to, unless pointer is null.  */
 	  if (elttype->length () == 1
-	      && elttype->code () == TYPE_CODE_INT
+	      && (elttype->code () == TYPE_CODE_INT
+		  || elttype->code () == TYPE_CODE_CHAR)
 	      && (options->format == 0 || options->format == 's')
 	      && addr != 0)
 	    {

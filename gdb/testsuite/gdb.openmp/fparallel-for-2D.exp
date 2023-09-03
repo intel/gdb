@@ -50,9 +50,13 @@ foreach device_info ${device_list} {
 
 	gdb_continue_to_breakpoint "hit the last line occurrence" \
 	    ".*${srcfile}:${last_line}.*"
+	setup_kfail "JIRA CMPLRLLVM/51154" "*-*-*"
 	gdb_test "ptype in_arr" "type \\\= INTEGER\\\*4 \\\(128,64\\\)"
+	setup_kfail "JIRA CMPLRLLVM/51154" "*-*-*"
 	gdb_test "ptype out_arr" "type \\\= INTEGER\\\*4 \\\(64,128\\\)"
+	setup_kfail "JIRA CMPLRLLVM/51174" "*-*-*"
 	gdb_test "print in_arr(1,1)" "123"
+	setup_kfail "JIRA CMPLRLLVM/51174" "*-*-*"
 	gdb_test "print in_arr(1,2)" "124"
     }
 }

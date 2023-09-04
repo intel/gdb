@@ -288,6 +288,151 @@ enum xe_version
 
 static xe_version get_xe_version (unsigned int device_id);
 
+/* Intelgt memory handler to manage memory allocation and releasing of
+   a target memory region.  We are using a linked list to keep track of
+   memory blocks and serve the ALLOC request with the first-fit approach.
+
+   This class is currently used to manage memory allocations of the scratch
+   debug area.  */
+
+class target_memory_allocator
+{
+  struct data_block
+  {
+    data_block (CORE_ADDR addr, size_t size, bool reserved, data_block *next)
+      : addr (addr), size (size), reserved (reserved), next (next)
+    {}
+    /* Disable copying.  */
+    data_block &operator= (const data_block &) = delete;
+    data_block (const data_block &) = delete;
+
+    /* Merge the NEXT block into this block and delete NEXT.  */
+    void merge_with_next ()
+    {
+      if (next != nullptr)
+	{
+	  gdb_assert (!reserved && !next->reserved);
+
+	  data_block *next_blk = next;
+	  size += next_blk->size;
+	  next = next_blk->next;
+	  delete next_blk;
+	}
+      else
+	dprintf ("Cannot apply merge to the last block.");
+    }
+
+    CORE_ADDR addr;
+    size_t size;
+    bool reserved;
+    data_block *next;
+  };
+
+public:
+  target_memory_allocator (CORE_ADDR start, size_t size)
+  {
+    blocks_list = new data_block (start, size, false, nullptr);
+  }
+
+  ~target_memory_allocator ()
+  {
+    /* Free up the list.  */
+    data_block *head = blocks_list;
+    while (head != nullptr)
+      {
+	data_block *current_blk = head;
+	head = head->next;
+	delete current_blk;
+      }
+  }
+
+  /* Disable copying and delete default constructor.  */
+  target_memory_allocator &operator= (const target_memory_allocator &)
+    = delete;
+  target_memory_allocator (const target_memory_allocator &) = delete;
+  target_memory_allocator () = delete;
+
+  /* Return the first fitting free block.  */
+  CORE_ADDR alloc (size_t size) const
+  {
+    data_block *head = blocks_list;
+    while (head != nullptr)
+      {
+	/* We found a larger fit block, split it.  */
+	if (!head->reserved && (head->size > size))
+	  {
+	    data_block *new_free_block
+	      = new data_block (head->addr + size,
+				head->size - size, false, head->next);
+	    head->size = size;
+	    head->reserved = true;
+	    head->next = new_free_block;
+	    break;
+	  }
+	else if (!head->reserved && head->size == size)
+	  {
+	    /* No need to create a new block, just re-use this one.  */
+	    head->reserved = true;
+	    break;
+	  }
+
+	head = head->next;
+      }
+
+    if (head == nullptr)
+      error (_("Failed to allocate %" PRIu64
+	       " bytes in the debug scratch area."), (uint64_t) size);
+
+    return head->addr;
+  }
+
+  void free (CORE_ADDR addr) const
+  {
+    data_block *head = blocks_list;
+    data_block *prev_head = nullptr;
+    while (head != nullptr)
+      {
+	/* The memory address does not belong to any block.  */
+	if (addr < head->addr)
+	  {
+	    dprintf ("Cannot find the corresponding allocated memory in "
+		     "scratch area: Addr %s",
+		     paddress (target_gdbarch (), addr));
+	    head = nullptr;
+	    break;
+	  }
+
+	if (head->addr == addr)
+	  {
+	    /* No need to do anything, the block is already free.  */
+	    if (!head->reserved)
+	      internal_error (_("Double free from the debug scratch area "
+				"detected: Addr %s"),
+			      paddress (target_gdbarch (), addr));
+
+	    head->reserved = false;
+	    /* Merge adjacent free blocks.  */
+	    if ((head->next != nullptr) && !head->next->reserved)
+	      head->merge_with_next ();
+	    if ((prev_head != nullptr) && !prev_head->reserved)
+	      prev_head->merge_with_next ();
+	    break;
+	  }
+
+	prev_head = head;
+	head = head->next;
+      }
+
+    if (head == nullptr)
+      internal_error (_("Failed to free memory from the debug scratch area: "
+			"Addr %s"), paddress (target_gdbarch (), addr));
+  }
+
+private:
+  /* Linked list of blocks ordered by increasing address.  */
+  data_block *blocks_list;
+};
+
 /* Return the machine code of the current elf.  */
 
 static int
@@ -354,6 +499,8 @@ struct intelgt_gdbarch_data
   std::vector<std::string> enabled_pseudo_regs;
   /* Cached $framedesc pseudo-register type.  */
   type *framedesc_type = nullptr;
+  /* Debug area memory manager.  */
+  target_memory_allocator *scratch_area = nullptr;
 
   /* Initialize ranges to -1 as "not-yet-set" indicator.  */
   intelgt_gdbarch_data ()

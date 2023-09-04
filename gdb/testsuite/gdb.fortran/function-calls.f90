@@ -196,7 +196,7 @@ program function_calls
     integer(kind=4) :: integer_return
     type(cart) :: c, cout
     type(cart_nd) :: c_nd
-    type(nested_cart_3d) :: nested_c
+    type(nested_cart_3d) :: nested_c, return_nested_c_debugger
     character(40) :: returned_string, returned_string_debugger
     external no_arg_subroutine
     real8 = 3.00
@@ -239,5 +239,6 @@ program function_calls
     print *, real4
     print *, integer_return
     print *, returned_string_debugger
+    print *, return_nested_c_debugger
     deallocate(c_nd%d) ! post_init
 end program

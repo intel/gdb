@@ -435,7 +435,6 @@ private:
   data_block *blocks_list;
 };
 
->>>>>>> 57b5ee00b06 (squash! gdb, intelgt: define frame descriptor register based on ELF machine type.)
 /* The 'gdbarch_data' stuff specific for this architecture.  */
 
 struct intelgt_gdbarch_data
@@ -456,6 +455,8 @@ struct intelgt_gdbarch_data
   std::vector<std::string> enabled_pseudo_regs;
   /* Cached $framedesc pseudo-register type.  */
   type *framedesc_type = nullptr;
+  /* Debug area memory manager.  */
+  target_memory_allocator *scratch_area = nullptr;
 
   /* Initialize ranges to -1 as "not-yet-set" indicator.  */
   intelgt_gdbarch_data ()

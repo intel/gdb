@@ -499,7 +499,11 @@ c_type_print_modifier (struct type *type, struct ui_file *stream,
   address_space_id
     = address_space_type_instance_flags_to_name (type->arch (),
 						 type->instance_flags ());
-  if (address_space_id)
+
+  /* Similar to the 'const' case above, we don't print address space
+     qualifiers for references.  It is invalid syntax to put any qualifier
+     before references.  */
+  if (address_space_id && !TYPE_IS_REFERENCE (type))
     {
       if (did_print_modifier || need_pre_space)
 	gdb_printf (stream, " ");

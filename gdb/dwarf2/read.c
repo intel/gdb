@@ -16279,7 +16279,20 @@ read_tag_pointer_type (struct die_info *die, struct dwarf2_cu *cu)
 						addr_class);
 	  gdb_assert ((type_flags & ~TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL)
 		      == 0);
-	  type = make_type_with_address_space (type, type_flags);
+
+	  /* HACK for SLM on intelgt: We want DW_AT_address_class have the
+	     meaning that the target type is in SLM.  To correspond to the
+	     current solution of also using DW_AT_address_class at
+	     DW_TAG_variable level for variables in SLM.  This also works fine
+	     with the existing '@' address class specifier in expression
+	     parsing.  */
+	  type_instance_flags new_flags
+	    = ((target_type->instance_flags ()
+		& ~TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL)
+	       | type_flags);
+
+	  type = lookup_pointer_type
+		   (make_type_with_address_space (target_type, new_flags));
 	}
       else if (type->length () != byte_size)
 	{
@@ -16392,7 +16405,21 @@ read_tag_reference_type (struct die_info *die, struct dwarf2_cu *cu,
 						addr_class);
 	  gdb_assert ((type_flags & ~TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL)
 		      == 0);
-	  type = make_type_with_address_space (type, type_flags);
+
+	  /* HACK for SLM on intelgt: We want DW_AT_address_class have the
+	     meaning that the target type is in SLM.  To correspond to the
+	     current solution of also using DW_AT_address_class at
+	     DW_TAG_variable level for variables in SLM.  This also works fine
+	     with the existing '@' address class specifier in expression
+	     parsing.  */
+	  type_instance_flags new_flags
+	    = ((target_type->instance_flags ()
+		& ~TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL)
+	       | type_flags);
+
+	  type = lookup_reference_type
+		   (make_type_with_address_space (target_type, new_flags),
+		    refcode);
 	}
       else if (type->length () != byte_size)
 	{

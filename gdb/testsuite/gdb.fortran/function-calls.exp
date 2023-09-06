@@ -67,6 +67,9 @@ gdb_test "p return_constant()" " = 17"
 if { [test_compiler_info {ifx-*} f90] } {
     setup_kfail "DOQG/3003" *-*-*
 }
+if { [test_compiler_info {ifort-*} f90] } {
+    setup_xfail "Dwarf issue in ifort" "*-*-*"
+}
 if { [test_compiler_info {ifx-*} f90] } {
     # Return derived type in a hidden argument.
     gdb_test "p derived_types_and_module_calls::build_cart(cout,7,8)" \
@@ -86,6 +89,9 @@ gdb_test "p return_string(returned_string_debugger, 40)" ""
 if { [test_compiler_info {ifx-*} f90] } {
     setup_kfail "DOQG/3003" *-*-*
 }
+if { [test_compiler_info {ifort-*} f90] } {
+    setup_xfail "Dwarf issue in ifort" "*-*-*"
+}
 gdb_test "p returned_string_debugger" "'returned in hidden first argument       '"
 
 # Argument type: real(kind=4), complex, array, pointer, derived type,
@@ -96,6 +102,9 @@ gdb_test "p pointer_function(int_pointer)" " = 87"
 gdb_test "call array_function(integer_array)" " = 17"
 if { [test_compiler_info {ifx-*} f90] } {
     setup_kfail "DOQG/3003" *-*-*
+}
+if { [test_compiler_info {ifort-*} f90] } {
+    setup_xfail "Dwarf issue in ifort" "*-*-*"
 }
 if { [test_compiler_info {ifx-*} f90] } {
     # Return value is in hidden argument.
@@ -110,6 +119,9 @@ if { [test_compiler_info {ifx-*} f90] } {
 gdb_test "p derived_types_and_module_calls::pass_cart_nd(c_nd)" " = 4"
 if { [test_compiler_info {ifx-*} f90] } {
     setup_kfail "DOQG/3003" *-*-*
+}
+if { [test_compiler_info {ifort-*} f90] } {
+    setup_xfail "Dwarf issue in ifort" "*-*-*"
 }
 if { [test_compiler_info {ifx-*} f90] } {
     gdb_test \
@@ -127,6 +139,9 @@ gdb_test "p real4_argument(real4)" " = 3.${decimal}"
 # Paragraph 2. Complex argument and return.
 if { [test_compiler_info {ifx-*} f90] } {
     setup_kfail "DOQG/3003" *-*-*
+}
+if { [test_compiler_info {ifort-*} f90] } {
+    setup_xfail "Dwarf issue in ifort" "*-*-*"
 }
 if { [test_compiler_info {ifx-*} f90] } {
     gdb_test "p complex_argument(fft_result, fft)" " = void"

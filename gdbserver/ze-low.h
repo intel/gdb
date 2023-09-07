@@ -282,6 +282,11 @@ struct ze_thread_info
 
   /* Pointer to regset info for fast lookup.  */
   const ze_regset_info_t *regset_info_p;
+
+  /* Set this when this thread has a change that needs a thread list update.
+     Initially this needs to be set to TRUE since all threads are new and are
+     therefore changed.  */
+  bool thread_changed = true;
 };
 
 /* Return the ZE thread info for TP.  */
@@ -441,8 +446,11 @@ public:
   bool supports_thread_stopped () override { return true; }
   bool thread_stopped (struct thread_info *tp) override;
 
-  /* We model h/w threads - the list is fixed.  */
-  bool has_fixed_thread_list () override { return true; }
+  /* We model h/w threads - but the thread list should be changing
+     when a tdesc changes.  */
+  bool has_delta_thread_list () override { return true; }
+  bool thread_changed (thread_info *thread) override;
+  void set_thread_changed (thread_info *thread, bool state) override;
 
   void request_interrupt () override;
 

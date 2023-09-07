@@ -353,6 +353,25 @@ private:
 		       gdb_byte *buff_write, int len);
 };
 
+/* The encoding for XE version enumerates follows this pattern, which is
+   aligned with the IGA encoding.  */
+
+#define XE_VERSION(MAJ, MIN) (((MAJ) << 24) | (MIN))
+
+/* Supported GDB GEN platforms.  */
+
+enum xe_version
+{
+  XE_INVALID = 0,
+  XE_HP = XE_VERSION (1, 1),
+  XE_HPG = XE_VERSION (1, 2),
+  XE_HPC = XE_VERSION (1, 4),
+};
+
+/* Translate the DEVICE_ID to GDB Xe version.  */
+
+static xe_version get_xe_version (unsigned int device_id);
+
 /* Return the machine code of the current elf.  */
 
 static int
@@ -456,7 +475,6 @@ struct intelgt_gdbarch_data
 #if defined (HAVE_LIBIGA64)
   /* libiga context for disassembly.  */
   iga_context_t iga_ctx = nullptr;
-  iga_gen_t iga_version = IGA_GEN_INVALID;
 #endif
 };
 
@@ -2565,13 +2583,10 @@ fe_stack_handle_small_struct (CORE_ADDR addr, type *valtype,
   return fe_addr;
 }
 
-#if defined (HAVE_LIBIGA64)
-/* Translate the DEVICE_ID to an IGA version.  */
-
-static iga_gen_t
-get_iga_version (unsigned int device_id)
+static xe_version
+get_xe_version (unsigned int device_id)
 {
-  iga_gen_t device_iga_version = IGA_GEN_INVALID;
+  xe_version device_xe_version = XE_INVALID;
   switch (device_id)
     {
       case 0x4F80:
@@ -2609,7 +2624,7 @@ get_iga_version (unsigned int device_id)
       case 0x56C0:
       case 0x56C1:
       case 0x56CF:
-	device_iga_version = IGA_XE_HPG;
+	device_xe_version = XE_HPG;
 	break;
 
       case 0x0201:
@@ -2628,7 +2643,7 @@ get_iga_version (unsigned int device_id)
       case 0x020E:
       case 0x020F:
       case 0x0210:
-	device_iga_version = IGA_XE_HP;
+	device_xe_version = XE_HP;
 	break;
 
       case 0x0BD0:
@@ -2639,13 +2654,12 @@ get_iga_version (unsigned int device_id)
       case 0x0BD9:
       case 0x0BDA:
       case 0x0BDB:
-	device_iga_version = IGA_XE_HPC;
+	device_xe_version = XE_HPC;
 	break;
     }
 
-  return device_iga_version;
+  return device_xe_version;
 }
-#endif /* defined (HAVE_LIBIGA64)  */
 
 /* Error out if the register STATUS is not valid.
    REG_NUM is register number added to the final error message.
@@ -3115,10 +3129,12 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 	warning (_("Failed to read target id from device."));
       else
 	{
-	  iga_version
-	    = get_iga_version (std::stoi (tdesc_device_id, nullptr, 16));
+	  iga_version = (iga_gen_t) get_xe_version (
+	    std::stoi (tdesc_device_id, nullptr, 16));
+
 	  if (iga_version == IGA_GEN_INVALID)
-	    warning (_("Intel GT device id is unrecognized"));
+	    warning (_("Intel GT device id is unrecognized: ID %s"),
+		     tdesc_device_id.c_str ());
 	}
     }
 
@@ -3126,7 +3142,6 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   if (iga_version == IGA_GEN_INVALID)
     iga_version = IGA_XE_HPC;
 
-  data->iga_version = iga_version;
   const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);
   iga_context_create (&options, &data->iga_ctx);
 #endif

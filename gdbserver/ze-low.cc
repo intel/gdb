@@ -3107,6 +3107,9 @@ ze_target::select_thread_tdesc (thread_info *tp,
   if (tp->tdesc != tdesc)
     {
       free_register_cache_thread (tp);
+      auto zetp = ze_thread (tp);
+      gdb_assert (zetp != nullptr);
+      zetp->thread_changed = true;
     }
 
   return cached_tdesc;
@@ -3142,6 +3145,32 @@ ze_target::update_thread_tdesc (thread_info *tp)
      properties.  */
   ze_store_tdesc (tp, select_thread_tdesc (tp, regsets));
 #endif /* HAVE_ZET_PFNDEBUGGETTHREADREGISTERSETPROPERTIES_T  */
+}
+
+/* We support sending only threads that have target description related changes
+   since our HW has a fixed thread set where no threads get added or destroyed
+   after setup.  We will be asked for every thread, so maybe compiling a changed
+   thread set and returning this in this target op would eventually be better.
+ */
+
+bool
+ze_target::thread_changed (thread_info *thread)
+{
+  gdb_assert (has_delta_thread_list ());
+
+  auto zetp = ze_thread (thread);
+  gdb_assert (zetp != nullptr);
+
+  return zetp->thread_changed;
+}
+
+void
+ze_target::set_thread_changed (thread_info *thread, bool state)
+{
+  auto zetp = ze_thread (thread);
+  gdb_assert (zetp != nullptr);
+
+  zetp->thread_changed = state;
 }
 
 /* ZE TDESC CACHE implementation.  */

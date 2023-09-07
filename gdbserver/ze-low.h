@@ -28,9 +28,10 @@
 #include <string>
 #include <vector>
 #include <list>
+#include <map>
 
 /* Ze-low target's packet buffer size.  */
-#define ZE_TARGET_PBUFSIZ 33808
+#define ZE_TARGET_PBUFSIZ 34728
 
 /* Information about register sets reported in target descriptions.
 
@@ -57,15 +58,53 @@ struct ze_regset_info
 /* A vector of regset infos.  */
 typedef std::vector<ze_regset_info> ze_regset_info_t;
 
+/* Unique pointer of regset infos.  */
+typedef std::unique_ptr<ze_regset_info_t> ze_regset_info_up;
+
 /* A vector of expedite register names.
 
    The names are expected to be string literals.  The vector must be
    terminated with a single nullptr entry.  */
 typedef std::vector<const char *> expedite_t;
 
+/* Each tdesc cache entry will keep one of these that get initialised in
+   create_tdesc.  */
+typedef std::unique_ptr<expedite_t> ze_expedites_up;
+
 /* A list of debug events.  */
 
 typedef std::list<zet_debug_event_t> events_t;
+
+/* Convenience typedef to be used in the tdesc cache below.  */
+typedef std::vector<zet_debug_regset_properties_t> ze_regset_properties_v_t;
+
+/* This stores information for a target description.  Each target description
+   has its own regset and expedites since these are dependent on the actual
+   register layout.  */
+struct ze_tdesc
+{
+  target_desc_up tdesc;
+  ze_regset_info_up regset_info;
+  ze_expedites_up expedites;
+};
+
+struct ze_tdesc_cache
+{
+  using ze_tdesc_map = std::map<ze_regset_properties_v_t, ze_tdesc>;
+
+public:
+  void add (const ze_regset_properties_v_t &regsets, target_desc_up tdesc,
+	    ze_regset_info_up regset_info, ze_expedites_up expedites);
+
+  /* We map from regsets to ze_tdesc.  */
+  const ze_tdesc *find (const ze_regset_properties_v_t &regsets) const;
+
+  /* Return any ze_tdesc.  Used during populating the cache during attach.  */
+  const ze_tdesc *any () const;
+
+private:
+  ze_tdesc_map tdescs_m;
+};
 
 /* Information about devices we're attached to.
 
@@ -96,15 +135,6 @@ struct ze_device_info
      In this case, debug attach state contains more information on
      the last error.  */
   ze_result_t debug_attach_state;
-
-  /* The target description for this device.  */
-  target_desc_up tdesc;
-
-  /* The register sets reported in the device's target description.  */
-  ze_regset_info_t regsets;
-
-  /* The expedite registers used for this device's target description.  */
-  expedite_t expedite;
 
   /* The device enumeration ordinal number.  */
   unsigned long ordinal = 0;
@@ -138,6 +168,10 @@ struct ze_device_info
 
   /* Device location as a string, built from PCI properties.  */
   std::string pci_slot;
+
+  /* Each device can have multiple different regsets and expedites
+     depending on the regset layout.  */
+  ze_tdesc_cache tdesc_cache;
 };
 
 /* A thread's resume state.
@@ -245,6 +279,9 @@ struct ze_thread_info
 
      TARGET_WAITKIND_IGNORE means that there is no last event.  */
   target_waitstatus waitstatus {};
+
+  /* Pointer to regset info for fast lookup.  */
+  const ze_regset_info_t *regset_info_p;
 };
 
 /* Return the ZE thread info for TP.  */
@@ -460,17 +497,25 @@ private:
   /* Return true if TP has single-stepped within its stepping range.  */
   bool is_range_stepping (thread_info *tp);
 
+  /* Fetch regsets from Level-Zero and store the new tdesc created by
+     update_thread_tdesc in the cache.  */
+  void update_thread_tdesc (thread_info *tp);
+
+  /* Select a tdesc for the thread and create one if needed.  */
+  const ze_tdesc *select_thread_tdesc (thread_info *tp,
+				       const ze_regset_properties_v_t &regsets);
+
 protected:
   /* Check whether a device is supported by this target.  */
   virtual bool is_device_supported
     (const ze_device_properties_t &,
-     const std::vector<zet_debug_regset_properties_t> &) = 0;
+     const ze_regset_properties_v_t &) = 0;
 
   /* Create a target description for a device and populate the
      corresponding regset information.  */
   virtual target_desc *create_tdesc
     (ze_device_info *dinfo,
-     const std::vector<zet_debug_regset_properties_t> &) = 0;
+     const ze_regset_properties_v_t &) = 0;
 
   /* Return whether TP is at a breakpoint.  */
   virtual bool is_at_breakpoint (thread_info *tp) = 0;

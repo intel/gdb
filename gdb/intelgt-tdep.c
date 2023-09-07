@@ -3701,6 +3701,19 @@ intelgt_kernel_instance_id (gdbarch *gdbarch, thread_info *tp)
   return retval;
 }
 
+/* Implement the "update_architecture" gdbarch method.  */
+
+static gdbarch *
+intelgt_update_architecture (gdbarch *gdbarch, const target_desc *tdesc)
+{
+  gdbarch_info info;
+
+  info.bfd_arch_info = bfd_lookup_arch (bfd_arch_intelgt, bfd_mach_intelgt);
+  info.target_desc = tdesc;
+
+  return gdbarch_find_by_info (info);
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -3868,6 +3881,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_workitem_local_size (gdbarch, intelgt_workitem_local_size);
   set_gdbarch_workitem_global_size (gdbarch, intelgt_workitem_global_size);
   set_gdbarch_kernel_instance_id (gdbarch, intelgt_kernel_instance_id);
+  set_gdbarch_update_architecture (gdbarch, intelgt_update_architecture);
 
   /* Enable inferior call support.  */
   set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);

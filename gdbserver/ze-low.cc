@@ -257,6 +257,17 @@ for_each_thread (const ze_device_info &device, ze_device_thread_t id,
     });
 }
 
+/* Store a tdesc and regset info in thread/thread privates.  */
+
+static void
+ze_store_tdesc (thread_info *tp, const ze_tdesc *cached_tdesc)
+{
+  tp->tdesc = cached_tdesc->tdesc.get ();
+  ze_thread_info *zetp = ze_thread (tp);
+  gdb_assert (zetp != nullptr);
+  zetp->regset_info_p = cached_tdesc->regset_info.get ();
+}
+
 /* Add a process for DEVICE.  */
 
 static process_info *
@@ -266,7 +277,6 @@ ze_add_process (ze_device_info *device, ze_process_state state)
 
   process_info *process = add_process (device->ordinal, 1);
   process->priv = new process_info_private (device, state);
-  process->tdesc = device->tdesc.get ();
   device->process = process;
 
   /* Enumerate threads on the device we attached to.
@@ -279,6 +289,10 @@ ze_add_process (ze_device_info *device, ze_process_state state)
      The alternative of only representing threads that are currently executing
      work would be too intrusive as we'd need to stop each thread on every
      dispatch.  */
+
+  /* Initial target descriptor for all threads.  */
+  const ze_tdesc *cached_tdesc = device->tdesc_cache.any ();
+
   long tid = 0;
   uint32_t slice, sslice, eu, thread;
   const ze_device_properties_t &properties = device->properties;
@@ -307,7 +321,13 @@ ze_add_process (ze_device_info *device, ze_process_state state)
 	    /* Assume threads are running until we hear otherwise.  */
 	    zetp->exec_state = ze_thread_state_running;
 
-	    add_thread (ptid, zetp);
+	    thread_info *tp = add_thread (ptid, zetp);
+
+	    /* Start each thread with the device's tdesc.  This will change
+	       possibly later but it's important that each thread reports
+	       that it has a tdesc which will be indicated during thread list
+	       query.  */
+	    ze_store_tdesc (tp, cached_tdesc);
 	  }
 
   device->nthreads = tid;
@@ -751,9 +771,12 @@ ze_device_detached (process_info *process, zet_debug_detach_reason_t reason)
 /* Find the regset containing REGNO on DEVICE or throw if not found.  */
 
 static ze_regset_info
-ze_find_regset (const ze_device_info &device, long regno)
+ze_find_regset (const thread_info *tp, long regno)
 {
-  for (const ze_regset_info &regset : device.regsets)
+  const ze_thread_info *zetp = ze_thread (tp);
+  const ze_regset_info_t &regsets = *zetp->regset_info_p;
+
+  for (const ze_regset_info &regset : regsets)
     {
       if (regno < regset.begin)
 	continue;
@@ -764,17 +787,24 @@ ze_find_regset (const ze_device_info &device, long regno)
       return regset;
     }
 
-  error (_("No register %ld on %s."), regno, device.properties.name);
+  const ze_device_info *device = ze_thread_device (tp);
+  error (_("No register %ld on %s."), regno, device->properties.name);
 }
 
 /* Fetch all registers for THREAD on DEVICE into REGCACHE.  */
 
 static void
-ze_fetch_all_registers (const ze_device_info &device,
-			const ze_device_thread_t thread,
+ze_fetch_all_registers (const thread_info *tp,
 			regcache *regcache)
 {
-  for (const ze_regset_info &regset : device.regsets)
+  const ze_device_info *device = ze_thread_device (tp);
+  gdb_assert (device != nullptr);
+
+  const ze_thread_info *zetp = ze_thread (tp);
+  const ze_regset_info_t &regsets = *zetp->regset_info_p;
+  ze_device_thread_t thread = ze_thread_id (tp);
+
+  for (const ze_regset_info &regset : regsets)
     {
       gdb_assert (regset.begin <= regset.end);
       long lnregs = regset.end - regset.begin;
@@ -784,7 +814,7 @@ ze_fetch_all_registers (const ze_device_info &device,
 
       std::vector<uint8_t> buffer (regset.size * nregs);
       ze_result_t status
-	= zetDebugReadRegisters (device.session, thread, regset.type, 0,
+	= zetDebugReadRegisters (device->session, thread, regset.type, 0,
 				 nregs, buffer.data ());
       switch (status)
 	{
@@ -807,7 +837,7 @@ ze_fetch_all_registers (const ze_device_info &device,
 	default:
 	  warning (_("Error %x reading regset %" PRIu32 " for %s on %s."),
 		   status, regset.type, ze_thread_id_str (thread).c_str (),
-		   device.properties.name);
+		   device->properties.name);
 
 	  break;
 	}
@@ -817,11 +847,11 @@ ze_fetch_all_registers (const ze_device_info &device,
 /* Fetch register REGNO for THREAD on DEVICE into REGCACHE.  */
 
 static void
-ze_fetch_register (const ze_device_info &device,
-		   const ze_device_thread_t thread,
+ze_fetch_register (const thread_info *tp,
 		   regcache *regcache, long regno)
 {
-  ze_regset_info regset = ze_find_regset (device, regno);
+  ze_regset_info regset = ze_find_regset (tp, regno);
+  ze_device_thread_t thread = ze_thread_id (tp);
 
   gdb_assert (regset.begin <= regno);
   long lrsno = regno - regset.begin;
@@ -829,9 +859,12 @@ ze_fetch_register (const ze_device_info &device,
   gdb_assert (lrsno <= UINT32_MAX);
   uint32_t rsno = (uint32_t) lrsno;
 
+  const ze_device_info *device = ze_thread_device (tp);
+  gdb_assert (device != nullptr);
+
   std::vector<uint8_t> buffer (regset.size);
   ze_result_t status
-    = zetDebugReadRegisters (device.session, thread, regset.type, rsno, 1,
+    = zetDebugReadRegisters (device->session, thread, regset.type, rsno, 1,
 			     buffer.data ());
   switch (status)
     {
@@ -846,7 +879,7 @@ ze_fetch_register (const ze_device_info &device,
     default:
       warning (_("Error %x reading register %ld (regset %" PRIu32
 		 ") for %s on %s."), status, regno, regset.type,
-	       ze_thread_id_str (thread).c_str (), device.properties.name);
+	       ze_thread_id_str (thread).c_str (), device->properties.name);
       break;
     }
 }
@@ -854,11 +887,17 @@ ze_fetch_register (const ze_device_info &device,
 /* Store all registers for THREAD on DEVICE from REGCACHE.  */
 
 static void
-ze_store_all_registers (const ze_device_info &device,
-			const ze_device_thread_t thread,
+ze_store_all_registers (const thread_info *tp,
 			regcache *regcache)
 {
-  for (const ze_regset_info &regset : device.regsets)
+  const ze_thread_info *zetp = ze_thread (tp);
+  const ze_regset_info_t &regsets = *zetp->regset_info_p;
+  ze_device_thread_t thread = ze_thread_id (tp);
+
+  ze_device_info *device = ze_thread_device (tp);
+  gdb_assert (device != nullptr);
+
+  for (const ze_regset_info &regset : regsets)
     {
       if (!regset.is_writeable)
 	continue;
@@ -876,7 +915,7 @@ ze_store_all_registers (const ze_device_info &device,
 	collect_register (regcache, reg, &buffer[offset]);
 
       ze_result_t status
-	= zetDebugWriteRegisters (device.session, thread, regset.type, 0,
+	= zetDebugWriteRegisters (device->session, thread, regset.type, 0,
 				  nregs, buffer.data ());
       switch (status)
 	{
@@ -886,7 +925,7 @@ ze_store_all_registers (const ze_device_info &device,
 	default:
 	  error (_("Error %x writing regset %" PRIu32 " for %s on %s."),
 		 status, regset.type, ze_thread_id_str (thread).c_str (),
-		 device.properties.name);
+		 device->properties.name);
 	}
     }
 }
@@ -894,16 +933,18 @@ ze_store_all_registers (const ze_device_info &device,
 /* Store register REGNO for THREAD on DEVICE from REGCACHE.  */
 
 static void
-ze_store_register (const ze_device_info &device,
-		   const ze_device_thread_t thread,
+ze_store_register (const thread_info *tp,
 		   regcache *regcache, long regno)
 {
-  ze_regset_info regset = ze_find_regset (device, regno);
+  ze_device_info *device = ze_thread_device (tp);
+  gdb_assert (device != nullptr);
+  ze_regset_info regset = ze_find_regset (tp, regno);
+  ze_device_thread_t thread = ze_thread_id (tp);
 
   if (!regset.is_writeable)
     error (_("Writing read-only register %ld (regset %" PRIu32
 	     ") for %s on %s."), regno, regset.type,
-	   ze_thread_id_str (thread).c_str (), device.properties.name);
+	   ze_thread_id_str (thread).c_str (), device->properties.name);
 
   gdb_assert (regset.begin <= regno);
   long lrsno = regno - regset.begin;
@@ -915,7 +956,7 @@ ze_store_register (const ze_device_info &device,
   collect_register (regcache, regno, buffer.data ());
 
   ze_result_t status
-    = zetDebugWriteRegisters (device.session, thread, regset.type, rsno, 1,
+    = zetDebugWriteRegisters (device->session, thread, regset.type, rsno, 1,
 			      buffer.data ());
   switch (status)
     {
@@ -936,7 +977,7 @@ ze_store_register (const ze_device_info &device,
       dprintf (_("Error %x writing register %ld (regset %" PRIu32
 		 ") for %s on %s."), status,  regno, regset.type,
 	       ze_thread_id_str (thread).c_str (),
-	       device.properties.name);
+	       device->properties.name);
     }
 }
 
@@ -1239,7 +1280,7 @@ ze_target::attach_to_device (uint32_t pid, ze_device_handle_t device)
       return nattached;
     }
 
-  std::vector<zet_debug_regset_properties_t> regsets (nregsets);
+  ze_regset_properties_v_t regsets (nregsets);
   status = zetDebugGetRegisterSetProperties (device, &nregsets,
 					     regsets.data ());
   if (status != ZE_RESULT_SUCCESS)
@@ -1282,8 +1323,7 @@ ze_target::attach_to_device (uint32_t pid, ze_device_handle_t device)
 				   pci_properties.address.device,
 				   pci_properties.address.function);
 
-  target_desc *tdesc = create_tdesc (dinfo.get (), regsets);
-  dinfo->tdesc.reset (tdesc);
+  (void)create_tdesc (dinfo.get (), regsets);
 
   unsigned long ordinal = this->ordinal + 1;
   if (ordinal == 0)
@@ -1565,6 +1605,10 @@ ze_target::fetch_events (ze_device_info &device)
 		ze_discard_regcache (tp);
 		try
 		  {
+		    /* Find the thread's tdesc and create one for its
+		       regset if needed.  */
+		    update_thread_tdesc (tp);
+
 		    gdb_signal signal = GDB_SIGNAL_0;
 		    target_stop_reason reason = get_stop_reason (tp, signal);
 
@@ -2542,27 +2586,19 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 void
 ze_target::fetch_registers (regcache *regcache, int regno)
 {
-  ze_device_thread_t tid = ze_thread_id (regcache->thread);
-  ze_device_info *device = ze_thread_device (regcache->thread);
-  gdb_assert (device != nullptr);
-
   if (regno == -1)
-    ze_fetch_all_registers (*device, tid, regcache);
+    ze_fetch_all_registers (regcache->thread, regcache);
   else
-    ze_fetch_register (*device, tid, regcache, regno);
+    ze_fetch_register (regcache->thread, regcache, regno);
 }
 
 void
 ze_target::store_registers (regcache *regcache, int regno)
 {
-  ze_device_thread_t tid = ze_thread_id (regcache->thread);
-  ze_device_info *device = ze_thread_device (regcache->thread);
-  gdb_assert (device != nullptr);
-
   if (regno == -1)
-    ze_store_all_registers (*device, tid, regcache);
+    ze_store_all_registers (regcache->thread, regcache);
   else
-    ze_store_register (*device, tid, regcache, regno);
+    ze_store_register (regcache->thread, regcache, regno);
 }
 
 /* Determine the thread id and device context for accessing ADDR_SPACE
@@ -3019,4 +3055,132 @@ ze_target::id_str (process_info *process)
     id += string_printf (".%d", device->properties.subdeviceId);
 
   return id;
+}
+
+/* Less than operator for zet_debug_regset_properties_t.  Used by
+   map from ze_regset_properties_v_t to ze_tdesc.  It uses these fields from
+   zet_debug_regset_properties_t for strict weak ordering.
+
+   uint32_t type;			 ///< device-specific register set type
+   uint32_t version;			 ///< device-specific version of this
+					 ///< register set
+   uint32_t count;			 ///< number of registers in the
+					 ///< set
+   uint32_t byteSize;			 ///< the size required for
+					 ///< reading or writing a register
+					 ///< in bytes
+*/
+
+static bool
+operator<(const zet_debug_regset_properties_t &lhs,
+	  const zet_debug_regset_properties_t &rhs)
+{
+  return (std::tie (lhs.type, lhs.version, lhs.count, lhs.byteSize)
+	  < std::tie (rhs.type, rhs.version, rhs.count, rhs.byteSize));
+}
+
+/* Fetch a thread's register set and select a tdesc.  Lookup in the tdesc
+   cache.  If not found create a new tdesc from Level-Zero properties.
+   Returns pointer to tdesc cache info.  */
+
+const ze_tdesc *
+ze_target::select_thread_tdesc (thread_info *tp,
+				const ze_regset_properties_v_t &regsets)
+{
+  ze_device_info *device = ze_thread_device (tp);
+  gdb_assert (device != nullptr);
+
+  const ze_tdesc *cached_tdesc = device->tdesc_cache.find (regsets);
+  target_desc *tdesc = nullptr;
+
+  /* The thread has no tdesc, create one.  */
+  if (cached_tdesc == nullptr)
+    {
+      tdesc = create_tdesc (device, regsets);
+      cached_tdesc = device->tdesc_cache.find (regsets);
+      dprintf ("created tdesc %p (id=%u).", tdesc, tdesc->id);
+    }
+  else
+    tdesc = cached_tdesc->tdesc.get ();
+
+  /* The thread's tdesc has changed, release regcache.  */
+  if (tp->tdesc != tdesc)
+    {
+      free_register_cache_thread (tp);
+    }
+
+  return cached_tdesc;
+}
+
+/* Guard against use of possibly undefined zetDebugGetThreadRegisterSet-
+   Properties API.  We will always have at least one tdesc that was created
+   after attaching.  */
+
+void
+ze_target::update_thread_tdesc (thread_info *tp)
+{
+#ifdef HAVE_ZET_PFNDEBUGGETTHREADREGISTERSETPROPERTIES_T
+  ze_device_info *device = ze_thread_device (tp);
+  gdb_assert (device != nullptr);
+  ze_device_thread_t tid = ze_thread_id (tp);
+
+  uint32_t nregsets = 0;
+  ze_result_t status = zetDebugGetThreadRegisterSetProperties (device->session,
+							       tid,
+							       &nregsets,
+							       nullptr);
+  if (status != ZE_RESULT_SUCCESS)
+    return;
+
+  ze_regset_properties_v_t regsets (nregsets);
+  status = zetDebugGetThreadRegisterSetProperties (device->session, tid,
+						   &nregsets, regsets.data ());
+  if (status != ZE_RESULT_SUCCESS)
+    error (_("Failed to obtain register sets (%x)."), status);
+
+  /* Select and store a matching tdesc based on the regsets in register
+     properties.  */
+  ze_store_tdesc (tp, select_thread_tdesc (tp, regsets));
+#endif /* HAVE_ZET_PFNDEBUGGETTHREADREGISTERSETPROPERTIES_T  */
+}
+
+/* ZE TDESC CACHE implementation.  */
+
+/* Add a new cache entry for a given regset.  We cache tdesc, regset.  */
+
+void
+ze_tdesc_cache::add (const ze_regset_properties_v_t &regsets,
+		     target_desc_up tdesc, ze_regset_info_up regset_info,
+		     ze_expedites_up expedites)
+{
+  /* We have already seen this regset layout.  */
+  if (find (regsets) != nullptr)
+    {
+      gdb_assert (find (regsets)->tdesc == tdesc);
+      return;
+    }
+
+  tdescs_m[regsets]
+    = { std::move (tdesc), std::move (regset_info), std::move (expedites) };
+}
+
+/* Find a target description given a regset vector.  This also tells us
+   that we need to create a new tdesc if none is found and returns the
+   tdesc cache entry for the regsets.  */
+
+const ze_tdesc *
+ze_tdesc_cache::find (const ze_regset_properties_v_t &regsets) const
+{
+  ze_tdesc_map::const_iterator it = tdescs_m.find (regsets);
+  return (it != tdescs_m.end ()) ? &it->second : nullptr;
+}
+
+/* Return any tdesc from the cache.  This will assert if none is found and
+   that means there's a generic error.  */
+
+const ze_tdesc *
+ze_tdesc_cache::any () const
+{
+  gdb_assert (!tdescs_m.empty ());
+  return &tdescs_m.begin ()->second;
 }

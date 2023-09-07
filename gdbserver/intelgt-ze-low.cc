@@ -298,10 +298,8 @@ protected:
 
 private:
   /* Add a register set for REGPROP on DEVICE to REGSETS and increment REGNUM
-     accordingly.
-
-     May optionally add registers to EXPEDITE.  */
-  void add_regset (target_desc *tdesc, const ze_device_properties_t &device,
+     accordingly.  */
+  void add_regset (target_desc *tdesc, const ze_device_info &dinfo,
 		   const zet_debug_regset_properties_t &regprop,
 		   long &regnum, ze_regset_info_t &regsets,
 		   expedite_t &expedite);
@@ -503,15 +501,26 @@ intelgt_ze_target::create_tdesc
   set_tdesc_device_info (tdesc.get (), device_info);
 
   long regnum = 0;
+  ze_regset_info_up regset_info { new ze_regset_info_t };
+  ze_expedites_up expedites { new expedite_t };
   for (const zet_debug_regset_properties_t &regprop : regset_properties)
-    add_regset (tdesc.get (), properties, regprop, regnum,
-		dinfo->regsets, dinfo->expedite);
+    add_regset (tdesc.get (), *dinfo, regprop, regnum,
+		*regset_info, *expedites);
 
   /* Tdesc expects a nullptr-terminated array.  */
-  dinfo->expedite.push_back (nullptr);
+  expedites->push_back (nullptr);
 
-  init_target_desc (tdesc.get (), dinfo->expedite.data (), GDB_OSABI_LINUX);
-  return tdesc.release ();
+  target_desc *tret = tdesc.get ();
+  init_target_desc (tret, expedites->data (), GDB_OSABI_LINUX);
+
+  /* Devices can have several tdescs.  One is created during attach to the
+     device.  Others may be created during thread stop event
+     handling as threads may have their own regset properties.  E.g. the number
+     of GRF registers is dependent on the GRF mode.  */
+  dinfo->tdesc_cache.add (regset_properties, std::move (tdesc),
+			  std::move (regset_info), std::move (expedites));
+
+  return tret;
 }
 
 target_stop_reason
@@ -855,13 +864,13 @@ intelgt_ze_target::prepare_thread_resume (thread_info *tp)
 }
 
 void
-intelgt_ze_target::add_regset (target_desc *tdesc,
-			       const ze_device_properties_t &device,
+intelgt_ze_target::add_regset (target_desc *tdesc, const ze_device_info &dinfo,
 			       const zet_debug_regset_properties_t &regprop,
 			       long &regnum, ze_regset_info_t &regsets,
 			       expedite_t &expedite)
 {
   tdesc_feature *feature = nullptr;
+  const ze_device_properties_t &device = dinfo.properties;
 
   ze_regset_info regset = {};
   regset.type = (uint32_t) regprop.type;

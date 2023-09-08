@@ -2170,19 +2170,43 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
   if (tdesc_device_id.empty ())
     error (_("Failed to read target id from device."));
 
+  int predication_bit = 0;
   xe_version device_version
     = get_xe_version (std::stoi (tdesc_device_id, nullptr, 16));
   switch (device_version)
     {
     case XE_HP:
     case XE_HPG:
+      predication_bit = 24;
       calla_inst[2] = exec_size;
       break;
     case XE_HPC:
+      predication_bit = 26;
       calla_inst[2] = exec_size << 2;
       break;
     default:
       error (_("Unsupported device id %s"), tdesc_device_id.c_str ());
+    }
+
+  gdb_assert (inferior_ptid != null_ptid);
+  thread_info *current_thread = inferior_thread ();
+
+  /* Enable predication to run the inferior call with a single lane.  */
+  if (current_thread->has_simd_lanes ())
+    {
+      /* Enable $F0 predication.  */
+      intelgt::set_inst_bit (calla_inst, predication_bit);
+
+      /* Update the predication flag register $F0 using the current lane.  */
+      const int current_lane = current_thread->current_simd_lane ();
+      if (!current_thread->is_simd_lane_active (current_lane))
+	error (_("Cannot run inferior calls for inactive lanes: lane %d"),
+	       current_lane);
+
+      const int f0_regnum = data->regset_ranges[intelgt::regset_flag].start;
+      gdb_assert (f0_regnum != -1);
+      uint32_t f0 = 1u << current_lane;
+      regcache->cooked_write (f0_regnum, (gdb_byte *)&f0);
     }
 
   /* Location of the CallMask field in the framedesc register (subreg 0)

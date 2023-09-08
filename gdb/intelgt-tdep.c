@@ -2056,42 +2056,62 @@ intelgt_unwind_sp (gdbarch *gdbarch, frame_info_ptr next_frame)
   return fe_sp;
 }
 
-/* This stack is used to store the instructions at the entry point of
-   the kernel when an inferior call takes place, so that we can restore
-   the original contents after the infcall completes.  We need stack here
-   to keep track of the entry point instructions for nested inferior
-   calls.
-   The stack entry is a pair of the byte array which holds the entry
-   instruction and a bool flag, which shows the instruction validity.
-   The instruction may be invalid in case we failed to find the kernel
-   entry point or read the memory from this point.  */
+/* Read the debug area info and initialize SCRATCH_AREA in intelgt data.  */
 
-std::stack<std::pair<std::array<gdb_byte, intelgt::MAX_INST_LENGTH>, bool>>
-entry_inst_stack;
-
-/* Determine the kernel start address.  */
-
-static bool
-get_kernel_entry (CORE_ADDR pc, CORE_ADDR &entry_addr)
+static void
+intelgt_read_debug_area_header (gdbarch *gdbarch)
 {
-  /* TODO: this needs to be changed once we have kernel start address
-     available in registers.  Until then find the section which contains
-     the PC and take its address.  */
-  obj_section *s = find_pc_section (pc);
-  if (s == nullptr)
-    return false;
+  /* Layout of the debug area header.  */
+  struct debug_area_header
+  {
+    char magic[8] = "";
+    uint64_t reserved_1 = 0;
+    uint8_t version = 0;
+    uint8_t pgsize = 0;
+    uint8_t size = 0;
+    uint8_t reserved_2 = 0;
+    uint16_t scratch_begin = 0;
+    uint16_t scratch_end = 0;
+  } dbg_header;
 
-  entry_addr = s->addr ();
-  return true;
+  CORE_ADDR isabase = intelgt_get_isabase (get_current_regcache ());
+  int err = target_read_memory (isabase, (gdb_byte *)&dbg_header,
+				sizeof dbg_header);
+  if (err != 0)
+    error (_("Target failed to read the debug area header at %s"),
+	   paddress (gdbarch, isabase));
+
+  if (strcmp (dbg_header.magic, "dbgarea") != 0)
+    error (_("Failed to find scratch debug area at %s"),
+	   paddress (gdbarch, isabase));
+
+  if (dbg_header.version != 0)
+    error (_("Unknown version of debug area header."));
+
+  /* Initialize SCRATCH_AREA.  */
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  data->scratch_area = new target_memory_allocator (
+    isabase + dbg_header.scratch_begin,
+    dbg_header.scratch_end - dbg_header.scratch_begin);
 }
+
+/* This stack is used to store the CALLA instruction addresses in the scratch
+   area, so that we can free the used space in "intelgt_post_infcall".
+   We need stack here to keep track of calla addresses for nested inferior
+   calls.
+   The stack entry is a pair of the scratch memory address that holds
+   the calla instruction and a front-end stack pointer address, at which the
+   dummy frame starts.  Since for each dummy frame we have a different FE_SP,
+   this address is used as a frame identifier to the allocated memory.  */
+
+std::stack<std::pair<CORE_ADDR, CORE_ADDR>> calla_addr_stack;
 
 /* Intelgt implementation of the "push_dummy_code" method.
 
-   In this function, we are injecting a CALLA instruction at the entry point
-   address of the kernel.  We set the REAL_PC to start executing from the
-   injected instruction, which will then force the function
-   to return to the next instruction address, and that would be the
-   BP_ADDR.  */
+   In this function, we are injecting a CALLA instruction in the debug area.
+   We set the REAL_PC to start executing from the injected instruction,
+   which will then force the function to return to the next address, and that
+   would be the BP_ADDR.  */
 
 static CORE_ADDR
 intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
@@ -2099,26 +2119,21 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
 			 CORE_ADDR *real_pc, CORE_ADDR *bp_addr,
 			 regcache *regcache)
 {
-  /* We push to the ENTRY_INST_STACK unconditionally, to avoid branching,
-     since the post-clean up is called on every error.
-     At first, the instruction is marked invalid (FALSE).  */
-  std::array<gdb_byte, intelgt::MAX_INST_LENGTH> entry_inst;
-  entry_inst_stack.push (std::make_pair (std::move (entry_inst), false));
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  /* Read the scratch header if not initialized.  */
+  if (data->scratch_area == nullptr)
+    intelgt_read_debug_area_header (gdbarch);
 
-  CORE_ADDR entry_addr = 0;
-  if (!get_kernel_entry (funaddr, entry_addr))
-    error ("Failed to get kernel starting address.");
+  if (data->scratch_area == nullptr)
+    error (_("Cannot find scratch area in arch data."));
 
-  int err = 0;
-  /* Save the original instruction data in ENTRY_INST_STACK so we can restore
-     it back after running the infcall.  */
-  err = target_read_memory (entry_addr, entry_inst_stack.top ().first.data (),
-			    intelgt::MAX_INST_LENGTH);
-  if (err != 0)
-    error ("Target failed to read memory at 0x%lx", entry_addr);
+  /* Allocate memory for two instructions in the scratch area,
+     the first is for the CALLA, and the second is for the breakpoint.  */
+  CORE_ADDR calla_addr
+    = data->scratch_area->alloc (2 * intelgt::MAX_INST_LENGTH);
 
-  /* We have read the entry instruction.  Mark it valid.  */
-  entry_inst_stack.top ().second = true;
+  /* Push the instruction's address to the stack.  */
+  calla_addr_stack.push (std::make_pair (calla_addr, sp));
 
   /* Compute the execution size from SIMD_WIDTH, below is the EXEC_SIZE
      encoding according to the spec.
@@ -2136,11 +2151,13 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
   /* Make sure that 2^EXEC_SIZE = SIMD_WIDTH.  */
   gdb_assert (1 << exec_size == simd_width);
 
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  /* Make sure to have a cleared buffer for the CALLA instruction
+     and the return breakpoint.  */
+  gdb_byte buff[2 * intelgt::MAX_INST_LENGTH];
+  memset (buff, 0, sizeof (buff));
 
   /* Construct the dummy CALLA instruction.  */
-  gdb_byte calla_inst[intelgt::MAX_INST_LENGTH];
-  memset (calla_inst, 0, intelgt::MAX_INST_LENGTH);
+  gdb_byte *calla_inst = buff;
 
   constexpr uint32_t calla_opcode = 0x2b;
   calla_inst[0] = calla_opcode;
@@ -2186,49 +2203,49 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
   store_unsigned_integer (calla_inst + intelgt::MAX_INST_LENGTH - 4, 4,
 			  byte_order, (uint32_t) jump_ip);
 
-  /* Inject the dummy CALLA instruction.  */
-  err = target_write_memory (entry_addr, calla_inst, intelgt::MAX_INST_LENGTH);
+  /* Use the NOP instruction for the return breakpoint.  */
+  constexpr uint32_t nop_opcode = 0x60;
+  gdb_byte *nop_inst = buff + intelgt::MAX_INST_LENGTH;
+  nop_inst[0] = nop_opcode;
+
+  /* Inject the dummy CALLA instruction and the breakpoint in the
+     reserved space.  */
+  int err = target_write_memory (calla_addr, buff, sizeof (buff));
   if (err != 0)
     error ("Target failed to inject a dummy calla instruction at 0x%lx",
-	   entry_addr);
+	   calla_addr);
 
   /* Update the REAL_PC to execute the CALLA, which would make the function
-     return to the next address.  Use that address BP_ADDR.  */
-  *real_pc = entry_addr;
-  *bp_addr = entry_addr + intelgt::MAX_INST_LENGTH;
+     return to the next address.  Use that address as the BP_ADDR.  */
+  *real_pc = calla_addr;
+  *bp_addr = calla_addr + intelgt::MAX_INST_LENGTH;
 
   return sp;
 }
 
 /* Intelgt implementation of the "post_infcall" method.
 
-   In this function, we restore the entry point original instruction that we
-   used to inject a CALLA instruction in intelgt_push_dummy_code.  */
+   In this function, we free up the scratch memory that we
+   used to inject the CALLA instruction in "intelgt_push_dummy_code".  */
 
 static void
-intelgt_post_infcall (gdbarch *gdbarch, CORE_ADDR funaddr)
+intelgt_post_infcall (gdbarch *gdbarch, CORE_ADDR sp)
 {
-  /* There always should be an entry instruction restore buffer.  */
-  gdb_assert (!entry_inst_stack.empty ());
-  CORE_ADDR entry_addr = 0;
-  if (get_kernel_entry (funaddr, entry_addr))
+  if (calla_addr_stack.empty ())
+    return;
+
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+  /* Make sure that we are freeing the right allocation.  */
+  CORE_ADDR top_calla_addr = calla_addr_stack.top ().first;
+  CORE_ADDR top_sp = calla_addr_stack.top ().second;
+  if (top_sp == sp)
     {
-      /* Restore the entry instruction only if its restore value
-	 is valid.  */
-      if (entry_inst_stack.top ().second)
-	{
-	  int err = target_write_memory (entry_addr,
-					 entry_inst_stack.top ().first.data (),
-					 intelgt::MAX_INST_LENGTH);
-	  if (err != 0)
-	    warning ("Target failed to restore instruction at 0x%lx",
-		     entry_addr);
-	}
+      data->scratch_area->free (top_calla_addr);
+      calla_addr_stack.pop ();
     }
   else
-    warning ("Failed to get kernel starting address.");
-
-  entry_inst_stack.pop ();
+    warning (_("Cannot find allocated memory for the current dummy frame."));
 }
 
 /* Intelgt implementation of the "push_dummy_call" method.  */

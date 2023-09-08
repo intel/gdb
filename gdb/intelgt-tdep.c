@@ -2002,11 +2002,29 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
 
   constexpr uint32_t calla_opcode = 0x2b;
   calla_inst[0] = calla_opcode;
-#if defined (HAVE_LIBIGA64)
-  calla_inst[2] = data->iga_version >= IGA_XE_HPC ? exec_size << 2 : exec_size;
-#else
-  error ("Inferior call feature is not available: libiga64 is missing.");
-#endif /* defined (HAVE_LIBIGA64)  */
+
+  /* Compute the DEVICE_GEN from the DEVICE_ID, so that we can determine
+     the correct encoding for some fields of the instruction.  */
+  const target_desc *tdesc = gdbarch_target_desc (gdbarch);
+  const std::string &tdesc_device_id
+    = tdesc_find_device_info_attribute (tdesc, "target_id");
+  if (tdesc_device_id.empty ())
+    error (_("Failed to read target id from device."));
+
+  xe_version device_version
+    = get_xe_version (std::stoi (tdesc_device_id, nullptr, 16));
+  switch (device_version)
+    {
+    case XE_HP:
+    case XE_HPG:
+      calla_inst[2] = exec_size;
+      break;
+    case XE_HPC:
+      calla_inst[2] = exec_size << 2;
+      break;
+    default:
+      error (_("Unsupported device id %s"), tdesc_device_id.c_str ());
+    }
 
   /* Location of the CallMask field in the framedesc register (subreg 0)
      and the Src0.IsImm field (bit 46).  */

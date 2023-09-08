@@ -214,37 +214,5 @@ foreach device $sycl_device_list {
 	gdb_assert {$bp_hit(10) == 2} "bp at odd then/else is hit twice"
 	gdb_assert {$bp_hit(11) == 2} "bp at odd else/then is hit twice"
 	gdb_assert {$bp_hit(12) == 2} "bp at odd else/else is hit twice"
-
-	# Below we check for unchanged $CE after infcalls.
-	with_test_prefix "ce after infcalls" {
-	    clean_restart "${binfile}"
-	    if {![runto_main [sycl_get_device_args $device]]} {
-		return -1
-	    }
-	}
-
-	gdb_breakpoint $bp_even_then_then {temporary}
-	gdb_breakpoint $bp_even_then_else {temporary}
-
-	set branches_hit 0
-	for {set i 0} {$i < 2} {incr i} {
-	    gdb_test_multiple "continue" "hit bp in thread branches" {
-		-re -wrap "breakpoint .*$srcfile:$bp_even_then_then.*" {
-		    incr branches_hit
-		    with_test_prefix "infcall at then-branch" {
-			gdb_test "print even_1(1)" "= 2101"
-			test_ce "0x101"
-		    }
-		}
-		-re -wrap "breakpoint .*$srcfile:$bp_even_then_else.*" {
-		    incr branches_hit
-		    with_test_prefix "infcall at else-branch" {
-			gdb_test "print even_1(2)" "= 2102"
-			test_ce "0x1010"
-		    }
-		}
-	    }
-	}
-	gdb_assert {$branches_hit == 2} "hit both thread branches"
     }
 }

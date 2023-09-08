@@ -2184,19 +2184,45 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
 
   /* Compute the DEVICE_GEN from the DEVICE_ID, so that we can determine
      the correct encoding for some fields of the instruction.  */
+  int predication_bit = 0;
   uint32_t device_id = get_device_id (gdbarch);
   xe_version device_version = get_xe_version (device_id);
   switch (device_version)
     {
     case XE_HP:
     case XE_HPG:
+      predication_bit = 24;
       calla_inst[2] = exec_size;
       break;
     case XE_HPC:
+      predication_bit = 26;
       calla_inst[2] = exec_size << 2;
       break;
     default:
       error (_("Unsupported device id 0x%x"), device_id);
+    }
+
+  thread_info *current_thread = inferior_thread ();
+
+  /* Enable predication to run the inferior call with a single lane.  */
+  if (current_thread->has_simd_lanes ())
+    {
+      /* Enable $F0 predication.  */
+      intelgt::set_inst_bit (calla_inst, predication_bit);
+
+      /* Update the predication flag register $F0 using the current lane.  */
+      const int current_lane = current_thread->current_simd_lane ();
+      if (!current_thread->is_simd_lane_active (current_lane))
+	error (_("Cannot run inferior calls for inactive lanes: lane %d"),
+	       current_lane);
+
+      const int f0_regnum = data->regset_ranges[intelgt::regset_flag].start;
+      if (f0_regnum == -1)
+	error (_("F0 register is needed for this operation but could "
+		 "not be found."));
+
+      uint32_t f0 = 1u << current_lane;
+      regcache->cooked_write (f0_regnum, (gdb_byte *)&f0);
     }
 
   /* Location of the CallMask field in the framedesc register (subreg 0)

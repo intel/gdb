@@ -34,6 +34,8 @@ if {[build_executable "failed to compile $srcfile" \
 # The main test sequence for GPU inferior calls.
 proc test_inferior_calls {simd_lane inside_kernel} {
     global srcfile
+    set real_f0 [get_hexadecimal_valueof "\$f0" "invalid" "F0 before infcalls"]
+    set real_ce [get_hexadecimal_valueof "\$ce" "invalid" "CE before infcalls"]
     gdb_test "thread :$simd_lane" "Switching to thread .*:$simd_lane .*"
 
     gdb_test "print no_args()" "= 20" \
@@ -110,6 +112,7 @@ proc test_inferior_calls {simd_lane inside_kernel} {
     set caller_function  "make_all_calls \\(\\) at $srcfile:$inside_kernel"
 
     gdb_breakpoint "$srcfile:$inside_function" {temporary}
+    gdb_test_no_output "set scheduler-locking on"
     gdb_test "print integer_grf_args(6, 7, 8)" ".*$callee_function.*" \
 	"Break point inside the callee function"
 
@@ -120,12 +123,20 @@ proc test_inferior_calls {simd_lane inside_kernel} {
 				"#2  $caller_function.*"] \
 	"Backtrace with a dummy frame"
 
+    set callee_ce "0x[format %x [expr 1 << $simd_lane]]"
+    set dmask "0xff"
+    gdb_test "p/x \$ce & $dmask" "$callee_ce" "CE within infcall"
+
     gdb_test "finish" [multi_line \
 			   "Run till exit from #0  $callee_function" \
 			   "$caller_function" \
 			   "$inside_kernel.*" \
 			   "Value returned is \\$\[0-9\]+ = 336"] \
 	"Finish the inferior call and get the returned result"
+    gdb_test_no_output "set scheduler-locking off"
+
+    gdb_test "p/x \$f0" "$real_f0" "F0 after infcall"
+    gdb_test "p/x \$ce" "$real_ce" "CE after infcall"
 }
 
 foreach device $sycl_device_list {
@@ -147,7 +158,7 @@ foreach device $sycl_device_list {
 	set inside_kernel \
 	    [gdb_get_line_number "bp-after-variables-declaration"]
 
-	gdb_breakpoint "$srcfile:$inside_kernel"
+	gdb_breakpoint "$srcfile:$inside_kernel" {temporary}
 	gdb_continue_to_breakpoint "kernel after variable declaration" \
 	    ".*$srcfile:$inside_kernel.*"
 
@@ -168,7 +179,7 @@ foreach device $sycl_device_list {
 	set else_branch [gdb_get_line_number "else-branch"]
 	set thread_branch [gdb_get_line_number "thread-branch"]
 
-	gdb_breakpoint "$srcfile:$thread_branch"
+	gdb_breakpoint "$srcfile:$thread_branch" {temporary}
 	gdb_continue_to_breakpoint "at thread branching" \
 	    ".*$srcfile:$thread_branch.*"
 
@@ -179,14 +190,18 @@ foreach device $sycl_device_list {
 		-re -wrap "$then_branch.*" {
 		    incr branches_step
 		    pass "stopped into then-branch"
+		    set real_ce [get_hexadecimal_valueof "\$ce" "invalid" "before infcalls at then-branch"]
 		    gdb_test "print integer_grf_args(8, 9, 10)" "= 720" \
 			"infcall at then-branch"
+		    gdb_test "p/x \$ce" "$real_ce" "unchanged CE at then-branch"
 		}
 		-re -wrap "$else_branch.*" {
 		    incr branches_step
 		    pass "stepped into else-branch"
+		    set real_ce [get_hexadecimal_valueof "\$ce" "invalid" "before infcalls at else-branch"]
 		    gdb_test "print integer_grf_args(7, 6, 5)" "= 210" \
 			"infcall at else-branch"
+		    gdb_test "p/x \$ce" "$real_ce" "unchanged CE at else-branch"
 		}
 	    }
 	}

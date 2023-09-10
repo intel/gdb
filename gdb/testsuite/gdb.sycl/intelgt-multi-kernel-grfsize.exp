@@ -1,0 +1,115 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for IntelGT SYCL, for a program that has two kernels where
+# each kernel has a different GRF size kernel_properties value.  This is run in
+# in both all-stop and non-stop mode.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+# Verify that exactly one thread has stopped.
+
+proc verify_one_stopped_thread {srcfile msg } {
+    global decimal
+
+    set num_stopped_threads 0
+    set stopped_thread_id ""
+    set tid_re "$decimal\(\.$decimal\)?"
+    gdb_test_multiple "info threads -stopped" $msg -lbl {
+	-re "\r\n. ($tid_re)\[^\r\n\]* at ${srcfile}" {
+	    set stopped_thread_id $expect_out(1,string)
+	    incr num_stopped_threads
+	    exp_continue
+	}
+	-re -wrap "" {
+	    gdb_assert {$num_stopped_threads == 1} $gdb_test_name
+	}
+    }
+    return $stopped_thread_id
+}
+
+foreach_with_prefix nonstop_mode {off on} {
+    set eol "\[\r\n\]+"
+
+    foreach device $sycl_device_list {
+	clean_restart "${binfile}"
+	with_test_prefix [sycl_get_device_prefix $device] {
+	    if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+		unsupported "test is aimed at Intel GPUs only"
+		continue
+	    }
+
+	    gdb_test_no_output "set non-stop $nonstop_mode"
+
+	    if {![runto_main [sycl_get_device_args $device]]} {
+		continue
+	    }
+
+	    set kernel_1 [gdb_get_line_number "kernel-1-line"]
+	    set kernel_2 [gdb_get_line_number "kernel-2-line"]
+	    gdb_breakpoint $kernel_1 {temporary}
+	    gdb_breakpoint $kernel_2 {temporary}
+
+	    # Check that we stop at each breakpoint in order.
+	    gdb_continue_to_breakpoint "hit the BP in kernel 1" \
+	      "$srcfile:$kernel_1.*"
+
+	    if {$nonstop_mode == "on"} {
+		set stopped_thread_id [verify_one_stopped_thread $srcfile \
+		    "stopped threads kernel 1"]
+		gdb_test "thread $stopped_thread_id" \
+		    ".Switching to thread ${stopped_thread_id}.*" \
+		    "switch to the stopped thread in kernel 1"
+	    }
+
+	    gdb_test "p \$r255" "= void" "access r255 in 128 GRF mode"
+
+	    set test "info frame r127 must be present in 128 GRF mode"
+	    gdb_test "info frame" "r127 *at.*" $test
+
+	    gdb_continue_to_breakpoint "hit the BP in kernel 2" \
+		"$srcfile:$kernel_2.*"
+
+	    if {$nonstop_mode == "on"} {
+		set stopped_thread_id [verify_one_stopped_thread $srcfile \
+		    "stopped threads kernel 2"]
+		gdb_test "thread $stopped_thread_id" \
+		    ".Switching to thread ${stopped_thread_id}.*" \
+		    "switch to the stopped thread in kernel 2"
+	    }
+
+	    gdb_test "p/x \$r255" "= .*$hex.*" "access r255 in 256 GRF mode"
+
+	    set test "info registers r255 must be present in 256 GRF mode"
+	    gdb_test "info registers r255" ".*r255 +\{ *$hex.*\}" $test
+
+	    set test "info frame r255 must be present in 256 GRF mode"
+	    gdb_test "info frame" "r255 *at.*" $test
+	}
+    }
+}

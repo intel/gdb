@@ -1983,6 +1983,28 @@ ze_target::mark_eventing_threads (ptid_t resume_ptid, resume_kind rkind)
 	  return;
 	}
 
+      /* TP may have stopped during range-stepping, but we reported
+	 another thread to GDB.  This means the range-stepping state
+	 of TP is canceled.
+
+	 The condition here is similar to, but not the same as
+	 is_range_stepping.  We do not check here if the thread's stop
+	 pc is within the stepping range.  We rather only check if there
+	 was a range to step, because the thread may have stopped just
+	 when it came out of the range.  We should cancel the event in
+	 that case, too.  */
+      if (ze_thread_stopped (tp)
+	  && (zetp->stop_reason == TARGET_STOPPED_BY_SINGLE_STEP)
+	  && (zetp->step_range_end > zetp->step_range_start))
+	{
+	  target_waitstatus waitstatus = ze_move_waitstatus (tp);
+	  dprintf ("Thread %s (%s) was range-stepping, "
+		   "canceling the pending event",
+		   tp->id.to_string ().c_str (),
+		   ze_thread_id_str (zetp->id).c_str ());
+	  return;
+	}
+
       /* Recover the resume state so that the thread can be picked up
 	 by 'wait'.  */
       ze_set_resume_state (tp, rkind);

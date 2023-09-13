@@ -26,19 +26,28 @@ if {[llength $sycl_device_list] == 0} {
     return 0
 }
 
-# LD and compile flags setting is needed for AOT testing.
-# gen9: option creates AOT binary for gen9 and newer targets.
-set aot_opts [list \
-    "additional_flags=-fsycl-targets=spir64_x86_64,spir64_fpga,spir64_gen" \
-    "ldflags=-Xsycl-target-backend=spir64_gen \"-q -device gen9:\""]
-
-if {[build_executable "failed to compile $srcfile" \
-    "${binfile}" $srcfile {sycl debug $aot_opts}]} {
-    return -1
-}
-
 foreach device $sycl_device_list {
-    clean_restart "${binfile}"
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	set target "gpu"
+	# LD and compile flags setting is needed for AOT testing.
+	# gen9: option creates AOT binary for gen9 and newer targets.
+	set aot_opts [list \
+	    "additional_flags=-fsycl-targets=spir64_gen" \
+	    "ldflags=-Xsycl-target-backend=spir64_gen \"-q -device gen9:\""]
+    } elseif {[require_sycl_device "$device" "accelerator" "*"]} {
+	set target "fpga"
+	set aot_opts [list "additional_flags=-fsycl-targets=spir64_fpga"]
+    } else {
+	set target "cpu"
+	set aot_opts [list "additional_flags=-fsycl-targets=spir64_x86_64"]
+    }
+
+    if {[build_executable "failed to compile $srcfile for ${target}" \
+	"${binfile}_${target}" $srcfile [concat sycl debug $aot_opts]]} {
+	continue
+    }
+
+    clean_restart "${binfile}_${target}"
     with_test_prefix [sycl_get_device_prefix $device] {
 	if {![runto_main [sycl_get_device_args $device]]} {
 	    continue

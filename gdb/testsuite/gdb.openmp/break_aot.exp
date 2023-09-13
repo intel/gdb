@@ -36,19 +36,22 @@ foreach extension $openmp_languages_list {
 	set offload_device "-q -device :gen12lp"
     }
 
-    # LD and compile flags setting is needed for AOT testing.
-    set aot_opts [list "additional_flags=-fopenmp-targets=spir64_gen,spir64_x86_64" \
-		      "ldflags=-Xopenmp-target-backend=spir64_gen \"${offload_device}\""]
-
-    if {[prepare_openmp_for_testing ${exe} ${srcfile} $extension \
-	     "${aot_opts}"] == -1} {
-	untested "OpenMP: Fail to prepare the test for $extension"
-	kfail "Jira XDEPS/5557" "${extension}: Offline compiler does not accept range of devices input for all targets."
-	continue
-    }
-
     foreach device_info "${device_list}" {
 	with_test_prefix [init_openmp_device $device_info $extension] {
+	    if {[require_openmp_device "GPU"]} {
+		# LD and compile flags setting is needed for AOT testing.
+		set aot_opts [list "additional_flags=-fopenmp-targets=spir64_gen" \
+		    "ldflags=-Xopenmp-target-backend=spir64_gen \"${offload_device}\""]
+	    } else {
+		set aot_opts [list "additional_flags=-fopenmp-targets=spir64_x86_64"]
+	    }
+
+	    if {[prepare_openmp_for_testing ${exe} ${srcfile} $extension \
+		"${aot_opts}"] == -1} {
+		untested "OpenMP: Fail to prepare the test for $extension"
+		kfail "Jira XDEPS/5557" "${extension}: Offline compiler does not accept range of devices input for all targets."
+		continue
+	    }
 
 	    if {![start_openmp_program $extension]} {
 		untested "Fail to start the program"

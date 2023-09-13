@@ -48,8 +48,12 @@ foreach extension $openmp_languages_list {
 
 	    if {[prepare_openmp_for_testing ${exe} ${srcfile} $extension \
 		"${aot_opts}"] == -1} {
+		if {[require_openmp_device "GPU"]} {
+		    kfail "Jira GSD/3754" "${extension}: Offline compiler does not accept range of devices input for all targets."
+		} else {
+		    kfail "Jira CMPLRLLVM/51578" "${extension}: AOT compilation fails for IFX."
+		}
 		untested "OpenMP: Fail to prepare the test for $extension"
-		kfail "Jira XDEPS/5557" "${extension}: Offline compiler does not accept range of devices input for all targets."
 		continue
 	    }
 

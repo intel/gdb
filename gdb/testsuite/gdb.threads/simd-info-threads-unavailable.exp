@@ -69,7 +69,7 @@ foreach device $sycl_device_list {
 		    incr found_main
 		    exp_continue
 		}
-		-re "${decimal}\.${decimal}${fill}Thread ${fill}\\(unavailable\\)" {
+		-re "${decimal}\.${decimal} ${fill}\\(unavailable\\)" {
 		    incr num_unavailable
 		    exp_continue
 		}

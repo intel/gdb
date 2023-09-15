@@ -507,7 +507,7 @@ make_ranges_from_set (const std::set<int> &numbers,
     return result;
 
   std::set<int>::const_iterator start = numbers.begin ();
-  if (*start == current)
+  if (*start == current && numbers.size () > 1)
     result = "*";
   result += std::to_string (*start);
 

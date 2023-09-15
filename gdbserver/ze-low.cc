@@ -2955,7 +2955,7 @@ ze_target::thread_id_str (thread_info *thread)
   gdb_assert (zetp != nullptr);
 
   std::stringstream id_str;
-  id_str << "Thread " << ze_thread_id_str (zetp->id);
+  id_str << "ZE " << ze_thread_id_str (zetp->id);
 
   return id_str.str ();
 }

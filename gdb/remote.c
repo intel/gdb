@@ -8268,6 +8268,14 @@ Packet: '%s'\n"),
 	      p = unpack_varlen_hex (++p1, &tdesc_id);
 	      event->rs->add_tdesc_id (tdesc_id);
 	      event->tdesc_id = tdesc_id;
+
+	      /* We need to skip processing expedites here because for
+		 this we would have to fetch missing target descriptions.
+		 However we cannot reliably do this here since during an
+		 attach in non-stop mode the remote target will not even
+		 have populated its thread list, which would make the
+		 target description fail.  */
+	      skipregs = 1;
 	    }
 	  else
 	    {

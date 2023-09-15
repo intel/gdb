@@ -54,7 +54,7 @@ foreach device $sycl_device_list {
 	    ".*$srcfile:$first_line.*"
 	gdb_breakpoint $next_line
 
-	set first_thread [get_integer_valueof "\$_thread" 0 "get tid"]
+	set first_thread [get_current_thread "first bp line"]
 
 	# Now only the second BP is there.  The "step" command will
 	# start a stepping flow for the first thread whereas it will
@@ -63,7 +63,7 @@ foreach device $sycl_device_list {
 	# there is a slight chance that this will not happen and the
 	# first thread will win the race.
 	gdb_test "step" "$srcfile:$next_line.*" "start stepping"
-	set second_thread [get_integer_valueof "\$_thread" 0 "get tid again"]
+	set second_thread [get_current_thread "second bp line"]
 
 	if {$first_thread eq $second_thread} {
 	    # There was really a very very low chance of this happening.
@@ -78,7 +78,8 @@ foreach device $sycl_device_list {
 	gdb_continue_to_breakpoint "resume the thread" \
 	    ".*$srcfile:$next_line.*"
 
-	gdb_test "print \$_thread == ${first_thread}" " = true" \
+	set curr_thread [get_current_thread "second bp line again"]
+	gdb_assert {"$curr_thread" eq "$first_thread"} \
 	    "sanity-check the current thread"
     }
 }

@@ -50,12 +50,15 @@ foreach device $sycl_device_list {
 	gdb_breakpoint $line_1 {temporary}
 	gdb_continue_to_breakpoint "simd.1" ".*$srcfile:$line_1.*"
 
+	set fill "\[^\r\n\]+"
+
 	with_test_prefix "simd_width_16" {
 	    gdb_assert {[current_thread_has_simd_lanes]}
 	    gdb_test "print \$_simd_width" " = 16"
 
 	    for {set lane 0} {$lane < 16} {incr lane 2} {
-		gdb_test "thread :$lane" "Switching to thread .*:$lane \\(Thread .* lane $lane\\).*"
+		gdb_test "thread :$lane" \
+		    "Switching to thread ${fill}:$lane ${fill} lane $lane\\).*"
 	    }
 	    for {set lane 1} {$lane < 16} {incr lane 2} {
 		gdb_test "thread :$lane" "SIMD lane $lane is inactive in thread.*"
@@ -70,7 +73,8 @@ foreach device $sycl_device_list {
 	    gdb_test "print \$_simd_width" " = 32"
 
 	    for {set lane 1} {$lane < 32} {incr lane 2} {
-		gdb_test "thread :$lane" "Switching to thread .*:$lane.*\\(Thread .* lane $lane\\).*"
+		gdb_test "thread :$lane" \
+		    "Switching to thread ${fill}:$lane ${fill} lane $lane\\).*"
 	    }
 	    for {set lane 0} {$lane < 32} {incr lane 2} {
 		gdb_test "thread :$lane" "SIMD lane $lane is inactive in thread.*"

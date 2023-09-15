@@ -150,6 +150,8 @@ foreach device ${device_list} {
     with_test_prefix [init_openmp_device $device "f90"] {
 	if {[require_openmp_device "GPU"]} {
 	    kfail "JIRA IGDB/4097" "breakpoint not hit on GPU"
+	} elseif {[require_openmp_device "CPU"]} {
+	    kfail "JIRA GSD/4271" "Trampoline tag is not enabled yet"
 	} else {
 	    set exe "${binfile}_f90"
 	    run_tests "auto" ${exe}

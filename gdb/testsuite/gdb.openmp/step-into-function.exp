@@ -27,15 +27,7 @@ foreach extension $openmp_languages_list {
     standard_testfile "call-stack.${extension}"
     set exe "${binfile}_${extension}"
 
-    set options ""
-    if {$extension == "f90" && [require_openmp_device "CPU"]} {
-	# TEMP: Option "-fsycl-nonsemantic-debuginfo" fixes the issue IGDB-2694
-	# and should be removed once it is enabled by default in compiler.
-	kfail "JIRA IGDB/2694" \
-	    "Compiler option -fsycl-nonsemantic-debuginfo is used to fix debug info."
-	set options "additional_flags=-fsycl-nonsemantic-debuginfo"
-    }
-    if {[prepare_openmp_for_testing ${exe} ${srcfile} $extension ${options}] == -1} {
+    if {[prepare_openmp_for_testing ${exe} ${srcfile} $extension] == -1} {
 	untested "OpenMP: Fail to prepare the test ${exe}"
 	continue
     }

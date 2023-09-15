@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Tests the intelgt target's handling of stepping.
+# Test the target's handling of stepping.
 #
 # In this scenario we start stepping for a thread and resume the
 # others.  There is a breakpoint close to the current PC.  We expect

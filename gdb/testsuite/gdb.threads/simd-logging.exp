@@ -25,8 +25,8 @@ standard_testfile simd.cpp
 
 proc thread_with_lane_re {thread lane} {
     return [multi_line \
-	"Thread $thread:$lane \\\(Thread (\[^\r\n\]+) lane $lane\\\):" \
-	"\\\[Current thread is $thread:$lane \\\(Thread (\[^\r\n\]+) lane $lane\\\)\\\]"
+	"Thread $thread:$lane \[^\r\n\]+ lane $lane\\\):" \
+	"\\\[Current thread is $thread:$lane \[^\r\n\]+ lane $lane\\\)\\\]"
     ]
 }
 
@@ -76,6 +76,9 @@ foreach device $sycl_device_list {
 	    }
 	}
 
+	verbose -log "odd branch inf: $odd_branch_inf"
+	verbose -log "odd branch thread: $odd_branch_thread"
+
 	if {$odd_branch_inf eq "invalid" || $odd_branch_thread eq "invalid" } {
 	    continue
 	}
@@ -90,7 +93,7 @@ foreach device $sycl_device_list {
 	    "switch to thread at default lane which is executing at the breakpoint"
 
 	gdb_test "thread" \
-	    "\\\[Current thread is $odd_branch_inf.$odd_branch_thread:1 \\\(Thread ($fill) lane 1\\\)\\\]" \
+	    "\\\[Current thread is $odd_branch_inf.$odd_branch_thread:1 $fill lane 1\\\)\\\]" \
 	    "print thread info for executing thread, lane information shall be printed"
 
 	gdb_test "thread apply :3 thread" \
@@ -98,7 +101,7 @@ foreach device $sycl_device_list {
 	    "thread apply for specific lane of non executing thread"
 
 	gdb_test "thread :5" \
-	    "\\\[Switching to thread $odd_branch_inf.$odd_branch_thread:5 \\\(Thread ($fill) lane 5\\\)\\\].*" \
+	    "\\\[Switching to thread $odd_branch_inf.$odd_branch_thread:5 $fill lane 5\\\)\\\].*" \
 	    "switch lane for a not executing thread"
 
 	gdb_test "print \$_simd_lane" \
@@ -111,10 +114,13 @@ foreach device $sycl_device_list {
 	set wpfa "with print frame-arguments none -- "
 	set running_thread "invalid"
 	gdb_test_multiple "${wpfa}info threads" "extract running thread" {
-	    -re "$odd_branch_inf\.($decimal)${fill}Thread ${fill}\\\(running\\\)" {
+	    -re "  $odd_branch_inf\.($decimal)${fill}\\\(running\\\)" {
 		if {$running_thread eq "invalid"} {
 		    set running_thread $expect_out(1,string)
 		}
+		exp_continue
+	    }
+	    -re "  $decimal\.($decimal)${fill}\\\(running\\\)" {
 		exp_continue
 	    }
 	    -re "$gdb_prompt $" {
@@ -130,11 +136,11 @@ foreach device $sycl_device_list {
 	}
 
 	gdb_test "thread $odd_branch_inf.$running_thread" \
-	    "\\\[Switching to thread $odd_branch_inf.$running_thread \\\(Thread ($fill)\\\)\\\]\\\(running\\\)" \
+	    "\\\[Switching to thread $odd_branch_inf.$running_thread $fill\\\(running\\\)" \
 	    "switch to thread $odd_branch_inf.$running_thread which is executing"
 
 	gdb_test "thread" \
-	    "\\\[Current thread is $odd_branch_inf.$running_thread \\\(Thread ($fill)\\\)\\\]" \
+	    "\\\[Current thread is $odd_branch_inf.$running_thread $fill" \
 	    "print thread info for an executing thread, no error shall occur"
 
 	set first_thread_lane 1
@@ -148,11 +154,11 @@ foreach device $sycl_device_list {
 	    "  1\.1 ${fill}Thread ($fill) \\\(LWP ($decimal)\\\) \"$testfile\" ${fill}\\\(running\\\)"
 
 	gdb_test "info threads $odd_branch_inf.$odd_branch_thread" \
-	    "  $odd_branch_inf\.$odd_branch_thread:\\\[1 3 5 7${fill}\\\] ${fill}Thread ($fill) ${fill}$srcfile:$bp_odd_branch" \
+	    "  $odd_branch_inf\.$odd_branch_thread:\\\[1 3 5 7${fill}\\\] ${fill}$srcfile:$bp_odd_branch" \
 	    "info threads for odd-branch-thread"
 
 	gdb_test "info threads $odd_branch_inf.$running_thread" \
-	    "\\* $odd_branch_inf\.$running_thread  ${fill}Thread ($fill) ${fill}\\\(running\\\)" \
+	    "\\* $odd_branch_inf\.$running_thread ${fill}\\\(running\\\)" \
 	    "info threads for running-thread"
 
 	# Test that we try to apply commands for executing and non executing threads.

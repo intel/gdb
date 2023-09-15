@@ -90,7 +90,7 @@ foreach device $sycl_device_list {
 	    "Current thread is marked as inactive"
 	set current_thread [get_current_thread "inactive stop"]
 	gdb_test "info threads -stopped $current_thread" \
-	    "$current_thread.*Thread.*$srcfile.*" \
+	    "$current_thread \[^\r\n\]+$srcfile.*" \
 	    "info threads for inactive thread"
 
 	set inactive_error "SIMD lane $decimal is inactive in thread $current_thread"
@@ -98,7 +98,7 @@ foreach device $sycl_device_list {
 	gdb_test "print dim0" "$inactive_error"
 
 	gdb_test "thread $current_thread" \
-	    "Switching to thread $current_thread \\(Thread \[^\r\n\]+\\) inactive.*"
+	    "Switching to thread $current_thread \[^\r\n\]+ inactive.*"
 
 	# An inactive thread still has the frame displayed, but args cannot
 	# be read.

@@ -44,12 +44,7 @@ if {[llength $device_list] == 0} {
 standard_testfile mixed-lang-stack.cpp mixed-lang-stack.f90
 set options_cpp [regexp -all -inline {\S+} {openmp c++ debug}]
 set options_f90 [regexp -all -inline {\S+} {openmp f90 debug}]
-# TEMP: Option "-fsycl-nonsemantic-debuginfo" fixes the issue IGDB-2694
-# and should be removed once it is enabled by default in compiler.
-kfail "JIRA IGDB/2694" \
-    "Compiler option -fsycl-nonsemantic-debuginfo is used to fix debug info."
-set options [lsort -unique [concat $options_f90 $options_cpp \
-    "additional_flags=-fsycl-nonsemantic-debuginfo"]]
+set options [lsort -unique [concat $options_f90 $options_cpp]]
 
 if {$OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"} {
     clean_restart "${binfile}_f90"

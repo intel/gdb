@@ -763,6 +763,23 @@ call_function_by_hand (struct value *function,
 				      args, NULL, NULL);
 }
 
+/* Arch dummy frame destructor.  */
+
+static void
+arch_post_cleanup_dtor (void *data, int registers_valid)
+{
+  arch_infcall_post_cleanup *post_cleanup = (arch_infcall_post_cleanup *)data;
+  delete post_cleanup;
+}
+
+/* See infcall.h.  */
+
+arch_infcall_post_cleanup::~arch_infcall_post_cleanup ()
+{
+  if (gdbarch_post_infcall_p (gdbarch))
+    gdbarch_post_infcall (gdbarch, sp);
+}
+
 /* All this stuff with a dummy frame may seem unnecessarily complicated
    (why not just save registers in GDB?).  The purpose of pushing a dummy
    frame which looks just like a real frame is so that if you call a
@@ -861,14 +878,6 @@ call_function_by_hand_dummy (struct value *function,
 
   infcall_debug_printf ("calling %s", get_function_name (funaddr, name_buf,
 							 sizeof (name_buf)));
-
-  /* Allow architecture to make infcalls post-clean-up and handle early
-     exit due to thrown error.  */
-  SCOPE_EXIT
-    {
-      if (gdbarch_post_infcall_p (gdbarch))
-	gdbarch_post_infcall (gdbarch, funaddr);
-    };
 
   /* A holder for the inferior status.
      This is only needed while we're preparing the inferior function call.  */
@@ -974,6 +983,11 @@ call_function_by_hand_dummy (struct value *function,
 	  }
       }
   }
+
+    /* Allow architecture to make infcalls post-clean-up when the dummy frame
+       is removed and handle early exit due to thrown error.  */
+  std::unique_ptr<arch_infcall_post_cleanup> arch_cleanup
+    (new arch_infcall_post_cleanup (gdbarch, sp));
 
   /* Are we returning a value using a structure return?  */
 
@@ -1293,9 +1307,13 @@ call_function_by_hand_dummy (struct value *function,
      caller (and identify the dummy-frame) onto the dummy-frame
      stack.  */
   dummy_frame_push (caller_state.release (), &dummy_id, call_thread.get ());
+
   if (dummy_dtor != NULL)
     register_dummy_frame_dtor (dummy_id, call_thread.get (),
 			       dummy_dtor, dummy_dtor_data);
+
+  register_dummy_frame_dtor (dummy_id, call_thread.get (),
+			     arch_post_cleanup_dtor, arch_cleanup.release ());
 
   /* Register a clean-up for unwind_on_terminating_exception_breakpoint.  */
   SCOPE_EXIT { delete_std_terminate_breakpoint (); };

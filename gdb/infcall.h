@@ -47,6 +47,21 @@ struct call_return_meta_info
   CORE_ADDR struct_addr;
 };
 
+/* The destructor of this structure will be called once the related dummy
+   frame is removed, it will call the "gdbarch_post_infcall" if it is
+   implemented by the arch.  */
+struct arch_infcall_post_cleanup
+{
+  arch_infcall_post_cleanup (struct gdbarch *gdbarch, CORE_ADDR sp)
+    : gdbarch (gdbarch), sp (sp)
+  {}
+  ~arch_infcall_post_cleanup ();
+
+private:
+  struct gdbarch *gdbarch;
+  CORE_ADDR sp;
+};
+
 /* Determine a function's address and its return type from its value.
    If the function is a GNU ifunc, then return the address of the
    target function, and set *FUNCTION_TYPE to the target function's

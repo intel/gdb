@@ -2420,13 +2420,13 @@ gdbarch_post_infcall_p (struct gdbarch *gdbarch)
 }
 
 void
-gdbarch_post_infcall (struct gdbarch *gdbarch, CORE_ADDR funaddr)
+gdbarch_post_infcall (struct gdbarch *gdbarch, CORE_ADDR sp)
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->post_infcall != NULL);
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_post_infcall called\n");
-  gdbarch->post_infcall (gdbarch, funaddr);
+  gdbarch->post_infcall (gdbarch, sp);
 }
 
 void

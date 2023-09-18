@@ -361,8 +361,8 @@ extern void set_gdbarch_push_dummy_code (struct gdbarch *gdbarch, gdbarch_push_d
 
 extern bool gdbarch_post_infcall_p (struct gdbarch *gdbarch);
 
-typedef void (gdbarch_post_infcall_ftype) (struct gdbarch *gdbarch, CORE_ADDR funaddr);
-extern void gdbarch_post_infcall (struct gdbarch *gdbarch, CORE_ADDR funaddr);
+typedef void (gdbarch_post_infcall_ftype) (struct gdbarch *gdbarch, CORE_ADDR sp);
+extern void gdbarch_post_infcall (struct gdbarch *gdbarch, CORE_ADDR sp);
 extern void set_gdbarch_post_infcall (struct gdbarch *gdbarch, gdbarch_post_infcall_ftype *post_infcall);
 
 /* Return true if the code of FRAME is writable. */

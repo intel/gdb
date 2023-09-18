@@ -706,7 +706,7 @@ not throw.
     type="void",
     name="post_infcall",
     params=[
-        ("CORE_ADDR", "funaddr"),
+        ("CORE_ADDR", "sp"),
     ],
     predicate=True,
     invalid=True,

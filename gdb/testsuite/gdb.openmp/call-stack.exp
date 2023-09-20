@@ -82,7 +82,7 @@ foreach extension $openmp_languages_list {
 
 	    # Currently failure is due to wrapper calls for all ifx testing.
 	    if {$extension eq "f90"} {
-		setup_kfail "JIRA DOQG/2694" "*-*-*"
+		setup_kfail "JIRA GSD/4271" "*-*-*"
 	    }
 	    # Limit the backtrace to 3 frames because frame #3
 	    # and beyond are implementation-specific to the OpenMP runtime.
@@ -99,18 +99,8 @@ foreach extension $openmp_languages_list {
 	    # Now switch frames and examine locals.
 	    gdb_test "frame $frame_num" ".*#${frame_num}.* $middle_desc.*" \
 		"switch to frame 1"
-	    # Currently failure is due to wrapper calls for all ifx testing since
-	    # frame 1 is the wrapper call.
-	    if {$extension eq "f90"} {
-		setup_kfail "JIRA DOQG/2694" "*-*-*"
-	    }
 	    gdb_test "print num1" "= 16" "print num1 at first bp"
 
-	    # Currently failure is due to wrapper calls for all ifx testing since
-	    # frame 1 is the wrapper call.
-	    if {$extension eq "f90"} {
-		setup_kfail "JIRA DOQG/2694" "*-*-*"
-	    }
 	    gdb_test "print num2" "= 3" "print num2 at first bp"
 
 	    # Currently failure is due to wrapper calls for all ifx testing since
@@ -121,18 +111,8 @@ foreach extension $openmp_languages_list {
 	    }
 	    gdb_test "frame $frame_num" ".*#${frame_num}.* $outer_desc.*" \
 		"switch to frame ${frame_num}"
-	    # Currently failing due to wrapper calls in call stack.
-	    if {$extension eq "f90"} {
-		setup_kfail "JIRA DOQG/2694" "*-*-*"
-	    }
 	    gdb_test "print fifteen" "= 15" "print fifteen at first bp"
-	    if {$extension eq "f90"} {
-		setup_kfail "JIRA DOQG/2694" "*-*-*"
-	    }
 	    gdb_test "print five" "= 5"
-	    if {$extension eq "f90"} {
-		setup_kfail "JIRA DOQG/2694" "*-*-*"
-	    }
 	    gdb_test "print ten" "= 10"
 
 	    gdb_test "frame 0" ".*#0.* $inner_desc.*" "switch to frame 0"
@@ -146,7 +126,7 @@ foreach extension $openmp_languages_list {
 	    set value_returned "(\r\nValue returned is $valnum_re = 180)?"
 
 	    if {$extension eq "f90"} {
-		setup_kfail "JIRA DOQG/2694" "*-*-*"
+		setup_kfail "JIRA GSD/4271" "*-*-*"
 	    }
 	    gdb_test "finish" [multi_line \
 		"Run till exit from #0 $fill second \\(x=20, y=9\\) $fill" \
@@ -160,7 +140,7 @@ foreach extension $openmp_languages_list {
 
 	    # Currently failing due to wrapper calls in call stack.
 	    if {$extension eq "f90"} {
-		setup_kfail "JIRA DOQG/2694" "*-*-*"
+		setup_kfail "JIRA GSD/4271" "*-*-*"
 	    }
 	    gdb_test "backtrace 2" [multi_line \
 		"#$decimal.* $middle_desc.*" \
@@ -171,7 +151,7 @@ foreach extension $openmp_languages_list {
 
 	    # Currently failing due to wrapper calls in call stack.
 	    if {$extension eq "f90"} {
-		setup_kfail "JIRA DOQG/2694" "*-*-*"
+		setup_kfail "JIRA GSD/4271" "*-*-*"
 	    }
 	    gdb_test "finish" [multi_line \
 		"Run till exit from #0 $fill first \\(num1=16, num2=3\\) $fill.*" \
@@ -181,7 +161,7 @@ foreach extension $openmp_languages_list {
 
 	    # Failing due to wrapper calls in call stack.
 	    if {$extension eq "f90"} {
-		setup_kfail "JIRA DOQG/2694" "*-*-*"
+		setup_kfail "JIRA GSD/4271" "*-*-*"
 	    }
 	    gdb_test "backtrace 1" "#0${fill} $outer_desc.*" \
 		"backtrace, test 3"
@@ -219,7 +199,7 @@ foreach extension $openmp_languages_list {
 	    gdb_continue_to_breakpoint "function 'second'" ".*"
 	    # Failing due to wrapper calls in call stack.
 	    if {$extension eq "f90"} {
-		setup_kfail "JIRA DOQG/2694" "*-*-*"
+		setup_kfail "JIRA GSD/4271" "*-*-*"
 	    }
 	    gdb_test "backtrace 3" [multi_line \
 		"#${decimal}.* second .*" \

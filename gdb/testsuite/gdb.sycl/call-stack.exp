@@ -284,10 +284,6 @@ proc test_call_stack {call_stack_supported device} {
 foreach device $sycl_device_list {
     clean_restart "${binfile}"
     with_test_prefix [sycl_get_device_prefix $device] {
-	if {[require_sycl_device "$device" "gpu" "Intel*Arc*Graphics"]} {
-	    kfail "Jira GSD/5249" "Skipping the test to avoid unnecessary timeouts."
-	    continue
-	}
 	with_test_prefix "FunctionControl=0" {
 	    gdb_test "set env IGC_FunctionControl=0"
 	    if {![runto_main [sycl_get_device_args $device]]} {

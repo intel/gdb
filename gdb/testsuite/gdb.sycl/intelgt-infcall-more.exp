@@ -96,17 +96,8 @@ proc test_inferior_calls {simd_lane inside_kernel device} {
     gdb_test "print vector_on_stack (1, 2, 3, 4, 5, 6, arr2_uchar10)" "= 176" \
 	"Vector is passed on the stack with the SoA layout: 2"
 
-    # Randomly timeout is seen from here onwards so if this happens then
-    # there is no use of continuing the test.
-    gdb_test_multiple "print small_vector_return_1()" "Small vectors are returned on GRFs: 1" {
-	-re -wrap "= \\{1, 2, 3, 4, 5\\}" {
-	    pass $gdb_test_name
-	}
-	timeout {
-	    fail "$gdb_test_name (timeout)"
-	    return 0
-	}
-    }
+    gdb_test "print small_vector_return_1()" "= \\{1, 2, 3, 4, 5\\}" \
+	"Small vectors are returned on GRFs: 1"
     gdb_test "print small_vector_return_2()" "= \\{1, 2, 3, 4, 5, 6, 7, 8, 9, 10\\}" \
 	"Small vectors are returned on GRFs: 2"
 

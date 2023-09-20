@@ -43,7 +43,7 @@ proc get_device {} {
 set devices_count 0
 
 # Run all tests
-proc test_multi_device {subdevices_as_root} {
+proc test_multi_device {subdevices_as_root sycl_dev} {
     global srcfile devices_count
 
     set num_devices_check [gdb_get_line_number "num-devices-check"]
@@ -103,6 +103,10 @@ proc test_multi_device {subdevices_as_root} {
 
     for {set trip 1} {$trip <= $num_trips} {incr trip} {
 	with_test_prefix "trip $trip" {
+	    if {$trip > 2 && [is_atsm $sycl_dev]
+		&& $subdevices_as_root == 0} {
+		setup_kfail "JIRA URT/249" "*-*-*"
+	    }
 	    gdb_test_multiple "continue" "resume" {
 		-re -wrap ".*$srcfile:$bp1.*" {
 		    set device [get_device]
@@ -120,8 +124,14 @@ proc test_multi_device {subdevices_as_root} {
 	}
     }
 
+    if {[is_atsm $sycl_dev] && $subdevices_as_root == 0} {
+	setup_kfail "JIRA URT/249" "*-*-*"
+    }
     gdb_continue_to_breakpoint "post-kernel bp" ".*$srcfile:$end_bp.*"
 
+    if {[is_atsm $sycl_dev] && $subdevices_as_root == 0} {
+	setup_kfail "JIRA URT/249" "*-*-*"
+    }
     continue_sycl_program_to_termination
 }
 
@@ -135,7 +145,7 @@ foreach device $sycl_device_list {
 	    if {![runto_main [sycl_get_device_args $device]]} {
 		continue
 	    }
-	    test_multi_device $ReturnSubDevicesAsApiDevices
+	    test_multi_device $ReturnSubDevicesAsApiDevices $device
 	}
     }
 }

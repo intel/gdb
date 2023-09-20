@@ -43,7 +43,7 @@ proc get_device {} {
 set devices_count 0
 
 # Run all tests
-proc test_multi_device {subdevices_as_root} {
+proc test_multi_device {subdevices_as_root sycl_dev} {
     global srcfile devices_count
 
     set num_devices_check [gdb_get_line_number "num-devices-check"]
@@ -101,8 +101,15 @@ proc test_multi_device {subdevices_as_root} {
 	set bp2_hit($i) 0
     }
 
+    if {[is_atsm $sycl_dev] && $subdevices_as_root == 0} {
+	setup_kfail "JIRA URT/249" "*-*-*"
+    }
+
     # We should hit bp1 first.  The order thereafter is not fixed.
     gdb_continue_to_breakpoint "kernel bp1 first hit" "$srcfile:$bp1.*"
+    if {[is_atsm $sycl_dev] && $subdevices_as_root == 0} {
+	setup_kfail "JIRA URT/249" "*-*-*"
+    }
     set device [get_device]
     incr bp1_hit($device)
     # Reset the spin-flag for all lanes to bring the threads to a
@@ -119,6 +126,9 @@ proc test_multi_device {subdevices_as_root} {
     while {$trip > 0} {
 	with_test_prefix "trip $trip" {
 	    incr trip
+	    if {[is_atsm $sycl_dev] && $subdevices_as_root == 0} {
+		setup_kfail "JIRA URT/249" "*-*-*"
+	    }
 	    gdb_test_multiple "continue" "resume" {
 		-re -wrap "$srcfile:$bp1.*" {
 		    set device [get_device]
@@ -140,11 +150,17 @@ proc test_multi_device {subdevices_as_root} {
 	}
     }
 
+    if {[is_atsm $sycl_dev] && $subdevices_as_root == 0} {
+	setup_kfail "JIRA URT/249" "*-*-*"
+    }
     # For logging purposes.
     gdb_test "info break"
 
     for {set i 0} {$i < $num_devices} {incr i} {
 	gdb_assert {$bp1_hit($i) == $bp2_hit($i)} "device $i hit both"
+	if {[is_atsm $sycl_dev] && $subdevices_as_root == 0} {
+	    setup_kfail "JIRA URT/249" "*-*-*"
+	}
 	gdb_assert {$bp1_hit($i) > 1} "hit at least once for device $i"
 	if { $i > 0 } {
 	    gdb_assert {$bp1_hit($i) == $bp1_hit([expr $i - 1])} \
@@ -152,6 +168,9 @@ proc test_multi_device {subdevices_as_root} {
 	}
     }
 
+    if {[is_atsm $sycl_dev] && $subdevices_as_root == 0} {
+	setup_kfail "JIRA URT/249" "*-*-*"
+    }
     continue_sycl_program_to_termination
 }
 
@@ -165,7 +184,7 @@ foreach device $sycl_device_list {
 	    if {![runto_main [sycl_get_device_args $device]]} {
 		continue
 	    }
-	    test_multi_device $ReturnSubDevicesAsApiDevices
+	    test_multi_device $ReturnSubDevicesAsApiDevices $device
 	}
     }
 }

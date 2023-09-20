@@ -123,6 +123,9 @@ foreach device $sycl_device_list {
 	set devices_hit {}
 	for {set trip 1} {$trip <= $num_devices} {incr trip} {
 	    with_test_prefix "trip $trip" {
+		if {[is_atsm $device]} {
+		    setup_kfail "JIRA URT/249" "*-*-*"
+		}
 		gdb_continue_to_breakpoint "resume" \
 		    ".*$srcfile:$bp.*"
 
@@ -145,6 +148,9 @@ foreach device $sycl_device_list {
 	gdb_assert {[llength $devices_hit] == $num_devices} \
 	    "bp has been hit by all devices"
 
+	if {[is_atsm $device]} {
+	    setup_kfail "JIRA URT/249" "*-*-*"
+	}
 	# Here no active device inferior should be detected.
 	gdb_continue_to_breakpoint "post-kernel bp" ".*$srcfile:$end_bp.*"
 
@@ -158,7 +164,13 @@ foreach device $sycl_device_list {
 	    }
 	}
 
+	if {[is_atsm $device]} {
+	    setup_kfail "JIRA URT/249" "*-*-*"
+	}
 	continue_sycl_program_to_termination
+	if {[is_atsm $device]} {
+	    setup_kfail "JIRA URT/249" "*-*-*"
+	}
 	gdb_test "info devices" "No devices\." "info devices post-sycl"
     }
 }

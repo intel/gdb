@@ -34,7 +34,7 @@ if {[build_executable "failed to compile $srcfile" \
 set devices_count 0
 
 # Run all tests
-proc test_multi_device {subdevices_as_root} {
+proc test_multi_device {subdevices_as_root sycl_dev} {
     global srcfile devices_count
 
     set num_devices_check [gdb_get_line_number "num-devices-check"]
@@ -83,6 +83,9 @@ proc test_multi_device {subdevices_as_root} {
     set end_bp [gdb_get_line_number "end-marker"]
     gdb_breakpoint $end_bp
 
+    if {[is_atsm $sycl_dev] && $subdevices_as_root == 0} {
+	setup_kfail "JIRA URT/249" "*-*-*"
+    }
     gdb_continue_to_breakpoint "$srcfile:$bp1.*"
     gdb_test_no_output "disable $first_line_bp_num"
 
@@ -96,11 +99,20 @@ proc test_multi_device {subdevices_as_root} {
 	gdb_test "thread apply all-lanes -s print spin=false" ".*"
     }
 
+    if {[is_atsm $sycl_dev] && $subdevices_as_root == 0} {
+	setup_kfail "JIRA URT/249" "*-*-*"
+    }
     gdb_continue_to_breakpoint "$srcfile:$bp2.*"
     gdb_test_no_output "disable $last_line_bp_num"
 
+    if {[is_atsm $sycl_dev] && $subdevices_as_root == 0} {
+	setup_kfail "JIRA URT/249" "*-*-*"
+    }
     gdb_continue_to_breakpoint "$srcfile:$end_bp.*"
 
+    if {[is_atsm $sycl_dev] && $subdevices_as_root == 0} {
+	setup_kfail "JIRA URT/249" "*-*-*"
+    }
     continue_sycl_program_to_termination
 }
 
@@ -114,7 +126,7 @@ foreach device $sycl_device_list {
 	    if {![runto_main [sycl_get_device_args $device]]} {
 		continue
 	    }
-	    test_multi_device $ReturnSubDevicesAsApiDevices
+	    test_multi_device $ReturnSubDevicesAsApiDevices $device
 	}
     }
 }

@@ -128,6 +128,9 @@ foreach device $sycl_device_list {
 	set subdevices 0
 	for {set trip 0} {$trip < $num_devices} {incr trip} {
 	    with_test_prefix "trip $trip" {
+		if {$trip > 0 && [is_atsm $device]} {
+		    setup_kfail "JIRA URT/249" "*-*-*"
+		}
 		gdb_test_multiple "continue" "resume" {
 		    -re -wrap ".*$srcfile:$bp.*" {
 
@@ -160,6 +163,9 @@ foreach device $sycl_device_list {
 	    }
 	}
 
+	if {[is_atsm $device]} {
+	    setup_kfail "JIRA URT/249" "*-*-*"
+	}
 	# Display all available inferiors at the post-kernel breakpoint.
 	gdb_continue_to_breakpoint "post-kernel bp" ".*$srcfile:$end_bp.*"
 
@@ -170,6 +176,9 @@ foreach device $sycl_device_list {
 		"${table_info_devices_hint_line}"
 		] "info inferiors post kernel for all ${num_devices} (sub)devices"
 
+	if {[is_atsm $device]} {
+	    setup_kfail "JIRA URT/249" "*-*-*"
+	}
 	continue_sycl_program_to_termination
 
 	# All inferiors should disappear after the program finishes.

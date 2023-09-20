@@ -43,17 +43,8 @@ foreach device $sycl_device_list {
 	gdb_breakpoint $first_line
 	gdb_continue_to_breakpoint "first line" ".*$srcfile:$first_line.*"
 
-	if {[require_sycl_device "$device" "gpu" "Intel*Arc*Graphics"]} {
-	    setup_kfail "JIRA GSD/5250" "*-*-*"
-	}
 	gdb_test "next" "int four = .*" "next 1"
-	if {[require_sycl_device "$device" "gpu" "Intel*Arc*Graphics"]} {
-	    setup_kfail "JIRA GSD/5250" "*-*-*"
-	}
 	gdb_test "next" "int fourteen = .*" "next 2"
-	if {[require_sycl_device "$device" "gpu" "Intel*Arc*Graphics"]} {
-	    setup_kfail "JIRA GSD/5250" "*-*-*"
-	}
 	gdb_test "next" "numbers.0. = .*" "next 3"
     }
 }

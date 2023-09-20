@@ -41,16 +41,8 @@ proc test_bp_1 {device} {
     set v2 [get_valueof "" "gid" "NONE"]
     gdb_assert {{$v1 eq $v2}} "pgid.operator() (wi) == gid"
 
-    set kfail ""
-    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
-	set kfail "JIRA IGDB/3364"
-	setup_kfail $kfail "*-*-*"
-    }
-    gdb_test_expr_eq "ain\[gid\]" "in" "" "${kfail}"
-    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
-	setup_kfail $kfail "*-*-*"
-    }
-    gdb_test_expr_eq "acs\[lid\].c" "cs" "" "${kfail}"
+    gdb_test_expr_eq "ain\[gid\]" "in"
+    gdb_test_expr_eq "acs\[lid\].c" "cs"
 
     # LCS should be a reference here, as the lambda capture is by reference.
     if {[require_sycl_device "$device" "gpu" "Intel*"]} {
@@ -81,12 +73,7 @@ proc test_bp_2 {device {lane 0} } {
     }
     gdb_assert {{$v1 eq $v2}} "atmp\[gid\].a == in"
 
-    set kfail ""
-    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
-	set kfail "JIRA IGDB/3364"
-	setup_kfail $kfail "*-*-*"
-    }
-    gdb_test_expr_eq "aout\[gid\]" "out" "" "${kfail}"
+    gdb_test_expr_eq "aout\[gid\]" "out"
 
     # LCS should be a reference here, as the lambda capture is by reference.
     if {[require_sycl_device "$device" "gpu" "Intel*"]} {

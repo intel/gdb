@@ -277,7 +277,7 @@ gdb_caching_proc is_sles_distro {
 
 proc is_atsm {device} {
 
-    if {[string match "*Intel* Data Center GPU Flex Series 140*" $device]} {
+    if {[string match "*Intel* Data Center GPU Flex* 140*" $device]} {
 	return 1;
     }
 

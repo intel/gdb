@@ -21,9 +21,6 @@ load_lib sycl.exp
 standard_testfile bitfields-packed.cpp
 
 proc test_print_packed_struct {struct_name struct_value device} {
-    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
-	setup_kfail "JIRA DOQG/2843 and JIRA XDEPS/3802" "*-*-*"
-    }
     gdb_test "print/d $struct_name" "$struct_value"
 }
 
@@ -61,27 +58,15 @@ foreach device $sycl_device_list {
 
 	test_print_packed_struct \
 	    "p_s1" "\\{x = 1, y = 2, z = 3, a = 4\\}" "$device"
-	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
-	    setup_kfail "JIRA DOQG/2843 and JIRA XDEPS/3802" "*-*-*"
-	}
 	test_print_array_element "arr_p1\[0\]" \
 	    "\\{x = 1, y = 2, z = 3, a = 4\\}"
-	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
-	    setup_kfail "JIRA DOQG/2843 and JIRA XDEPS/3802" "*-*-*"
-	}
 	test_print_array_element "arr_p1\[1\]" \
 	    "\\{x = 11, y = 12, z = 13, a = 14\\}"
 
 	test_print_packed_struct \
 	    "p_s3" "\\{x = 1, y = 2, z = 3, a = 4\\}" "$device"
-	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
-	    setup_kfail "JIRA DOQG/2843 and JIRA XDEPS/3802" "*-*-*"
-	}
 	test_print_array_element "arr_p2\[0\]" \
 	    "\\{x = 1, y = 2, z = 3, a = 4\\}"
-	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
-	    setup_kfail "JIRA DOQG/2843 and JIRA XDEPS/3802" "*-*-*"
-	}
 	test_print_array_element "arr_p2\[1\]" \
 	    "\\{x = 11, y = 12, z = 13, a = 14\\}"
 

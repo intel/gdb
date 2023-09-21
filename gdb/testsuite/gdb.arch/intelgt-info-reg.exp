@@ -48,10 +48,11 @@ foreach device $sycl_device_list {
 	gdb_continue_to_breakpoint "inside kernel" ".*$srcfile:$kernel_line.*"
 
 	set ws "\[ \t\]+"
+	set fill "\[^\r\n\]+"
 
-	gdb_test "info reg" [multi_line \
-			    "r0${ws}${hex}${ws}${decimal}" \
-			    "r1${ws}${hex}${ws}${decimal}" \
+	gdb_test "info reg GRF" [multi_line \
+			    "r0${ws}${fill}${hex}${fill}" \
+			    "r1${ws}${fill}${hex}${fill}" \
 			    ".*" \
 			    ]
 
@@ -82,12 +83,32 @@ foreach device $sycl_device_list {
 	    }
 	}
 
-	gdb_test "print \$r${regnum}" "= $decimal" "initial reg value for logging"
-	gdb_test "print \$r${regnum} = 42" "= 42" "write to reg"
+	gdb_test "print \$r${regnum}\[0\]" "= $decimal" \
+	    "initial reg value for logging"
+	gdb_test "print/x \$r${regnum}\[0\] = 0xabcd" "= 0xabcd" \
+	    "write to reg"
 	gdb_test "stepi"
-	gdb_test "info reg r$regnum" \
-	    "r10            0x2a                42" \
-	    "read the written register"
+	gdb_test "print/x \$r${regnum}\[0\]" "= 0xabcd" \
+	    "read the written register after stepping"
+
+	# Test casting.
+	gdb_test "print/x ((unsigned char\[\])\$r${regnum})\[0\] = 0xfe" "= 0xfe" \
+	    "write to the first byte"
+	gdb_test "print/x \$r${regnum}\[0\]" "= 0xabfe" \
+	    "read the first word"
+	gdb_test "print/x ((unsigned char\[\])\$r${regnum})\[1\]" "= 0xab" \
+	    "read the second byte"
+
+	gdb_test "print/x \$r${regnum}\[1\] = 0x1234" "= 0x1234" \
+	    "write to the second word"
+	gdb_test "print/x ((double\[\])\$r${regnum})\[0\]" "= 0x12340000abfe" \
+	    "read 8 bytes"
+	gdb_test "print/x ((long long\[\])\$r${regnum})\[0\]= 0x123456789fedcba0" \
+	    " = 0x123456789fedcba0" "write 8 bytes"
+	gdb_test "print/x \$r${regnum}\[0\]" "= 0x9fedcba0" \
+	    "read the first word again"
+	gdb_test "print/x \$r${regnum}\[1\]" "= 0x12345678" \
+	    "read the second word"
 
 	set ws "\[ \t]+"
 	set total_acc 4

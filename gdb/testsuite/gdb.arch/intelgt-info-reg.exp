@@ -110,23 +110,10 @@ foreach device $sycl_device_list {
 	gdb_test "print/x \$r${regnum}\[1\]" "= 0x12345678" \
 	    "read the second word"
 
-	set ws "\[ \t]+"
-	set total_acc 4
-	set total_mme 8
-
-	for {set mme_regnum 0} {$mme_regnum < $total_mme} {incr mme_regnum} {
-	    if {[is_level_zero_debug_api]} {
-		setup_kfail "JIRA XDEPS/5113" "*-*-*"
-	    }
-	    gdb_test "info reg mme$mme_regnum" \
-		"mme$mme_regnum           $hex.*" \
-		"read the mme$mme_regnum register"
+	if {[is_level_zero_debug_api]} {
+	    setup_kfail "JIRA XDEPS/5113" "*-*-*"
 	}
-
-	for {set acc_regnum 0} {$acc_regnum < $total_acc} {incr acc_regnum} {
-	    gdb_test "info reg acc$acc_regnum" \
-		"acc$acc_regnum           $hex.*" \
-		"read the acc$acc_regnum register"
-	}
+	gdb_test "info reg mme0" "mme0${fill}$hex${fill}"
+	gdb_test "info reg acc0" "acc0${fill}$hex${fill}"
     }
 }

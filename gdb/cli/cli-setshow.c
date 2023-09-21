@@ -448,7 +448,7 @@ do_set_command (const char *arg, int from_tty, struct cmd_list_element *c)
       error (_("gdb internal error: bad var_type in do_setshow_command"));
     }
 
-  c->func (NULL, from_tty, c);
+  c->func (arg, from_tty, c);
 
   if (notify_command_param_changed_p (option_changed, c))
     {

@@ -50,11 +50,14 @@ foreach device $sycl_device_list {
 	set ws "\[ \t\]+"
 	set fill "\[^\r\n\]+"
 
-	gdb_test "info reg GRF" [multi_line \
+	gdb_test "info reg grf" [multi_line \
 			    "r0${ws}${fill}${hex}${fill}" \
 			    "r1${ws}${fill}${hex}${fill}" \
 			    ".*" \
 			    ]
+
+	gdb_test "info reg arf" "sr0${ws}${fill}${hex}.*"
+	gdb_test "info reg virtual" "isabase${ws}${fill}${hex}.*"
 
 	# Below we write a value to an arbitrary register, then step one
 	# instruction, then read the register, and expect to see the value we

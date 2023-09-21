@@ -775,6 +775,23 @@ intelgt_init_reg (gdbarch *gdbarch, int regnum, dwarf2_frame_state_reg *reg,
     }
 }
 
+/* A helper function that returns the value of the ISABASE register.  */
+
+static CORE_ADDR
+intelgt_get_isabase (readable_regcache *regcache)
+{
+  gdbarch *gdbarch = regcache->arch ();
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  gdb_assert (data->isabase_regnum != -1);
+
+  uint64_t isabase = 0;
+  if (regcache->cooked_read (data->isabase_regnum, &isabase) != REG_VALID)
+    throw_error (NOT_AVAILABLE_ERROR,
+		 _("Register %d (isabase) is not available"),
+		 data->isabase_regnum);
+  return isabase;
+}
+
 /* The 'unwind_pc' gdbarch method.  */
 
 static CORE_ADDR
@@ -790,16 +807,9 @@ intelgt_unwind_pc (gdbarch *gdbarch, frame_info_ptr next_frame)
      regcache instead of unwinding, as the frame unwind info may
      simply be unavailable.  The isabase register does not change
      during kernel execution, so this must be safe.  */
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
-  gdb_assert (data->isabase_regnum != -1);
-  uint64_t isabase = 0;
-  if (get_current_regcache ()->cooked_read (data->isabase_regnum,
-					    &isabase) != REG_VALID)
-    throw_error (NOT_AVAILABLE_ERROR,
-		 _("Register %d (isabase) is not available"),
-		 data->isabase_regnum);
+  CORE_ADDR isabase = intelgt_get_isabase (get_current_regcache ());
 
-  return (CORE_ADDR) isabase + prev_ip;
+  return isabase + prev_ip;
 }
 
 /* Frame unwinding.  */
@@ -1150,12 +1160,7 @@ intelgt_read_pc (readable_regcache *regcache)
 		 data->cr0_regnum);
 
   /* Program counter is $ip + $isabase.  */
-  gdb_assert (data->isabase_regnum != -1);
-  uint64_t isabase;
-  if (regcache->cooked_read (data->isabase_regnum, &isabase) != REG_VALID)
-    throw_error (NOT_AVAILABLE_ERROR,
-		 _("Register %d (isabase) is not available"),
-		 data->isabase_regnum);
+  uint64_t isabase = intelgt_get_isabase (regcache);
   return isabase + ip;
 }
 
@@ -1163,16 +1168,10 @@ static void
 intelgt_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
   gdbarch *arch = regcache->arch ();
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
   /* Program counter is $ip + $isabase, can only modify $ip.  Need
      to ensure that the new value fits within $ip modification rannge
      and propagate the write accordingly.  */
-  uint64_t isabase;
-  gdb_assert (data->isabase_regnum != -1);
-  if (regcache->cooked_read (data->isabase_regnum, &isabase) != REG_VALID)
-    throw_error (NOT_AVAILABLE_ERROR,
-		 _("Register %d (isabase) is not available"),
-		 data->isabase_regnum);
+  uint64_t isabase = intelgt_get_isabase (regcache);
   if (pc < isabase || pc > isabase + UINT32_MAX)
     error ("Can't update $pc to value 0x%lx, out of range", pc);
   /* $ip is uint32_t, but uint64_t is used here to comply with cooked_write
@@ -2036,13 +2035,8 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
 
   /* Determine the jump IP from function address.
      FUNADDR = JIP + $isabase.  */
-  gdb_assert (data->isabase_regnum != -1);
-  uint64_t isabase = 0, jump_ip = 0;
-  if (regcache->cooked_read (data->isabase_regnum, &isabase) != REG_VALID)
-    throw_error (NOT_AVAILABLE_ERROR,
-		 _("Register %d (isabase) is not available"),
-		 data->isabase_regnum);
-  jump_ip = funaddr - isabase;
+  CORE_ADDR isabase = intelgt_get_isabase (regcache);
+  CORE_ADDR jump_ip = funaddr - isabase;
 
   /* Store the JIP in the last 4 bytes of the CALLA instruction.  */
   bfd_endian byte_order = gdbarch_byte_order (gdbarch);

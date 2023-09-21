@@ -1056,7 +1056,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       intelgt_add_regset (feature, regnum, "fc", regprop.count, "FC",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize),
+			  intelgt_uint_reg_type (feature, regprop.bitSize),
 			  expedite);
       break;
 

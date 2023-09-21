@@ -160,11 +160,6 @@ handle_redirections (int from_tty)
 static void
 set_logging_on (const char *args, int from_tty)
 {
-  const char *rest = args;
-
-  if (rest && *rest)
-    logging_filename = rest;
-
   handle_redirections (from_tty);
 }
 

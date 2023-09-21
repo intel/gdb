@@ -49,7 +49,7 @@ int using_threads = 1;
    register of BITSIZE bits.  */
 
 static const char *
-intelgt_uint_reg_type (uint32_t bitsize)
+intelgt_uint_reg_type (tdesc_feature *feature, uint32_t bitsize)
 {
   if (bitsize <= 8u)
     return "uint8";
@@ -67,22 +67,46 @@ intelgt_uint_reg_type (uint32_t bitsize)
     return "uint128";
 
   if (bitsize <= 256u)
-    return "uint256";
+    {
+      tdesc_create_vector (feature, "vector256",
+			   tdesc_named_type (feature, "uint32"), 8);
+      return "vector256";
+    }
 
   if (bitsize <= 512u)
-    return "uint512";
+    {
+      tdesc_create_vector (feature, "vector512",
+			   tdesc_named_type (feature, "uint32"), 16);
+      return "vector512";
+    }
 
   if (bitsize <= 1024u)
-    return "uint1024";
+    {
+      tdesc_create_vector (feature, "vector1024",
+			   tdesc_named_type (feature, "uint32"), 32);
+      return "vector1024";
+    }
 
   if (bitsize <= 2048u)
-    return "uint2048";
+    {
+      tdesc_create_vector (feature, "vector2048",
+			   tdesc_named_type (feature, "uint32"), 64);
+      return "vector2048";
+    }
 
   if (bitsize <= 4096u)
-    return "uint4096";
+    {
+      tdesc_create_vector (feature, "vector4096",
+			   tdesc_named_type (feature, "uint32"), 128);
+      return "vector4096";
+    }
 
   if (bitsize <= 8192u)
-    return "uint8192";
+    {
+      tdesc_create_vector (feature, "vector8192",
+			   tdesc_named_type (feature, "uint32"), 256);
+      return "vector8192";
+    }
 
   error (_("unsupported bitsize %" PRIu32), bitsize);
 }
@@ -875,7 +899,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
       expedite.push_back ("r0");
       intelgt_add_regset (feature, regnum, "r", regprop.count, "GRF",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize),
+			  intelgt_uint_reg_type (feature, regprop.bitSize),
 			  expedite);
       break;
 
@@ -884,7 +908,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       intelgt_add_regset (feature, regnum, "a", regprop.count, "ADDR",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize),
+			  intelgt_uint_reg_type (feature, regprop.bitSize),
 			  expedite);
       break;
 
@@ -893,7 +917,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       intelgt_add_regset (feature, regnum, "f", regprop.count, "FLAG",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize),
+			  intelgt_uint_reg_type (feature, regprop.bitSize),
 			  expedite);
       break;
 
@@ -908,7 +932,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
       expedite.push_back ("ce");
       tdesc_create_reg (feature, "ce", regnum++, 1, "CE",
 			regprop.bitSize,
-			intelgt_uint_reg_type (regprop.bitSize),
+			intelgt_uint_reg_type (feature, regprop.bitSize),
 			true /* expedited */);
       break;
 
@@ -918,7 +942,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
       expedite.push_back ("sr0");
       intelgt_add_regset (feature, regnum, "sr", regprop.count, "SR",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize),
+			  intelgt_uint_reg_type (feature, regprop.bitSize),
 			  expedite);
       break;
 
@@ -928,7 +952,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
       expedite.push_back ("cr0");
       intelgt_add_regset (feature, regnum, "cr", regprop.count, "CR",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize),
+			  intelgt_uint_reg_type (feature, regprop.bitSize),
 			  expedite);
       break;
 
@@ -937,7 +961,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       intelgt_add_regset (feature, regnum, "tdr", regprop.count, "TDR",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize),
+			  intelgt_uint_reg_type (feature, regprop.bitSize),
 			  expedite);
       break;
 
@@ -946,7 +970,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       intelgt_add_regset (feature, regnum, "acc", regprop.count, "ACC",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize),
+			  intelgt_uint_reg_type (feature, regprop.bitSize),
 			  expedite);
       break;
 
@@ -955,7 +979,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       intelgt_add_regset (feature, regnum, "mme", regprop.count, "MME",
 			  regprop.bitSize,
-			  intelgt_uint_reg_type (regprop.bitSize),
+			  intelgt_uint_reg_type (feature, regprop.bitSize),
 			  expedite);
       break;
 
@@ -969,7 +993,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       tdesc_create_reg (feature, "sp", regnum++, 1, "SP",
 			regprop.bitSize,
-			intelgt_uint_reg_type (regprop.bitSize));
+			intelgt_uint_reg_type (feature, regprop.bitSize));
       break;
 
     case ZET_DEBUG_REGSET_TYPE_SBA_INTEL_GPU:
@@ -979,7 +1003,8 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 	{
 	case 0:
 	  {
-	    const char *regtype = intelgt_uint_reg_type (regprop.bitSize);
+	    const char *regtype = intelgt_uint_reg_type (feature,
+							 regprop.bitSize);
 	    const char *sbaregs[] = {
 	      "genstbase",
 	      "sustbase",

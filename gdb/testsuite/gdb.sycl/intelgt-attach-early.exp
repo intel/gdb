@@ -1,0 +1,86 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test the auto-attach script for Intel GT by attaching before Level-Zero
+# Debug API is initialized.
+
+if {![can_spawn_for_attach]} {
+    return 0
+}
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "$binfile" "$srcfile" {sycl debug}]} {
+    return -1
+}
+
+proc spawn_sycl_proc {executable device} {
+    # We directly use 'remote_spawn' to be able to pass
+    # the program arguments.
+    set command [list $executable]
+    foreach arg [sycl_get_device_args $device] {
+	lappend command $arg
+    }
+    verbose -log "command: $command"
+
+    set spawn_id [remote_spawn target $command]
+
+    return $spawn_id
+}
+
+foreach device $sycl_device_list {
+    clean_restart $binfile
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device $device "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	# Spawn sycl proc and attach.
+	set test_spawn_id [spawn_sycl_proc $binfile $device]
+
+	# Return early if it is failed to spawn a sycl proc.
+	if {$test_spawn_id == -1} {
+	    fail "failed to spawn a sycl proc to attach"
+	    continue
+	}
+
+	# Obtain PID to attach.
+	set test_pid [spawn_id_get_pid $test_spawn_id]
+	verbose -log "spawn id: $test_spawn_id, test pid: $test_pid"
+
+	# Attach GDB to the process.
+	gdb_test "attach $test_pid" "Attaching to program.*" "attach command"
+
+	# Stop spinning.
+	gdb_test "p spin = 0" " = false" "break the loop"
+
+	# Set and hit a breakpoint in kernel.
+	set line_number [gdb_get_line_number kernel-line]
+	gdb_breakpoint "$srcfile:$line_number" {temporary}
+	gdb_continue_to_breakpoint "line in kernel" \
+	    ".*$srcfile:$line_number.*"
+    }
+}

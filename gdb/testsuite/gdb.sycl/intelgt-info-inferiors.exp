@@ -56,7 +56,7 @@ foreach device $sycl_device_list {
 
 	set any_name "\[^\r\n\]+"
 	set any_path "\(?:\/${any_name}\)+"
-	set any_location "\\\[\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
+	set any_location "\\\[\[0-9a-f\]{4}:\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
 
 	set table_header_line [wrap_regex_with_spaces_and_tabs " " "Num" \
 	    "Description" "Connection" "Executable"]
@@ -71,9 +71,9 @@ foreach device $sycl_device_list {
 	    "Type \"info devices\" to see details of the devices\."
 
 	# (gdb) info inferiors
-	#   Num  Description            Connection                  Executable
-	#   1    process 40678          1 (native)                  /XXX/XXX/XXX/XXX
-	# * 2    device [03:00.0].0     2 (...remote gdbserver...)
+	#   Num  Description              Connection                  Executable
+	#   1    process 40678            1 (native)                  /XXX/XXX/XXX/XXX
+	# * 2    device [0000:03:00.0].0  2 (...remote gdbserver...)
 	# Type \"info devices\" to see details of the devices.
 
 	gdb_test "info inferiors" \

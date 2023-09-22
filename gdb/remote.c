@@ -79,6 +79,7 @@
 #include <unordered_map>
 #include "async-event.h"
 #include "gdbsupport/selftest.h"
+#include "ser-base.h"
 
 /* The remote target.  */
 
@@ -10096,9 +10097,12 @@ remote_target::readchar (int timeout)
       throw_error (TARGET_CLOSE_ERROR, _("Remote connection closed"));
       /* no return */
     case SERIAL_ERROR:
-      unpush_and_perror (this, _("Remote communication error.  "
-				 "Target disconnected."));
-      /* no return */
+      {
+	std::string msg = _("Remote communication error.  "
+			    "Target disconnected. ") + ser_error_output;
+	unpush_and_perror (this, msg.c_str ());
+	/* no return.  */
+      }
     case SERIAL_TIMEOUT:
       break;
     }

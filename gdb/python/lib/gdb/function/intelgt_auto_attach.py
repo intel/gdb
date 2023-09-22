@@ -139,6 +139,9 @@ Continuing with GPU-debugging disabled.
                         print(f"\033[93m{line}\033[0m")
             return True
         except gdb.error as gdb_exception:
+            """ Too early attach is handled in init_gt_inferiors."""
+            if "attempting to attach too early" in str(gdb_exception):
+                raise gdb_exception
             IntelgtErrorReport.exit_intelgt_session(exception=gdb_exception)
             return False
 

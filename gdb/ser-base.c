@@ -258,6 +258,8 @@ ser_base_wait_for (struct serial *scb, int timeout)
 
 /* Read any error output we might have.  */
 
+std::string ser_error_output;
+
 static void
 ser_base_read_error_fd (struct serial *scb, int close_fd)
 {
@@ -265,6 +267,7 @@ ser_base_read_error_fd (struct serial *scb, int close_fd)
     {
       ssize_t s;
       char buf[GDB_MI_MSG_WIDTH + 1];
+      ser_error_output.clear ();
 
       for (;;)
 	{
@@ -302,6 +305,7 @@ ser_base_read_error_fd (struct serial *scb, int close_fd)
 	     in newline chunks.  */
 	  gdb_assert (s > 0 && s <= GDB_MI_MSG_WIDTH);
 	  buf[s] = '\0';
+	  ser_error_output.append (buf, s);
 	  current = buf;
 	  while ((newline = strstr (current, "\n")) != NULL)
 	    {

@@ -74,7 +74,7 @@ save_vars { env(ZE_GDB_DO_NOT_ATTACH_TO_SUB_DEVICE) } {
 
 	    # GDB should attach only to root devices.
 	    set fill "\[^\r\n\]+"
-	    set any_location "\\\[\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
+	    set any_location "\\\[\[0-9a-f\]{4}:\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
 	    set dev_inferior_match "${fill}${decimal}${fill}device ${any_location}${fill}(\r\n)?"
 	    gdb_test "info inferiors" [multi_line \
 				       "${fill}1${fill}process${fill}" \

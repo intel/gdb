@@ -45,7 +45,7 @@ foreach device $sycl_device_list {
 	    continue
 	}
 
-	set any_location "\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}"
+	set any_location "\[0-9a-f\]{4}:\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}"
 	set any_name "\[^\r\n\]+"
 	set warning ".*warning: -device-info: No devices\..*"
 

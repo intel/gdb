@@ -111,10 +111,10 @@ foreach device $sycl_device_list {
 	# to one more inferior and one more device being displayed.
 	# Check the info devices command output - there should be one now if on GPU.
 	#   Location   Sub-device   Vendor Id   Target Id   Cores   Device Name
-	# * [00:02.0]  -            0x8086      0x56c1      128     Intel(R) Data Center GPU Flex Series 140 [0x56c1]
-	#   [00:09.0]  -            0x8086      0x56c1      128     Intel(R) Data Center GPU Flex Series 140 [0x56c1]
+	# * [0000:00:02.0]  -            0x8086      0x56c1      128     Intel(R) Data Center GPU Flex Series 140 [0x56c1]
+	#   [0000:00:09.0]  -            0x8086      0x56c1      128     Intel(R) Data Center GPU Flex Series 140 [0x56c1]
 
-	set any_location "\\\[\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
+	set any_location "\\\[\[0-9a-f\]{4}:\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
 	set any_name "\[^\r\n\]+"
 	set table_header [wrap_regex_with_spaces_and_tabs " " "Location" "Sub-device" \
 	    "Vendor Id" "Target Id" "Cores" "Device Name"]

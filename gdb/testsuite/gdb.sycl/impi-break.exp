@@ -1,0 +1,113 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDB's support for IMPI/SYCL; in particular, inserting and
+# hitting breakpoints inside and outside a kernel.
+
+load_lib impi-sycl.exp
+
+standard_testfile impi-single-task.cpp
+
+set line_at_end [gdb_get_line_number "return-stmt"]
+
+set impi_sycl_device_list [impi_init_sycl_devices_list]
+if {[llength $impi_sycl_device_list] == 0} {
+    unsupported "target does not support IMPI/SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "$binfile" "$srcfile" {impi sycl debug}]} {
+    return -1
+}
+
+
+# Run a set of tests on a single rank.
+
+proc test_per_rank {rank} {
+    global srcfile
+
+    set fill "\[^\r\n\]*"
+
+    # Activate the given rank.
+    gdb_test -prompt $::impi_gdb_prompt "z $rank" \
+	"mpigdb: set active processes to $rank.*" "Activate the rank"
+
+    # Remove all breakpoints
+    gdb_test -prompt $::impi_gdb_prompt "delete"
+
+    # Set breakpoints inside and outside the kernel.
+    array set bp_locations_kernel {}
+    set num_kernel_locations 4
+
+    set line_after_kernel [gdb_get_line_number "line-after-kernel"]
+    impi_gdb_breakpoint "$srcfile:$line_after_kernel" {message}
+
+    for {set i 1} {$i <= $num_kernel_locations} {incr i} {
+	set bp_locations_kernel($i) [gdb_get_line_number "kernel-line-$i"]
+	impi_gdb_breakpoint "$srcfile:$bp_locations_kernel($i)" {message}
+    }
+
+    # Test that we actually hit the breakpoints.
+    for {set i 1} {$i <= $num_kernel_locations} {incr i} {
+	gdb_test -prompt $::impi_gdb_prompt "continue" \
+	    "\\\[$rank\\\]$fill$srcfile:$bp_locations_kernel($i).*" \
+	    "continue to $bp_locations_kernel($i)"
+    }
+
+    impi_gdb_continue_to_breakpoint 1 "line after kernel" \
+	"$srcfile:$line_after_kernel.*"
+
+    # Set breakpoint at the end of the main-function.
+    impi_gdb_breakpoint "$srcfile:${::line_at_end}" {message}
+
+    return 0
+}
+
+
+foreach device $impi_sycl_device_list {
+    set ranks 2
+
+    impi_clean_restart
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {[impi_gdb_start $binfile $device $ranks]} {
+	    continue
+	}
+
+	# All ranks must return together from the MPI_Init.
+	set line_after_mpi_init [gdb_get_line_number "line-after-mpi-init"]
+	impi_gdb_breakpoint "$srcfile:$line_after_mpi_init"
+	impi_gdb_continue_to_breakpoint $ranks "line after MPI_Init" \
+	    "$srcfile:$line_after_mpi_init"
+
+	for {set i 0} {$i < $ranks} {incr i} {
+	    with_test_prefix "rank $i" {
+		test_per_rank $i
+	    }
+	}
+
+	with_test_prefix "rank all" {
+	    # Activate all the ranks.
+	    gdb_test -prompt $::impi_gdb_prompt "z all" ""
+
+	    # Run all ranks to the last breakpoint.
+	    global line_at_end
+	    impi_gdb_continue_to_breakpoint $ranks "last breakpoint" \
+		"$srcfile:$line_at_end"
+
+	    impi_continue_sycl_program_to_termination $ranks
+	}
+    }
+}

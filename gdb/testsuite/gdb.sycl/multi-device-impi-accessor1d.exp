@@ -1,0 +1,88 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for SYCL, for accessing an element of 1D data
+# using operator[].
+
+load_lib impi-sycl.exp
+
+standard_testfile .cpp
+
+set impi_sycl_device_list [impi_init_sycl_devices_list]
+if {[llength $impi_sycl_device_list] == 0} {
+    unsupported "target does not support IMPI/SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "$binfile" "$srcfile" {impi sycl debug}]} {
+    return -1
+}
+
+
+# Run a set of tests on a single rank.
+
+proc test_per_rank {rank} {
+
+    # Activate the given rank.
+    gdb_test -prompt $::impi_gdb_prompt "z $rank" \
+	"mpigdb: set active processes to $rank.*" "Activate the rank"
+
+    gdb_test -prompt $::impi_gdb_prompt "ptype input\[0\]" "type = int" \
+	"1D element type"
+    gdb_test -prompt $::impi_gdb_prompt "print one == input\[0\]" "true" \
+	"1D access via size_t"
+    gdb_test -prompt $::impi_gdb_prompt "print two == input\[id\]" "true" \
+	"1D access via id<1>"
+    # A type of size_t is treated as a typedef inside GDB (as opposed to
+    # unsigned long) which is a special case.  As size_t is returned by e.g.
+    # get_linear_id, passing size_t as the argument of [] is natural and we
+    # test that our xmethods script treats these typdefs appropriately.
+    gdb_test -prompt $::impi_gdb_prompt "print two == input\[(size_t) id\]" \
+	"true" "1D access via id<1> cast to typedef"
+}
+
+foreach device $impi_sycl_device_list {
+    set ranks 2
+
+    # In this test, host must have a (sub)device for each rank.
+    set num_subdevices [sycl_num_subdevices $device]
+    if {$num_subdevices < $ranks} {
+	unsupported "target does not have enough (sub)devices"
+	continue
+    }
+
+    impi_clean_restart
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {[impi_gdb_start $binfile $device $ranks]} {
+	    continue
+	}
+
+	# All ranks must return together from the MPI_Init.
+	set line [gdb_get_line_number "kernel-line"]
+	impi_gdb_breakpoint "$srcfile:$line" {temporary}
+	impi_gdb_continue_to_breakpoint $ranks "$srcfile:$line" ".*$srcfile:$line.*"
+
+	for {set i 0} {$i < $ranks} {incr i} {
+	    with_test_prefix "rank $i" {
+		test_per_rank $i
+	    }
+	}
+
+	# Activate all the ranks.
+	gdb_test -prompt $::impi_gdb_prompt "z all"
+	impi_continue_sycl_program_to_termination $ranks
+    }
+}

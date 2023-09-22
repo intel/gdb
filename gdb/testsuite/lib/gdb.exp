@@ -6364,6 +6364,9 @@ proc gdb_compile_sycl {source dest type options} {
     lappend new_options {additional_flags=-fsycl-unnamed-lambda}
     lappend new_options {c++}
     lappend new_options {optimize=-O0}
+    if {[lsearch -exact $options impi] != -1} {
+	append options { $::impi_library_path ldflags=-lmpi}
+    }
 
     # If the optimize option is given multiple times, only the last use is
     # significant in DEJAGNU.  So, to make optimize option set in the test

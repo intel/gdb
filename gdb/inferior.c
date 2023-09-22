@@ -1170,7 +1170,7 @@ print_devices (ui_out *uiout)
 	table_emitter.emplace (uiout, 7, devices_to_print.size (),
 			       "InfoDevicesTable");
 	uiout->table_header (1, ui_left, "current", "");
-	uiout->table_header (10, ui_left, "location", "Location");
+	uiout->table_header (15, ui_left, "location", "Location");
 	uiout->table_header (12, ui_left, "sub-device", "Sub-device");
 	uiout->table_header (11, ui_left, "vendor-id", "Vendor Id");
 	uiout->table_header (11, ui_left, "target-id", "Target Id");

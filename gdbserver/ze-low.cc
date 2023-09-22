@@ -1273,7 +1273,9 @@ ze_target::attach_to_device (uint32_t pid, ze_device_handle_t device)
     }
 
   /* Generate device location for display.  */
-  dinfo->pci_slot = string_printf ("%02" PRIx32 ":%02" PRIx32 ".%" PRId32,
+  dinfo->pci_slot = string_printf ("%04" PRIx32 ":%02" PRIx32 ":%02" PRIx32
+				   ".%" PRId32,
+				   pci_properties.address.domain,
 				   pci_properties.address.bus,
 				   pci_properties.address.device,
 				   pci_properties.address.function);

@@ -59,10 +59,10 @@ foreach device $sycl_device_list {
 	gdb_continue_to_breakpoint "kernel" ".*$srcfile:$last_kernel_line.*"
 
 	# Check the info devices command output - there should be one now if on GPU.
-	#   Location   Sub-device   Vendor Id   Target Id   Cores   Device Name
-	# * [00:02.0]  0            0x8086      0x4c8a      32      Intel(R) UHD Graphics 750
+	#   Location        Sub-device   Vendor Id   Target Id   Cores   Device Name
+	# * [0000:00:02.0]  0            0x8086      0x4c8a      32      Intel(R) UHD Graphics 750
 
-	set any_location "\\\[\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
+	set any_location "\\\[\[0-9a-f\]{4}:\[0-9a-f\]{2}:\[0-9a-f\]\{2\}\.${decimal}\\\]"
 	set any_name "\[^\r\n\]+"
 	set table_header \
 	    [wrap_regex_with_spaces_and_tabs " " "Location" "Sub-device" \

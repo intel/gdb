@@ -49,8 +49,8 @@ foreach device $sycl_device_list {
 
 	# Using variables does not work in gdb_test_sequence.
 	gdb_test_sequence "detach" "detach from target" {
-	    "Detaching from device \\\[\[0-9a-fA-F\]\{2\}:\[0-9a-fA-F\]\{2\}\.\[0-9]*\]\\\.*\[0-9\]*"
-	    "Detached from device \\\[\[0-9a-fA-F\]\{2\}:\[0-9a-fA-F\]\{2\}\.\[0-9]*\]\\\.*\[0-9\]*"
+	    "Detaching from device \\\[\[0-9a-fA-F\]\{4\}:\[0-9a-fA-F\]\{2\}:\[0-9a-fA-F\]\{2\}\.\[0-9]*\]\\\.*\[0-9\]*"
+	    "Detached from device \\\[\[0-9a-fA-F\]\{4\}:\[0-9a-fA-F\]\{2\}:\[0-9a-fA-F\]\{2\}\.\[0-9]*\]\\\.*\[0-9\]*"
 	}
     }
 }

@@ -469,10 +469,9 @@ protected:
   /* Create a target description for a device and populate the
      corresponding regset information.  */
   virtual target_desc *create_tdesc
-    (const ze_device_properties_t &,
+    (ze_device_info *dinfo,
      const std::vector<zet_debug_regset_properties_t> &,
-     const ze_pci_ext_properties_t &,
-     ze_regset_info_t &, expedite_t &) = 0;
+     const ze_pci_ext_properties_t &) = 0;
 
   /* Return whether TP is at a breakpoint.  */
   virtual bool is_at_breakpoint (thread_info *tp) = 0;

@@ -290,10 +290,9 @@ protected:
      const std::vector<zet_debug_regset_properties_t> &) override;
 
   target_desc *create_tdesc
-    (const ze_device_properties_t &,
+    (ze_device_info *dinfo,
      const std::vector<zet_debug_regset_properties_t> &,
-     const ze_pci_ext_properties_t &,
-     ze_regset_info_t &, expedite_t &) override;
+     const ze_pci_ext_properties_t &) override;
 
   target_stop_reason get_stop_reason (thread_info *, gdb_signal &) override;
 
@@ -477,11 +476,12 @@ intelgt_ze_target::is_device_supported
 
 target_desc *
 intelgt_ze_target::create_tdesc
-  (const ze_device_properties_t &properties,
+  (ze_device_info *dinfo,
    const std::vector<zet_debug_regset_properties_t> &regset_properties,
-   const ze_pci_ext_properties_t &pci_properties,
-   ze_regset_info_t &regsets, expedite_t &expedite)
+   const ze_pci_ext_properties_t &pci_properties)
 {
+  const ze_device_properties_t &properties = dinfo->properties;
+
   if (properties.vendorId != 0x8086)
     error (_("unknown vendor (%" PRIx32 ") of device (%" PRIx32 "): %s"),
 	   properties.vendorId, properties.deviceId, properties.name);
@@ -522,12 +522,13 @@ intelgt_ze_target::create_tdesc
 
   long regnum = 0;
   for (const zet_debug_regset_properties_t &regprop : regset_properties)
-    add_regset (tdesc.get (), properties, regprop, regnum, regsets, expedite);
+    add_regset (tdesc.get (), properties, regprop, regnum,
+		dinfo->regsets, dinfo->expedite);
 
   /* Tdesc expects a nullptr-terminated array.  */
-  expedite.push_back (nullptr);
+  dinfo->expedite.push_back (nullptr);
 
-  init_target_desc (tdesc.get (), expedite.data ());
+  init_target_desc (tdesc.get (), dinfo->expedite.data ());
   return tdesc.release ();
 }
 

@@ -1280,10 +1280,8 @@ ze_target::attach_to_device (uint32_t pid, ze_device_handle_t device)
   if ((properties.flags & ZE_DEVICE_PROPERTY_FLAG_SUBDEVICE) != 0)
     dinfo->device_name += string_printf (".%d", properties.subdeviceId);
 
-  target_desc *tdesc = create_tdesc (properties, regsets,
-				     pci_properties,
-				     dinfo->regsets,
-				     dinfo->expedite);
+  target_desc *tdesc = create_tdesc (dinfo.get (), regsets,
+				     pci_properties);
   dinfo->tdesc.reset (tdesc);
 
   unsigned long ordinal = this->ordinal + 1;

@@ -1,0 +1,701 @@
+# Copyright 2023 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Support library for testing IMPI/SYCL GDB features
+#
+# A particular SYCL device can be selected by passing the IMPI/SYCL program
+# two command-line arguments:
+#   1. the device type, whose value is in {cpu, gpu, accelerator}.
+#   2. a substring of the device name.
+#
+# To set these arguments properly, use a board file, and
+# make your test program select a queue via the get_sycl_queue
+# function in lib/sycl-util.cpp.  See lib/impi-sycl-hello.cpp
+# for a sample IMPI/SYCL program setup.
+
+load_lib sycl.exp
+
+# Define global variables.
+
+# impi_gdb_output is the container for mpigdb outputs.
+if {![info exists impi_gdb_output]} {
+    array set impi_gdb_output {}
+}
+# impi_library_path is the path to IMPI libraries.
+if {![info exists impi_library_path]} {
+    set impi_library_path ""
+    if {[info exists ::env(I_MPI_ROOT)]} {
+	set impi_library_path "ldflags=-L$::env(I_MPI_ROOT)/lib/release"
+    }
+}
+# whitespaces is a regexp which matches with a space or tab.
+if ![info exists whitespaces] then {
+    set whitespaces " 	"
+}
+# impi_rank_id is a regexp which matches the rank IDs in mpigdb prompt.
+if ![info exists impi_rank_id] then {
+    set impi_rank_id "\\\[\(\[\\\-\\\,0-9\]+\)\\\]"
+}
+# impi_gdb_prompt is a regexp which matches the mpigdb prompt.
+if ![info exists impi_gdb_prompt] then {
+    set impi_gdb_prompt "$impi_rank_id\[$whitespaces\]+\\\(mpigdb\\\)\[$whitespaces\]*"
+}
+
+
+# ************************************************************
+# Run a test on the target to check if it recognizes IMPI/SYCL.
+# Remove device from the available devices list if IMPI/SYCL is not
+# supported and return the updated list.
+
+proc impi_get_sycl_supported_devices {sycl_device_list} {
+    set supported_impi_sycl_device_list {}
+
+    # Set up, compile, and execute a simple MPI/SYCL program.
+    set exe "$::objdir/impi-sycl-hello"
+    set src "$::srcdir/lib/impi-sycl-hello.cpp"
+
+    # Don't re-compile in case OFFLOAD_IGNORE_PREPARE_FOR_TESTING option
+    # is set.
+    if {$::OFFLOAD_IGNORE_PREPARE_FOR_TESTING != "1"} {
+	if {[build_executable "failed to compile $src" \
+		"$exe" "$src" {impi sycl debug}]} {
+	    verbose "IMPI/SYCL: Compilation failed" 0
+	    return 1
+	}
+	verbose -log "\nIMPI/SYCL: Compilation succeeded"
+    }
+
+    foreach device $sycl_device_list {
+	if ![is_sycl_device_filtered $device] {
+	    continue
+	}
+
+	impi_clean_restart
+	if {[impi_gdb_start "$exe" $device 1]} {
+	    continue
+	}
+
+	set result 1
+	gdb_test_multiple "continue" "continue" -prompt $::impi_gdb_prompt {
+	    -re "$::inferior_exited_re normally.*" {
+		set result 0
+	    }
+	    -re "$::inferior_exited_re with code.*" {
+		set result 1
+	    }
+	}
+
+	if {$result == 0} {
+	    verbose "IMPI/SYCL: Support detected for $device" 0
+	    lappend supported_impi_sycl_device_list "$device"
+	} else {
+	    verbose "IMPI/SYCL: Support not detected for $device" 0
+	}
+
+	gdb_exit
+    }
+
+    return $supported_impi_sycl_device_list
+}
+
+# ************************************************************
+# Get list of devices and return 0 if device list is non-empty else
+# return 1.  Each device entry of this list contains ";" separated
+# following information:
+#   Device name;Backend Type;Backend Platform version.
+# e.g.
+#   Intel(R) Iris(R) Plus Graphics 655 [0x3ea5];ext_oneapi_level_zero;1.3.24347
+
+gdb_caching_proc impi_init_sycl_devices_list {
+    set ::sycl_device_list {}
+    set supported_impi_sycl_device_list {}
+
+    if {![is_sycl_offload_supported_compiler]} {
+	unsupported "IMPI/SYCL tests supported only for dpcpp and icpx compilers"
+	return $::sycl_device_list
+    }
+    if { [which mpirun] == 0 } then {
+	unsupported "IMPI/SYCL tests supported only for MPI"
+	return $::sycl_device_list
+    }
+
+    # Set up, compile, and execute a simple IMPI/SYCL program.
+    set exe "$::objdir/impi-sycl-devices"
+    set src "$::srcdir/lib/impi-sycl-devices.cpp"
+
+    # Don't re-compile in case OFFLOAD_IGNORE_PREPARE_FOR_TESTING option
+    # is set.
+    if {$::OFFLOAD_IGNORE_PREPARE_FOR_TESTING != "1"} {
+	if {[build_executable "failed to compile $src" \
+		"$exe" "$src" {impi sycl debug}]} {
+	    verbose "IMPI/SYCL: Compilation failed" 0
+	    return $::sycl_device_list
+	}
+	verbose -log "\nIMPI/SYCL: Compilation succeeded"
+    }
+
+    impi_clean_restart
+    if {[impi_gdb_start "$exe" "" 1]} {
+	return $::sycl_device_list
+    }
+
+    set result 1
+    gdb_test_multiple "continue" "continue" -prompt $::impi_gdb_prompt {
+	-re "IMPI/SYCL: List of Target devices: \\\[(\[^\r\n\]*)\\\]\r\n" {
+	    set ::sycl_device_list [split $expect_out(1,string) ","]
+	    exp_continue
+	}
+	-re "$::inferior_exited_re normally.*$" {
+	    set result 0
+	}
+	-re "$::inferior_exited_re with code.*" {
+	    set result 1
+	}
+    }
+
+    set supported_impi_sycl_device_list \
+	[impi_get_sycl_supported_devices $::sycl_device_list]
+    if {($result == 0) && ([llength $supported_impi_sycl_device_list])} {
+	verbose "IMPI/SYCL: Devices found: $supported_impi_sycl_device_list" 0
+    } else {
+	set result 1
+	verbose "IMPI/SYCL: No device found" 0
+    }
+
+    return $supported_impi_sycl_device_list
+}
+
+# ************************************************************
+# Get number of sub-devices of given type.
+#
+# TYPE is the device type ("gpu", "cpu" or "accelerator").
+
+proc num_subdevices { type } {
+    # Set up, compile, and execute a simple SYCL program.
+    set exe "$::objdir/sycl-numdevices"
+    set src "$::srcdir/lib/sycl-numdevices.cpp"
+
+    # Don't re-compile in case OFFLOAD_IGNORE_PREPARE_FOR_TESTING option
+    # is set.
+    if {$::OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"} {
+	clean_restart "$exe"
+    } else {
+	if {[prepare_for_testing "failed to compile $src" \
+		"$exe" "$src" {sycl debug}]} {
+	    verbose "SYCL: Compilation failed" 0
+	    return 0
+	}
+	verbose -log "\nSYCL: Compilation succeeded"
+    }
+
+    gdb_test "set env ReturnSubDevicesAsApiDevices=1"
+
+    if {![runto_main $type]} {
+	untested "failed to run sycl-devices to main"
+	return 0
+    }
+
+    set result 0
+    gdb_test_multiple "continue" "continue" {
+	-re "SYCL: Number of devices: ($::decimal)\r\n" {
+	    set result [split $expect_out(1,string) ","]
+	}
+	-re "$::inferior_exited_re normally.*$" {
+	}
+	-re "$::inferior_exited_re with code.*" {
+	}
+    }
+
+    return $result
+}
+
+# ************************************************************
+# Get number of GPU sub-devices.
+
+gdb_caching_proc sycl_gpu_subdevices {
+    return [num_subdevices "gpu"]
+}
+
+# ************************************************************
+# Get number of CPU sub-devices.
+
+gdb_caching_proc sycl_cpu_subdevices {
+    return [num_subdevices "cpu"]
+}
+
+# ************************************************************
+# Get number of ACCELERATOR sub-devices.
+
+gdb_caching_proc sycl_accelerator_subdevices {
+    return [num_subdevices "accelerator"]
+}
+
+# ************************************************************
+# Get number of SYCL sub-devices.
+
+proc sycl_num_subdevices { device } {
+    set num_subdevices 0
+
+    set device_info [split "$device" ";"]
+    set device_type [lindex $device_info 3]
+
+    if {$device_type == "gpu"} {
+	set num_subdevices [sycl_gpu_subdevices]
+    } elseif {$device_type == "cpu"} {
+	set num_subdevices [sycl_cpu_subdevices]
+    } elseif {$device_type == "accelerator"} {
+	set num_subdevices [sycl_accelerator_subdevices]
+    } else {
+	fail "Unknown device type '$device_type'"
+    }
+
+    return $num_subdevices
+}
+
+# ************************************************************
+# Collect the output from all the ranks, until (and including) mpigdb-prompt.
+#
+# CMD is the command to execute.
+# NAME is the name of the test.
+#
+# MPIGDB multiplexes outputs from all attached debuggers.
+# This proc arranges outputs in key-value pairs, where key is the rank,
+# and value is all the lines from that rank.
+#
+# For example, if the output is following:
+#    [0]   A
+#    [2]   B
+#    [1]   C
+#    [0,2] D
+#    [1]   E
+#    [0-2] F
+# Following code prints the output of each rank:
+#    impi_get_gdb_output ("continue" "test")
+#    puts $::impi_gdb_output(0)    # -> "A\r\nD\r\nF"
+#    puts $::impi_gdb_output(1)    # -> "C\r\nE\r\nF"
+#    puts $::impi_gdb_output(2)    # -> "B\r\nD\r\nF"
+#
+# Returns:
+#    0 in success
+#   -1 if no prompt detected, test has failed.
+
+proc impi_get_gdb_output { cmd name } {
+    set fill "\[^\r\n\]*"
+    set full_name "get gdb lines: $name"
+    set prompt_pattern {}
+    append prompt_pattern "${::impi_gdb_prompt}$"
+
+    # Remove any previous outputs.
+    unset ::impi_gdb_output ; array set ::impi_gdb_output {}
+
+    set kfail_pattern "Process record does not support instruction 0xfae64 at.*"
+    gdb_test_multiple $cmd $full_name -prompt $::impi_gdb_prompt {
+	-re "\($::impi_rank_id\($fill\)\)" {
+
+	    set prompt $expect_out(2,string)
+	    set line $expect_out(1,string)
+	    set rank_list [impi_get_ranks_in_promt $prompt]
+	    foreach rank $rank_list {
+		set full_line ""
+		if {[info exists ::impi_gdb_output($rank)]} {
+		    set full_line $::impi_gdb_output($rank)
+		}
+		append full_line $line "\r\n" 
+		set ::impi_gdb_output($rank) $full_line
+	    }
+
+	    # Is it mpigdb prompt?
+	    if {[regexp $prompt_pattern $line]} {
+		return 0
+	    } else {
+		exp_continue
+	    }
+	}
+    }
+
+    # Didn't get the prompt, failed with a timeout.
+    fail "$full_name - No prompt (timeout)"
+    return -1
+}
+
+# ************************************************************
+# Create a list of ranks in the given prompt.
+#
+# PROMPT is a string, listing the ranks.
+#
+# For example, if PROMPT is "0,2-4,6", returns {0 2 3 4 6}.
+
+proc impi_get_ranks_in_promt { prompt } {
+    # List of ranks in the prompt.
+    set ranks {}
+
+    # Consider prompt as a comma seraparte list
+    # Each split should be in format "${::decimal}" or
+    # "${::decimal}-${::decimal}".
+    set list1 [split $prompt ,]
+    foreach value $list1 {
+
+       set range [split $value -]
+
+       switch [llength $range] {
+	    1 {
+		# Single rank
+		set rank [lindex $range 0]
+		if {0 != [string is double -strict $rank]} {
+		    lappend ranks $rank
+		} else {
+		    # Not a number
+		    verbose "IMPI/SYCL: Non-number '$rank' detected in prompt" 0
+		    return {}
+		}
+	    }
+	    2 {
+		# Range of ranks
+		set start [lindex $range 0]
+		if { 0 == [string is double -string $start]} {
+		    # Not a number
+		    verbose "IMPI/SYCL: Non-number '$start' detected in prompt" 0
+		    return {}
+		}
+		set end [lindex $range 1]
+		if { 0 == [string is double -string $end]} {
+		    # Not a number
+		    verbose "IMPI/SYCL: Non-number '$end' detected in prompt" 0
+		    return {}
+		}
+		for {set rank $start} {$rank < $end}{incr rank} {
+		    lappend ranks $rank
+		}
+	    }
+	    default {
+		# Syntax error
+		verbose "IMPI/SYCL: Syntax error detected in prompt" 0
+		return {}
+	    }
+	}
+    }
+    return $ranks;
+}
+
+# ************************************************************
+# Set a breakpoint using LINESPEC.
+#
+# If there is an additional argument it is a list of options; the supported
+# options are allow-pending, temporary, message, no-message and qualified.
+#
+# The result is 1 for success, 0 for failure.
+#
+# This is IMPI replacement for gdb_breakpoint in gdb.exp.
+# The only difference is the expected prompt.  gdb_breakpoint doesn't take
+# argument '-promt' to change the expected prompt, but always expects the
+# $gdb_prompt.
+
+proc impi_gdb_breakpoint { linespec args } {
+    set pending_response n
+    if {[lsearch -exact $args allow-pending] != -1} {
+	set pending_response y
+    }
+
+    set break_command "break"
+    set break_message "Breakpoint"
+    if {[lsearch -exact $args temporary] != -1} {
+	set break_command "tbreak"
+	set break_message "Temporary breakpoint"
+    }
+
+    if {[lsearch -exact $args qualified] != -1} {
+	append break_command " -qualified"
+    }
+
+    set print_pass 0
+    set print_fail 1
+    set no_message_loc [lsearch -exact $args no-message]
+    set message_loc [lsearch -exact $args message]
+    # The last one to appear in args wins.
+    if { $no_message_loc > $message_loc } {
+	set print_fail 0
+    } elseif { $message_loc > $no_message_loc } {
+	set print_pass 1
+    }
+
+    set test_name "impi_gdb_breakpoint: set breakpoint at $linespec"
+
+    send_gdb "$break_command $linespec\n"
+    # The first two regexps are what we get with -g, the third is without -g.
+    gdb_expect 30 {
+	-re "$break_message \[0-9\]* at .*: file .*, line $::decimal.\r\n$::impi_gdb_prompt $" {}
+	-re "$break_message \[0-9\]*: file .*, line $::decimal.\r\n$::impi_gdb_prompt $" {}
+	-re "$break_message \[0-9\]* at .*$::impi_gdb_prompt $" {}
+	-re "$break_message \[0-9\]* \\(.*\\) pending.*$::impi_gdb_prompt $" {
+		if {$pending_response == "n"} {
+			if { $print_fail } {
+				fail $test_name
+			}
+			return 0
+		}
+	}
+	-re "Make breakpoint pending.*y or \\\[n\\\]. $" {
+		send_gdb "$pending_response\n"
+		exp_continue
+	}
+	-re "A problem internal to GDB has been detected" {
+		if { $print_fail } {
+		    fail "$test_name (GDB internal error)"
+		}
+		gdb_internal_error_resync
+		return 0
+	}
+	-re "$::impi_gdb_prompt $" {
+		if { $print_fail } {
+			fail $test_name
+		}
+		return 0
+	}
+	eof {
+		perror "GDB process no longer exists"
+		global gdb_spawn_id
+		set wait_status [wait -i $gdb_spawn_id]
+		verbose -log "GDB process exited with wait status $wait_status"
+		if { $print_fail } {
+			fail "$test_name (eof)"
+		}
+		return 0
+	}
+	timeout {
+		if { $print_fail } {
+			fail "$test_name (timeout)"
+		}
+		return 0
+	}
+    }
+    if { $print_pass } {
+	pass $test_name
+    }
+    return 1
+}
+
+# ************************************************************
+# Continue active ranks, and expect them all to hit a breakpoint.
+# All active ranks are expected to hit the same breakpoint.
+# Report a pass or fail, depending on whether it seems to have
+# worked.
+#
+# NUM_RANKS is the number of active rasks.
+# Use NAME as part of the test name; each call to this proc
+# should use a NAME which is unique within that test file.
+#
+# This is IMPI replacement for gdb_continue_to_breakpoint in gdb.exp.
+
+proc impi_gdb_continue_to_breakpoint {num_ranks name { location_pattern .*} } {
+    set result 0
+    set full_name "continue to breakpoint: $name"
+
+    # Collect debugger outputs.
+    if {[impi_get_gdb_output "continue" $name]} {
+	return
+    }
+
+    # Count the ranks hitting the BP.
+    # Note that longer output-strings may be spread over multiple lines.
+    set pattern {.*(?:Breakpoint|Temporary breakpoint).*(at|in).*}
+    append pattern "$location_pattern.*$::impi_gdb_prompt"
+    foreach {key value} [array get ::impi_gdb_output] {
+	if {[regexp $pattern $value]} {
+	    incr result
+	}
+    }
+
+    if {$result == $num_ranks} {
+	pass $full_name
+    } else {
+	fail $full_name
+    }
+}
+
+# ************************************************************
+# Issue a 'continue' command and expect to see program termination.
+# All active ranks are expected to exit.
+#
+# NUM_RANKS is the number of active rasks.
+
+proc impi_continue_sycl_program_to_termination { num_ranks {msg_suffix ""} {known_fail ""} } {
+    set is_non_stop 0
+    gdb_test_multiple "show non-stop" "get non-stop mode" \
+	-prompt $::impi_gdb_prompt {
+	-re "non-stop mode is off.\r\n$::impi_gdb_prompt $" {
+	    set is_non_stop 0
+	}
+	-re "non-stop mode is on.\r\n$::impi_gdb_prompt $" {
+	    set is_non_stop 1
+	}
+    }
+
+    if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
+
+    set full_name "continue to end $msg_suffix"
+    set command "continue"
+    if {$is_non_stop} {
+	set command "continue -a"
+    }
+
+    set result 0
+    gdb_test_multiple $command $full_name -prompt $::impi_gdb_prompt {
+	-re "$::inferior_exited_re normally\]\r\n" {
+	    incr result
+	    exp_continue
+	}
+	-re "(${::impi_gdb_prompt})" {
+	    if {$result < $num_ranks} {
+		exp_continue
+	    } elseif {$result == $num_ranks} {
+		pass $gdb_test_name
+	    } else {
+		fail $gdb_test_name
+	    }
+	}
+    }
+}
+
+# ************************************************************
+# Prepare to spawn a new MPIEXEC.
+#
+# We cannot start the debugger yet.  It must be started together
+# with the IMPI-processes, in impi_gdb_start.
+# Here we can only prepare for a new start by cleaning any
+# exising entities.
+#
+# This is IMPI replacement for clean_restart in gdb.exp.
+
+proc impi_clean_restart { } {
+    # gdb_exit kills the process previously spawned in impi_gdb_spawn.
+    gdb_exit
+
+    # This is a clean restart, so reset error and warning count.
+    set ::errcnt 0
+    set ::warncnt 0
+}
+
+# ************************************************************
+# Start MPIEXEC, wait for mpigdb-prompt, and disable the pagers.
+#
+# EXE is the binary execuable to launch.
+# DEVICE is a semicolon-separated list with following information:
+#   Device name;Backend Type;Backend Platform version.
+# See an example in impi_init_sycl_devices_list.
+# RANKS (integer) is the number of IMPI-processes to launch.
+# RANKS2ATTACH (string) is the ranks for debugger to attach.
+# Default is to attach all.
+# ARGS is the arguments to the IMPI-processes.
+#
+# This is IMPI replacement for gdb_start in gdb.exp.
+
+proc impi_gdb_start { exe device ranks {ranks2attach "all"} {args ""} } {
+    if [info exists ::gdb_spawn_id] {
+	return 0
+    }
+
+    # Keep track of the number of times GDB has been launched.
+    incr ::gdb_instances
+
+    gdb_stdin_log_init
+
+    set device_args ""
+    if {"$device" != ""} {
+	set device_args [sycl_get_device_args $device]
+    }
+
+    set res [impi_gdb_spawn $exe $ranks $ranks2attach $device_args $args]
+    if { $res != 0} {
+	return $res
+    }
+
+    # Default to assuming inferior I/O is done on GDB's terminal.
+    if {![info exists ::inferior_spawn_id]} {
+	set ::inferior_spawn_id $::gdb_spawn_id
+    }
+
+    # When running over NFS, particularly if running many simultaneous
+    # tests on different hosts all using the same server, things can
+    # get really slow.  Give gdb at least 3 minutes to start up.
+    gdb_expect 360 {
+	-re "(\[\r\n\]$::impi_gdb_prompt)" {
+	    verbose "MPIGDB initialized."
+	}
+	timeout {
+	    perror "(timeout) MPIGDB never initialized after 10 seconds."
+	    remote_close host
+	    unset ::gdb_spawn_id
+	    return -1
+	}
+	eof {
+	    perror "(eof) MPIGDB never initialized."
+	    unset ::gdb_spawn_id
+	    return -1
+	}
+    }
+
+    gdb_debug_init
+    return 0
+}
+
+# ************************************************************
+# Spawn the MPIEXEC process.
+#
+# To spawn MPIEXEC, we use the following command and arguments:
+#   mpirun -n $ranks -gtool '$GDB:$ranks2attach=attach' $exe $args
+#
+# Upon successfull launch, when this proc returns, each rank is
+# waiting in MPI_Init.
+#
+# This is IMPI replacement for gdb_spawn in gdb.exp.
+
+proc impi_gdb_spawn { exe ranks ranks2attach device_args args } {
+    set ::use_gdb_stub [target_info exists ::use_gdb_stub]
+
+    if [info exists ::gdb_spawn_id] {
+	return 0
+    }
+
+    if ![is_remote host] {
+	if { [which mpirun] == 0 } then {
+	    perror "mpirun does not exist."
+	    exit 1
+	}
+    }
+
+    # With gtool, we must use env.variable to pass arguments to GDB.
+    setenv I_MPI_GTOOL_ATTACH_ARGS "-data-directory [pwd]/../data-directory"
+
+    set mpirun_args "-n $ranks"
+    set gtool_args "\"./../../gdb/gdb:${ranks2attach}=attach\""
+
+    # IMPI 2021.10 has a bug, it ignores the path we give to gtool, and
+    # instead launches a GDB from the default path.  Thus we must add our GDB
+    # in PATH.
+    set org_path $::env(PATH)
+    setenv PATH "[pwd]/../:$org_path"
+
+    set exe_args "$device_args $args"
+    set cmdline "mpirun $mpirun_args -gtool $gtool_args $exe $exe_args"
+    set res [remote_spawn host $cmdline]
+    if { $res < 0 || $res == "" } {
+	perror "Spawning $::GDB failed."
+	return 1
+    }
+
+    set ::gdb_spawn_id $res
+    set ::gdb_tty_name $::last_spawn_tty_name
+    return 0
+}

@@ -136,8 +136,8 @@ struct ze_device_info
   /* Number of interrupts sent to this target.  */
   unsigned long ninterrupts = 0;
 
-  /* Device name built from PCI properties and subdevice ID.  */
-  std::string device_name;
+  /* Device location as a string, built from PCI properties.  */
+  std::string pci_slot;
 };
 
 /* A thread's resume state.
@@ -470,8 +470,7 @@ protected:
      corresponding regset information.  */
   virtual target_desc *create_tdesc
     (ze_device_info *dinfo,
-     const std::vector<zet_debug_regset_properties_t> &,
-     const ze_pci_ext_properties_t &) = 0;
+     const std::vector<zet_debug_regset_properties_t> &) = 0;
 
   /* Return whether TP is at a breakpoint.  */
   virtual bool is_at_breakpoint (thread_info *tp) = 0;

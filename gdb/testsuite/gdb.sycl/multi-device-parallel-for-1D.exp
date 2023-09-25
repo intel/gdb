@@ -130,6 +130,10 @@ proc test_multi_device {subdevices_as_root sycl_dev} {
 		setup_kfail "JIRA URT/249" "*-*-*"
 	    }
 	    gdb_test_multiple "continue" "resume" {
+		-re -wrap "The program is not being run.*" {
+		    fail "$gdb_test_name (Process no longer exist)"
+		    return
+		}
 		-re -wrap "$srcfile:$bp1.*" {
 		    set device [get_device]
 		    incr bp1_hit($device)

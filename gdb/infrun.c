@@ -2206,7 +2206,7 @@ set_schedlock_shortcut_option (const char *shortcut)
   /* Check that we got a valid shortcut option.  */
   gdb_assert (is_on || is_step || is_replay || is_off);
 
-  bool any_changed = schedlock.normal.run.set (is_on) || any_changed;
+  bool any_changed = schedlock.normal.run.set (is_on);
   any_changed = schedlock.normal.step.set (is_on || is_step) || any_changed;
   any_changed = schedlock.normal.eval.set (is_on) || any_changed;
   any_changed = schedlock.replay.run.set (is_on || is_replay) || any_changed;

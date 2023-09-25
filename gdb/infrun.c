@@ -2106,7 +2106,7 @@ struct schedlock_options
 
     option () = delete;
     option (std::string name, bool value)
-      : name (name), value (value)
+      : name (std::move (name)), value (value)
     {}
 
     /* Forbid accidential copying.  */

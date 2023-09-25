@@ -103,8 +103,7 @@ proc test_multi_device {subdevices_as_root sycl_dev} {
 
     for {set trip 1} {$trip <= $num_trips} {incr trip} {
 	with_test_prefix "trip $trip" {
-	    if {$trip > 2 && [is_atsm $sycl_dev]
-		&& $subdevices_as_root == 0} {
+	    if {[is_atsm $sycl_dev] && $subdevices_as_root == 0} {
 		setup_kfail "JIRA URT/249" "*-*-*"
 	    }
 	    gdb_test_multiple "continue" "resume" {

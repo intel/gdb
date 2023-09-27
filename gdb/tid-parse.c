@@ -293,6 +293,15 @@ tid_range_parser::skip_simd_lane_range ()
 
 /* See tid-parse.h.  */
 
+unsigned int
+tid_range_parser::simd_lane_range_end ()
+{
+    gdb_assert (in_simd_lane_state ());
+    return m_simd_lane_range_parser.end_value ();
+}
+
+/* See tid-parse.h.  */
+
 bool
 tid_range_parser::tid_is_qualified () const
 {

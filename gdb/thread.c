@@ -2496,12 +2496,6 @@ thread_apply_command (const char *tidlist, int from_tty)
 	      continue;
 	    }
 
-	  /* If this is the last meaningful lane of this thread, skip
-	     the rest of the SIMD range.  */
-	  if ((simd_lane_num >= (tp->get_simd_width () - 1))
-	      && parser.in_simd_lane_state ())
-	    parser.skip_simd_lane_range ();
-
 	  /* If thread has SIMD lanes, check that the specified one is
 	       currently active.  */
 	  if (tp->is_simd_lane_active (simd_lane_num))
@@ -2510,11 +2504,42 @@ thread_apply_command (const char *tidlist, int from_tty)
 	    {
 	      if (!is_simd_from_star)
 		{
-		  /* Print warning only for explicitly specified SIMD
-		     lanes.  */
-		  warning (_("SIMD lane %d is inactive in thread %s"),
-			   simd_lane_num, print_thread_id (tp));
+		  auto warn_single = [&] ()
+		    {
+		      warning (_("SIMD lane %d is unavailable in thread %s"),
+			       simd_lane_num, print_thread_id (tp));
+		    };
+
+		  /* If SIMD lane is outside the meaningful range...  */
+		  if (simd_lane_num >= (tp->get_simd_width () - 1))
+		    {
+		      /* In SIMD lane range state we need to check if all
+			 lanes in the full range are valid to produce a
+			 range warning output.  */
+		      if (parser.in_simd_lane_state ())
+			{
+			  unsigned int range_end
+			    = parser.simd_lane_range_end ();
+
+			  /* If the range is not just one lane long warn for
+			     the entire range.  */
+			  if ((range_end - simd_lane_num) > 0)
+			    warning (_("SIMD lanes [%d-%d] are unavailable in "
+				       "thread %s"),
+				     simd_lane_num, range_end,
+				     print_thread_id (tp));
+			  else
+			    warn_single ();
+
+			  parser.skip_simd_lane_range ();
+			}
+		      else
+			warn_single ();
+		    }
+		  else
+		    warn_single ();
 		}
+
 	      continue;
 	    }
 	}

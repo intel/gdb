@@ -53,6 +53,9 @@ proc test_solib {device stop_on_solib_events auto_solib_add non_stop_mode} {
 	set test_name "shared library loaded"
 	set in_memory_lib "<in-memory@$hex-$hex>"
 
+	if {![is_level_zero_zebinary]} {
+	    setup_kfail "JIRA IGDB/4140" "*-*-*"
+	}
 	gdb_test_multiple "continue" $test_name {
 	    -re -wrap "Inferior loaded (${in_memory_lib}(\[\\s\r\n\])*)+" {
 		with_test_prefix "iteration $num_solib_event" {

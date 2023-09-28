@@ -40,7 +40,7 @@ set fill "\[^\r\n\]*"
 # EXPECTED_OUTER_FRAME defines the format of the outer frame.
 # CALL_STACK_SUPPORTED indicates that at this run the call stack feature
 # was enabled.
-proc test_finish {function_name function_args expected_value expected_outer_frame call_stack_supported} {
+proc test_finish {function_name function_args expected_value expected_outer_frame call_stack_supported {kfail ""}} {
     with_test_prefix "$function_name" {
 	global fill valnum_re
 	set value_returned "(\r\nValue returned is $valnum_re = $expected_value)"
@@ -48,6 +48,7 @@ proc test_finish {function_name function_args expected_value expected_outer_fram
 	    append value_returned "?"
 	}
 
+	if { $kfail ne "" } { setup_kfail $kfail "*-*-*" }
 	gdb_test "finish" [multi_line \
 			       "Run till exit from #0 ${fill}${function_name}$fill\\($function_args\\) $fill" \
 			       "${fill}${expected_outer_frame}${fill}" \
@@ -150,18 +151,18 @@ proc test_call_stack {call_stack_supported} {
 		-re -wrap ".*$srcfile:$return_int4_loc.*" {
 		    set hit_return_int4 true
 		    test_finish "return_int4" "dim0=5" "\\{500, 501, 502, 503\\}" \
-			"make_output \\(dim0=5\\)" $call_stack_supported
+			"make_output \\(dim0=5\\)" $call_stack_supported "JIRA GSD/6258"
 		}
 		-re -wrap ".*$srcfile:$return_int10_loc.*" {
 		    set hit_return_int10 true
 		    test_finish "return_int10" "dim0=5" "\\{500, 501, 502, 503, 504, 505, 506, 507, 508, 509\\}" \
-			"make_output \\(dim0=5\\)" $call_stack_supported
+			"make_output \\(dim0=5\\)" $call_stack_supported "JIRA GSD/6258"
 		}
 		-re -wrap ".*$srcfile:$return_uchar4_loc.*" {
 		    set hit_return_uchar4 true
 		    test_finish "return_uchar4" \
 			"dim0=5" "\\{5, 10, 20, 40\\}" "make_output \\(dim0=5\\)" \
-			$call_stack_supported
+			$call_stack_supported "JIRA GSD/6258"
 		}
 		-re -wrap ".*$srcfile:$return_int_loc.*" {
 		    set hit_return_int true

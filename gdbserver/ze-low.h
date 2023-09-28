@@ -176,19 +176,6 @@ enum ze_thread_exec_state_t
      resume it.  */
   ze_thread_state_held,
 
-  /* The thread is stopped by pause_all ().  In unpause_all (), we need to
-     resume just the paused threads.
-
-     In particular, we need to distinguish threads that reported their
-     event to higher layers in gdbserver and hence have their waitstatus
-     clear (set to ignore) from threads that were paused and had their
-     waitstatus cleared by pause_all ().
-
-     Unavailable threads will not be resumed, so we keep those in state
-     unavailable and only clear their waitstatus to prevent them from
-     getting reported by wait ().  */
-  ze_thread_state_paused,
-
   /* The thread is running.  We do not know whether it is still available
      to us and we're able to stop it or whether it would eventually hit a
      breakpoint.

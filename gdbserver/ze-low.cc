@@ -1540,6 +1540,10 @@ ze_target::fetch_events (ze_device_info &device)
 		if (ze_thread_stopped (tp))
 		  return;
 
+		/* Prevent underflowing.  */
+		if (device.nresumed > 0)
+		  device.nresumed--;
+
 		ze_thread_info *zetp = ze_thread (tp);
 		gdb_assert (zetp != nullptr);
 
@@ -1596,10 +1600,6 @@ ze_target::fetch_events (ze_device_info &device)
 		    zetp->exec_state = ze_thread_state_unavailable;
 		    zetp->waitstatus.set_unavailable ();
 		  }
-
-		/* Prevent underflowing.  */
-		if (device.nresumed > 0)
-		  device.nresumed--;
 	      });
 
 	    dprintf ("device %lu's nresumed=%ld%s",

@@ -53,7 +53,7 @@ proc spawn_sycl_proc {executable device} {
 # Find the stopped threads, check their backtrace, and return the
 # thread ids.
 
-proc test_attach {testpid} {
+proc test_attach {testpid device} {
     global srcfile
 
     # Attach GDB to the process.
@@ -69,6 +69,9 @@ proc test_attach {testpid} {
     set num_spinning_threads 4
     set spinning_threads [get_stopped_threads $srcfile $spinning_line]
     verbose -log "spinning threads: $spinning_threads"
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA IGDB/4294" "*-*-*"
+    }
     gdb_assert { [llength $spinning_threads] == $num_spinning_threads } \
 	"expecting $num_spinning_threads spinning threads"
 
@@ -116,7 +119,7 @@ foreach device $sycl_device_list {
 	verbose -log "spawn id: $test_spawn_id, test pid: $test_pid"
 
 	with_test_prefix "first attach" {
-	    set spinning_threads_1 [test_attach $test_pid]
+	    set spinning_threads_1 [test_attach $test_pid $device]
 	}
 
 	# Detach from the host application and attach again.
@@ -125,7 +128,7 @@ foreach device $sycl_device_list {
 
 	# Re-attach and test the spinning threads, again.
 	with_test_prefix "second attach" {
-	    set spinning_threads_2 [test_attach $test_pid]
+	    set spinning_threads_2 [test_attach $test_pid $device]
 	}
 
 	# For each spinning thread, stop spinning.
@@ -134,6 +137,9 @@ foreach device $sycl_device_list {
 		" = false" "break the loop at $thread"
 	}
 
+	if {[is_pvc $device]} {
+	    setup_kfail "JIRA IGDB/4294" "*-*-*"
+	}
 	# Continue to termination.
 	continue_sycl_program_to_termination
 

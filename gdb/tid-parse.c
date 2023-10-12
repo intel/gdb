@@ -364,15 +364,17 @@ tid_range_parser::process_inferior_state (const char *space)
 bool
 tid_range_parser::process_thread_state (const char *space)
 {
-  bool thread_is_parsed = m_range_parser.get_number (&m_thr_num);
+  get_number_status thread_parse_error
+    = m_range_parser.get_number_overflow (&m_thr_num);
 
   /* Even if the thread parser failed, we want to check if SIMD lane
      range is specified.  */
 
-  if (thread_is_parsed && m_thr_num < 0)
+  if (thread_parse_error == NUMBER_OK && m_thr_num < 0)
     error (_("negative value: %s"), m_cur_tok);
-
-  if (thread_is_parsed && m_thr_num == 0)
+  else if (thread_parse_error == NUMBER_CONVERSION_ERROR && m_thr_num == 0)
+    error (_("Out of bounds value: %s"), m_cur_tok);
+  else  if (thread_parse_error == NUMBER_OK && m_thr_num == 0)
     error (_("Invalid thread ID 0: %s"), m_cur_tok);
 
   const char *colon = strchr (m_cur_tok, ':');
@@ -387,8 +389,11 @@ tid_range_parser::process_thread_state (const char *space)
 
       /* When thread ID is skipped, thread parser returns false.
 	 In that case, return the default thread.  */
-      if (!thread_is_parsed && m_cur_tok[0] == ':')
-	m_thr_num = m_default_thr_num;
+      if (thread_parse_error != NUMBER_OK && m_cur_tok[0] == ':')
+	{
+	  m_thr_num = m_default_thr_num;
+	  thread_parse_error = NUMBER_OK;
+	}
 
       /* Step over the colon.  */
       colon++;
@@ -405,7 +410,7 @@ tid_range_parser::process_thread_state (const char *space)
 	m_in_simd_lane_star_range = false;
     }
 
-  return thread_is_parsed;
+  return (thread_parse_error == NUMBER_OK);
 }
 
 /* See tid-parse.h.  */
@@ -414,12 +419,18 @@ bool
 tid_range_parser::process_simd_lane_state ()
 {
   int simd_lane_num;
-  if (!m_simd_lane_range_parser.get_number (&simd_lane_num))
+  get_number_status numerr
+      = m_simd_lane_range_parser.get_number_overflow (&simd_lane_num);
+  if (NUMBER_ERROR == numerr)
     {
       /* SIMD lanes are specified, but its parsing failed.  */
       m_state = STATE_INFERIOR;
       return false;
     }
+
+  /* Specifying a number that can't be parsed into an integer is bad.  */
+  if (NUMBER_CONVERSION_ERROR == numerr)
+    error (_("SIMD lane number out of integer bounds."));
 
   if (simd_lane_num >= m_simd_max_len)
     {

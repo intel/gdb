@@ -79,9 +79,17 @@ get_ulongest (const char **pp, int trailer)
 /* See documentation in cli-utils.h.  */
 
 bool
-get_number_trailer (const char **pp, int *num, int trailer)
+get_number_trailer (const char **pp, int *parsed_value, int trailer)
 {
-  bool retval = false;	/* Default.  */
+  return NUMBER_OK == get_number_trailer_overflow (pp, parsed_value, trailer);
+}
+
+/* See documentation in cli-utils.h.  */
+
+get_number_status
+get_number_trailer_overflow (const char **pp, int *num, int trailer)
+{
+  get_number_status retval = NUMBER_OK;	/* Default.  */
   int parsed_value = 0;
   const char *p = *pp;
   bool negative = false;
@@ -101,12 +109,12 @@ get_number_trailer (const char **pp, int *num, int trailer)
 	  if (val->type ()->code () == TYPE_CODE_INT)
 	    {
 	      parsed_value = value_as_long (val);
-	      retval = true;
+	      retval = NUMBER_OK;
 	    }
 	  else
 	    {
 	      gdb_printf (_("History value must have integer type.\n"));
-	      retval = false;
+	      retval = NUMBER_ERROR;
 	    }
 	}
       else	/* Convenience variable */
@@ -126,13 +134,13 @@ get_number_trailer (const char **pp, int *num, int trailer)
 				       &longest_val))
 	    {
 	      parsed_value = (int) longest_val;
-	      retval = true;
+	      retval = NUMBER_OK;
 	    }
 	  else
 	    {
 	      gdb_printf (_("Convenience variable must "
 			    "have integer value.\n"));
-	      retval = false;
+	      retval = NUMBER_ERROR;
 	    }
 	}
     }
@@ -142,27 +150,35 @@ get_number_trailer (const char **pp, int *num, int trailer)
       while (*p >= '0' && *p <= '9')
 	++p;
       if (p == p1)
-	/* There is no number here.  (e.g. "cond a == b").  */
 	{
 	  /* Skip non-numeric token.  */
 	  while (*p && !isspace((int) *p))
 	    ++p;
 	  /* Return zero, which caller must interpret as error.  */
-	  retval = false;
+	  retval = NUMBER_ERROR;
 	}
       else
 	{
-	  parsed_value = atoi (p1);
-	  retval = true;
+	  long val = strtol (p1, nullptr, 10);
+	  /* Value here is always positive, we stripped a potential negative
+	     sign.  Tell the caller about that but also verify a valid int
+	     representation.  */
+	  parsed_value = 0;
+	  if ((val == LONG_MAX && errno == ERANGE) || val > INT_MAX)
+	    retval = NUMBER_CONVERSION_ERROR;
+	  else
+	    {
+	      parsed_value = (int)val;
+	      retval = NUMBER_OK;
+	    }
 	}
-
     }
   if (!(isspace (*p) || *p == '\0' || *p == trailer))
     {
       /* Trailing junk: return 0 and let caller print error msg.  */
       while (!(isspace (*p) || *p == '\0' || *p == trailer))
 	++p;
-      retval = false;
+      retval = NUMBER_ERROR;
     }
   p = skip_spaces (p);
   *pp = p;
@@ -177,7 +193,15 @@ get_number_trailer (const char **pp, int *num, int trailer)
 bool
 get_number (const char **pp, int *num)
 {
-  return get_number_trailer (pp, num, '\0');
+  return NUMBER_OK == get_number_overflow (pp, num);
+}
+
+/* See documentation in cli-utils.h.  */
+
+get_number_status
+get_number_overflow (const char **pp, int *num)
+{
+  return get_number_trailer_overflow (pp, num, '\0');
 }
 
 /* See documentation in cli-utils.h.  */
@@ -185,10 +209,16 @@ get_number (const char **pp, int *num)
 bool
 get_number (char **pp, int *num)
 {
-  int result;
-  const char *p = *pp;
+  return NUMBER_OK == get_number_overflow (pp, num);
+}
 
-  result = get_number_trailer (&p, num, '\0');
+/* See documentation in cli-utils.h.  */
+
+get_number_status
+get_number_overflow (char **pp, int *num)
+{
+  const char *p = *pp;
+  get_number_status result = get_number_trailer_overflow (&p, num, '\0');
   *pp = (char *) p;
   return result;
 }
@@ -252,7 +282,15 @@ number_or_range_parser::init (const char *string, int end_trailer)
 bool
 number_or_range_parser::get_number (int *num)
 {
-  bool retval = false;
+  return NUMBER_OK == get_number_overflow (num);
+}
+
+/* See documentation in cli-utils.h.  */
+
+enum get_number_status
+number_or_range_parser::get_number_overflow (int *num)
+{
+  get_number_status retval = NUMBER_ERROR;
 
   if (m_in_range)
     {
@@ -261,7 +299,7 @@ number_or_range_parser::get_number (int *num)
 	 Do not advance the token pointer until the end of range is
 	 reached.  */
 
-      retval = true;
+      retval = NUMBER_OK;
 
       if (++m_last_retval == m_end_value)
 	{
@@ -275,20 +313,21 @@ number_or_range_parser::get_number (int *num)
       const char *restore_tok = m_cur_tok;
       /* Default case: state->m_cur_tok is pointing either to a solo
 	 number, or to the first number of a range.  */
-      if (!get_number_trailer (&m_cur_tok, &m_last_retval, '-'))
+      retval = ::get_number_trailer_overflow (&m_cur_tok, &m_last_retval, '-');
+      if (NUMBER_OK != retval)
 	{
 	  /* Make another attempt only if there is a custom end trailer.  */
 	  if (m_end_trailer == 0)
-	    return false;
+	    return retval;
 
 	  m_cur_tok = restore_tok;
-	  if (!get_number_trailer (&m_cur_tok, &m_last_retval, m_end_trailer))
-	    return false;
+	  retval = ::get_number_trailer_overflow (&m_cur_tok, &m_last_retval,
+					 m_end_trailer);
+	  if (NUMBER_OK != retval)
+	    return retval;
 	}
 
-      retval = true;
-
-      /* If get_number_trailer has found a '-' preceded by a space, it
+      /* If get_number_trailer_overflow has found a '-' preceded by a space, it
 	 might be the start of a command option.  So, do not parse a
 	 range if the '-' is followed by an alpha or another '-'.  We
 	 might also be completing something like
@@ -310,12 +349,14 @@ number_or_range_parser::get_number (int *num)
 	  temp = &m_end_ptr;
 	  m_end_ptr = skip_spaces (m_cur_tok + 1);
 
-	  if (!::get_number_trailer (temp, &m_end_value, m_end_trailer))
+	  retval = ::get_number_trailer_overflow (temp, &m_end_value,
+						  m_end_trailer);
+	  if (NUMBER_OK != retval)
 	    {
 	      /* Advance the token pointer behind the failed range.  */
 	      m_cur_tok = m_end_ptr;
 
-	      return false;
+	      return retval;
 	    }
 
 	  if (m_end_value < m_last_retval)
@@ -340,10 +381,9 @@ number_or_range_parser::get_number (int *num)
       if (*(m_cur_tok + 1) == '$')
 	{
 	  /* Convenience variable.  */
-	  if (!::get_number (&m_cur_tok, &m_last_retval))
-	    return false;
-
-	  retval = true;
+	  retval = ::get_number_overflow (&m_cur_tok, &m_last_retval);
+	  if (NUMBER_OK != retval)
+	    return retval;
 
 	  if (m_last_retval < 0)
 	    error (_("negative value"));

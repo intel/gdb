@@ -25,6 +25,15 @@
 
 struct cmd_list_element;
 
+/* Return values for get_number_overflow and get_number_trailer_overflow since
+   bool is not enough for some cases.  See handling of thread ranges.  */
+enum get_number_status
+{
+  NUMBER_OK = 0,
+  NUMBER_ERROR,
+  NUMBER_CONVERSION_ERROR
+};
+
 /* *PP is a string denoting a number.  Get the number.  Advance *PP
    after the string and any trailing whitespace.
 
@@ -35,21 +44,44 @@ struct cmd_list_element;
    commonly this is `-'.  If you don't want a trailer, use \0.
 
    Returns TRUE on success (parsed value is written to PARSED_VALUE).
-   If parsing failed, returns FALSE.  */
+   If parsing failed, returns FALSE.
+
+   Internally calls get_number_trailer_overflow ().  */
 
 extern bool get_number_trailer (const char **pp, int *parsed_value,
 				int trailer);
+
+/* Backend for get_number_trailer, does overflow checking.
+
+   Returns NUMBER_OK on success (parsed value is written to PARSED_VALUE).
+   If parsing failed, returns NUMBER_ERROR or NUMBER_CONVERSION_ERROR.
+
+   NUMBER_CONVERSION_ERROR is returned if strtol () conversion to int overflows.
+
+   NUMBER_ERROR is returned for all other parsing errors.  */
+
+extern get_number_status
+get_number_trailer_overflow (const char **pp, int *parsed_value, int trailer);
 
 /* Convenience.  Like get_number_trailer, but with no TRAILER.  */
 
 extern bool get_number (const char **, int *);
 
-/* Like the above, but takes a non-const "char **".  */
+/* Convenience.  Like get_number_trailer, but with no TRAILER and can
+   return more detailed result codes.  Above get_number is just wrapper around
+   this.  */
 
+extern get_number_status get_number_overflow (const char **, int *);
+
+/* Like the above, but takes a non-const "char **".  */
 extern bool get_number (char **, int *);
 
+/* Like the above, but takes a non-const "char **" and returns an extended
+   result.  */
+extern get_number_status get_number_overflow (char **, int *);
+
 /* Like get_number_trailer, but works with ULONGEST, and throws on
-   error instead of returning 0.  */
+   error instead of returning an error enum.  */
 extern ULONGEST get_ulongest (const char **pp, int trailer = '\0');
 
 /* Throws an error telling the user that ARGS starts with an option
@@ -98,6 +130,11 @@ public:
      pointer until the range is completed.  The call that completes
      the range will advance the pointer past <number2>.  */
   bool get_number (int *num);
+
+  /* Like get_number but allows more subtle result codes.
+     Currently this can return if a general error occurred or if a number
+     was out of bounds in conversion to integer.  */
+  enum get_number_status get_number_overflow (int *num);
 
   /* Setup internal state such that get_next() returns numbers in the
      START_VALUE to END_VALUE range.  END_PTR is where the string is

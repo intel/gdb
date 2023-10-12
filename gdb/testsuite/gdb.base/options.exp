@@ -417,6 +417,8 @@ proc_with_prefix test-thread-apply {} {
     gdb_test "thread apply 1-" "Invalid thread ID: 1-"
     test_gdb_complete_none "frame apply level 1-"
 
+    gdb_test "thread apply 1-2147483648" "Out of bounds value: 1-2147483648"
+
     foreach cmd {
 	"thread apply all-lanes"
 	"thread apply all"

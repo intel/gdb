@@ -34,6 +34,12 @@ if {[build_executable "failed to compile $srcfile" \
 foreach device $sycl_device_list {
     clean_restart "${binfile}"
     with_test_prefix [sycl_get_device_prefix $device] {
+	if {([is_atsm $device] && [require_sycl_device $device "gpu" "Intel*"])
+	    || ([is_dg2 $device] && [require_sycl_device $device "gpu" "Intel*"])} {
+	    kfail "JIRA GSD/6607" "Skip the remaining tests to avoid unnecessary timeouts"
+	    continue
+	}
+
 	if {![runto_main [sycl_get_device_args $device]]} {
 	    continue
 	}

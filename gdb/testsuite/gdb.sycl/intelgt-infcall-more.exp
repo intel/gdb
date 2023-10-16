@@ -32,7 +32,7 @@ if {[build_executable "failed to compile $srcfile" \
 }
 
 # The main test sequence for GPU inferior calls.
-proc test_inferior_calls {simd_lane inside_kernel} {
+proc test_inferior_calls {simd_lane inside_kernel device} {
     global srcfile
     set real_f0 [get_valueof "/x" "\$f0" "invalid" "F0 before infcalls"]
     set real_ce [get_valueof "/x" "\$ce" "invalid" "CE before infcalls"]
@@ -40,6 +40,12 @@ proc test_inferior_calls {simd_lane inside_kernel} {
 
     gdb_test "print no_args()" "= 20" \
 	"Inferior call of a function without arguments"
+
+    if {([is_atsm $device] && [require_sycl_device $device "gpu" "Intel*"])
+        || ([is_dg2 $device] && [require_sycl_device $device "gpu" "Intel*"])} {
+	kfail "JIRA GSD/6607" "Skip the remaining tests to avoid unnecessary timeouts"
+	return 0
+    }
 
     gdb_test "print integer_grf_args(3, 4, 5)" "= 60" \
 	"Arguments are passed on GRFs: 1"
@@ -189,7 +195,7 @@ foreach device $sycl_device_list {
 
 	# Loop over the lanes to be tested and performe all the inferior calls tests.
 	foreach_with_prefix lane $lanes {
-	    test_inferior_calls $lane $inside_kernel
+	    test_inferior_calls $lane $inside_kernel $device
 	}
 
 	set then_branch [gdb_get_line_number "then-branch"]

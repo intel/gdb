@@ -408,6 +408,10 @@
 /* Define to 1 if you have the <ws2tcpip.h> header file. */
 #undef HAVE_WS2TCPIP_H
 
+/* Define to 1 if the system has the type
+   `zet_pfnDebugGetThreadRegisterSetProperties_t'. */
+#undef HAVE_ZET_PFNDEBUGGETTHREADREGISTERSETPROPERTIES_T
+
 /* Define as const if the declaration of iconv() needs const. */
 #undef ICONV_CONST
 

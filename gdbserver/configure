@@ -11892,6 +11892,18 @@ case "${target}" in
   intelgt-*-ze)
     if test "$HAVE_LIBZE_LOADER" != yes; then
       as_fn_error $? "libze_loader is missing or unusable" "$LINENO" 5
+    else
+      ac_fn_c_check_type "$LINENO" "zet_pfnDebugGetThreadRegisterSetProperties_t" "ac_cv_type_zet_pfnDebugGetThreadRegisterSetProperties_t" "#include <level_zero/zet_ddi.h>
+"
+if test "x$ac_cv_type_zet_pfnDebugGetThreadRegisterSetProperties_t" = xyes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_ZET_PFNDEBUGGETTHREADREGISTERSETPROPERTIES_T 1
+_ACEOF
+
+
+fi
+
     fi
     ;;
   *)

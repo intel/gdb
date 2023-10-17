@@ -461,6 +461,9 @@ case "${target}" in
   intelgt-*-ze)
     if test "$HAVE_LIBZE_LOADER" != yes; then
       AC_MSG_ERROR([libze_loader is missing or unusable])
+    else
+      AC_CHECK_TYPES([zet_pfnDebugGetThreadRegisterSetProperties_t], [], [],
+        [#include <level_zero/zet_ddi.h>])
     fi
     ;;
   *)

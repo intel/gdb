@@ -8146,7 +8146,7 @@ remote_target::queued_stop_reply (ptid_t ptid)
   remote_state *rs = get_remote_state ();
   stop_reply_up r = remote_notif_remove_queued_reply (ptid);
 
-  if (!rs->stop_reply_queue.empty () && target_can_async_p ())
+  if (!rs->stop_reply_queue.empty () && target_is_async_p ())
     {
       /* There's still at least an event left.  */
       rs->mark_async_event_handler ();

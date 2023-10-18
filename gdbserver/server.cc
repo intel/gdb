@@ -3585,6 +3585,13 @@ queue_stop_reply_callback (thread_info *thread)
     {
       if (target_thread_stopped (thread))
 	{
+	  /* Wait for THREAD if we have not done that, already.  */
+	  client_state cs;
+	  cs.last_ptid = mywait (thread->id, &cs.last_status,
+				 TARGET_WNOHANG, 1);
+	  if (cs.last_ptid == thread->id)
+	    thread->last_status = cs.last_status;
+
 	  threads_debug_printf
 	    ("Reporting thread %s as already stopped with %s",
 	     target_pid_to_str (thread->id).c_str (),

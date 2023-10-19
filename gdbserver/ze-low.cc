@@ -697,7 +697,7 @@ ze_has_priority_waitstatus (const thread_info *tp)
       /* If this thread was stopped via an interrupt, it is an interesting
 	 case if GDB wanted it stopped with a stop resume request.  */
       if ((zetp->stop_reason == TARGET_STOPPED_BY_NO_REASON)
-	  && (zetp->waitstatus.sig () == GDB_SIGNAL_INT))
+	  && (zetp->waitstatus.sig () == GDB_SIGNAL_TRAP))
 	return (zetp->resume_state == ze_thread_resume_stop);
 
       return true;

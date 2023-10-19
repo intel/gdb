@@ -603,7 +603,7 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
       cr0[1] &= ~(1 << intelgt_cr0_1_external_halt_status);
       intelgt_write_cr0 (tp, 1, cr0[1]);
 
-      signal = GDB_SIGNAL_INT;
+      signal = GDB_SIGNAL_TRAP;
       return TARGET_STOPPED_BY_NO_REASON;
     }
 

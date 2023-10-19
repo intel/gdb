@@ -54,10 +54,17 @@ proc spawn_sycl_proc {executable device} {
 # thread ids.
 
 proc test_attach {testpid} {
-    global srcfile
+    global srcfile gdb_prompt
 
     # Attach GDB to the process.
-    gdb_test "attach $testpid" "Attaching to program.*" "attach command"
+    #
+    # We use gdb_test_multiple since in non-stop mode, there may be
+    # further stop messages after the prompt.
+    gdb_test_multiple "attach $testpid" "attach" {
+	-re "Attaching to program.*$gdb_prompt" {
+	    pass $gdb_test_name
+	}
+    }
 
     # Get the spinning kernel line.
     set spinning_line [gdb_get_line_number "spinning-line"]
@@ -102,42 +109,50 @@ foreach device $sycl_device_list {
 	    continue
 	}
 
-	# Spawn sycl proc and attach.
-	set test_spawn_id [spawn_sycl_proc $binfile $device]
+	foreach_with_prefix non_stop "off on" {
+	    gdb_test_no_output "set non-stop $non_stop"
 
-	# Return early if it is failed to spawn a sycl proc.
-	if {$test_spawn_id == -1} {
-	    fail "failed to spawn a sycl proc to attach"
-	    continue
+	    # Spawn sycl proc and attach.
+	    set test_spawn_id [spawn_sycl_proc $binfile $device]
+
+	    # Return early if it is failed to spawn a sycl proc.
+	    if {$test_spawn_id == -1} {
+		fail "failed to spawn a sycl proc to attach"
+		continue
+	    }
+
+	    # Obtain PID to attach.
+	    set test_pid [spawn_id_get_pid $test_spawn_id]
+	    verbose -log "spawn id: $test_spawn_id, test pid: $test_pid"
+
+	    with_test_prefix "first attach" {
+		set spinning_threads_1 [test_attach $test_pid]
+	    }
+
+	    # Detach from the host application and attach again.
+	    gdb_test "detach inferior 1" \
+		"Detaching from program.*intelgt: inferior .* removed."
+
+	    # Re-attach and test the spinning threads, again.
+	    with_test_prefix "second attach" {
+		set spinning_threads_2 [test_attach $test_pid]
+	    }
+
+	    # For each spinning thread, stop spinning.
+	    foreach thread $spinning_threads_2 {
+		gdb_test "thread apply $thread:* -q -s p spin = false" \
+		    " = false" "break the loop at $thread"
+	    }
+
+	    # Continue to termination.
+	    set cmd "continue"
+	    if {$non_stop == "on"} {
+		set cmd "continue -a"
+	    }
+	    gdb_test $cmd "$inferior_exited_re normally].*"
+
+	    # Should make sure process is killed just in case.
+	    kill_wait_spawned_process $test_spawn_id
 	}
-
-	# Obtain PID to attach.
-	set test_pid [spawn_id_get_pid $test_spawn_id]
-	verbose -log "spawn id: $test_spawn_id, test pid: $test_pid"
-
-	with_test_prefix "first attach" {
-	    set spinning_threads_1 [test_attach $test_pid]
-	}
-
-	# Detach from the host application and attach again.
-	gdb_test "detach inferior 1" \
-	    "Detaching from program.*intelgt: inferior .* has been removed."
-
-	# Re-attach and test the spinning threads, again.
-	with_test_prefix "second attach" {
-	    set spinning_threads_2 [test_attach $test_pid]
-	}
-
-	# For each spinning thread, stop spinning.
-	foreach thread $spinning_threads_2 {
-	    gdb_test "thread apply $thread:* -q -s p spin = false" \
-		" = false" "break the loop at $thread"
-	}
-
-	# Continue to termination.
-	continue_sycl_program_to_termination
-
-	# Should make sure process is killed just in case.
-	kill_wait_spawned_process $test_spawn_id
     }
 }

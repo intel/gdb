@@ -504,7 +504,7 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
         if platform.system() == "Windows":
             gdbserver_attach_str = f"{binary} --attach 127.0.0.1:PORT_PLACE_HOLDER {inf.pid}"
         else:
-            gdbserver_attach_str = f"{binary} --attach - {inf.pid}"
+            gdbserver_attach_str = f"{binary} --once --attach - {inf.pid}"
 
         if gdbserver_path_env_var:
             gdbserver_attach_str = \

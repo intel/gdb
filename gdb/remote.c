@@ -1435,7 +1435,7 @@ public: /* Remote specific methods.  */
 					 ULONGEST length, ULONGEST *xfered_len,
 					 const gdb_byte *data);
 
-  int readchar (int timeout);
+  int readchar (int timeout, remote_state *rs);
 
   void remote_serial_write (const char *str, int len);
   void remote_serial_send_break ();
@@ -1448,8 +1448,8 @@ public: /* Remote specific methods.  */
     return putpkt (buf.data ());
   }
 
-  void skip_frame ();
-  long read_frame (gdb::char_vector *buf_p);
+  void skip_frame (remote_state *rs);
+  long read_frame (gdb::char_vector *buf_p, remote_state* rs);
   int getpkt (gdb::char_vector *buf, bool forever = false,
 	      bool *is_notif = nullptr);
   int remote_vkill (int pid);
@@ -10402,10 +10402,9 @@ remote_target::flash_done ()
    See remote_serial_quit_handler for more detail.  */
 
 int
-remote_target::readchar (int timeout)
+remote_target::readchar (int timeout, remote_state *rs)
 {
   int ch;
-  struct remote_state *rs = get_remote_state ();
 
   try
     {
@@ -10610,7 +10609,7 @@ remote_target::putpkt_binary (const char *buf, int cnt)
 	 Handle any notification that arrives in the mean time.  */
       while (1)
 	{
-	  ch = readchar (remote_timeout);
+	  ch = readchar (remote_timeout, rs);
 
 	  switch (ch)
 	    {
@@ -10632,7 +10631,7 @@ remote_target::putpkt_binary (const char *buf, int cnt)
 		   was lost.  Gobble up the packet and ack it so it
 		   doesn't get retransmitted when we resend this
 		   packet.  */
-		skip_frame ();
+		skip_frame (rs);
 		remote_serial_write ("+", 1);
 		continue;	/* Now, go look for +.  */
 	      }
@@ -10645,7 +10644,7 @@ remote_target::putpkt_binary (const char *buf, int cnt)
 		   for an ack.  */
 		/* We've found the start of a notification.  Now
 		   collect the data.  */
-		val = read_frame (&rs->buf);
+		val = read_frame (&rs->buf, rs);
 		if (val >= 0)
 		  {
 		    remote_debug_printf_nofunc
@@ -10690,14 +10689,14 @@ remote_target::putpkt_binary (const char *buf, int cnt)
    ack.  Do our best to discard the rest of this packet.  */
 
 void
-remote_target::skip_frame ()
+remote_target::skip_frame (remote_state *rs)
 {
   int c;
   gdb::char_vector buf;
 
   while (1)
     {
-      c = readchar (remote_timeout);
+      c = readchar (remote_timeout, rs);
       switch (c)
 	{
 	case SERIAL_TIMEOUT:
@@ -10705,20 +10704,20 @@ remote_target::skip_frame ()
 	  return;
 	case '#':
 	  /* Discard the two bytes of checksum and stop.  */
-	  c = readchar (remote_timeout);
+	  c = readchar (remote_timeout, rs);
 	  if (c >= 0)
-	    c = readchar (remote_timeout);
+	    c = readchar (remote_timeout, rs);
 
 	  return;
 	case '*':		/* Run length encoding.  */
 	  /* Discard the repeat count.  */
-	  c = readchar (remote_timeout);
+	  c = readchar (remote_timeout, rs);
 	  if (c < 0)
 	    return;
 	  break;
 	case 'E':		/* Looks like this is an error packet.  */
 	  buf.resize (3); /* Resize to fit at least E NN packet.  */
-	  if (read_frame (&buf))
+	  if (read_frame (&buf, rs))
 	    buf.insert (buf.begin (), 'E');
 	  if (packet_check_result (buf).status () == PACKET_ERROR)
 	    set_last_error (parse_error_message (buf));
@@ -10740,20 +10739,19 @@ remote_target::skip_frame ()
    SERIAL status indications).  */
 
 long
-remote_target::read_frame (gdb::char_vector *buf_p)
+remote_target::read_frame (gdb::char_vector *buf_p, remote_state *rs)
 {
   unsigned char csum;
   long bc;
   int c;
   char *buf = buf_p->data ();
-  struct remote_state *rs = get_remote_state ();
 
   csum = 0;
   bc = 0;
 
   while (1)
     {
-      c = readchar (remote_timeout);
+      c = readchar (remote_timeout, rs);
       switch (c)
 	{
 	case SERIAL_TIMEOUT:
@@ -10772,9 +10770,9 @@ remote_target::read_frame (gdb::char_vector *buf_p)
 
 	    buf[bc] = '\0';
 
-	    check_0 = readchar (remote_timeout);
+	    check_0 = readchar (remote_timeout, rs);
 	    if (check_0 >= 0)
-	      check_1 = readchar (remote_timeout);
+	      check_1 = readchar (remote_timeout, rs);
 
 	    if (check_0 == SERIAL_TIMEOUT || check_1 == SERIAL_TIMEOUT)
 	      {
@@ -10810,7 +10808,7 @@ remote_target::read_frame (gdb::char_vector *buf_p)
 	    int repeat;
 
 	    csum += c;
-	    c = readchar (remote_timeout);
+	    c = readchar (remote_timeout, rs);
 	    csum += c;
 	    repeat = c - ' ' + 3;	/* Compute repeat count.  */
 
@@ -10914,7 +10912,7 @@ remote_target::getpkt (gdb::char_vector *buf, bool forever, bool *is_notif)
 	     expect characters to arrive at a brisk pace.  They should
 	     show up within remote_timeout intervals.  */
 	  do
-	    c = readchar (timeout);
+	    c = readchar (timeout, rs);
 	  while (c != SERIAL_TIMEOUT && c != '$' && c != '%');
 
 	  if (c == SERIAL_TIMEOUT)
@@ -10937,7 +10935,7 @@ remote_target::getpkt (gdb::char_vector *buf, bool forever, bool *is_notif)
 	    {
 	      /* We've found the start of a packet or notification.
 		 Now collect the data.  */
-	      val = read_frame (buf);
+	      val = read_frame (buf, rs);
 	      if (val >= 0)
 		break;
 	    }

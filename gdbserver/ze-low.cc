@@ -1588,6 +1588,8 @@ ze_target::fetch_events (ze_device_info &device)
 				 tp->id.to_string ().c_str (),
 				 ze_thread_id_str (zetp->id).c_str ());
 
+			/* Undo any previous holding of the event.  */
+			zetp->exec_state = ze_thread_state_stopped;
 			zetp->waitstatus.set_ignore ();
 			ze_set_resume_state (tp, resume_continue);
 

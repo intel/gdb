@@ -289,6 +289,9 @@
 /* Define if you have the xxhash library. */
 #undef HAVE_LIBXXHASH
 
+/* Define if you have the yaml-cpp library. */
+#undef HAVE_LIBYAML_CPP
+
 /* Define to 1 if you have the <linux/elf.h> header file. */
 #undef HAVE_LINUX_ELF_H
 

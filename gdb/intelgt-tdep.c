@@ -53,6 +53,10 @@
 #include <array>
 #include <stack>
 #include <unordered_map>
+#if defined (HAVE_LIBYAML_CPP)
+#include <yaml-cpp/yaml.h>
+#include "gdb_bfd.h"
+#endif
 
 /* Address space flags.
    We are assigning the TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 to the shared
@@ -3225,6 +3229,259 @@ intelgt_on_target_resumed_internal (process_stratum_target *target,
   implicit_args_cache.clear ();
 }
 
+/* Currently parsed and cached fields from zeinfo.  */
+
+struct zeinfo
+{
+  struct kernel
+  {
+    struct mem_buffer
+    {
+      std::string type;
+      std::string usage;
+      uint32_t size;
+    };
+
+    std::string name;
+    uint8_t simd_size;
+    std::vector<mem_buffer> per_thread_memory_buffers;
+  };
+
+  std::unordered_map<std::string, zeinfo::kernel> kernels;
+};
+
+/* zeinfo cache with the key of the corresponding bfd.  */
+std::unordered_map<bfd *, zeinfo> zeinfo_cache;
+
+#if defined (HAVE_LIBYAML_CPP)
+
+namespace YAML
+{
+constexpr const char *error_prefix = "Error parsing .ze_info section:";
+/* YAML decoder for zeinfo::kernel::mem_buffer.  */
+template<>
+struct convert<zeinfo::kernel::mem_buffer>
+{
+  static bool decode (const Node &node, zeinfo::kernel::mem_buffer &rhs)
+  {
+    /* Check the type and the required fields.  */
+    if (!node.IsMap () || !node["size"] || !node["usage"] || !node["type"])
+      {
+	dprintf ("%s Mem buffer node is invalid or missing required fields.",
+		 error_prefix);
+	return false;
+      }
+    if (!node["size"].IsScalar () || !node["usage"].IsScalar ()
+	|| !node["type"].IsScalar ())
+      {
+	dprintf ("%s Mem buffer required fields are not scalar.", error_prefix);
+	return false;
+      }
+    rhs.size = node["size"].as<uint32_t> ();
+    rhs.usage = node["usage"].as<std::string> ();
+    rhs.type = node["type"].as<std::string> ();
+    return true;
+  }
+};
+
+/* YAML decoder for zeinfo::kernel.  */
+template<>
+struct convert<zeinfo::kernel> {
+  static bool decode (const Node &kernel_node, zeinfo::kernel &rhs)
+  {
+    /* We expect a kernel to be a map with "name" and execution_env
+       fields required.  */
+    if (!kernel_node.IsMap ())
+      {
+	dprintf ("%s kernel node is not a map.", error_prefix);
+	return false;
+      }
+
+    if (!kernel_node["name"] || !kernel_node["name"].IsScalar ())
+      {
+	dprintf ("%s kernel name is missing or invalid but required.",
+		 error_prefix);
+	return false;
+      }
+    rhs.name = kernel_node["name"].as<std::string> ();
+
+    if (!kernel_node["execution_env"]
+	|| !kernel_node["execution_env"].IsMap ())
+      {
+	dprintf ("%s execution_env for kernel \"%s\" is missing or "
+		 "invalid but required.", error_prefix, rhs.name.c_str ());
+	return false;
+      }
+
+    /* execution_env has to have a scalar simd_size.  */
+    if (!kernel_node["execution_env"]["simd_size"]
+	|| !kernel_node["execution_env"]["simd_size"].IsScalar ())
+      {
+	dprintf ("%s simd_size for kernel \"%s\" is missing or invalid "
+		 "but required.", error_prefix, rhs.name.c_str ());
+	return false;
+      }
+    rhs.simd_size = kernel_node["execution_env"]["simd_size"].as<uint8_t> ();
+
+    if (!kernel_node["per_thread_memory_buffers"]
+	|| !kernel_node["per_thread_memory_buffers"].IsSequence ())
+      {
+	dprintf ("Warning parsing ze_info section: "
+		 "per_thread_memory_buffers for kernel \"%s\" is missing "
+		 "or invalid.", rhs.name.c_str ());
+	/* Memory buffers are optional.  */
+	return true;
+      }
+
+    for (int j = 0; j < kernel_node["per_thread_memory_buffers"].size (); j++)
+      {
+	using mem_buffer = zeinfo::kernel::mem_buffer;
+	Node node = kernel_node["per_thread_memory_buffers"][j];
+	try
+	  {
+	    rhs.per_thread_memory_buffers.push_back (node.as<mem_buffer> ());
+	  }
+	catch (const YAML::Exception &e)
+	  {
+	    dprintf ("%s mem buffer parsing failed: %s",
+		     error_prefix, e.what ());
+	    return false;
+	  }
+      }
+
+    return true;
+  }
+};
+
+/* YAML decoder for zeinfo.  */
+template<>
+struct convert<zeinfo>
+{
+  static bool decode (const Node &node, zeinfo &rhs)
+  {
+    /* Check the type and the required fields.  */
+    if (!node.IsMap ())
+      {
+	dprintf ("%s invalid root node.", error_prefix);
+	return false;
+      }
+
+    YAML::Node kernels = node["kernels"];
+    if (!kernels || !kernels.IsSequence ())
+      {
+	dprintf ("%s kernels are missing or invalid, but required.",
+		 error_prefix);
+	return false;
+      }
+
+    for (int i = 0; i < kernels.size (); i++)
+      {
+	try
+	  {
+	    zeinfo::kernel kernel = kernels[i].as<zeinfo::kernel> ();
+	    if (rhs.kernels.count (kernel.name) != 0)
+	      {
+		dprintf ("%s duplicated kernel name: %s",
+			 error_prefix, kernel.name.c_str ());
+		return false;
+	      }
+
+	    dprintf ("Parsed zeinfo for kernel \"%s\".", kernel.name.c_str ());
+	    rhs.kernels.insert (std::make_pair (kernel.name,
+						std::move (kernel)));
+	  }
+	catch (const YAML::Exception &e)
+	  {
+	    dprintf ("%s kernel parsing failed: %s", error_prefix, e.what ());
+	    return false;
+	  }
+      }
+    return true;
+  }
+};
+
+} /* namespace YAML.  */
+
+/* Read zeinfo if a kernel module was loaded.  */
+static void
+intelgt_on_solib_loaded (so_list *kernel_so)
+{
+  if (kernel_so == nullptr)
+    return;
+
+  bfd *abfd = kernel_so->abfd;
+  if (abfd == nullptr)
+    return;
+
+  gdb_assert (zeinfo_cache.count (abfd) == 0);
+  const elf_backend_data *ebd = get_elf_backend_data (abfd);
+  if (ebd == nullptr || ebd->elf_machine_code != EM_INTELGT)
+    {
+      /* Not a kernel binary.  */
+      return;
+    }
+
+  asection *zeinfo_section = bfd_get_section_by_name (abfd, ".ze_info");
+  if (zeinfo_section == nullptr)
+    {
+      dprintf (".ze_info section not found.");
+      return;
+    }
+
+  gdb_byte *buf;
+  /* We need the contents of the section only during the YAML parsing.
+     We will free the BUF once the content is copied to a string.  */
+  if (!bfd_malloc_and_get_section (abfd, zeinfo_section, &buf))
+    {
+      dprintf ("Error reading .ze_info section.");
+      return;
+    }
+
+  bfd_size_type allocsz = bfd_get_section_alloc_size (abfd, zeinfo_section);
+  std::string str (reinterpret_cast<const char *>(buf), allocsz);
+  free (buf);
+
+  try
+    {
+      YAML::Node node = YAML::Load (str);
+      zeinfo_cache.insert ({abfd, node.as<zeinfo> ()});
+      dprintf ("zeinfo for %s cached.", host_address_to_string (abfd));
+    }
+  catch (const YAML::Exception &e)
+    {
+      dprintf ("Error parsing .ze_info section: kernel parsing failed: %s",
+	       e.what ());
+      dprintf ("zeinfo for %s is not cached.", host_address_to_string (abfd));
+    }
+}
+
+/* Clean the cached value of zeinfo for a kernel module, when
+   it is unloaded.  */
+
+static void
+intelgt_on_solib_unloaded (program_space *pspace, so_list *kernel_so)
+{
+  if (kernel_so == nullptr)
+    return;
+
+  bfd *abfd = kernel_so->abfd;
+  if (abfd == nullptr)
+    return;
+
+  const elf_backend_data *ebd = get_elf_backend_data (abfd);
+  if (ebd == nullptr || ebd->elf_machine_code != EM_INTELGT)
+    return;
+
+  asection *zeinfo_section = bfd_get_section_by_name (abfd, ".ze_info");
+  if (zeinfo_section == nullptr)
+    return;
+
+  zeinfo_cache.erase (abfd);
+  dprintf ("zeinfo for %s cleared.", host_address_to_string (abfd));
+}
+
+#endif /* defined (HAVE_LIBYAML_CPP) */
+
 /* Return workgroup coordinates of the specified thread TP.  */
 
 static std::array<uint32_t, 3>
@@ -3577,4 +3834,8 @@ _initialize_intelgt_tdep ()
      did not occur.  */
   gdb::observers::target_resumed_internal.attach
     (intelgt_on_target_resumed_internal, "intelgt");
+#if defined (HAVE_LIBYAML_CPP)
+  gdb::observers::solib_loaded.attach (intelgt_on_solib_loaded, "intelgt");
+  gdb::observers::solib_unloaded.attach (intelgt_on_solib_unloaded, "intelgt");
+#endif /* defined (HAVE_LIBYAML_CPP) */
 }

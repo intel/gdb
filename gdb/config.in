@@ -259,6 +259,9 @@
 /* Define if you have the iga64 library. */
 #undef HAVE_LIBIGA64
 
+/* Define if you have the yaml-cpp library. */
+#undef HAVE_LIBYAML_CPP
+
 /* Define if you have the ipt library. */
 #undef HAVE_LIBIPT
 

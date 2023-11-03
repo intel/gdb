@@ -1290,6 +1290,30 @@ fi
 AC_SUBST(SRCHIGH_LIBS)
 AC_SUBST(SRCHIGH_CFLAGS)
 
+# Check for yaml-cpp.
+AC_ARG_WITH(yaml_cpp,
+  AS_HELP_STRING([--with-yaml-cpp], [include yaml-cpp support (auto/yes/no)]),
+    [], [with_yaml_cpp=no])
+AC_MSG_CHECKING([whether to use yaml-cpp])
+AC_MSG_RESULT([$with_yaml_cpp])
+
+if test "${with_yaml_cpp}" = no; then
+  AC_MSG_WARN([yaml-cpp support disabled; some features may be unavailable.])
+  HAVE_LIBYAML_CPP=no
+else
+  AC_LANG_PUSH([C++])
+  AC_LIB_HAVE_LINKFLAGS([yaml-cpp], [], [#include "yaml-cpp/yaml.h"],
+    [YAML::Node node = YAML::Load("[1, 2, 3]");])
+  AC_LANG_POP([C++])
+  if test "$HAVE_LIBYAML_CPP" != yes; then
+    if test "$with_yaml_cpp" = yes; then
+      AC_MSG_ERROR([yaml-cpp is missing or unusable])
+    else
+      AC_MSG_WARN([yaml-cpp is missing or unusable; some features may be unavailable.])
+    fi
+  fi
+fi
+
 # Check for Intel(R) Graphics Technology assembler library
 
 # Workaround the issue that AC_LIB_HAVE_LINKFLAGS doesn't use the outcome of

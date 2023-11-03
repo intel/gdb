@@ -727,6 +727,9 @@ ALLOCA
 LTLIBIGA64
 LIBIGA64
 HAVE_LIBIGA64
+LTLIBYAML_CPP
+LIBYAML_CPP
+HAVE_LIBYAML_CPP
 SRCHIGH_CFLAGS
 SRCHIGH_LIBS
 HAVE_GUILE_FALSE
@@ -941,6 +944,9 @@ with_python
 with_python_libdir
 with_guile
 enable_source_highlight
+with_yaml_cpp
+with_libyaml_cpp_prefix
+with_libyaml_cpp_type
 with_libiga64_prefix
 with_libiga64_type
 enable_threading
@@ -1710,6 +1716,10 @@ Optional Packages:
                           search for python's libraries in DIR
   --with-guile[=GUILE]    include guile support
                           (auto/yes/no/<guile-version>/<pkg-config-program>)
+  --with-yaml-cpp         include yaml-cpp support (auto/yes/no)
+  --with-libyaml-cpp-prefix[=DIR]  search for libyaml-cpp in DIR/include and DIR/lib
+  --without-libyaml-cpp-prefix     don't search for libyaml-cpp in includedir and libdir
+  --with-libyaml-cpp-type=TYPE     type of library to search for (auto/static/shared)
   --with-libiga64-prefix[=DIR]  search for libiga64 in DIR/include and DIR/lib
   --without-libiga64-prefix     don't search for libiga64 in includedir and libdir
   --with-libiga64-type=TYPE     type of library to search for (auto/static/shared)
@@ -22775,6 +22785,524 @@ fi
 
 
 
+# Check for yaml-cpp.
+
+# Check whether --with-yaml_cpp was given.
+if test "${with_yaml_cpp+set}" = set; then :
+  withval=$with_yaml_cpp;
+else
+  with_yaml_cpp=no
+fi
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to use yaml-cpp" >&5
+$as_echo_n "checking whether to use yaml-cpp... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $with_yaml_cpp" >&5
+$as_echo "$with_yaml_cpp" >&6; }
+
+if test "${with_yaml_cpp}" = no; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: yaml-cpp support disabled; some features may be unavailable." >&5
+$as_echo "$as_me: WARNING: yaml-cpp support disabled; some features may be unavailable." >&2;}
+  HAVE_LIBYAML_CPP=no
+else
+  ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+
+
+
+
+
+
+
+
+    use_additional=yes
+
+  acl_save_prefix="$prefix"
+  prefix="$acl_final_prefix"
+  acl_save_exec_prefix="$exec_prefix"
+  exec_prefix="$acl_final_exec_prefix"
+
+    eval additional_includedir=\"$includedir\"
+    eval additional_libdir=\"$libdir\"
+
+  exec_prefix="$acl_save_exec_prefix"
+  prefix="$acl_save_prefix"
+
+
+# Check whether --with-libyaml-cpp-prefix was given.
+if test "${with_libyaml_cpp_prefix+set}" = set; then :
+  withval=$with_libyaml_cpp_prefix;
+    if test "X$withval" = "Xno"; then
+      use_additional=no
+    else
+      if test "X$withval" = "X"; then
+
+  acl_save_prefix="$prefix"
+  prefix="$acl_final_prefix"
+  acl_save_exec_prefix="$exec_prefix"
+  exec_prefix="$acl_final_exec_prefix"
+
+          eval additional_includedir=\"$includedir\"
+          eval additional_libdir=\"$libdir\"
+
+  exec_prefix="$acl_save_exec_prefix"
+  prefix="$acl_save_prefix"
+
+      else
+        additional_includedir="$withval/include"
+        additional_libdir="$withval/lib"
+      fi
+    fi
+
+fi
+
+
+# Check whether --with-libyaml-cpp-type was given.
+if test "${with_libyaml_cpp_type+set}" = set; then :
+  withval=$with_libyaml_cpp_type;  with_libyaml-cpp_type=$withval
+else
+   with_libyaml-cpp_type=auto
+fi
+
+  lib_type=`eval echo \$with_libyaml-cpp_type`
+
+      LIBYAML_CPP=
+  LTLIBYAML_CPP=
+  INCYAML_CPP=
+  rpathdirs=
+  ltrpathdirs=
+  names_already_handled=
+  names_next_round='yaml-cpp '
+  while test -n "$names_next_round"; do
+    names_this_round="$names_next_round"
+    names_next_round=
+    for name in $names_this_round; do
+      already_handled=
+      for n in $names_already_handled; do
+        if test "$n" = "$name"; then
+          already_handled=yes
+          break
+        fi
+      done
+      if test -z "$already_handled"; then
+        names_already_handled="$names_already_handled $name"
+                        uppername=`echo "$name" | sed -e 'y|abcdefghijklmnopqrstuvwxyz./-|ABCDEFGHIJKLMNOPQRSTUVWXYZ___|'`
+        eval value=\"\$HAVE_LIB$uppername\"
+        if test -n "$value"; then
+          if test "$value" = yes; then
+            eval value=\"\$LIB$uppername\"
+            test -z "$value" || LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }$value"
+            eval value=\"\$LTLIB$uppername\"
+            test -z "$value" || LTLIBYAML_CPP="${LTLIBYAML_CPP}${LTLIBYAML_CPP:+ }$value"
+          else
+                                    :
+          fi
+        else
+                              found_dir=
+          found_la=
+          found_so=
+          found_a=
+          if test $use_additional = yes; then
+            if test -n "$shlibext" && test -f "$additional_libdir/lib$name.$shlibext" && test x$lib_type != xstatic; then
+              found_dir="$additional_libdir"
+              found_so="$additional_libdir/lib$name.$shlibext"
+              if test -f "$additional_libdir/lib$name.la"; then
+                found_la="$additional_libdir/lib$name.la"
+              fi
+            elif test x$lib_type != xshared; then
+              if test -f "$additional_libdir/lib$name.$libext"; then
+                found_dir="$additional_libdir"
+                found_a="$additional_libdir/lib$name.$libext"
+                if test -f "$additional_libdir/lib$name.la"; then
+                  found_la="$additional_libdir/lib$name.la"
+                fi
+              fi
+            fi
+          fi
+          if test "X$found_dir" = "X"; then
+            for x in $LDFLAGS $LTLIBYAML_CPP; do
+
+  acl_save_prefix="$prefix"
+  prefix="$acl_final_prefix"
+  acl_save_exec_prefix="$exec_prefix"
+  exec_prefix="$acl_final_exec_prefix"
+  eval x=\"$x\"
+  exec_prefix="$acl_save_exec_prefix"
+  prefix="$acl_save_prefix"
+
+              case "$x" in
+                -L*)
+                  dir=`echo "X$x" | sed -e 's/^X-L//'`
+                  if test -n "$shlibext" && test -f "$dir/lib$name.$shlibext" && test x$lib_type != xstatic; then
+                    found_dir="$dir"
+                    found_so="$dir/lib$name.$shlibext"
+                    if test -f "$dir/lib$name.la"; then
+                      found_la="$dir/lib$name.la"
+                    fi
+                  elif test x$lib_type != xshared; then
+                    if test -f "$dir/lib$name.$libext"; then
+                      found_dir="$dir"
+                      found_a="$dir/lib$name.$libext"
+                      if test -f "$dir/lib$name.la"; then
+                        found_la="$dir/lib$name.la"
+                      fi
+                    fi
+                  fi
+                  ;;
+              esac
+              if test "X$found_dir" != "X"; then
+                break
+              fi
+            done
+          fi
+          if test "X$found_dir" != "X"; then
+                        LTLIBYAML_CPP="${LTLIBYAML_CPP}${LTLIBYAML_CPP:+ }-L$found_dir -l$name"
+            if test "X$found_so" != "X"; then
+                                                        if test "$enable_rpath" = no || test "X$found_dir" = "X/usr/lib"; then
+                                LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }$found_so"
+              else
+                                                                                haveit=
+                for x in $ltrpathdirs; do
+                  if test "X$x" = "X$found_dir"; then
+                    haveit=yes
+                    break
+                  fi
+                done
+                if test -z "$haveit"; then
+                  ltrpathdirs="$ltrpathdirs $found_dir"
+                fi
+                                if test "$hardcode_direct" = yes; then
+                                                      LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }$found_so"
+                else
+                  if test -n "$hardcode_libdir_flag_spec" && test "$hardcode_minus_L" = no; then
+                                                            LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }$found_so"
+                                                            haveit=
+                    for x in $rpathdirs; do
+                      if test "X$x" = "X$found_dir"; then
+                        haveit=yes
+                        break
+                      fi
+                    done
+                    if test -z "$haveit"; then
+                      rpathdirs="$rpathdirs $found_dir"
+                    fi
+                  else
+                                                                                haveit=
+                    for x in $LDFLAGS $LIBYAML_CPP; do
+
+  acl_save_prefix="$prefix"
+  prefix="$acl_final_prefix"
+  acl_save_exec_prefix="$exec_prefix"
+  exec_prefix="$acl_final_exec_prefix"
+  eval x=\"$x\"
+  exec_prefix="$acl_save_exec_prefix"
+  prefix="$acl_save_prefix"
+
+                      if test "X$x" = "X-L$found_dir"; then
+                        haveit=yes
+                        break
+                      fi
+                    done
+                    if test -z "$haveit"; then
+                      LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }-L$found_dir"
+                    fi
+                    if test "$hardcode_minus_L" != no; then
+                                                                                        LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }$found_so"
+                    else
+                                                                                                                                                                                LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }-l$name"
+                    fi
+                  fi
+                fi
+              fi
+            else
+              if test "X$found_a" != "X"; then
+                                LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }$found_a"
+              else
+                                                LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }-L$found_dir -l$name"
+              fi
+            fi
+                        additional_includedir=
+            case "$found_dir" in
+              */lib | */lib/)
+                basedir=`echo "X$found_dir" | sed -e 's,^X,,' -e 's,/lib/*$,,'`
+                additional_includedir="$basedir/include"
+                ;;
+            esac
+            if test "X$additional_includedir" != "X"; then
+                                                                                                                if test "X$additional_includedir" != "X/usr/include"; then
+                haveit=
+                if test "X$additional_includedir" = "X/usr/local/include"; then
+                  if test -n "$GCC"; then
+                    case $host_os in
+                      linux*) haveit=yes;;
+                    esac
+                  fi
+                fi
+                if test -z "$haveit"; then
+                  for x in $CPPFLAGS $INCYAML_CPP; do
+
+  acl_save_prefix="$prefix"
+  prefix="$acl_final_prefix"
+  acl_save_exec_prefix="$exec_prefix"
+  exec_prefix="$acl_final_exec_prefix"
+  eval x=\"$x\"
+  exec_prefix="$acl_save_exec_prefix"
+  prefix="$acl_save_prefix"
+
+                    if test "X$x" = "X-I$additional_includedir"; then
+                      haveit=yes
+                      break
+                    fi
+                  done
+                  if test -z "$haveit"; then
+                    if test -d "$additional_includedir"; then
+                                            INCYAML_CPP="${INCYAML_CPP}${INCYAML_CPP:+ }-I$additional_includedir"
+                    fi
+                  fi
+                fi
+              fi
+            fi
+                        if test -n "$found_la"; then
+                                                        save_libdir="$libdir"
+              case "$found_la" in
+                */* | *\\*) . "$found_la" ;;
+                *) . "./$found_la" ;;
+              esac
+              libdir="$save_libdir"
+                            for dep in $dependency_libs; do
+                case "$dep" in
+                  -L*)
+                    additional_libdir=`echo "X$dep" | sed -e 's/^X-L//'`
+                                                                                                                                                                if test "X$additional_libdir" != "X/usr/lib"; then
+                      haveit=
+                      if test "X$additional_libdir" = "X/usr/local/lib"; then
+                        if test -n "$GCC"; then
+                          case $host_os in
+                            linux*) haveit=yes;;
+                          esac
+                        fi
+                      fi
+                      if test -z "$haveit"; then
+                        haveit=
+                        for x in $LDFLAGS $LIBYAML_CPP; do
+
+  acl_save_prefix="$prefix"
+  prefix="$acl_final_prefix"
+  acl_save_exec_prefix="$exec_prefix"
+  exec_prefix="$acl_final_exec_prefix"
+  eval x=\"$x\"
+  exec_prefix="$acl_save_exec_prefix"
+  prefix="$acl_save_prefix"
+
+                          if test "X$x" = "X-L$additional_libdir"; then
+                            haveit=yes
+                            break
+                          fi
+                        done
+                        if test -z "$haveit"; then
+                          if test -d "$additional_libdir"; then
+                                                        LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }-L$additional_libdir"
+                          fi
+                        fi
+                        haveit=
+                        for x in $LDFLAGS $LTLIBYAML_CPP; do
+
+  acl_save_prefix="$prefix"
+  prefix="$acl_final_prefix"
+  acl_save_exec_prefix="$exec_prefix"
+  exec_prefix="$acl_final_exec_prefix"
+  eval x=\"$x\"
+  exec_prefix="$acl_save_exec_prefix"
+  prefix="$acl_save_prefix"
+
+                          if test "X$x" = "X-L$additional_libdir"; then
+                            haveit=yes
+                            break
+                          fi
+                        done
+                        if test -z "$haveit"; then
+                          if test -d "$additional_libdir"; then
+                                                        LTLIBYAML_CPP="${LTLIBYAML_CPP}${LTLIBYAML_CPP:+ }-L$additional_libdir"
+                          fi
+                        fi
+                      fi
+                    fi
+                    ;;
+                  -R*)
+                    dir=`echo "X$dep" | sed -e 's/^X-R//'`
+                    if test "$enable_rpath" != no; then
+                                                                  haveit=
+                      for x in $rpathdirs; do
+                        if test "X$x" = "X$dir"; then
+                          haveit=yes
+                          break
+                        fi
+                      done
+                      if test -z "$haveit"; then
+                        rpathdirs="$rpathdirs $dir"
+                      fi
+                                                                  haveit=
+                      for x in $ltrpathdirs; do
+                        if test "X$x" = "X$dir"; then
+                          haveit=yes
+                          break
+                        fi
+                      done
+                      if test -z "$haveit"; then
+                        ltrpathdirs="$ltrpathdirs $dir"
+                      fi
+                    fi
+                    ;;
+                  -l*)
+                                        names_next_round="$names_next_round "`echo "X$dep" | sed -e 's/^X-l//'`
+                    ;;
+                  *.la)
+                                                                                names_next_round="$names_next_round "`echo "X$dep" | sed -e 's,^X.*/,,' -e 's,^lib,,' -e 's,\.la$,,'`
+                    ;;
+                  *)
+                                        LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }$dep"
+                    LTLIBYAML_CPP="${LTLIBYAML_CPP}${LTLIBYAML_CPP:+ }$dep"
+                    ;;
+                esac
+              done
+            fi
+          else
+                                                            if test "x$lib_type" = "xauto" || test "x$lib_type" = "xshared"; then
+              LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }-l$name"
+              LTLIBYAML_CPP="${LTLIBYAML_CPP}${LTLIBYAML_CPP:+ }-l$name"
+            else
+              LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }-l:lib$name.$libext"
+              LTLIBYAML_CPP="${LTLIBYAML_CPP}${LTLIBYAML_CPP:+ }-l:lib$name.$libext"
+            fi
+          fi
+        fi
+      fi
+    done
+  done
+  if test "X$rpathdirs" != "X"; then
+    if test -n "$hardcode_libdir_separator"; then
+                        alldirs=
+      for found_dir in $rpathdirs; do
+        alldirs="${alldirs}${alldirs:+$hardcode_libdir_separator}$found_dir"
+      done
+            acl_save_libdir="$libdir"
+      libdir="$alldirs"
+      eval flag=\"$hardcode_libdir_flag_spec\"
+      libdir="$acl_save_libdir"
+      LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }$flag"
+    else
+            for found_dir in $rpathdirs; do
+        acl_save_libdir="$libdir"
+        libdir="$found_dir"
+        eval flag=\"$hardcode_libdir_flag_spec\"
+        libdir="$acl_save_libdir"
+        LIBYAML_CPP="${LIBYAML_CPP}${LIBYAML_CPP:+ }$flag"
+      done
+    fi
+  fi
+  if test "X$ltrpathdirs" != "X"; then
+            for found_dir in $ltrpathdirs; do
+      LTLIBYAML_CPP="${LTLIBYAML_CPP}${LTLIBYAML_CPP:+ }-R$found_dir"
+    done
+  fi
+
+
+        ac_save_CPPFLAGS="$CPPFLAGS"
+
+  for element in $INCYAML_CPP; do
+    haveit=
+    for x in $CPPFLAGS; do
+
+  acl_save_prefix="$prefix"
+  prefix="$acl_final_prefix"
+  acl_save_exec_prefix="$exec_prefix"
+  exec_prefix="$acl_final_exec_prefix"
+  eval x=\"$x\"
+  exec_prefix="$acl_save_exec_prefix"
+  prefix="$acl_save_prefix"
+
+      if test "X$x" = "X$element"; then
+        haveit=yes
+        break
+      fi
+    done
+    if test -z "$haveit"; then
+      CPPFLAGS="${CPPFLAGS}${CPPFLAGS:+ }$element"
+    fi
+  done
+
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libyaml-cpp" >&5
+$as_echo_n "checking for libyaml-cpp... " >&6; }
+if ${ac_cv_libyaml_cpp+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+
+    ac_save_LIBS="$LIBS"
+    LIBS="$LIBS $LIBYAML_CPP"
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include "yaml-cpp/yaml.h"
+int
+main ()
+{
+YAML::Node node = YAML::Load("[1, 2, 3]");
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  ac_cv_libyaml_cpp=yes
+else
+  ac_cv_libyaml_cpp=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+    LIBS="$ac_save_LIBS"
+
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_libyaml_cpp" >&5
+$as_echo "$ac_cv_libyaml_cpp" >&6; }
+  if test "$ac_cv_libyaml_cpp" = yes; then
+    HAVE_LIBYAML_CPP=yes
+
+$as_echo "#define HAVE_LIBYAML_CPP 1" >>confdefs.h
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking how to link with libyaml-cpp" >&5
+$as_echo_n "checking how to link with libyaml-cpp... " >&6; }
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: $LIBYAML_CPP" >&5
+$as_echo "$LIBYAML_CPP" >&6; }
+  else
+    HAVE_LIBYAML_CPP=no
+            CPPFLAGS="$ac_save_CPPFLAGS"
+    LIBYAML_CPP=
+    LTLIBYAML_CPP=
+  fi
+
+
+
+
+
+
+  ac_ext=c
+ac_cpp='$CPP $CPPFLAGS'
+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_c_compiler_gnu
+
+  if test "$HAVE_LIBYAML_CPP" != yes; then
+    if test "$with_yaml_cpp" = yes; then
+      as_fn_error $? "yaml-cpp is missing or unusable" "$LINENO" 5
+    else
+      { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: yaml-cpp is missing or unusable; some features may be unavailable." >&5
+$as_echo "$as_me: WARNING: yaml-cpp is missing or unusable; some features may be unavailable." >&2;}
+    fi
+  fi
+fi
+
 # Check for Intel(R) Graphics Technology assembler library
 
 # Workaround the issue that AC_LIB_HAVE_LINKFLAGS doesn't use the outcome of
@@ -24730,6 +25258,8 @@ main ()
     if (*(data + i) != *(data3 + i))
       return 14;
   close (fd);
+  free (data);
+  free (data3);
   return 0;
 }
 _ACEOF

@@ -82,6 +82,14 @@ main (int argc, char *argv[])
 	    size_t workitem_local_id1 = item.get_local_id (1);
 	    size_t workitem_local_id2 = item.get_local_id (2);
 
+	    size_t workitem_local_size0 = item.get_local_range (0);
+	    size_t workitem_local_size1 = item.get_local_range (1);
+	    size_t workitem_local_size2 = item.get_local_range (2);
+
+	    size_t workitem_global_size0 = item.get_global_range (0);
+	    size_t workitem_global_size1 = item.get_global_range (1);
+	    size_t workitem_global_size2 = item.get_global_range (2);
+
 	    int in_elem = accessorIn[gid];
 	    accessorOut[gid] = in_elem; /* kernel-2 */
 	  });

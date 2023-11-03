@@ -83,9 +83,16 @@ foreach device $sycl_device_list {
 	set local_id [get_id "workitem_local_id" 0]
 	gdb_assert {{$local_id eq "0, 1, 2"}} "check local id"
 
+	set local_size [get_id "workitem_local_size" 0]
+	gdb_assert {{$local_size eq "3, 3, 3"}} "check local size"
+	set global_size [get_id "workitem_global_size" 0]
+	gdb_assert {{$global_size eq "6, 12, 18"}} "check global size"
+
 	gdb_test "disable pretty-printer global"
 	compare_id "thread_workgroup" 0
 	compare_id "workitem_local_id" 0
 	compare_id "workitem_global_id" 0
+	compare_id "workitem_local_size" 0
+	compare_id "workitem_global_size" 0
     }
 }

@@ -587,6 +587,8 @@ set show_conv_list \
 	{$_thread_workgroup = void} \
 	{$_workitem_local_id = void} \
 	{$_workitem_global_id = void} \
+	{$_workitem_local_size = void} \
+	{$_workitem_global_size = void} \
 	{$_gthread = 0} \
 	{$_inferior = 1} \
 	{$_inferior_thread_count = 0} \

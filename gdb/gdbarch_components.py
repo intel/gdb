@@ -2950,3 +2950,24 @@ return the one processed by the current SIMD lane.
     params=[("thread_info *", "tp")],
     predicate=True,
 )
+
+Method(
+    comment="""
+Return an array containing the size of TP's thread group.
+""",
+    type="std::array<uint32_t, 3>",
+    name="workitem_local_size",
+    params=[("thread_info *", "tp")],
+    predicate=True,
+)
+
+Method(
+    comment="""
+Return an array containing the total number of workitems in the
+context of TP.
+""",
+    type="std::array<uint32_t, 3>",
+    name="workitem_global_size",
+    params=[("thread_info *", "tp")],
+    predicate=True,
+)

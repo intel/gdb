@@ -3430,6 +3430,38 @@ intelgt_current_workitem_global_id (gdbarch *gdbarch, thread_info *tp)
   return global_id;
 }
 
+static std::array<uint32_t, 3>
+intelgt_workitem_local_size (gdbarch *gdbarch, thread_info *tp)
+{
+  if (tp->is_unavailable ())
+    error (_("Cannot read local size of unavailable thread."));
+
+  const implicit_args_v0 &implicit_args_v0
+    = intelgt_implicit_args_find_value_pair (gdbarch, tp).first;
+
+  std::array<uint32_t, 3> local_size;
+  local_size[0] = implicit_args_v0.local_size_x;
+  local_size[1] = implicit_args_v0.local_size_y;
+  local_size[2] = implicit_args_v0.local_size_z;
+  return local_size;
+}
+
+static std::array<uint64_t, 3>
+intelgt_workitem_global_size (gdbarch *gdbarch, thread_info *tp)
+{
+  if (tp->is_unavailable ())
+    error (_("Cannot read global size of unavailable thread."));
+
+  const implicit_args_v0 &implicit_args_v0
+    = intelgt_implicit_args_find_value_pair (gdbarch, tp).first;
+
+  std::array<uint64_t, 3> global_size;
+  global_size[0] = implicit_args_v0.global_size_x;
+  global_size[1] = implicit_args_v0.global_size_y;
+  global_size[2] = implicit_args_v0.global_size_z;
+  return global_size;
+}
+
 /* Read the 'framedesc' user register, a structured alias
    of the actual GRF.  */
 
@@ -3625,6 +3657,8 @@ Device vendor id and target id not found in intelgt target description."));
 					 intelgt_current_workitem_local_id);
   set_gdbarch_current_workitem_global_id (gdbarch,
 					  intelgt_current_workitem_global_id);
+  set_gdbarch_workitem_local_size (gdbarch, intelgt_workitem_local_size);
+  set_gdbarch_workitem_global_size (gdbarch, intelgt_workitem_global_size);
 
   /* Enable inferior call support.  */
   set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);

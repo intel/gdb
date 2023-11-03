@@ -3077,6 +3077,46 @@ workitem_global_id_make_value (gdbarch *gdbarch, internalvar *var,
   return val;
 }
 
+static value *
+workitem_local_size_make_value (gdbarch *gdbarch, internalvar *var,
+				void *ignore)
+{
+  const struct builtin_type *bt = builtin_type (gdbarch);
+  if (inferior_ptid == null_ptid || !gdbarch_workitem_local_size_p (gdbarch))
+    return value::allocate (bt->builtin_void);
+
+  thread_info *tp = inferior_thread ();
+  std::array<uint32_t, 3> local_size
+    = gdbarch_workitem_local_size (gdbarch, tp);
+
+  type *result_type = init_vector_type (bt->builtin_unsigned_int, 3);
+  result_type->set_name ("_gdb_workitem");
+  value *val = value_from_contents (result_type,
+				    (gdb_byte *) (local_size.data ()));
+
+  return val;
+}
+
+static value *
+workitem_global_size_make_value (gdbarch *gdbarch, internalvar *var,
+				 void *ignore)
+{
+  const struct builtin_type *bt = builtin_type (gdbarch);
+  if (inferior_ptid == null_ptid || !gdbarch_workitem_global_size_p (gdbarch))
+    return value::allocate (bt->builtin_void);
+
+  thread_info *tp = inferior_thread ();
+  std::array<uint32_t, 3> global_size
+    = gdbarch_workitem_global_size (gdbarch, tp);
+
+  type *result_type = init_vector_type (bt->builtin_unsigned_int, 3);
+  result_type->set_name ("_gdb_workitem");
+  value *val = value_from_contents (result_type,
+				    (gdb_byte *) (global_size.data ()));
+
+  return val;
+}
+
 /* Commands with a prefix of `thread'.  */
 struct cmd_list_element *thread_cmd_list = NULL;
 
@@ -3141,6 +3181,22 @@ static const internalvar_funcs workitem_local_id_funcs =
 static const internalvar_funcs workitem_global_id_funcs =
 {
   workitem_global_id_make_value,
+  nullptr
+};
+
+/* Implementation of the `$_workitem_local_size' variable.  */
+
+static const internalvar_funcs workitem_local_size_funcs =
+{
+  workitem_local_size_make_value,
+  nullptr
+};
+
+/* Implementation of the `$_workitem_global_size' variable.  */
+
+static const internalvar_funcs workitem_global_size_funcs =
+{
+  workitem_global_size_make_value,
   nullptr
 };
 
@@ -3288,4 +3344,8 @@ When on messages about thread creation and deletion are printed."),
 				&workitem_local_id_funcs, nullptr);
   create_internalvar_type_lazy ("_workitem_global_id",
 				&workitem_global_id_funcs, nullptr);
+  create_internalvar_type_lazy ("_workitem_local_size",
+				&workitem_local_size_funcs, nullptr);
+  create_internalvar_type_lazy ("_workitem_global_size",
+				&workitem_global_size_funcs, nullptr);
 }

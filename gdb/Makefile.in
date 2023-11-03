@@ -254,6 +254,10 @@ GDBFLAGS =
 # This will be empty if libiga was not available.
 LIBIGA = @LIBIGA64@
 
+# Where is libyaml-cpp (i.e.  the YAML parser lib for the intelgt target)?
+# This will be empty if libyaml-cpp was not available.
+LIBYAML_CPP = @LIBYAML_CPP@
+
 # Helper code from gnulib.
 GNULIB_PARENT_DIR = ..
 include $(GNULIB_PARENT_DIR)/gnulib/Makefile.gnulib.inc
@@ -666,7 +670,7 @@ CLIBS = $(SIM) $(READLINE) $(OPCODES) $(LIBCTF) $(BFD) $(ZLIB) $(ZSTD_LIBS) \
 	$(LIBEXPAT) $(LIBLZMA) $(LIBBABELTRACE) $(LIBIPT) \
 	$(WIN32LIBS) $(LIBGNU) $(LIBGNU_EXTRA_LIBS) $(LIBICONV) \
 	$(GMPLIBS) $(SRCHIGH_LIBS) $(LIBXXHASH) $(PTHREAD_LIBS) \
-	$(DEBUGINFOD_LIBS) $(LIBBABELTRACE_LIB) $(LIBIGA)
+	$(DEBUGINFOD_LIBS) $(LIBBABELTRACE_LIB) $(LIBIGA) $(LIBYAML_CPP)
 CDEPS = $(NAT_CDEPS) $(SIM) $(BFD) $(READLINE_DEPS) $(CTF_DEPS) \
 	$(OPCODES) $(INTL_DEPS) $(LIBIBERTY) $(CONFIG_DEPS) $(LIBGNU) \
 	$(LIBSUPPORT)

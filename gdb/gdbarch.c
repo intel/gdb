@@ -271,6 +271,8 @@ struct gdbarch
   gdbarch_thread_workgroup_ftype *thread_workgroup = nullptr;
   gdbarch_workitem_local_id_ftype *workitem_local_id = nullptr;
   gdbarch_workitem_global_id_ftype *workitem_global_id = nullptr;
+  gdbarch_workitem_local_size_ftype *workitem_local_size = nullptr;
+  gdbarch_workitem_global_size_ftype *workitem_global_size = nullptr;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -553,6 +555,8 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of thread_workgroup, has predicate.  */
   /* Skip verify of workitem_local_id, has predicate.  */
   /* Skip verify of workitem_global_id, has predicate.  */
+  /* Skip verify of workitem_local_size, has predicate.  */
+  /* Skip verify of workitem_global_size, has predicate.  */
   if (!log.empty ())
     internal_error (_("verify_gdbarch: the following are invalid ...%s"),
 		    log.c_str ());
@@ -1466,6 +1470,18 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: workitem_global_id = <%s>\n",
 	      host_address_to_string (gdbarch->workitem_global_id));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_workitem_local_size_p() = %d\n",
+	      gdbarch_workitem_local_size_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: workitem_local_size = <%s>\n",
+	      host_address_to_string (gdbarch->workitem_local_size));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_workitem_global_size_p() = %d\n",
+	      gdbarch_workitem_global_size_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: workitem_global_size = <%s>\n",
+	      host_address_to_string (gdbarch->workitem_global_size));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -5798,4 +5814,52 @@ set_gdbarch_workitem_global_id (struct gdbarch *gdbarch,
 				gdbarch_workitem_global_id_ftype workitem_global_id)
 {
   gdbarch->workitem_global_id = workitem_global_id;
+}
+
+bool
+gdbarch_workitem_local_size_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->workitem_local_size != NULL;
+}
+
+std::array<uint32_t, 3>
+gdbarch_workitem_local_size (struct gdbarch *gdbarch, thread_info *tp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->workitem_local_size != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_workitem_local_size called\n");
+  return gdbarch->workitem_local_size (gdbarch, tp);
+}
+
+void
+set_gdbarch_workitem_local_size (struct gdbarch *gdbarch,
+				 gdbarch_workitem_local_size_ftype workitem_local_size)
+{
+  gdbarch->workitem_local_size = workitem_local_size;
+}
+
+bool
+gdbarch_workitem_global_size_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->workitem_global_size != NULL;
+}
+
+std::array<uint32_t, 3>
+gdbarch_workitem_global_size (struct gdbarch *gdbarch, thread_info *tp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->workitem_global_size != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_workitem_global_size called\n");
+  return gdbarch->workitem_global_size (gdbarch, tp);
+}
+
+void
+set_gdbarch_workitem_global_size (struct gdbarch *gdbarch,
+				  gdbarch_workitem_global_size_ftype workitem_global_size)
+{
+  gdbarch->workitem_global_size = workitem_global_size;
 }

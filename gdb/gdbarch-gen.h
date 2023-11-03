@@ -1847,3 +1847,20 @@ extern bool gdbarch_workitem_global_id_p (struct gdbarch *gdbarch);
 typedef std::array<uint32_t, 3> (gdbarch_workitem_global_id_ftype) (struct gdbarch *gdbarch, thread_info *tp);
 extern std::array<uint32_t, 3> gdbarch_workitem_global_id (struct gdbarch *gdbarch, thread_info *tp);
 extern void set_gdbarch_workitem_global_id (struct gdbarch *gdbarch, gdbarch_workitem_global_id_ftype *workitem_global_id);
+
+/* Return array containing the size of TP's thread group. */
+
+extern bool gdbarch_workitem_local_size_p (struct gdbarch *gdbarch);
+
+typedef std::array<uint32_t, 3> (gdbarch_workitem_local_size_ftype) (struct gdbarch *gdbarch, thread_info *tp);
+extern std::array<uint32_t, 3> gdbarch_workitem_local_size (struct gdbarch *gdbarch, thread_info *tp);
+extern void set_gdbarch_workitem_local_size (struct gdbarch *gdbarch, gdbarch_workitem_local_size_ftype *workitem_local_size);
+
+/* Return array containing the total number of workitems in the
+   context of TP. */
+
+extern bool gdbarch_workitem_global_size_p (struct gdbarch *gdbarch);
+
+typedef std::array<uint32_t, 3> (gdbarch_workitem_global_size_ftype) (struct gdbarch *gdbarch, thread_info *tp);
+extern std::array<uint32_t, 3> gdbarch_workitem_global_size (struct gdbarch *gdbarch, thread_info *tp);
+extern void set_gdbarch_workitem_global_size (struct gdbarch *gdbarch, gdbarch_workitem_global_size_ftype *workitem_global_size);

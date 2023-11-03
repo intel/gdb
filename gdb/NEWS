@@ -26,6 +26,14 @@ $_workitem_global_id
   The global ID coordinates of the workitem processed by the current context.
   Unsigned int vector of size 3, when available.  Otherwise, void.
 
+$_workitem_local_size
+  The number of workitems in the thread's workgroup in every dimension.
+  Unsigned int vector of size 3, when available.  Otherwise, void.
+
+$_workitem_global_size
+  The overall number of workitems processed by the current workload in every
+  dimension.  Unsigned int vector of size 3, when available.  Otherwise, void.
+
 * New commands
 
 set scheduler-locking eval | replay eval | replay run | replay step | run | step (on|off)

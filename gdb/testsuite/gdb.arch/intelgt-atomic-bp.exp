@@ -1,0 +1,132 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests for setting a BP inside an atomic sequence.
+
+load_lib sycl.exp
+
+standard_testfile intelgt-atomic.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+foreach device $sycl_device_list {
+    set aot_device "xe-hpg,xe-hpc"
+    set aot_opts [list "additional_flags=-fsycl-targets=spir64_gen" \
+		     "ldflags=-Xsycl-target-backend=spir64_gen \"-q -device $aot_device\""]
+    set flags [list sycl debug]
+
+    sycl_with_intelgt_lock $device {
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {[build_executable "failed to compile $srcfile" "${binfile}" \
+		 $srcfile [concat $flags $aot_opts]]} {
+	    kfail "JIRA GSD/4081" "[sycl_get_device_prefix $device]: -O0 is not yet enabled for joint_matrix"
+	    with_test_prefix "-O2" {
+		lappend flags optimize=-O2
+		if {[build_executable "failed to compile $srcfile" "${binfile}" \
+			 $srcfile [concat $flags $aot_opts]]} {
+		    kfail "JIRA GSD/4181" "[sycl_get_device_prefix $device]: {}: Not all subgroups sizes are supported"
+		    if {[is_atsm $device] || [is_dg2 $device]} {
+			lappend flags additional_flags=-DSG_SIZE=8
+			set aot_device "xe-hpg"
+		    } elseif {[is_pvc $device]} {
+			lappend flags additional_flags=-DSG_SIZE=16
+			set aot_device "xe-hpc"
+		    } else {
+			unsupported "Unsupported device: $device"
+			return -1
+		    }
+
+		    set aot_opts [list \
+				  "additional_flags=-fsycl-targets=spir64_gen" \
+				  "ldflags=-Xsycl-target-backend=spir64_gen \"-q -device $aot_device\""]
+		    with_test_prefix "device-specific" {
+			if {[build_executable "failed to compile $srcfile" "${binfile}" \
+				 $srcfile [concat $flags $aot_opts]]} {
+			    return -1
+			}
+		    }
+		}
+	    }
+	}
+
+	clean_restart "${binfile}"
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	gdb_breakpoint "get_startxy" {temporary}
+	if {[is_pvc $device]} {
+	    setup_kfail "JIRA GSD/8399" "*-*-*"
+	}
+	gdb_continue_to_breakpoint "hit the BP inside the kernel"
+
+	set fill "\[^\r\n\]*"
+	scan [get_hexadecimal_valueof "\$pc" "0"] %x current_address
+	set atomic_address 0
+	set is_compacted 0
+
+	gdb_test_multiple "disassemble" "find atomic" {
+	    -re "($hex)(${fill}Atomic${fill})" {
+		scan $expect_out(1,string) %x addr
+		set inst $expect_out(2,string)
+		# Skip everything until reaching the current address.
+		if {($current_address <= $addr) && !$atomic_address} {
+		    set atomic_address $addr
+		    if {[regexp -all "Compacted" $inst]} {
+			set is_compacted 1
+		    }
+		}
+		exp_continue
+	    }
+	    -re "${hex}${fill}" {
+		exp_continue
+	    }
+	    -re -wrap "" {
+		pass $gdb_test_name
+	    }
+	}
+
+	if {[is_pvc $device]} {
+	    setup_kfail "JIRA GSD/8399" "*-*-*"
+	}
+	gdb_assert {$atomic_address} "found atomic address"
+
+	if {$is_compacted} {
+	    set bp_address [format 0x%x [expr $atomic_address + 8]]
+	} else {
+	    set bp_address [format 0x%x [expr $atomic_address + 16]]
+	}
+
+	gdb_breakpoint "*$bp_address" {temporary}
+	if {[is_pvc $device]} {
+	    setup_kfail "JIRA GSD/8399" "*-*-*"
+	}
+	gdb_continue_to_breakpoint "continue to bp after atomic"
+	if {[is_pvc $device]} {
+	    setup_kfail "JIRA GSD/8399" "*-*-*"
+	}
+	# Make sure that the application computes correct results.
+	gdb_test "continue" "Correct.*" "correct matrix multiplication"
+    }
+}

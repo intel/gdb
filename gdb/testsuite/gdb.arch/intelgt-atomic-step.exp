@@ -1,0 +1,126 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests stepping an atomic sequence.
+
+load_lib sycl.exp
+
+standard_testfile intelgt-atomic.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+proc step_over_atomic {displaced_stepping} {
+    global hex decimal
+
+    set fill "\[^\r\n\]*"
+    set current_addr [get_hexadecimal_valueof "\$pc" "0"]
+    set atomic_address 0
+    set is_compacted 0
+
+    gdb_test_multiple "disassemble" "find atomic" {
+	-re "($hex)(${fill}Atomic${fill})" {
+	    set addr $expect_out(1,string)
+	    set inst $expect_out(2,string)
+	    # Skip everything until reaching the current address.
+	    if {($current_addr <= $addr) && !$atomic_address} {
+		set atomic_address $addr
+		if {[regexp -all "Compacted" $inst]} {
+		    set is_compacted 1
+		}
+	    }
+	    exp_continue
+	}
+	-re "${hex}${fill}" {
+	    exp_continue
+	}
+	-re -wrap "" {
+	    pass $gdb_test_name
+	}
+    }
+    gdb_assert {$atomic_address} "found atomic address"
+
+    gdb_breakpoint "*$atomic_address" {temporary}
+    gdb_continue_to_breakpoint "continue to bp at atomic instruction"
+
+    gdb_test_no_output "set scheduler-locking step"
+    gdb_test_no_output "set debug displaced on"
+    gdb_test_no_output "set displaced-stepping $displaced_stepping"
+
+    set curr_pc $atomic_address
+    set next_pc [format 0x%x [expr $curr_pc + 0x10]]
+    if {$is_compacted} {
+	set next_pc [format 0x%x [expr $curr_pc + 0x08]]
+    }
+
+    gdb_test "nexti" "${hex}\[\\t\\s\].*\[\r\n\]+${decimal}${fill}" \
+	"step over atomic at $curr_pc"
+
+    set pc_test_name "check PC after atomic step over"
+    set pc [get_hexadecimal_valueof "\$pc" "invalid" "read PC"]
+    if {($displaced_stepping eq "on" && $pc eq $next_pc)
+	|| ($displaced_stepping eq "off" && $pc > $next_pc)} {
+	pass $pc_test_name
+    } else {
+	fail $pc_test_name
+    }
+
+    # Make sure that the application computes correct results.
+    gdb_test "continue" "Correct.*" "correct matrix multiplication"
+}
+
+foreach device $sycl_device_list {
+
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	foreach_with_prefix displaced_stepping {"on" "off"} {
+	    clean_restart "${binfile}"
+	    if {![runto_main [sycl_get_device_args $device]]} {
+		continue
+	    }
+
+	    gdb_breakpoint "get_startxy" {temporary}
+	    gdb_test_multiple "continue" "hit the BP inside the kernel" {
+		-re -wrap "hit Temporary breakpoint.*" {
+		    if {[is_pvc $device]} {
+			setup_kfail "JIRA GSD/8399" "*-*-*"
+		    }
+		    pass $gdb_test_name
+		}
+		-re -wrap "joint_matrix is not supported.*" {
+		    kfail "JIRA GSD/8399" $gdb_test_name
+		    continue
+		}
+		-re -wrap "" {
+		    fail $gdb_test_name
+		    continue
+		}
+	    }
+	    step_over_atomic $displaced_stepping
+	}
+    }
+}

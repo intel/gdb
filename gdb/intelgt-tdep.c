@@ -644,6 +644,9 @@ struct intelgt_inferior_data
 {
   /* Device target id.  */
   uint32_t device_id = 0u;
+
+  /* Buffer in debug area for an out-of-line step.  */
+  std::optional<displaced_step_buffers> disp_step_buf;
 };
 
 static const registry<inferior>::key<intelgt_inferior_data>
@@ -4060,6 +4063,262 @@ intelgt_adjust_breakpoint_address (gdbarch *gdbarch, CORE_ADDR bpaddr)
 	 paddress (gdbarch, bpaddr));
 }
 
+/* Returns whether the thread needs to perform an out-of-line step.
+
+   When single-stepping through an atomic sequence, it is necessary to execute
+   a displaced step with the atomic controls cleared in the copy.  Clearing the
+   atomic controls enables thread switching and ensures that the instruction's
+   result is written back to GRFs.  This adjustment should be done in the copy
+   to avoid interrupting the execution flow of other threads.  */
+
+static bool
+intelgt_needs_displaced_step (gdbarch *gdbarch, thread_info *thread,
+			      CORE_ADDR pc)
+{
+  std::array<gdb_byte, intelgt::MAX_INST_LENGTH> inst {};
+  int err = target_read_memory (pc, inst.data (), inst.size ());
+  if (err != 0)
+    error (_("Cannot read instruction at %s"), paddress (gdbarch, pc));
+
+  return is_atomic (inst.data (), get_device_id (thread->inf));
+}
+
+/* Intelgt closure structure for displaced stepping.  */
+
+struct intelgt_displaced_step_copy_insn_closure
+  : public displaced_step_copy_insn_closure
+{
+  intelgt_displaced_step_copy_insn_closure (int inst_len)
+    : inst_buf (inst_len, 0)
+  {}
+
+  /* Original instruction data.  */
+  gdb::byte_vector inst_buf;
+};
+
+/* Implementation of gdbarch_displaced_step_prepare.  */
+
+static displaced_step_prepare_status
+intelgt_displaced_step_prepare (gdbarch *arch, thread_info *thread,
+				CORE_ADDR &displaced_pc)
+{
+  try
+    {
+      /* Prepare a buffer in the scratch area for an out-of-line step.  */
+      intelgt_inferior_data *inf_data = get_intelgt_inferior_data (thread->inf);
+      if (!inf_data->disp_step_buf.has_value ())
+	{
+	  target_memory_allocator *scratch_area = get_scratch_area (arch);
+
+	  CORE_ADDR disp_step_buf_addr
+	    = scratch_area->alloc (intelgt::MAX_INST_LENGTH);
+
+	  inf_data->disp_step_buf.emplace (disp_step_buf_addr);
+	}
+
+      return inf_data->disp_step_buf->prepare (thread, displaced_pc);
+    }
+  catch (const gdb_exception_error &e)
+    {
+      warning (_("Failed to prepare for a displaced step: %s."), e.what ());
+      return DISPLACED_STEP_PREPARE_STATUS_CANT;
+    }
+}
+
+static displaced_step_copy_insn_closure_up
+intelgt_displaced_step_copy_insn (gdbarch *gdbarch, CORE_ADDR from,
+				  CORE_ADDR to, regcache *regs)
+{
+  std::array<gdb_byte, intelgt::MAX_INST_LENGTH> inst {};
+  if (target_read_memory (from, inst.data (), inst.size ()) != 0)
+    error (_("Cannot read instruction at %s"), paddress (gdbarch, from));
+
+  uint32_t inst_len = intelgt::inst_length (inst.data ());
+  /* Copy the original instruction.  */
+  std::unique_ptr<intelgt_displaced_step_copy_insn_closure>
+    closure (new intelgt_displaced_step_copy_insn_closure (inst_len));
+  memcpy (closure->inst_buf.data (), inst.data (), inst_len);
+
+  uint32_t device_id = get_device_id (current_inferior ());
+  xe_version device_version = get_xe_version (device_id);
+  switch (device_version)
+    {
+    case XE_HP:
+    case XE_HPG:
+    case XE_HPC:
+      {
+	if (!is_atomic (inst.data (), device_id))
+	  break;
+
+	/* Check if the instruction is compact.  */
+	if ((inst[3] & 0x20) != 0)
+	  {
+	    /* For compacted instructions, we need to check the opcode.  */
+	    switch (inst[0] & 0x7f)
+	      {
+	      case 0x59: /* DPAS.  */
+	      case 0x5a: /* DPASW.  */
+		{
+		  /* For DPAS, the DPAS Control Index determines which flavors
+		     are atomic, and it is used to transform the instruction to
+		     be non-atomic.  */
+		  switch (inst[2] & 0x3c)
+		    {
+		    case 0x0:
+		      inst[2] = (inst[2] & ~0x3c) | 0x10;
+		      break;
+		    case 0xc:
+		      inst[2] = (inst[2] & ~0x3c) | 0x14;
+		      break;
+		    case 0x18:
+		      inst[2] = (inst[2] & ~0x3c) | 0x28;
+		      break;
+		    case 0x2c:
+		      inst[2] = (inst[2] & ~0x3c) | 0x3c;
+		      break;
+
+		    default:
+		      error (_("Cannot transform atomic instruction"));
+		    }
+		  break;
+		}
+
+	      default:
+		error (_("Unsupported compact atomic opcode 0x%x"),
+		       inst[0] & 0x7f);
+	      }
+	    break;
+	  }
+
+	/* For non-compact instructions, clear AtomicCtrl.  */
+	inst[4] &= ~0x1;
+
+	/* Early break if FwdCtrl is clear.  */
+	if ((inst[4] & 0x2) == 0)
+	  break;
+
+	/* Clear FwdCtrl.  */
+	inst[4] &= ~0x2;
+
+	/* Add a default SBID for forward instructions if none is used.  This
+	   allows the system routine to wait for the GRF write-back.  */
+	switch (device_version)
+	  {
+	  case XE_HP:
+	  case XE_HPG:
+	    if (!(inst[1] & 0x80) /* DualInfo.  */
+		&& !((inst[1] & 0x70) == 0x40) /* SingleInfo.  */)
+	      inst[1] |= 0x40;
+	    break;
+
+	  case XE_HPC:
+	    if (!((inst[2] & 0x3) == 0x1) /* DualInfo.  */
+		&& !(((inst[2] & 0x3) == 0) /* SingleInfo.  */
+		     && ((inst[1] & 0xe0) == 0xc0)))
+	      inst[1] |= 0xc0;
+	    break;
+
+	  default:
+	    gdb_assert_not_reached ("unexpected device version");
+	  }
+	break;
+      }
+    default:
+      error (_("Unsupported device id 0x%x"), device_id);
+    }
+
+  /* Write the modified instruction to the TO address.  */
+  if (target_write_memory (to, inst.data (), inst_len) != 0)
+    error (_("Target failed to copy instruction from %s to %s"),
+	   paddress (gdbarch, from), paddress (gdbarch, to));
+
+  displaced_debug_printf ("%s->%s: %s",
+			  paddress (gdbarch, from), paddress (gdbarch, to),
+			  bytes_to_string (inst.data (), inst_len).c_str ());
+
+  return closure;
+}
+
+/* Intelgt implementation of 'displaced_step_finish'.  */
+
+static displaced_step_finish_status
+intelgt_displaced_step_finish (gdbarch *arch, thread_info *thread,
+			       const target_waitstatus &status)
+{
+  intelgt_inferior_data *inf_data = get_intelgt_inferior_data (thread->inf);
+  gdb_assert (inf_data->disp_step_buf.has_value ());
+
+  return inf_data->disp_step_buf->finish (arch, thread, status);
+}
+
+/* Fix up the state of registers and memory after having single-stepped
+   a displaced instruction.  */
+
+static void
+intelgt_displaced_step_fixup (gdbarch *gdbarch,
+			      displaced_step_copy_insn_closure *_closure,
+			      CORE_ADDR from, CORE_ADDR to, regcache *regs,
+			      bool completed_p)
+{
+  CORE_ADDR stop_pc = intelgt_read_pc (regs);
+  CORE_ADDR pc = from;
+  if (!completed_p)
+    warning (_("Unsuccessful displaced stepping: Restoring PC %s"),
+	     paddress (gdbarch, pc));
+  else
+    pc += stop_pc - to;
+
+  intelgt_write_pc (regs, pc);
+  displaced_debug_printf ("Restored PC to %s", paddress (gdbarch, pc));
+}
+
+static bool
+intelgt_displaced_step_hw_singlestep (gdbarch *gdbarch)
+{
+  return true;
+}
+
+/* Intelgt implementation for software_single_step.  We use a software single
+   step when we are stepping over an atomic instruction that cannot be turned
+   into non-atomic.  In this case, we step using breakpoints.  */
+
+static std::vector<CORE_ADDR>
+intelgt_software_single_step (regcache *regcache)
+{
+  gdbarch *gdbarch = regcache->arch ();
+  CORE_ADDR pc = regcache_read_pc (regcache);
+
+  std::array<gdb_byte, intelgt::MAX_INST_LENGTH> inst;
+  if (target_read_memory (pc, inst.data (), inst.size ()) != 0)
+    error (_("Cannot read instruction at %s"), paddress (gdbarch, pc));
+
+  /* Favor hardware single-stepping over software stepping.
+
+     When implementing this arch method, GDB would favor software
+     single-stepping stepping, even though hardware stepping is supported.
+     We need this only as a fall-back when displaced stepping is needed for
+     atomic sequences.  Returning an empty vector would allow GDB to proceed
+     with a hardware single step.  */
+  uint32_t device_id = get_device_id (current_inferior ());
+  if (!is_atomic (inst.data (), device_id))
+    return {};
+
+  if (is_branch (inst.data (), device_id))
+    error (_("Abort stepping: Unexpected branch instruction at %s"),
+	   paddress (gdbarch, pc));
+
+  CORE_ADDR next_pc = pc + intelgt::inst_length (inst.data ());
+
+  /* Skip the atomic sequence.  */
+  CORE_ADDR bpaddr = intelgt_adjust_breakpoint_address (gdbarch, next_pc);
+  if (next_pc != bpaddr)
+    warning (_("Stepping over instruction at %s is not possible. "
+	       "Adjusting address to %s."),
+	     paddress (gdbarch, pc), paddress (gdbarch, next_pc));
+
+  return {bpaddr};
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -4251,6 +4510,18 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
   set_gdbarch_adjust_breakpoint_address (gdbarch,
 					 intelgt_adjust_breakpoint_address);
+
+  /* Atomic sequence stepping.  */
+  set_gdbarch_needs_displaced_step (gdbarch, intelgt_needs_displaced_step);
+  set_gdbarch_max_insn_length (gdbarch, intelgt::MAX_INST_LENGTH);
+  set_gdbarch_displaced_step_prepare (gdbarch, intelgt_displaced_step_prepare);
+  set_gdbarch_displaced_step_copy_insn (gdbarch,
+					intelgt_displaced_step_copy_insn);
+  set_gdbarch_displaced_step_finish (gdbarch, intelgt_displaced_step_finish);
+  set_gdbarch_displaced_step_fixup (gdbarch, intelgt_displaced_step_fixup);
+  set_gdbarch_software_single_step (gdbarch, intelgt_software_single_step);
+  set_gdbarch_displaced_step_hw_singlestep
+    (gdbarch, intelgt_displaced_step_hw_singlestep);
 
   return gdbarch;
 }

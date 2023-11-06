@@ -1,0 +1,88 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests for setting a BP inside an atomic sequence.
+
+load_lib sycl.exp
+
+standard_testfile intelgt-atomic.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set first_line [gdb_get_line_number "kernel-line-1"]
+	gdb_breakpoint "$first_line" {temporary}
+	gdb_continue_to_breakpoint "hit the BP at the first line"
+
+	set fill "\[^\r\n\]*"
+	scan [get_hexadecimal_valueof "\$pc" "0"] %x current_address
+	set atomic_address 0
+	set is_compacted 0
+
+	gdb_test_multiple "disassemble" "find atomic" {
+	    -re "($hex)(${fill}Atomic${fill})" {
+		scan $expect_out(1,string) %x addr
+		set inst $expect_out(2,string)
+		# Skip everything until reaching the current address.
+		if {($current_address <= $addr) && !$atomic_address} {
+		    set atomic_address $addr
+		    if {[regexp -all "Compacted" $inst]} {
+			set is_compacted 1
+		    }
+		}
+		exp_continue
+	    }
+	    -re "${hex}${fill}" {
+		exp_continue
+	    }
+	    -re -wrap "" {
+		pass $gdb_test_name
+	    }
+	}
+
+	gdb_assert {$atomic_address} "found atomic address"
+
+	if {$is_compacted} {
+	    set bp_address [format 0x%x [expr $atomic_address + 8]]
+	} else {
+	    set bp_address [format 0x%x [expr $atomic_address + 16]]
+	}
+
+	gdb_breakpoint "*$bp_address" {temporary}
+	gdb_continue_to_breakpoint "continue to bp after atomic"
+	# Make sure that the application computes correct results.
+	gdb_test "continue" "Correct.*" "correct matrix multiplication"
+    }
+}

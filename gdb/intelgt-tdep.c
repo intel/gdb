@@ -3779,6 +3779,176 @@ intelgt_core_xfer_siginfo (gdbarch *gdbarch, gdb_byte *readbuf,
   return len;
 }
 
+/* Return true if the instruction is a branch instruction.  */
+
+static bool
+is_branch (const gdb_byte inst[])
+{
+  uint32_t device_id = get_device_id (get_current_arch ());
+  xe_version device_version = get_xe_version (device_id);
+  switch (device_version)
+    {
+    case XE_HP:
+    case XE_HPG:
+    case XE_HPC:
+      {
+	uint8_t opcode = inst[0] & intelgt::opc_mask;
+	switch (opcode)
+	  {
+	  case intelgt::opc_branchd:
+	  case intelgt::opc_branchc:
+	  case intelgt::opc_goto:
+	    return true;
+
+	  default:
+	    return false;
+	  }
+      }
+    }
+  error (_("Unsupported device id 0x%x"), device_id);
+}
+
+/* A helper function to check if a compact instruction is atomic.
+   TRANSFORMED_CTR is an optional argument output that holds the non-atomic
+   value of the control index in case the instruction is atomic.  */
+
+static bool
+is_compact_atomic (const gdb_byte inst[], int *transformed_ctr = nullptr)
+{
+  gdb_assert (intelgt::is_compacted_inst (inst));
+
+  /* DPAS_CONTROL_INDEX is used for DPAS control index mapping.
+     DPAS_CONTROL_INDEX[INDEX] = {TRUE, 4} implies that the control index of
+     value INDEX is atomic, and the non-atomic transformation is 4.
+     The second field is NOT_AVAILABLE if atomic/non-atomic transformation is
+     not possible.  */
+  constexpr uint8_t not_available = 0xff;
+  static constexpr std::pair<bool, uint8_t> dpas_control_index[]
+    {{true, 4},
+    {true, not_available},
+    {true, not_available},
+    {true, 5},
+    {false, 0},
+    {false, 3},
+    {true, 10},
+    {true, not_available},
+    {true, not_available},
+    {true, not_available},
+    {false, 6},
+    {true, 15},
+    {true, not_available},
+    {true, not_available},
+    {true, not_available},
+    {false, 11}};
+
+  uint32_t device_id = get_device_id (get_current_arch ());
+  xe_version device_version = get_xe_version (device_id);
+  switch (device_version)
+    {
+    case XE_HP:
+    case XE_HPG:
+    case XE_HPC:
+      {
+	switch (inst[0] & intelgt::opc_mask)
+	  {
+	  case intelgt::opc_dpas:
+	  case intelgt::opc_dpasw:
+	    {
+	      uint8_t ctr_idx3 = (inst[2] & 0x3c) >> 2;
+	      gdb_assert (ctr_idx3 < ARRAY_SIZE (dpas_control_index));
+
+	      if (transformed_ctr != nullptr)
+		*transformed_ctr = dpas_control_index[ctr_idx3].second;
+
+	      return dpas_control_index[ctr_idx3].first;
+	    }
+	  default:
+	    return false;
+	  }
+      }
+    }
+  error (_("Unsupported device id 0x%x"), device_id);
+}
+
+/* Return true if the instruction is atomic.  */
+
+static bool
+is_atomic (const gdb_byte inst[])
+{
+  if (intelgt::is_compacted_inst (inst))
+    return is_compact_atomic (inst);
+
+  return intelgt::get_inst_bit (inst, intelgt::ctrl_atomic);
+}
+
+/* If we are setting a breakpoint within an atomic sequence, we are required to
+   skip the entire sequence.
+
+   AtomicCtrl affects scheduling of the next instruction, so an atomic
+   sequence starts after the first instruction with AtomicCtrl and ends
+   after the first instruction without AtomicCtrl.  */
+
+static CORE_ADDR
+intelgt_adjust_breakpoint_address (gdbarch *gdbarch, CORE_ADDR bpaddr)
+{
+  /* Find a block containing BPADDR.  */
+  CORE_ADDR start = 0ull, end = 0ull;
+  const block *bl = block_for_pc (bpaddr);
+  if (bl != nullptr)
+    {
+      start = bl->start ();
+      end = bl->end ();
+    }
+  else
+    {
+      /* We are not able to find the corresponding block, fallback to use
+	 a more broad approach.  */
+      bool found = find_function_entry_range_from_pc (bpaddr, nullptr,
+						      &start, &end);
+      /* Do not adjust the bp address if we are not able to find a surrounding
+	 function.  We need to handle this gracefully because of the scratch
+	 memory, which is used to insert breakpoints during an inferior call.
+	 The scratch memory does not belong to any sections.  */
+      if (!found)
+	{
+	  dprintf ("Cannot find an enclosing function: Addr %s",
+		   paddress (gdbarch, bpaddr));
+	  return bpaddr;
+	}
+    }
+  gdb_assert (bpaddr >= start && bpaddr < end);
+
+  /* An atomic sequence would not span a branch or call so the first
+     instruction of a block or function are not inside an atomic sequence,
+     and we can safely place a breakpoint there.  */
+  if (bpaddr == start)
+    return bpaddr;
+
+  std::vector<gdb_byte> inst_block (end - start, 0);
+  int err = target_read_memory (start, inst_block.data (), inst_block.size ());
+  if (err != 0)
+      error (_("Cannot read instructions block at %s"),
+	     paddress (target_gdbarch (), start));
+
+  CORE_ADDR addr = start;
+  bool inside_atomic_region = false;
+  for (; addr <= end; addr += intelgt::inst_length (&inst_block[addr - start]))
+    {
+      if ((bpaddr <= addr) && !inside_atomic_region)
+	return addr;
+
+      const gdb_byte *inst = &inst_block[addr - start];
+      if (inside_atomic_region && is_branch (inst))
+	error (_("Unexpected branch in atomic sequence"));
+
+      /* The AtomicCtrl affects the next instruction.  */
+      inside_atomic_region = is_atomic (inst);
+    }
+
+  error (_("Couldn't adjust breakpoint to skip atomic region at %s"),
+	 paddress (target_gdbarch (), bpaddr));
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -3963,6 +4133,9 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_push_dummy_code (gdbarch, intelgt_push_dummy_code);
   set_gdbarch_get_inferior_call_return_value (
     gdbarch, intelgt_get_inferior_call_return_value);
+
+  set_gdbarch_adjust_breakpoint_address (gdbarch,
+					 intelgt_adjust_breakpoint_address);
 
   return gdbarch;
 }

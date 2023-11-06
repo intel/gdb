@@ -93,15 +93,31 @@ enum
   /* The opcode mask for bits 6:0.  */
   opc_mask = 0x7f,
 
+  /* Branch instruction opcodes.  */
+  opc_branchd = 0x21,
+  opc_branchc = 0x23,
+  opc_goto = 0x2e,
+
   /* Send instruction opcodes.  */
   opc_send = 0x31,
   opc_sendc = 0x32,
+
+  /* DPAS instruction opcodes.  */
+  opc_dpas = 0x59,
+  opc_dpasw = 0x5a,
 };
 
 /* Selected instruction control bit positions.  */
 
 enum
 {
+  /* AtomicCtrl bit for non-compact instructions.  */
+  ctrl_atomic = 32,
+
+  /* FwdCtrl bit for non-compact instructions.  Only used for atomic
+     instructions.  */
+  ctrl_fwd = 33,
+
   /* The End Of Thread control.  Only used for SEND and SENDC.  */
   ctrl_eot = 34,
 };

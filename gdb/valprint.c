@@ -123,6 +123,7 @@ struct value_print_options user_print_options =
   false,			/* print_array_indexes */
   false,			/* deref_ref */
   true,				/* static_field_print */
+  true,				/* print_shadowed */
   true,				/* pascal_static_field_print */
   false,			/* raw */
   false,			/* summary */
@@ -2928,6 +2929,16 @@ show_static_field_print (struct ui_file *file, int from_tty,
 	      value);
 }
 
+static void
+show_shadowed_print (struct ui_file *file, int from_tty,
+		     struct cmd_list_element *c,
+		     const char *value)
+{
+  gdb_printf (file,
+	      _("Printing of shadowed variables is %s.\n"),
+	      value);
+}
+
 
 
 /* A couple typedefs to make writing the options a bit more
@@ -3087,6 +3098,15 @@ pretty-printers for that value.")
     show_static_field_print, /* show_cmd_cb */
     N_("Set printing of C++ static members."),
     N_("Show printing of C++ static members."),
+    NULL, /* help_doc */
+  },
+
+  boolean_option_def {
+    "shadowed",
+    [] (value_print_options *opt) { return &opt->print_shadowed; },
+    show_shadowed_print, /* show_cmd_cb */
+    N_("Set printing of shadowed variables."),
+    N_("Show printing of shadowed variables."),
     NULL, /* help_doc */
   },
 

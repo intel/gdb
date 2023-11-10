@@ -2332,6 +2332,7 @@ struct print_variable_and_value_data
   int num_tabs;
   struct ui_file *stream;
   int values_printed;
+  bool has_shadowed_variables;
 
   void operator() (const char *print_name, struct symbol *sym, bool shadowed);
 };
@@ -2368,6 +2369,8 @@ print_variable_and_value_data::operator() (const char *print_name,
   frame = NULL;
 
   values_printed = 1;
+
+  has_shadowed_variables |= shadowed;
 }
 
 /* Prepares the regular expression REG from REGEXP.
@@ -2429,6 +2432,7 @@ print_frame_local_vars (frame_info_ptr frame,
   cb_data.num_tabs = 4 * num_tabs;
   cb_data.stream = stream;
   cb_data.values_printed = 0;
+  cb_data.has_shadowed_variables = false;
 
   /* Temporarily change the selected frame to the given FRAME.
      This allows routines that rely on the selected frame instead
@@ -2438,7 +2442,26 @@ print_frame_local_vars (frame_info_ptr frame,
 
   iterate_over_block_local_vars (block, cb_data);
 
-  if (!cb_data.values_printed && !quiet)
+  if (quiet)
+    return;
+
+  if (cb_data.values_printed)
+    {
+      if (!cb_data.has_shadowed_variables)
+	return;
+
+      value_print_options opts;
+      get_user_print_options (&opts);
+      if (opts.print_shadowed)
+	gdb_printf (stream,
+		    _("Use 'set print shadowed off' "
+		      "to hide shadowed variables.\n"));
+      else
+	gdb_printf (stream,
+		    _("Use 'set print shadowed on' "
+		      "to include shadowed variables.\n"));
+    }
+  else
     {
       if (regexp == NULL && t_regexp == NULL)
 	gdb_printf (stream, _("No locals.\n"));

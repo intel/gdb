@@ -9190,7 +9190,8 @@ x = 4
 x = 3   <shadowed: decl at line 1>
 @end smallexample
 
-If a variable is shadowed, the declaration line is also printed.
+If a variable is shadowed, the declaration line is also printed.  Printing
+shadowed variables can be controlled by @ref{set print shadowed}.
 
 @item info locals [-q] [-t @var{type_regexp}] [@var{regexp}]
 Like @kbd{info locals}, but only print the local variables selected
@@ -12772,6 +12773,18 @@ Do not pretty print C@t{++} virtual function tables.
 
 @item show print vtbl
 Show whether C@t{++} virtual function tables are pretty printed, or not.
+
+@anchor{set print shadowed}
+@item set print shadowed
+@itemx set print shadowed on
+@cindex shadowed variables in C/C@t{++}/Fortran
+Print shadowed variables for C/C@t{++}/Fortran.  The default is on.
+
+@item set print shadowed off
+Do not print shadowed variables for C/C@t{++}/Fortran.
+
+@item show print shadowed
+Show whether C/C@t{++}/Fortran shadowed variables are printed or not.
 @end table
 
 @node Pretty Printing

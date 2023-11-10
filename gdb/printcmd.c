@@ -2399,12 +2399,6 @@ print_variable_and_value (const char *name, struct symbol *var,
 			  bool shadowed)
 {
 
-  if (!name)
-    name = var->print_name ();
-
-  gdb_printf (stream, "%*s%ps = ", 2 * indent, "",
-	      styled_string (variable_name_style.style (), name));
-
   try
     {
       struct value *val;
@@ -2416,6 +2410,16 @@ print_variable_and_value (const char *name, struct symbol *var,
 	 a block to it.  */
       val = read_var_value (var, NULL, frame);
       get_user_print_options (&opts);
+
+      if (!opts.print_shadowed && shadowed)
+	return;
+
+      if (!name)
+	name = var->print_name ();
+
+      gdb_printf (stream, "%*s%ps = ", 2 * indent, "",
+		  styled_string (variable_name_style.style (), name));
+
       opts.deref_ref = true;
       common_val_print_checked (val, stream, indent, &opts, current_language);
 

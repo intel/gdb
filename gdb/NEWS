@@ -74,6 +74,12 @@ info devices
   one to uniquely identify devices in 'info inferiors' with devices
   displayed in 'info devices'.
 
+set print shadowed on|off
+show print shadowed
+  This controls the output of the "info locals" command for C/C++/Fortran.  If
+  the option is 'off' shadowed variables will be omitted in output.  The
+  default is to print shadowed variables.
+
 * Changed commands
 
 info threads [-gid] [-stopped] [ID]...

@@ -99,6 +99,9 @@ struct value_print_options
   /* If true, print static fields.  */
   bool static_field_print;
 
+  /* If true, print shadowed variables.  */
+  bool print_shadowed;
+
   /* If true, print static fields for Pascal.  FIXME: C++ has a
      flag, why not share with Pascal too?  */
   bool pascal_static_field_print;

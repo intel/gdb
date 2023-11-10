@@ -47,7 +47,7 @@ if { ! $no_frames } {
     set pass_re "array = \\{0 <repeats 64 times>\\}"
     set kfail_re [multi_line $pass_re \
 		      "array = <optimized out>\t<shadowed: decl at line $array_d1>"]
-    gdb_test_multiple "info locals" "info locals above bar 2" {
+    gdb_test_multiple "info locals -q" "info locals above bar 2" {
 	-re -wrap $pass_re {
 	    pass $gdb_test_name
 	}
@@ -71,7 +71,7 @@ if { ! $no_frames } {
     }
 } else {
     gdb_test "up" "#1  .*main .* at .*" "up from bar 2"
-    gdb_test "info locals" ".*arg1 = 0.*" "info locals above bar 2"
+    gdb_test "info locals -q" ".*arg1 = 0.*" "info locals above bar 2"
 }
 
 # Make sure that locals on the stack are found.  This is an array to
@@ -96,7 +96,7 @@ if { ! $no_frames } {
     set pass_re "array = {$decimal, \[^\r\n\]*}"
     set kfail_re [multi_line $pass_re \
 		      "array = <optimized out>\t<shadowed: decl at line $array_d1>"]
-    gdb_test_multiple "info locals" "info locals above bar 3" {
+    gdb_test_multiple "info locals -q" "info locals above bar 3" {
 	-re -wrap $pass_re {
 	    pass $gdb_test_name
 	}
@@ -120,8 +120,8 @@ if { ! $no_frames } {
     }
 } else {
     gdb_test "up" "#1  .*main .* at .*" "up from bar 3"
-    gdb_test "info locals" ".*arg1 = 1.*" "info locals above bar (3a)"
-    gdb_test "info locals" ".*arg2 = 184.*" "info locals above bar (3b)"
+    gdb_test "info locals -q" ".*arg1 = 1.*" "info locals above bar (3a)"
+    gdb_test "info locals -q" ".*arg2 = 184.*" "info locals above bar (3b)"
 }
 
 gdb_test "print array\[0\]" "\\\$$decimal = 184" "print local 3"
@@ -136,7 +136,7 @@ proc check_scoped_locals {bp_label pass_re} {
 
     gdb_continue_to_breakpoint "$bp_label" ".*$srcfile:$locals_bp.*"
     set kfail_re [multi_line $pass_re ".*<optimized out>(\t<shadowed: decl at line .*>)?"]
-    gdb_test_multiple "info locals" "scoped info locals at $bp_label" {
+    gdb_test_multiple "info locals -q" "scoped info locals at $bp_label" {
 	-re -wrap $pass_re {
 	    pass $gdb_test_name
 	}

@@ -63,7 +63,7 @@ foreach extension ${openmp_languages_list} {
 	    if {[require_openmp_device "CPU"]} {
 		setup_kfail "JIRA CMPLRLLVM/49736" "*-*-*"
 	    }
-	    gdb_test_multiple "info locals ten" "info locals ten" {
+	    gdb_test_multiple "info locals -q ten" "info locals -q ten" {
 		-re -wrap "ten = 10\r\nten = (-)?$decimal\t<shadowed: decl at line ${ten_d1}>" {
 		    pass ${gdb_test_name}
 		}
@@ -75,7 +75,7 @@ foreach extension ${openmp_languages_list} {
 	    if {[require_openmp_device "CPU"]} {
 		setup_kfail "JIRA CMPLRLLVM/49736" "*-*-*"
 	    }
-	    gdb_test_multiple "info locals five" "info locals five" {
+	    gdb_test_multiple "info locals -q five" "info locals -q five" {
 		-re -wrap "five = 5\r\nfive = (-)?$decimal\t<shadowed: decl at line ${five_d1}>" {
 		    pass ${gdb_test_name}
 		}
@@ -87,7 +87,7 @@ foreach extension ${openmp_languages_list} {
 	    if {[require_openmp_device "CPU"]} {
 		setup_kfail "JIRA CMPLRLLVM/49736" "*-*-*"
 	    }
-	    gdb_test_multiple "info locals fifteen" "info locals fifteen" {
+	    gdb_test_multiple "info locals -q fifteen" "info locals -q fifteen" {
 		-re -wrap "fifteen = 15\r\nfifteen = (-)?$decimal\t<shadowed: decl at line ${fifteen_d1}>" {
 		    pass ${gdb_test_name}
 		}

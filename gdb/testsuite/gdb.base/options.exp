@@ -198,6 +198,7 @@ proc_with_prefix test-print {{prefix ""}} {
 	"-pretty"
 	"-raw-values"
 	"-repeats"
+	"-shadowed"
 	"-static-members"
 	"-symbol"
 	"-union"

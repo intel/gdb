@@ -273,6 +273,7 @@ struct gdbarch
   gdbarch_current_workitem_global_id_ftype *current_workitem_global_id = nullptr;
   gdbarch_workitem_local_size_ftype *workitem_local_size = nullptr;
   gdbarch_workitem_global_size_ftype *workitem_global_size = nullptr;
+  gdbarch_kernel_instance_id_ftype *kernel_instance_id = nullptr;
   gdbarch_entry_point_ftype *entry_point = nullptr;
 };
 
@@ -558,6 +559,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of current_workitem_global_id, has predicate.  */
   /* Skip verify of workitem_local_size, has predicate.  */
   /* Skip verify of workitem_global_size, has predicate.  */
+  /* Skip verify of kernel_instance_id, has predicate.  */
   /* Skip verify of entry_point, has predicate.  */
   if (!log.empty ())
     internal_error (_("verify_gdbarch: the following are invalid ...%s"),
@@ -1487,6 +1489,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: workitem_global_size = <%s>\n",
 	      host_address_to_string (gdbarch->workitem_global_size));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_kernel_instance_id_p() = %d\n",
+	      gdbarch_kernel_instance_id_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: kernel_instance_id = <%s>\n",
+	      host_address_to_string (gdbarch->kernel_instance_id));
   gdb_printf (file,
 	      "gdbarch_dump: gdbarch_entry_point_p() = %d\n",
 	      gdbarch_entry_point_p (gdbarch));
@@ -5880,6 +5888,30 @@ set_gdbarch_workitem_global_size (struct gdbarch *gdbarch,
 				  gdbarch_workitem_global_size_ftype workitem_global_size)
 {
   gdbarch->workitem_global_size = workitem_global_size;
+}
+
+bool
+gdbarch_kernel_instance_id_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->kernel_instance_id != NULL;
+}
+
+value *
+gdbarch_kernel_instance_id (struct gdbarch *gdbarch, thread_info *tp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->kernel_instance_id != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_kernel_instance_id called\n");
+  return gdbarch->kernel_instance_id (gdbarch, tp);
+}
+
+void
+set_gdbarch_kernel_instance_id (struct gdbarch *gdbarch,
+				gdbarch_kernel_instance_id_ftype kernel_instance_id)
+{
+  gdbarch->kernel_instance_id = kernel_instance_id;
 }
 
 bool

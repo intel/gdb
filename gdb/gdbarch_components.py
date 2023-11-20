@@ -2955,6 +2955,18 @@ context of TP.
     invalid=True,
 )
 
+Method(
+    comment="""
+Return a unique kernel instance identifier for the context processed
+by thread TP.
+""",
+    type="value *",
+    name="kernel_instance_id",
+    params=[("thread_info *", "tp")],
+    predicate=True,
+    invalid=True,
+)
+
 Function(
     comment="""
 On some architectures the entry point cannot be determined based solely

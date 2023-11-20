@@ -28,6 +28,12 @@ $_workitem_global_size
   The overall number of workitems processed by the current workload in every
   dimension.  Unsigned int vector of size 3, when available.  Otherwise, void.
 
+$_kernel_instance_id
+  An architecture-specific kernel instance identifier for the kernel processed
+  by the thread.  The identifier is unique per kernel submission.  The term
+  `kernel` refers to a function that is submitted to and runs on an appropriate
+  device, e.g. a GPU device.
+
 * New commands
 
 set scheduler-locking eval | replay eval | replay run | replay step | run | step (on|off)

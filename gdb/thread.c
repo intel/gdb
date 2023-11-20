@@ -2986,6 +2986,19 @@ workitem_global_size_make_value (gdbarch *gdbarch, internalvar *var,
   return val;
 }
 
+static value *
+kernel_instance_id_make_value (gdbarch *gdbarch, internalvar *var,
+			       void *ignore)
+{
+  const struct builtin_type *bt = builtin_type (gdbarch);
+  if (inferior_ptid == null_ptid
+      || !gdbarch_kernel_instance_id_p (gdbarch))
+    return allocate_value (bt->builtin_void);
+
+  thread_info *tp = inferior_thread ();
+  return gdbarch_kernel_instance_id (gdbarch, tp);
+}
+
 /* Commands with a prefix of `thread'.  */
 struct cmd_list_element *thread_cmd_list = NULL;
 
@@ -3066,6 +3079,14 @@ static const internalvar_funcs workitem_local_size_funcs =
 static const internalvar_funcs workitem_global_size_funcs =
 {
   workitem_global_size_make_value,
+  nullptr
+};
+
+/* Implementation of the `$_kernel_instance_id' variable.  */
+
+static const internalvar_funcs kernel_instance_id_funcs =
+{
+  kernel_instance_id_make_value,
   nullptr
 };
 
@@ -3217,4 +3238,6 @@ When on messages about thread creation and deletion are printed."),
 				&workitem_local_size_funcs, nullptr);
   create_internalvar_type_lazy ("_workitem_global_size",
 				&workitem_global_size_funcs, nullptr);
+  create_internalvar_type_lazy ("_kernel_instance_id",
+				&kernel_instance_id_funcs, nullptr);
 }

@@ -2920,3 +2920,28 @@ context of TP.
     predicate=True,
     invalid=True,
 )
+
+Method(
+    comment="""
+Return a unique kernel instance identifier for the context processed
+by thread TP.
+""",
+    type="value *",
+    name="kernel_instance_id",
+    params=[("thread_info *", "tp")],
+    predicate=True,
+    invalid=True,
+)
+
+Function(
+    comment="""
+On some architectures the entry point cannot be determined based solely
+on the object file.
+Return true if the entry point was acquired in ENTRY_P.
+""",
+    type="bool",
+    name="entry_point",
+    params=[("CORE_ADDR *", "entry_p")],
+    predicate=True,
+    invalid=True,
+)

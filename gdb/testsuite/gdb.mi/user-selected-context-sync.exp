@@ -50,6 +50,14 @@ set main_break_line [gdb_get_line_number "main break line"]
 set thread_loop_line [gdb_get_line_number "thread loop line"]
 set thread_caller_line [gdb_get_line_number "thread caller line"]
 
+# Reset to thread 2.1.
+
+proc reset_to_known_thread { pfx } {
+    with_test_prefix "$pfx" {
+	reset_selection "2.1"
+    }
+}
+
 # Return whether we expect thread THREAD to be running in mode MODE.
 #
 # MODE can be either "all-stop" or "non-stop".
@@ -1314,6 +1322,9 @@ foreach_with_prefix mode { "all-stop" "non-stop" } {
     }
     pass $test
 
+    # Reset to known state.
+    reset_to_known_thread "before testing CLI"
+
     # Test selecting inferior, thread and frame from CLI
 
     test_cli_inferior $mode
@@ -1326,6 +1337,9 @@ foreach_with_prefix mode { "all-stop" "non-stop" } {
 
     test_mi_thread_select $mode
     test_mi_stack_select_frame $mode
+
+    # Reset to known state.
+    reset_to_known_thread "before testing MI"
 
     # Test some CLI commands sent through MI, both with a "direct" command,
     # such as "thread 1", and with -interpreter-exec, such as

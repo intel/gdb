@@ -4835,7 +4835,10 @@ fetch_inferior_event ()
 	    if (!non_stop
 		&& cmd_done
 		&& ecs.ws.kind () != TARGET_WAITKIND_NO_RESUMED)
-	      restore_thread.dont_restore ();
+	      {
+		restore_thread.dont_restore ();
+		save_inferior_last_thread ();
+	      }
 	  }
       }
 

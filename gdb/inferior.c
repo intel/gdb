@@ -552,6 +552,25 @@ inferior_pid_to_str (const inferior *inf)
 /* See inferior.h.  */
 
 void
+save_inferior_last_thread ()
+{
+  if (has_inferior_thread ())
+    current_inferior ()->last_user_thread
+      = thread_info_ref::new_reference (inferior_thread ());
+  else
+    current_inferior ()->last_user_thread = nullptr;
+}
+
+static void
+inferiors_on_user_selected_context_changed (user_selected_what selection)
+{
+  if (selection & USER_SELECTED_THREAD)
+    save_inferior_last_thread ();
+}
+
+/* See inferior.h.  */
+
+void
 print_selected_inferior (struct ui_out *uiout)
 {
   struct inferior *inf = current_inferior ();
@@ -832,9 +851,16 @@ inferior_command (const char *args, int from_tty)
 	{
 	  if (inf != current_inferior ())
 	    {
-	      thread_info *tp = any_thread_of_inferior (inf);
-	      if (tp == NULL)
-		error (_("Inferior has no threads."));
+	      thread_info *stored_tp = inf->last_user_thread.get ();
+
+	      /* Fallback to selecting any non-exited thread of
+		 inferior.  */
+	      thread_info *tp = (stored_tp == nullptr
+				 || stored_tp->state == THREAD_EXITED)
+				    ? any_thread_of_inferior (inf)
+				    : stored_tp;
+	      if (tp == nullptr)
+		error (_ ("Inferior has no threads."));
 
 	      switch_to_thread (tp);
 	    }
@@ -1420,4 +1446,9 @@ Print an extended list of all devices that are exposed to GDB.\n\
 Usage: info devices"));
 
   create_internalvar_type_lazy ("_inferior", &inferior_funcs, NULL);
+
+  /* Observe user_selected_context_changed to store the current user
+     thread.  */
+  gdb::observers::user_selected_context_changed.attach (
+      inferiors_on_user_selected_context_changed, "inferiors");
 }

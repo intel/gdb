@@ -3339,6 +3339,30 @@ intelgt_workitem_global_size (gdbarch *gdbarch, thread_info *tp)
   return global_size;
 }
 
+/* Compute the kernel instance identifier for a given thread TP.  */
+
+static value *
+intelgt_kernel_instance_id (gdbarch *gdbarch, thread_info *tp)
+{
+  if (tp->is_unavailable ())
+    error (_("Cannot read kernel instance id of unavailable thread %s."),
+	   print_thread_id (tp));
+
+  value *retval = nullptr;
+  const struct builtin_type *bt = builtin_type (gdbarch);
+
+  /* We use the address of the implicit arguments as identifier.  The
+     implicit arguments are heap allocated by UMD per kernel submission.
+     Reusage of the same address is possible but not problematic as long
+     as the implicit arguments data structure is not shared between
+     simultaneously running kernels.  */
+  CORE_ADDR address = intelgt_implicit_args::get_address (gdbarch, tp);
+  retval = value_from_pointer (bt->builtin_data_ptr, address);
+
+  gdb_assert (retval != nullptr);
+  return retval;
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -3503,6 +3527,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_workitem_global_id (gdbarch, intelgt_workitem_global_id);
   set_gdbarch_workitem_local_size (gdbarch, intelgt_workitem_local_size);
   set_gdbarch_workitem_global_size (gdbarch, intelgt_workitem_global_size);
+  set_gdbarch_kernel_instance_id (gdbarch, intelgt_kernel_instance_id);
 
 /* Inferior calls is still not fully supported on Windows.  */
 #ifndef USE_WIN32API

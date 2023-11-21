@@ -1,0 +1,85 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for kernel instance ID.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile ${srcfile}" "${binfile}" \
+    "${srcfile}" {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    with_test_prefix [sycl_get_device_prefix $device] {
+	clean_restart "${binfile}"
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	gdb_test_no_output "set non-stop on"
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set kernel_1 [gdb_get_line_number "kernel-1-line"]
+	set kernel_2 [gdb_get_line_number "kernel-2-line"]
+	set post_kernel [gdb_get_line_number "post-kernel-line"]
+	gdb_breakpoint $kernel_1
+	set bp1 [get_integer_valueof "\$bpnum" -1 "Breakpoint 1"]
+	gdb_breakpoint $kernel_2
+	set bp2 [get_integer_valueof "\$bpnum" -1 "Breakpoint 2"]
+	gdb_breakpoint $post_kernel
+
+	# Test parameters.
+	set fill "\[^\r\n\]*"
+	set instance_id_count [dict create]
+
+	# Print kernel-instance-id on breakpoint hits and continue thread.
+	gdb_test [multi_line \
+	    "commands $bp1 $bp2" \
+	    "printf \"kernel_instance_id 0x%x\", \$_kernel_instance_id" \
+	    "continue" \
+	    "end"
+	] "" "set breakpoint commands"
+
+	gdb_test_multiple "continue -a" "continue to breakpoint" {
+	    -re "kernel_instance_id ($hex)" {
+		dict incr instance_id_count $expect_out(1,string)
+		exp_continue
+	    }
+	    -re "$fill hit Breakpoint ${fill}$srcfile:$post_kernel\r\n" {
+		pass $gdb_test_name
+	    }
+	}
+
+	gdb_assert {[dict size $instance_id_count] == 3}
+
+	set hit_counts [lsort -integer [dict values $instance_id_count]]
+	gdb_assert {[lindex $hit_counts 0] == 1}
+	gdb_assert {[lindex $hit_counts 1] == [lindex $hit_counts 2]}
+    }
+}

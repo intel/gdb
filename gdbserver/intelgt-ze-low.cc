@@ -260,7 +260,6 @@ enum
     /* Selected instruction opcodes.  */
     intelgt_opc_send = 0x31,
     intelgt_opc_sendc = 0x32,
-    intelgt_opc_join = 0x2f,
   };
 
 /* Selected instruction control bit positions.  */
@@ -570,8 +569,7 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 
 	case ze_thread_resume_run:
 	case ze_thread_resume_none:
-	  /* On some devices, we may get spurious breakoint exceptions at
-	     JOIN instructions.  */
+	  /* On some devices, we may get spurious breakpoint exceptions.  */
 	  if (erratum_18020355813 (tp))
 	    {
 	      ze_device_thread_t zeid = ze_thread_id (tp);
@@ -798,16 +796,8 @@ intelgt_ze_target::erratum_18020355813 (thread_info *tp)
       return false;
     }
 
-  /* The erratum applies to JOIN instructions without breakpoint control.  */
-  uint8_t opc = inst[0] & intelgt_opc_mask;
-  switch (opc)
-    {
-    case intelgt_opc_join:
-      return !intelgt::has_breakpoint (inst);
-
-    default:
-      return false;
-    }
+  /* The erratum applies to instructions without breakpoint control.  */
+  return !intelgt::has_breakpoint (inst);
 }
 
 void

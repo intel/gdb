@@ -24,26 +24,24 @@ main (int argc, char *argv[])
 {
   int data[1] = {0};
 
-  { /* Extra scope enforces waiting on the kernel.  */
-    sycl::queue deviceQueue {get_sycl_queue (argc, argv)};
-    sycl::buffer<int, 1> buf {data, sycl::range<1> {1}};
-    sycl::range<1> range {1u};
+  sycl::queue queue {get_sycl_queue (argc, argv)};
+  sycl::buffer<int, 1> buf {data, sycl::range<1> {1}};
+  sycl::range<1> range {1u};
 
-    deviceQueue.submit ([&] (sycl::handler& cgh)
-      {
-	auto acc
-	  = buf.get_access<sycl::access::mode::read_write> (cgh);
+  queue.submit ([&] (sycl::handler& cgh)
+    {
+      auto acc = buf.get_access<sycl::access::mode::read_write> (cgh);
 
-	cgh.parallel_for (range, [=] (sycl::id<1> id)
-	  {
-	    int addend = 1;
-	    if (id[0] > 128)
-	      addend = 0; /* then-branch */
+      cgh.parallel_for (range, [=] (sycl::id<1> id)
+	{
+	  int addend = 1;
+	  if (id[0] > 128)
+	    addend = 0; /* then-branch */
 
-	    acc[0] += addend; /* after-if */
-	  });
-      });
-  }
+	  acc[0] += addend; /* after-if */
+	});
+    });
+  queue.wait ();
 
   return 0;
 }

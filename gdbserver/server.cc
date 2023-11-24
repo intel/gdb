@@ -4029,6 +4029,13 @@ __declspec (dllexport)
 int
 main (int argc, char *argv[])
 {
+#ifdef _WIN32
+  /* Exclude the current working directory from the DLL search path.  This,
+     in combination with the /DELAYLOAD linker flag, can be used to prevent
+     DLL injection attacks for libraries that are linked with load time
+     linking.  */
+  SetDllDirectory ("");
+#endif
 
   try
     {

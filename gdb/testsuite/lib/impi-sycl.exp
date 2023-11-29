@@ -176,6 +176,9 @@ gdb_caching_proc impi_init_sycl_devices_list {} {
 	-re "$::inferior_exited_re with code.*" {
 	    set result 1
 	}
+	-re "$::impi_gdb_prompt" {
+	    kfail "JIRA IGDB/4506" $gdb_test_name
+	}
     }
 
     set supported_impi_sycl_device_list \

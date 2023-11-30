@@ -240,6 +240,58 @@ proc is_level_zero_debug_api {} {
     }
 }
 
+# Return non-zero, if the ZE binary is being used.
+
+proc is_level_zero_zebinary {} {
+    global env
+
+    if {![info exists env(IGC_EnableZEBinary)]} {
+	return 1
+    }
+
+    set env_var $env(IGC_EnableZEBinary)
+    if {[string is integer $env_var]} {
+	return [expr $env_var ne "0"]
+    } else {
+	return 1
+    }
+}
+
+# Return non-zero if the device is DG2.
+
+proc is_dg2 {device} {
+
+    if {[string match "*Intel* Arc* A* Graphics*" $device]} {
+	return 1;
+    }
+
+    return 0;
+}
+
+# Return non-zero if the device is ATSM.
+
+proc is_atsm {device} {
+
+    if {[string match "*Intel* Data Center GPU Flex* 1*" $device]} {
+	return 1;
+    }
+
+    return 0;
+}
+
+# Return non-zero if the device is PVC.
+
+proc is_pvc {device} {
+
+    if {[string match "*Intel* Data Center GPU Max* 1100*" $device]
+	|| [string match "*Intel* Data Center GPU Max* 1550*" $device]
+	|| [string match "*Intel* Data Center GPU Max* 1350*" $device]} {
+	return 1;
+    }
+
+    return 0;
+}
+
 # Issue a 'continue' command and expect to see program termination.
 
 proc continue_sycl_program_to_termination {{msg_suffix ""} {known_fail ""}} {

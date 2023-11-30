@@ -3977,29 +3977,6 @@ intelgt_kernel_instance_id (gdbarch *gdbarch, thread_info *tp)
   return retval;
 }
 
-/* Read the 'framedesc' user register, a structured alias
-   of the actual GRF.  */
-
-static value *
-intelgt_value_of_framedesc_user_reg (const frame_info_ptr &frame,
-				     const void *baton)
-{
-  gdbarch *arch = get_frame_arch (frame);
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
-  regcache *regcache = get_thread_regcache (inferior_thread ());
-  type *frame_type = data->get_framedesc_type (regcache);
-  int grf_num = data->framedesc_base_regnum ();
-  int grf_size = register_size (arch, grf_num);
-  int framedesc_size = frame_type->length ();
-  gdb_assert (framedesc_size <= grf_size);
-
-  value *grf
-    = value_of_register (grf_num, get_next_frame_sentinel_okay (frame));
-  value *result = value::allocate (frame_type);
-  grf->contents_copy (result, 0, 0, framedesc_size);
-  return result;
-}
-
 /* Implement the "update_architecture" gdbarch method.  */
 
 static gdbarch *
@@ -4225,6 +4202,29 @@ intelgt_adjust_breakpoint_address (gdbarch *gdbarch, CORE_ADDR bpaddr)
 
   error (_("Couldn't adjust breakpoint to skip atomic region at %s"),
 	 paddress (gdbarch, bpaddr));
+}
+
+/* Read the 'framedesc' user register, a structured alias
+   of the actual GRF.  */
+
+static value *
+intelgt_value_of_framedesc_user_reg (const frame_info_ptr &frame,
+				     const void *baton)
+{
+  gdbarch *arch = get_frame_arch (frame);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  regcache *regcache = get_thread_regcache (inferior_thread ());
+  type *frame_type = data->get_framedesc_type (regcache);
+  int grf_num = data->framedesc_base_regnum ();
+  int grf_size = register_size (arch, grf_num);
+  int framedesc_size = frame_type->length ();
+  gdb_assert (framedesc_size <= grf_size);
+
+  value *grf
+    = value_of_register (grf_num, get_next_frame_sentinel_okay (frame));
+  value *result = value::allocate (frame_type);
+  grf->contents_copy (result, 0, 0, framedesc_size);
+  return result;
 }
 
 /* Architecture initialization.  */

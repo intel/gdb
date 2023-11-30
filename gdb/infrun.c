@@ -1438,7 +1438,12 @@ enum step_over_what_flag
     /* Step past a non-continuable watchpoint, in order to let the
        instruction execute so we can evaluate the watchpoint
        expression.  */
-    STEP_OVER_WATCHPOINT = 2
+    STEP_OVER_WATCHPOINT = 2,
+
+    /* Step over a special arch instruction.  This is used when the arch
+       decides to do a displaced step for certain instructions regardless
+       of the running mode.  */
+    STEP_OVER_CUSTOM = 4,
   };
 DEF_ENUM_FLAGS_TYPE (enum step_over_what_flag, step_over_what);
 
@@ -1746,6 +1751,10 @@ use_displaced_stepping (thread_info *tp)
   if (can_use_displaced_stepping == AUTO_BOOLEAN_FALSE)
     return false;
 
+  /* If the architecture requested it, use displaced stepping.  */
+  if (tp->control.trap_expected == STEP_OVER_CUSTOM)
+    return true;
+
   /* If "auto", only use displaced stepping if the target operates in a non-stop
      way.  */
   if (can_use_displaced_stepping == AUTO_BOOLEAN_AUTO
@@ -1810,11 +1819,11 @@ displaced_step_prepare_throw (thread_info *tp)
   displaced_step_thread_state &disp_step_thread_state
     = tp->displaced_step_state;
 
-  /* We should never reach this function if the architecture does not
+  /* We should neither reach this function if the architecture does not
      support displaced stepping.  */
   gdb_assert (gdbarch_supports_displaced_stepping (gdbarch));
 
-  /* Nor if the thread isn't meant to step over a breakpoint.  */
+  /* Nor if the thread isn't meant to do a displaced step.  */
   gdb_assert (tp->control.trap_expected);
 
   /* Disable range stepping while executing in the scratch pad.  We
@@ -3041,6 +3050,12 @@ resume_1 (enum gdb_signal sig)
      step only.  Same if we have software watchpoints.  */
   if (tp->control.trap_expected || bpstat_should_step ())
     tp->control.may_range_step = 0;
+
+  if (step && gdbarch_needs_displaced_step (gdbarch, tp, pc))
+    {
+      gdb_assert (gdbarch_supports_displaced_stepping (gdbarch));
+      tp->control.trap_expected = STEP_OVER_CUSTOM;
+    }
 
   /* If displaced stepping is enabled, step over breakpoints by executing a
      copy of the instruction at a different address.

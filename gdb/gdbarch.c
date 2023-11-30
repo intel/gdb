@@ -204,6 +204,7 @@ struct gdbarch
   gdbarch_displaced_step_copy_insn_closure_by_addr_ftype *displaced_step_copy_insn_closure_by_addr = nullptr;
   gdbarch_displaced_step_restore_all_in_ptid_ftype *displaced_step_restore_all_in_ptid = nullptr;
   ULONGEST displaced_step_buffer_length = 0;
+  gdbarch_needs_displaced_step_ftype *needs_displaced_step = [] (gdbarch *, thread_info *, CORE_ADDR) -> bool {return false;};
   gdbarch_relocate_instruction_ftype *relocate_instruction = NULL;
   gdbarch_overlay_update_ftype *overlay_update = nullptr;
   gdbarch_core_read_description_ftype *core_read_description = nullptr;
@@ -494,6 +495,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
     gdbarch->displaced_step_buffer_length = gdbarch->max_insn_length;
   if (gdbarch->displaced_step_buffer_length < gdbarch->max_insn_length)
     log.puts ("\n\tdisplaced_step_buffer_length");
+  /* Skip verify of needs_displaced_step, invalid_p == 0.  */
   /* Skip verify of relocate_instruction, has predicate.  */
   /* Skip verify of overlay_update, has predicate.  */
   /* Skip verify of core_read_description, has predicate.  */
@@ -1215,6 +1217,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: displaced_step_buffer_length = %s\n",
 	      plongest (gdbarch->displaced_step_buffer_length));
+  gdb_printf (file,
+	      "gdbarch_dump: needs_displaced_step = <%s>\n",
+	      host_address_to_string (gdbarch->needs_displaced_step));
   gdb_printf (file,
 	      "gdbarch_dump: gdbarch_relocate_instruction_p() = %d\n",
 	      gdbarch_relocate_instruction_p (gdbarch));
@@ -4562,6 +4567,23 @@ set_gdbarch_displaced_step_buffer_length (struct gdbarch *gdbarch,
 					  ULONGEST displaced_step_buffer_length)
 {
   gdbarch->displaced_step_buffer_length = displaced_step_buffer_length;
+}
+
+bool
+gdbarch_needs_displaced_step (struct gdbarch *gdbarch, thread_info *thread_info, CORE_ADDR pc)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->needs_displaced_step != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_needs_displaced_step called\n");
+  return gdbarch->needs_displaced_step (gdbarch, thread_info, pc);
+}
+
+void
+set_gdbarch_needs_displaced_step (struct gdbarch *gdbarch,
+				  gdbarch_needs_displaced_step_ftype needs_displaced_step)
+{
+  gdbarch->needs_displaced_step = needs_displaced_step;
 }
 
 bool

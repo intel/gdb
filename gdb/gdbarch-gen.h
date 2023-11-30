@@ -1259,6 +1259,12 @@ extern void set_gdbarch_displaced_step_restore_all_in_ptid (struct gdbarch *gdba
 extern ULONGEST gdbarch_displaced_step_buffer_length (struct gdbarch *gdbarch);
 extern void set_gdbarch_displaced_step_buffer_length (struct gdbarch *gdbarch, ULONGEST displaced_step_buffer_length);
 
+/* Return true if the arch needs to execute an out-of-line instruction at PC. */
+
+typedef bool (gdbarch_needs_displaced_step_ftype) (struct gdbarch *gdbarch, thread_info *thread_info, CORE_ADDR pc);
+extern bool gdbarch_needs_displaced_step (struct gdbarch *gdbarch, thread_info *thread_info, CORE_ADDR pc);
+extern void set_gdbarch_needs_displaced_step (struct gdbarch *gdbarch, gdbarch_needs_displaced_step_ftype *needs_displaced_step);
+
 /* Relocate an instruction to execute at a different address.  OLDLOC
    is the address in the inferior memory where the instruction to
    relocate is currently at.  On input, TO points to the destination

@@ -2061,6 +2061,18 @@ displaced-step instruction to multiple replacement instructions.
 
 Method(
     comment="""
+Return true if the arch needs to execute an out-of-line instruction at PC.
+""",
+    type="bool",
+    name="needs_displaced_step",
+    params=[("thread_info *", "thread_info"), ("CORE_ADDR", "pc")],
+    predefault="[] (gdbarch *, thread_info *, CORE_ADDR) -> bool {return false;}",
+    predicate=False,
+    invalid=False,
+)
+
+Method(
+    comment="""
 Relocate an instruction to execute at a different address.  OLDLOC
 is the address in the inferior memory where the instruction to
 relocate is currently at.  On input, TO points to the destination

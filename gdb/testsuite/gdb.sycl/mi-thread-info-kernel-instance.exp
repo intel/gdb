@@ -1,0 +1,77 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests the `kernel-instance-id` field of the -thread-info MI command.
+
+load_lib sycl.exp
+
+standard_testfile single-task.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile ${srcfile}" "${binfile}" \
+    "${srcfile}" {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	mi_clean_restart $binfile
+
+	if {![mi_runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set kernel_line [gdb_get_line_number "kernel-line-1"]
+	mi_tbreak "${srcfile}:$kernel_line" "set BP at kernel"
+	mi_continue_to_line "${srcfile}:$kernel_line" \
+	    "continue to kernel"
+
+	set kernel_instance_id_stopped 0
+	set kernel_instance_id_unavailable 0
+
+	foreach_with_prefix tid [get_mi_thread_list ""] {
+	    send_gdb "-thread-info --qid $tid\n"
+	    # Test that the `kernel-instance-id` is only added to stopped threads.
+	    gdb_expect {
+		-re "kernel-instance-id=\"$hex\",.*,state=\"stopped\".*$mi_gdb_prompt$" {
+		    incr kernel_instance_id_stopped
+		}
+		-re "kernel-instance-id=\"$hex\",.*,state=\"unavailable\".*$mi_gdb_prompt$" {
+		    incr kernel_instance_id_unavailable
+		    break
+		}
+		-re "$mi_gdb_prompt$" {
+		    # OK.
+		}
+	    }
+	}
+
+	# We use a `single_task` kernel and expect a single active thread only.
+	gdb_assert {$kernel_instance_id_stopped == 1}
+	gdb_assert {$kernel_instance_id_unavailable == 0}
+    }
+}

@@ -37,6 +37,9 @@ foreach device $sycl_device_list {
 	    continue
 	}
 
+	if {[is_dg2 $device] || [is_atsm $device] || [is_pvc $device]} {
+	    setup_kfail "JIRA IGC/8265" "*-*-*"
+	}
 	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*"
     }
 }

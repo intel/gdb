@@ -91,6 +91,17 @@ thread apply thread-list|all|all-lanes -unavailable
 
 * MI changes
 
+  ** New field in '-thread-info': 'kernel-instance-id'
+
+     Added a new thread field to the '-thread-info' command.  If the thread is
+     stopped, available, and the kernel-instance-id is defined for its arch,
+     the new field contains a string with an identifier for each thread and
+     is unique per kernel submission.  The term `kernel` refers to a function
+     that is submitted to and runs on an appropriate device, e.g. a GPU device.
+
+  ** New possible value "unavailable" for the "reason" field in "stopped"
+     async record.
+
   ** New field in '-thread-info': 'thread-workgroup'
 
      Added a new field to the '-thread-info' command.  If the thread is

@@ -149,7 +149,7 @@ enum
     intelgt_cr0_1_illegal_opcode_status = 28,
 
     /* The position of the Force Exception Status and Control bit in CR0.1.  */
-    intelgt_cr0_1_force_exception_status = 26
+    intelgt_cr0_1_force_exception_status = 26,
 };
 
 /* Return CR0.SUBREG in REGCACHE.  */

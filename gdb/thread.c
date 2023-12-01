@@ -53,6 +53,7 @@
 #include "stack.h"
 #include "interps.h"
 #include <array>
+#include "valprint.h"
 
 /* See gdbthread.h.  */
 
@@ -1508,6 +1509,29 @@ print_thread_row (ui_out *uiout, thread_info *tp,
 		}
 
 	      print_workitem_data_mi (uiout, tp);
+
+	      if (gdbarch_kernel_instance_id_p (tp->inf->arch ()))
+		{
+		  try
+		    {
+		      string_file buffer;
+		      value_print_options print_opts;
+		      get_user_print_options (&print_opts);
+
+		      value *val
+			= gdbarch_kernel_instance_id (tp->inf->arch (), tp);
+
+		      common_val_print (val, &buffer, 0, &print_opts,
+					current_language);
+		      uiout->field_string (
+			"kernel-instance-id", buffer.string ().c_str ());
+		    }
+		  catch (const gdb_exception_error &e)
+		    {
+		      /* Skip `kernel-instance-id` field in case of errors.
+			 We don't want to abort the MI command.  */
+		    }
+		}
 	    }
 	}
     }

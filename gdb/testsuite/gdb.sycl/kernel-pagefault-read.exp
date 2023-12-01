@@ -1,0 +1,138 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Check read pagefault detection.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+
+    sycl_with_intelgt_lock $device {
+	if {![require_sycl_device "$device" "gpu" "Intel*"]
+	    || !([is_pvc $device] || [is_xe2 $device])} {
+	    unsupported "test requires a GPU with pagefault support"
+	    continue
+	}
+
+	clean_restart "${binfile}"
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*" \
+	    "continue before offloading"
+
+	clean_restart "${binfile}"
+	with_test_prefix "second" {
+	    if {![runto_main [sycl_get_device_args $device]]} {
+		continue
+	    }
+	}
+	set line [gdb_get_line_number "line-before-pagefault"]
+	gdb_breakpoint $line {temporary}
+	gdb_continue_to_breakpoint "line before pagefault" ".*$srcfile:$line.*"
+	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*" \
+	    "continue inside kernel"
+    }
+
+    # Single-stepping over a page-faulting instruction should report
+    # the SIGSEGV.
+    clean_restart "${binfile}"
+    sycl_with_intelgt_lock $device { with_test_prefix "stepping" {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set pagefault_line [gdb_get_line_number "pagefault-line"]
+	gdb_breakpoint "$pagefault_line"
+	gdb_continue_to_breakpoint "pagefault line" \
+	    "$srcfile:$pagefault_line.*"
+
+	gdb_test_no_output "set scheduler-locking step"
+
+	set pagefault_seen 0
+	set iter 1
+	while {$iter > 0} {
+	    gdb_test_multiple "stepi" "step $iter" {
+		-re -wrap "signal SIGSEGV, Segmentation fault.*" {
+		    set pagefault_seen 1
+		    set iter 0
+		}
+		-re -wrap "last-line.*" {
+		    # Stepped over all the instructions on the
+		    # pagefaulting line.  We are done.
+		    set iter 0
+		}
+		-re -wrap ".*" {
+		    # An ordinary instruction was stepped.  Keep going.
+		    incr iter
+		}
+	    }
+	}
+	gdb_assert {$pagefault_seen} "saw the pagefault"
+
+	# Record the fault IP for the next test.
+	set ip_at_fault [get_hexadecimal_valueof "\$ip" invalid]
+    }}
+
+    # This test verifies that GDB does not convert our GDB_SIGSEGV into a
+    # GDB_TRAP because the imprecisely reported pagefault may be reported
+    # on an instruction with a breakpoint.
+    # Set a breakpoint on the instruction after the pagefault was hit.  The
+    # address of the instruction was retrieved in the previous test
+    # when the pagefault was hit.  Its IP was recorded and this will now
+    # set the breakpoint to $isabase + the recorded address.
+    clean_restart "${binfile}"
+    sycl_with_intelgt_lock $device { with_test_prefix " bp report SIGSEGV" {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	# Run to somewhere before the pagefault line to be able
+	# to get the isabase register content.
+	set line [gdb_get_line_number "line-before-pagefault"]
+	gdb_breakpoint $line {temporary}
+	gdb_continue_to_breakpoint "line" ".*$srcfile:$line.*"
+
+	# Get ISABASE and build a breakpoint address from it and
+	# IP.
+	set isabase [get_hexadecimal_valueof "\$isabase" invalid]
+
+	# Set bp at ISABASE + IP.
+	set break_addr [format 0x%x [expr {$isabase + $ip_at_fault}]]
+	gdb_breakpoint "*$break_addr"
+
+	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*" \
+	    "continue inside kernel"
+
+	# Verify we actually had the breakpoint and the fault reported
+	# at the same address.
+	gdb_assert {[get_hexadecimal_valueof "\$pc" invalid] == $break_addr}
+    }}
+}

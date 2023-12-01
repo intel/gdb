@@ -150,6 +150,11 @@ enum
 
     /* The position of the Force Exception Status and Control bit in CR0.1.  */
     intelgt_cr0_1_force_exception_status = 26,
+
+    /* The position of the Page Fault Status bit in CR0.1.
+       This is a software convention using a reserved bit to indicate
+       page faults by the user mode driver.  */
+    intelgt_cr0_1_pagefault_status = 16,
 };
 
 /* Return CR0.SUBREG in REGCACHE.  */
@@ -535,7 +540,7 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
   };
 
   dprintf ("thread %s (%s) stopped, cr0.0=%" PRIx32 ", .1=%" PRIx32
-	   " [ %s%s%s%s], .2=%" PRIx32 ".", tp->id.to_string ().c_str (),
+	   " [ %s%s%s%s%s], .2=%" PRIx32 ".", tp->id.to_string ().c_str (),
 	   ze_thread_id_str (thread).c_str (), cr0[0], cr0[1],
 	   (((cr0[1] & (1 << intelgt_cr0_1_breakpoint_status)) != 0)
 	    ? "bp " : ""),
@@ -545,7 +550,18 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 	    ? "fe " : ""),
 	   (((cr0[1] & (1 << intelgt_cr0_1_external_halt_status)) != 0)
 	    ? "eh " : ""),
+	   (((cr0[1] & (1 << intelgt_cr0_1_pagefault_status)) != 0)
+	    ? "pf " : ""),
 	   cr0[2]);
+
+  if ((cr0[1] & (1 << intelgt_cr0_1_pagefault_status)) != 0)
+    {
+      cr0[1] &= ~(1 << intelgt_cr0_1_pagefault_status);
+      intelgt_write_cr0 (tp, 1, cr0[1]);
+
+      signal = GDB_SIGNAL_SEGV;
+      return TARGET_STOPPED_BY_NO_REASON;
+    }
 
   if ((cr0[1] & (1 << intelgt_cr0_1_breakpoint_status)) != 0)
     {

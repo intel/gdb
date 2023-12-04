@@ -40,7 +40,7 @@ set fill "\[^\r\n\]*"
 # EXPECTED_OUTER_FRAME defines the format of the outer frame.
 # CALL_STACK_SUPPORTED indicates that at this run the call stack feature
 # was enabled.
-proc test_finish {function_name function_args expected_value expected_outer_frame call_stack_supported} {
+proc test_finish {function_name function_args expected_value expected_outer_frame call_stack_supported {known_fail ""}} {
     with_test_prefix "$function_name" {
 	global fill valnum_re
 	set value_returned "(\r\nValue returned is $valnum_re = $expected_value)"
@@ -48,6 +48,7 @@ proc test_finish {function_name function_args expected_value expected_outer_fram
 	    append value_returned "?"
 	}
 
+	if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
 	gdb_test "finish" [multi_line \
 			       "Run till exit from #0 ${fill}${function_name}$fill\\($function_args\\) $fill" \
 			       "${fill}${expected_outer_frame}${fill}" \
@@ -144,24 +145,27 @@ proc test_call_stack {call_stack_supported} {
     # other tests are not affected.  We also run "finish" tests only when
     # we are at the correct location.  Afterwards, we check which BPs were
     # hit.
+    set kfail "JIRA GSD/7295"
     while {$i < 11 && $should_continue} {
         with_test_prefix "iteration $i" {
 	    gdb_test_multiple "continue" "iteration $i" {
 		-re -wrap ".*$srcfile:$return_int4_loc.*" {
 		    set hit_return_int4 true
 		    test_finish "return_int4" "dim0=5" "\\{500, 501, 502, 503\\}" \
-			"make_output \\(dim0=5\\)" $call_stack_supported
+			"make_output \\(dim0=5\\)" $call_stack_supported \
+			"${kfail}"
 		}
 		-re -wrap ".*$srcfile:$return_int10_loc.*" {
 		    set hit_return_int10 true
 		    test_finish "return_int10" "dim0=5" "\\{500, 501, 502, 503, 504, 505, 506, 507, 508, 509\\}" \
-			"make_output \\(dim0=5\\)" $call_stack_supported
+			"make_output \\(dim0=5\\)" $call_stack_supported \
+			"${kfail}"
 		}
 		-re -wrap ".*$srcfile:$return_uchar4_loc.*" {
 		    set hit_return_uchar4 true
 		    test_finish "return_uchar4" \
 			"dim0=5" "\\{5, 10, 20, 40\\}" "make_output \\(dim0=5\\)" \
-			$call_stack_supported
+			$call_stack_supported "${kfail}"
 		}
 		-re -wrap ".*$srcfile:$return_int_loc.*" {
 		    set hit_return_int true

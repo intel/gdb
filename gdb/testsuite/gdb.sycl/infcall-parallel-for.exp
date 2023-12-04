@@ -48,6 +48,9 @@ foreach device $sycl_device_list {
 	    gdb_continue_to_breakpoint "hit the last line, trip $i" \
 		".*$srcfile:$last_line.*"
 
+	    if {[require_sycl_device $device "gpu" "Intel*"]} {
+		setup_kfail "JIRA GSD/7293" "*-*-*"
+	    }
 	    gdb_test "print get_dim\(wiID, 0\) == dim0" "true" \
 		"thread invariant, trip $i"
 	}

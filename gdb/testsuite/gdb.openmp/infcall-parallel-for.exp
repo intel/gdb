@@ -65,6 +65,9 @@ foreach extension ${openmp_languages_list} {
 		    gdb_test "print update_val\(in_elem, 100\).eqv.in_elem2" ".TRUE."\
 			"thread invariant, ${j}"
 		} else {
+		    if {[require_openmp_device "GPU"]} {
+			setup_kfail "JIRA GSD/7293" "*-*-*"
+		    }
 		    gdb_test "print update_val\(in_elem, 100\) == in_elem2" "true"\
 			"thread invariant, ${j}"
 		}

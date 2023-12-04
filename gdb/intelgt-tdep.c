@@ -573,6 +573,8 @@ struct intelgt_gdbarch_data
   int isabase_regnum = -1;
   /* Register number for the general state base SBA register.  */
   int genstbase_regnum = -1;
+  /* Register number for the DBG0 register.  */
+  int dbg0_regnum = -1;
   /* Assigned regnum ranges for DWARF regsets.  */
   regnum_range regset_ranges[intelgt::regset_count];
   /* Enabled pseudo-register for the current target description.  */
@@ -1488,6 +1490,8 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
     data->ce_regnum = possible_regnum;
   else if (strcmp ("genstbase", reg_name) == 0)
     data->genstbase_regnum = possible_regnum;
+  else if (strcmp ("dbg0", reg_name) == 0)
+    data->dbg0_regnum = possible_regnum;
 
   return possible_regnum;
 }
@@ -2896,6 +2900,62 @@ intelgt_check_reg_status (register_status status, int reg_num,
 	   reg_num, status);
 }
 
+/* Return the entry point of the kernel.
+   Throw if DBG0.1 or isabase cannot be read.  */
+
+static CORE_ADDR
+intelgt_kernel_entry_point ()
+{
+  std::string error_msg = _("Cannot read kernel entry address.");
+  if (inferior_ptid == null_ptid)
+    error ("%s", error_msg.c_str ());
+
+  regcache *regcache = get_current_regcache ();
+  gdbarch *arch = regcache->arch ();
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+  /* Check if DBG0 register is supported and includes DBG0.1.  */
+  if (data->dbg0_regnum == -1
+      || register_size (arch, data->dbg0_regnum) < 2 * sizeof (uint32_t))
+    error ("%s", error_msg.c_str ());
+
+  CORE_ADDR kernel_entry_address = 0x0;
+  register_status reg_status
+    = regcache->cooked_read_part (data->dbg0_regnum, sizeof (uint32_t),
+				  sizeof (uint32_t),
+				  (gdb_byte *) &kernel_entry_address);
+  intelgt_check_reg_status (reg_status, data->dbg0_regnum, error_msg);
+  CORE_ADDR isabase = intelgt_get_isabase (regcache);
+  kernel_entry_address += isabase;
+
+  bound_minimal_symbol kernel_symbol
+    = lookup_minimal_symbol_by_pc (kernel_entry_address);
+
+  /* Return the address of the kernel symbol, if we found one.  */
+  if (kernel_symbol.minsym != nullptr)
+    return kernel_symbol.value_address ();
+
+  /* Otherwise, return the address we just constructed.  */
+  return kernel_entry_address;
+}
+
+/* Implementation of gdbarch_entry_point method.  */
+
+static bool
+intelgt_entry_point (CORE_ADDR *entry_p)
+{
+  try
+    {
+      *entry_p = intelgt_kernel_entry_point ();
+      return true;
+    }
+  catch (const gdb_exception_error &e)
+    {
+      dprintf ("%s", e.message->c_str ());
+      return false;
+    }
+}
+
 namespace intelgt_implicit_args
 {
 /* A helper function to parse the fields of the implicit args structure.
@@ -3755,6 +3815,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_core_pid_to_str (gdbarch, intelgt_core_pid_to_str);
   set_gdbarch_core_read_description
     (gdbarch, intelgt_core_read_description);
+  set_gdbarch_entry_point (gdbarch, intelgt_entry_point);
 
 #if defined (USE_WIN32API)
   set_gdbarch_has_dos_based_file_system (gdbarch, 1);

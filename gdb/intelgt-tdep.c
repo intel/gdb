@@ -2817,6 +2817,10 @@ get_xe_version (unsigned int device_id)
       case 0x56B1:
       case 0x56B2:
       case 0x56B3:
+      case 0x56BA:
+      case 0x56BB:
+      case 0x56BC:
+      case 0x56BD:
       case 0x56C0:
       case 0x56C1:
       case 0x56CF:
@@ -2851,6 +2855,8 @@ get_xe_version (unsigned int device_id)
       case 0x0BD9:
       case 0x0BDA:
       case 0x0BDB:
+      case 0x0B69:
+      case 0x0B6E:
 	device_xe_version = XE_HPC;
 	break;
     }

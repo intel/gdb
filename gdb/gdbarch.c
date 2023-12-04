@@ -273,6 +273,7 @@ struct gdbarch
   gdbarch_workitem_global_id_ftype *workitem_global_id = nullptr;
   gdbarch_workitem_local_size_ftype *workitem_local_size = nullptr;
   gdbarch_workitem_global_size_ftype *workitem_global_size = nullptr;
+  gdbarch_entry_point_ftype *entry_point = nullptr;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -557,6 +558,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of workitem_global_id, has predicate.  */
   /* Skip verify of workitem_local_size, has predicate.  */
   /* Skip verify of workitem_global_size, has predicate.  */
+  /* Skip verify of entry_point, has predicate.  */
   if (!log.empty ())
     internal_error (_("verify_gdbarch: the following are invalid ...%s"),
 		    log.c_str ());
@@ -1482,6 +1484,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: workitem_global_size = <%s>\n",
 	      host_address_to_string (gdbarch->workitem_global_size));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_entry_point_p() = %d\n",
+	      gdbarch_entry_point_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: entry_point = <%s>\n",
+	      host_address_to_string (gdbarch->entry_point));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -5862,4 +5870,28 @@ set_gdbarch_workitem_global_size (struct gdbarch *gdbarch,
 				  gdbarch_workitem_global_size_ftype workitem_global_size)
 {
   gdbarch->workitem_global_size = workitem_global_size;
+}
+
+bool
+gdbarch_entry_point_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->entry_point != NULL;
+}
+
+bool
+gdbarch_entry_point (struct gdbarch *gdbarch, CORE_ADDR *entry_p)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->entry_point != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_entry_point called\n");
+  return gdbarch->entry_point (entry_p);
+}
+
+void
+set_gdbarch_entry_point (struct gdbarch *gdbarch,
+			 gdbarch_entry_point_ftype entry_point)
+{
+  gdbarch->entry_point = entry_point;
 }

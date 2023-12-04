@@ -1864,3 +1864,13 @@ extern bool gdbarch_workitem_global_size_p (struct gdbarch *gdbarch);
 typedef std::array<uint32_t, 3> (gdbarch_workitem_global_size_ftype) (struct gdbarch *gdbarch, thread_info *tp);
 extern std::array<uint32_t, 3> gdbarch_workitem_global_size (struct gdbarch *gdbarch, thread_info *tp);
 extern void set_gdbarch_workitem_global_size (struct gdbarch *gdbarch, gdbarch_workitem_global_size_ftype *workitem_global_size);
+
+/* On some architectures the entry point cannot be determined based solely
+   on the object file.
+   Return true if the entry point was acquired in ENTRY_P. */
+
+extern bool gdbarch_entry_point_p (struct gdbarch *gdbarch);
+
+typedef bool (gdbarch_entry_point_ftype) (CORE_ADDR *entry_p);
+extern bool gdbarch_entry_point (struct gdbarch *gdbarch, CORE_ADDR *entry_p);
+extern void set_gdbarch_entry_point (struct gdbarch *gdbarch, gdbarch_entry_point_ftype *entry_point);

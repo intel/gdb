@@ -51,6 +51,7 @@
 #include "gdb_bfd.h"
 #include "btrace.h"
 #include "gdbsupport/pathstuff.h"
+#include "gdbarch.h"
 
 #include <algorithm>
 #include <vector>
@@ -355,6 +356,13 @@ objfile::objfile (gdb_bfd_ref_ptr bfd_, const char *name, objfile_flags flags_)
 int
 entry_point_address_query (CORE_ADDR *entry_p)
 {
+  gdbarch *const gdbarch = target_gdbarch ();
+
+  /* On some architectures the entry point cannot be determined
+     based on object file.  */
+  if (gdbarch_entry_point_p (gdbarch))
+    return gdbarch_entry_point (gdbarch, entry_p);
+
   objfile *objf = current_program_space->symfile_object_file;
   if (objf == NULL || !objf->per_bfd->ei.entry_point_p)
     return 0;

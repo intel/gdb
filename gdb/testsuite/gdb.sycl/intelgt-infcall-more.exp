@@ -222,6 +222,9 @@ foreach device $sycl_device_list {
 		    incr branches_step
 		    pass "stepped into else-branch"
 		    set real_ce [get_valueof "/x" "\$ce" "invalid" "before infcalls at else-branch"]
+		    if {[require_sycl_device $device "gpu" "Intel*"]} {
+			setup_kfail "JIRA GSD/7293" "*-*-*"
+		    }
 		    gdb_test "print integer_grf_args(7, 6, 5)" "= 210" \
 			"infcall at else-branch"
 		    gdb_test "p/x \$ce" "$real_ce" "unchanged CE at else-branch"

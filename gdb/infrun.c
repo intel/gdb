@@ -4664,6 +4664,8 @@ wait_for_inferior (inferior *inf)
       /* Now figure out what to do with the result of the result.  */
       handle_inferior_event (&ecs);
 
+      set_stop_requested (ecs.target, ecs.ptid, false);
+
       if (!ecs.wait_some_more)
 	break;
     }
@@ -4985,7 +4987,10 @@ fetch_inferior_event ()
 	       don't want to stop all the other threads.  */
 	    if (ecs.event_thread == nullptr
 		|| !ecs.event_thread->control.in_cond_eval)
-	      stop_all_threads_if_all_stop_mode ();
+	      {
+		set_stop_requested (ecs.target, ecs.ptid, false);
+		stop_all_threads_if_all_stop_mode ();
+	      }
 
 	    clean_up_just_stopped_threads_fsms (&ecs);
 

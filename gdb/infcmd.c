@@ -63,6 +63,8 @@ static void until_next_command (int);
 
 static void step_1 (int, int, const char *);
 
+static void stop_current_target_threads_ns (ptid_t);
+
 #define ERROR_NO_INFERIOR \
    if (!target_has_execution ()) error (_("The program is not being run."));
 
@@ -2624,14 +2626,12 @@ attach_post_wait (int from_tty, enum attach_post_wait_mode mode)
 
       /* At least the current thread is already stopped.  */
 
-      /* In all-stop, by definition, all threads have to be already
-	 stopped at this point.  In non-stop, however, although the
-	 selected thread is stopped, others may still be executing.
-	 Be sure to explicitly stop all threads of the process.  This
-	 should have no effect on already stopped threads.  */
-      if (non_stop)
-	target_stop (ptid_t (inferior->pid));
-      else if (target_is_non_stop_p ())
+      /* In all-stop targets, by definition, all threads have to be
+	 already stopped at this point.  In non-stop targets, however,
+	 be sure to explicitly stop all threads of the process if we
+	 are in all-stop mode.  This should have no effect on already
+	 stopped threads.  */
+      if (!non_stop && target_is_non_stop_p ())
 	{
 	  struct thread_info *lowest = inferior_thread ();
 
@@ -2742,13 +2742,13 @@ attach_command (const char *args, int from_tty)
 	 do so now, because we're going to install breakpoints and
 	 poke at memory.  */
 
-      if (async_exec)
-	/* The user requested an `attach&'; stop just one thread.  */
-	target_stop (inferior_ptid);
-      else
-	/* The user requested an `attach', so stop all threads of this
-	   inferior.  */
-	target_stop (ptid_t (inferior_ptid.pid ()));
+      /* If the user requested an `attach&', stop just one thread.
+	 If the user requested an `attach', stop all threads of this
+	 inferior.  */
+      ptid_t stop_ptid
+	= async_exec ? inferior_ptid : ptid_t (inferior_ptid.pid ());
+
+      stop_current_target_threads_ns (stop_ptid);
     }
 
   /* Check for exec file mismatch, and let the user solve it.  */

@@ -4790,6 +4790,7 @@ fetch_inferior_event ()
 	    bool should_notify_stop = true;
 	    bool proceeded = false;
 
+	    set_stop_requested (ecs.target, ecs.ptid, false);
 	    stop_all_threads_if_all_stop_mode (ecs);
 
 	    clean_up_just_stopped_threads_fsms (&ecs);

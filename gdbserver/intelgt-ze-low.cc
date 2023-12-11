@@ -766,6 +766,7 @@ intelgt_ze_target::erratum_18020355813 (thread_info *tp)
     case 0x56bd:
 
     case 0x0bd0:
+    case 0x0bd4:
     case 0x0bd5:
     case 0x0bd6:
     case 0x0bd7:

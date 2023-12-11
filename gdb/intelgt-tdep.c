@@ -2843,6 +2843,7 @@ get_xe_version (unsigned int device_id)
 	break;
 
       case 0x0BD0:
+      case 0x0BD4:
       case 0x0BD5:
       case 0x0BD6:
       case 0x0BD7:

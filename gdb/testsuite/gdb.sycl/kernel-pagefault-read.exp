@@ -42,5 +42,16 @@ foreach device $sycl_device_list {
 	    setup_kfail "JIRA GSD/6918" "*-*-*"
 	}
 	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*"
+
+	clean_restart "${binfile}"
+	with_test_prefix "second" {
+	    if {![runto_main [sycl_get_device_args $device]]} {
+		continue
+	    }
+	}
+	set line [gdb_get_line_number "line-before-pagefault"]
+	gdb_breakpoint $line {temporary}
+	gdb_continue_to_breakpoint "line before pagefault" ".*$srcfile:$line.*"
+	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*"
     }
 }

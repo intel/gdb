@@ -32,7 +32,7 @@ main (int argc, char *argv[])
 
       cgh.single_task<> ([=] ()
 	{
-	  int *src = nullptr;
+	  int *src = nullptr;  /* line-before-pagefault  */
 	  numbers[0] = src[0];
 	});
     });

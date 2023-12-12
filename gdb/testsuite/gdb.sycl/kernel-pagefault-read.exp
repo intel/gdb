@@ -52,6 +52,9 @@ foreach device $sycl_device_list {
 	set line [gdb_get_line_number "line-before-pagefault"]
 	gdb_breakpoint $line {temporary}
 	gdb_continue_to_breakpoint "line before pagefault" ".*$srcfile:$line.*"
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    setup_kfail "JIRA GSD/7316" "*-*-*"
+	}
 	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*"
     }
 }

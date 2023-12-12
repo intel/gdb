@@ -3326,10 +3326,16 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
   if (tdesc != nullptr)
     {
+      const std::string &tdesc_vendor_id
+	= tdesc_find_device_info_attribute (tdesc, "vendor_id");
       const std::string &tdesc_device_id
 	= tdesc_find_device_info_attribute (tdesc, "target_id");
-      if (tdesc_device_id.empty ())
-	warning (_("Failed to read target id from device."));
+      if ((tdesc_vendor_id != "0x8086") || tdesc_device_id.empty ())
+	{
+	  warning (_("Device not recognized: vendor id=%s, device id=%s"),
+		   tdesc_vendor_id.c_str (), tdesc_device_id.c_str ());
+	  return nullptr;
+	}
       else
 	{
 	  iga_version = (iga_gen_t) get_xe_version (

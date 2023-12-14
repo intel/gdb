@@ -89,6 +89,9 @@ thread apply thread-list|all|all-lanes -unavailable
 
 * MI changes
 
+  ** New possible value "unavailable" for the "reason" field in "stopped"
+     async record.
+
   ** New field in '-thread-info': 'thread-workgroup'
 
      Added a new field to the '-thread-info' command.  If the thread is

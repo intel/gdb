@@ -61,9 +61,15 @@ foreach device_info "${device_list}" {
 	gdb_test "ptype arr_vla1"  \
 	    "type = character\\*12 \\(5\\)"  \
 	    "print variable length string array type"
+	if {[require_openmp_device "GPU"]} {
+	    setup_kfail "JIRA GSD/10380" "*-*-*"
+	}
 	gdb_test "print arr_vla2"  \
 	    " = 'vlaary'"  \
 	    "print variable length string"
+	if {[require_openmp_device "GPU"]} {
+	    setup_kfail "JIRA GSD/10380" "*-*-*"
+	}
 	gdb_test "ptype arr_vla2"  \
 	    "type = character\\*6"  \
 	    "print variable length string type"

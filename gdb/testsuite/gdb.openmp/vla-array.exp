@@ -50,6 +50,7 @@ foreach device_info "${device_list}" {
 
 	# Try to access vla string / vla string array / string array values
 	gdb_breakpoint [gdb_get_line_number "breakpt"]
+	setup_kfail "JIRA CMPLRLLVM/54593" "*-*-*"
 	gdb_continue_to_breakpoint "breakpt" ".*breakpt.*"
 
 	if {[require_openmp_device "GPU"]} {
@@ -94,6 +95,8 @@ foreach device_info "${device_list}" {
 	    "print string array"
 	if {[require_openmp_device "GPU"]} {
 	    setup_kfail "$kfail_ticket" "*-*-*"
+	} elseif {[require_openmp_device "CPU"]} {
+	    setup_kfail "JIRA CMPLRLLVM/54593" "*-*-*"
 	}
 	gdb_test "ptype arr2"  \
 	    "type = character\\*9 \\(3\\)"  \

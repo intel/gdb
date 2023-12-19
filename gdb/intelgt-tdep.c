@@ -3318,8 +3318,6 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
     return arches->gdbarch;
 
   const target_desc *tdesc = info.target_desc;
-  gdbarch *gdbarch = gdbarch_alloc (&info, nullptr);
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
 
 #if defined (HAVE_LIBIGA64)
   iga_gen_t iga_version = IGA_GEN_INVALID;
@@ -3350,7 +3348,12 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   /* Take the best guess in case IGA_VERSION is still invalid.  */
   if (iga_version == IGA_GEN_INVALID)
     iga_version = IGA_XE_HPC;
+#endif
 
+  gdbarch *gdbarch = gdbarch_alloc (&info, nullptr);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+#if defined (HAVE_LIBIGA64)
   const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);
   iga_context_create (&options, &data->iga_ctx);
 #endif

@@ -39,6 +39,10 @@ foreach device_info "${device_list}" {
 	    continue
 	}
 
+	# Older i915 doesn't support pagefault event.
+	if {[require_openmp_device "GPU"]} {
+	    setup_kfail "JIRA GSD/6918" "*-*-*"
+	}
 	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*"
 
 	clean_restart ${binfile}

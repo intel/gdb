@@ -1,0 +1,55 @@
+# Copyright 2023 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Check read pagefault detection.
+
+load_lib openmp.exp
+
+set device_list [omp_get_device_list "cpp"]
+if {[llength $device_list] == 0} {
+    unsupported "target does not support OpenMP cpp"
+    return 0
+}
+
+standard_testfile .cpp
+set exe "${binfile}_cpp"
+
+if {[prepare_openmp_for_testing ${exe} ${srcfile} "cpp"] == -1} {
+    untested "OpenMP: Fail to prepare the test ${exe}"
+    return -1
+}
+
+foreach device_info "${device_list}" {
+    with_test_prefix [init_openmp_device $device_info "cpp"] {
+
+	if {![start_openmp_program "cpp"]} {
+	    untested "Fail to start the program"
+	    continue
+	}
+
+	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*"
+
+	clean_restart "${exe}"
+	with_test_prefix "second" {
+	    if {![start_openmp_program "cpp"]} {
+		continue
+	    }
+	    set line [gdb_get_line_number "line-before-pagefault"]
+	    gdb_breakpoint $line {temporary}
+	    gdb_continue_to_breakpoint "line before pagefault" ".*$srcfile:$line.*"
+	    gdb_test "continue" "signal SIGSEGV, Segmentation fault.*"
+	}
+    }
+}

@@ -44,6 +44,7 @@ line_header::add_include_dir (const char *include_dir)
 void
 line_header::add_file_name (const char *name,
 			    dir_index d_index,
+			    const char *source,
 			    unsigned int mod_time,
 			    unsigned int length)
 {
@@ -53,7 +54,7 @@ line_header::add_file_name (const char *name,
   if (dwarf_line_debug >= 2)
     gdb_printf (gdb_stdlog, "Adding file %d: %s\n", index, name);
 
-  m_file_names.emplace_back (name, index, d_index, mod_time, length);
+  m_file_names.emplace_back (name, index, d_index, source, mod_time, length);
 }
 
 std::string
@@ -124,6 +125,7 @@ read_formatted_entries (dwarf2_per_objfile *per_objfile, bfd *abfd,
 			void (*callback) (struct line_header *lh,
 					  const char *name,
 					  dir_index d_index,
+					  const char *source,
 					  unsigned int mod_time,
 					  unsigned int length))
 {
@@ -238,13 +240,17 @@ read_formatted_entries (dwarf2_per_objfile *per_objfile, bfd *abfd,
 	      break;
 	    case DW_LNCT_MD5:
 	      break;
+	    case DW_LNCT_LLVM_source:
+	      if (string.has_value ())
+		fe.source = *string;
+	      break;
 	    default:
 	      complaint (_("Unknown format content type %s"),
 			 pulongest (content_type));
 	    }
 	}
 
-      callback (lh, fe.name, fe.d_index, fe.mod_time, fe.length);
+      callback (lh, fe.name, fe.d_index, fe.source, fe.mod_time, fe.length);
     }
 
   *bufp = buf;
@@ -366,8 +372,8 @@ dwarf_decode_line_header (sect_offset sect_off, bool is_dwz,
       read_formatted_entries (per_objfile, abfd, &line_ptr, lh.get (),
 			      offset_size,
 			      [] (struct line_header *header, const char *name,
-				  dir_index d_index, unsigned int mod_time,
-				  unsigned int length)
+				  dir_index d_index, const char *source,
+				  unsigned int mod_time, unsigned int length)
 	{
 	  header->add_include_dir (name);
 	});
@@ -376,10 +382,10 @@ dwarf_decode_line_header (sect_offset sect_off, bool is_dwz,
       read_formatted_entries (per_objfile, abfd, &line_ptr, lh.get (),
 			      offset_size,
 			      [] (struct line_header *header, const char *name,
-				  dir_index d_index, unsigned int mod_time,
-				  unsigned int length)
+				  dir_index d_index, const char *source,
+				  unsigned int mod_time, unsigned int length)
 	{
-	  header->add_file_name (name, d_index, mod_time, length);
+	  header->add_file_name (name, d_index, source, mod_time, length);
 	});
     }
   else
@@ -406,7 +412,7 @@ dwarf_decode_line_header (sect_offset sect_off, bool is_dwz,
 	  length = read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
 	  line_ptr += bytes_read;
 
-	  lh->add_file_name (cur_file, d_index, mod_time, length);
+	  lh->add_file_name (cur_file, d_index, nullptr, mod_time, length);
 	}
       line_ptr += bytes_read;
     }

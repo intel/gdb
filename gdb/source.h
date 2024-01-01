@@ -21,6 +21,7 @@
 
 #include "gdbsupport/pathstuff.h"
 #include "gdbsupport/scoped_fd.h"
+#include "gdbsupport/scoped_memfd.h"
 
 struct program_space;
 struct symtab;
@@ -89,6 +90,10 @@ extern gdb::unique_xmalloc_ptr<char> find_source_or_rewrite
 /* Open a source file given a symtab S.  Returns a file descriptor or
    negative errno indicating the reason for the failure.  */
 extern scoped_fd open_source_file (struct symtab *s);
+
+extern scoped_fd
+open_embedded_source (struct symtab *s,
+		      gdb::unique_xmalloc_ptr<char> *fullname);
 
 extern gdb::unique_xmalloc_ptr<char> rewrite_source_path (const char *path);
 

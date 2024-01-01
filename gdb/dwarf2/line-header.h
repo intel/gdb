@@ -39,9 +39,10 @@ struct file_entry
   file_entry () = default;
 
   file_entry (const char *name_, file_name_index index_, dir_index d_index_,
-	      unsigned int mod_time_, unsigned int length_)
+	      const char *source_, unsigned int mod_time_, unsigned int length_)
     : name (name_),
       index (index_),
+      source (source_),
       d_index (d_index_),
       mod_time (mod_time_),
       length (length_)
@@ -57,6 +58,10 @@ struct file_entry
 
   /* The index of this file in the file table.  */
   file_name_index index {};
+
+  /* The file's contents (if not null).  Note this is an observing pointer.
+     The memory is owned by debug_line_buffer.  */
+  const char *source {};
 
   /* The directory index (1-based).  */
   dir_index d_index {};
@@ -92,7 +97,7 @@ struct line_header
   void add_include_dir (const char *include_dir);
 
   /* Add an entry to the file name table.  */
-  void add_file_name (const char *name, dir_index d_index,
+  void add_file_name (const char *name, dir_index d_index, const char *source,
 		      unsigned int mod_time, unsigned int length);
 
   /* Return the include dir at INDEX (0-based in DWARF 5 and 1-based before).

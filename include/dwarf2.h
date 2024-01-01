@@ -294,6 +294,7 @@ enum dwarf_line_number_content_type
     DW_LNCT_size = 0x4,
     DW_LNCT_MD5 = 0x5,
     DW_LNCT_lo_user = 0x2000,
+    DW_LNCT_LLVM_source = 0x2001,
     DW_LNCT_hi_user = 0x3fff
   };
 

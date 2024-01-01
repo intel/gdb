@@ -18,6 +18,8 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "print-utils.h"
+#include <string_view>
+
 /* Temporary storage using circular buffer.  */
 
 /* Number of cells in the circular buffer.  */
@@ -329,4 +331,16 @@ host_address_to_string_1 (const void *addr)
   xsnprintf (str, PRINT_CELL_SIZE, "0x%s",
 	     phex_nz ((uintptr_t) addr, sizeof (addr)));
   return str;
+}
+
+/* See print-utils.h.  */
+
+bool
+ends_with (const std::string_view input, const std::string_view suffix)
+{
+  if (suffix.size () > input.size ())
+    return false;
+
+  return input.compare (input.size () - suffix.size (),
+			suffix.size (), suffix) == 0;
 }

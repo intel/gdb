@@ -2601,11 +2601,11 @@ namespace eval Dwarf {
 	# Add a file name entry to the line table header's file names table.
 	#
 	# Return the index by which this entry can be referred to.
-	proc file_name {filename diridx} {
+	proc file_name {filename diridx { source "" }} {
 	    variable _line_file_names
-	    lappend _line_file_names $filename $diridx
+	    lappend _line_file_names $filename $diridx $source
 
-	    set nr_filenames [expr [llength $_line_file_names] / 2]
+	    set nr_filenames [expr [llength $_line_file_names] / 3]
 	    if { $Dwarf::_line_unit_version >= 5 } {
 		return [expr $nr_filenames - 1]
 	    } else {
@@ -2660,7 +2660,7 @@ namespace eval Dwarf {
 		    }
 		}
 
-		_op .byte 2 "file_name_entry_format_count"
+		_op .byte 3 "file_name_entry_format_count"
 		_op .uleb128 1 \
 		    "file_name_entry_format (content type code: DW_LNCT_path)"
 		switch $_line_string_form {
@@ -2673,15 +2673,19 @@ namespace eval Dwarf {
 			    "directory_entry_format (form: DW_FORM_line_strp)"
 		    }
 		}
+		_op .uleb128 0x2001 \
+		    "file_name_entry_format (content type code: DW_LNCT_llvm_source)"
+		_op .uleb128 0x08 \
+		  "directory_entry_format (form: DW_FORM_string)"
 		_op .uleb128 2 \
 		    "file_name_entry_format (content type code: DW_LNCT_directory_index)"
 		_op .uleb128 0x0f \
 		    "file_name_entry_format (form: DW_FORM_udata)"
 
-		set nr_files [expr [llength $_line_file_names] / 2]
+		set nr_files [expr [llength $_line_file_names] / 3]
 		_op .byte $nr_files "file_names_count"
 
-		foreach { filename diridx } $_line_file_names {
+		foreach { filename diridx source } $_line_file_names {
 		    switch $_line_string_form {
 			string {
 			    _op .ascii [_quote $filename]
@@ -2695,6 +2699,7 @@ namespace eval Dwarf {
 			    _op_offset [expr $_line_is_64 ? 8 : 4] $string_ptr
 			}
 		    }
+		    _op .ascii [_quote [string map { "\"" "\\\"" "\n" "\\n" } "$source"]]
 		    _op .uleb128 $diridx
 		}
 	    } else {

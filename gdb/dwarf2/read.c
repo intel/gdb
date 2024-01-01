@@ -16630,7 +16630,8 @@ dwarf_decode_lines_1 (struct line_header *lh, struct dwarf2_cu *cu,
 		    length =
 		      read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
 		    line_ptr += bytes_read;
-		    lh->add_file_name (cur_file, dindex, mod_time, length);
+		    lh->add_file_name (cur_file, dindex, nullptr, mod_time,
+				       length);
 		  }
 		  break;
 		case DW_LNE_set_discriminator:
@@ -16785,8 +16786,12 @@ dwarf_decode_lines (struct line_header *lh, struct dwarf2_cu *cu,
       subfile *sf = builder->get_current_subfile ();
 
       if (sf->symtab == nullptr)
-	sf->symtab = allocate_symtab (cust, sf->name.c_str (),
-				      sf->name_for_id.c_str ());
+	{
+	  sf->symtab = allocate_symtab (cust, sf->name.c_str (),
+					sf->name_for_id.c_str ());
+	  if (fe.source != nullptr)
+	    sf->symtab->source = fe.source;
+	}
 
       fe.symtab = sf->symtab;
     }

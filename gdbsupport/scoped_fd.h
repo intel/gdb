@@ -80,7 +80,7 @@ public:
     return m_fd;
   }
 
-private:
+protected:
   int m_fd;
 };
 

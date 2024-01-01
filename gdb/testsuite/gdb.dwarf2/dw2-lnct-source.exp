@@ -1,0 +1,86 @@
+# Copyright 2024-2026 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Check that GDB can honor LNCT_llvm_SOURCE.
+
+load_lib dwarf.exp
+
+# This test can only be run on targets which support DWARF-2 and use gas.
+require dwarf2_support
+
+standard_testfile .c .S
+
+set asm_file [standard_output_file $srcfile2]
+
+set fp [open "${srcdir}/${subdir}/${srcfile}" r]
+set srcfile_data [read $fp]
+close $fp
+
+Dwarf::assemble $asm_file {
+    global srcdir subdir srcfile srcfile2 srcfile_data
+    declare_labels lines_label
+
+    get_func_info main
+
+    cu {} {
+	compile_unit {
+	    {language @DW_LANG_C}
+	    {name missing-file.c}
+	    {stmt_list ${lines_label} DW_FORM_sec_offset}
+	} {
+	    subprogram {
+		{external 1 flag}
+		{name main}
+		{low_pc $main_start addr}
+		{high_pc "$main_start + $main_len" addr}
+	    }
+	}
+    }
+
+    lines {version 5} lines_label {
+	set diridx [include_dir "${srcdir}/${subdir}"]
+	file_name "missing-file.c" $diridx "${srcfile_data}"
+
+	program {
+	    DW_LNS_set_file $diridx
+	    DW_LNE_set_address $main_start
+	    line [gdb_get_line_number "main prologue"]
+	    DW_LNS_copy
+
+	    DW_LNE_set_address main_label
+	    line [gdb_get_line_number "main assign m"]
+	    DW_LNS_copy
+
+	    DW_LNE_set_address main_end
+	    line [gdb_get_line_number "main end"]
+	    DW_LNS_copy
+
+	    DW_LNE_set_address $main_end
+	    DW_LNE_end_sequence
+	}
+    }
+}
+
+if { [prepare_for_testing "failed to prepare" ${testfile} \
+	  [list $srcfile $asm_file] {nodebug}] } {
+    return -1
+}
+
+if { ![runto_main] } {
+    return -1
+}
+
+set assign_m_line [gdb_get_line_number "main assign m"]
+gdb_test "frame" ".*main \\\(\\\) at \[^\r\n\]*:$assign_m_line\r\n.*"

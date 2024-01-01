@@ -1155,6 +1155,37 @@ find_and_open_source (const char *filename,
   return scoped_fd (result);
 }
 
+/* Open an embedded source file given a symtab S.  Returns a file descriptor
+   or negative errno for error.  */
+
+scoped_fd
+open_embedded_source (struct symtab *s,
+		      gdb::unique_xmalloc_ptr<char> *fullname)
+{
+  if ((s->source == nullptr) || (strlen (s->source) == 0))
+    return scoped_memfd {};
+
+  std::string dirname = ldirname (objfile_name (s->compunit ()-> objfile ()));
+  std::string filename = lbasename (s->filename);
+  /* Append 'embedded' suffix to indicate the source file is based on
+     DWARF embedded sources.  */
+  std::string temp_name = dirname + SLASH_STRING + filename + "-embedded";
+
+  /* If reading of source files is disabled then return a result indicating
+     the attempt to read this source file failed.  GDB will then display
+     the filename and line number instead.  */
+  if (!source_open)
+    return scoped_fd (-ECANCELED);
+
+  size_t source_len = strlen (s->source);
+  scoped_memfd fd (s->source, source_len, temp_name.c_str ());
+  if (fd.get () < 0)
+    return std::move (fd);
+
+  *fullname = make_unique_xstrdup (temp_name.c_str ());
+  return std::move (fd);
+}
+
 /* Open a source file given a symtab S.  Returns a file descriptor or
    negative errno for error.
    
@@ -1167,8 +1198,16 @@ open_source_file (struct symtab *s)
     return scoped_fd (-EINVAL);
 
   gdb::unique_xmalloc_ptr<char> fullname = s->release_fullname ();
-  scoped_fd fd = find_and_open_source (s->filename, s->compunit ()->dirname (),
-				       &fullname);
+
+  scoped_fd fd = open_embedded_source(s, &fullname);
+  if (fd.get () >= 0)
+    {
+      s->set_fullname (std::move (fullname));
+      return fd;
+    }
+
+  fd = find_and_open_source (s->filename, s->compunit ()->dirname (),
+			      &fullname);
 
   if (fd.get () < 0)
     {

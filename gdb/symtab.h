@@ -1764,6 +1764,15 @@ struct symtab
 
   const char *filename;
 
+  /* Embedded source text for this source file, if available.
+
+     This is a borrowed pointer to storage owned by the creator of this
+     symtab (for example, the debug info reader or objfile).  The storage
+     must remain valid for as long as the symtab is in use.  This pointer
+     may be nullptr if no embedded source text is provided.  */
+
+  const char *source;
+
   /* Filename for this source file, used as an identifier to link with
      related objects such as associated macro_source_file objects.  It must
      therefore match the name of any macro_source_file object created for this

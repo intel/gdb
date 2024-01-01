@@ -20,6 +20,8 @@
 #ifndef GDBSUPPORT_PRINT_UTILS_H
 #define GDBSUPPORT_PRINT_UTILS_H
 
+#include <string_view>
+
 /* How many characters (including the terminating null byte) fit in a
    cell.  */
 #define PRINT_CELL_SIZE 100
@@ -101,5 +103,10 @@ extern const char *host_address_to_string_1 (const void *addr);
 /* Return the next entry in the circular print buffer.  */
 
 extern char *get_print_cell (void);
+
+/* Returns true if INPUT ends with SUFFIX, false otherwise.  */
+
+extern bool ends_with (const std::string_view input,
+		       const std::string_view suffix);
 
 #endif /* GDBSUPPORT_PRINT_UTILS_H */

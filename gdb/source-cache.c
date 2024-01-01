@@ -24,6 +24,7 @@
 #include "objfiles.h"
 #include "exec.h"
 #include "cli/cli-cmds.h"
+#include "gdbsupport/print-utils.h"
 
 #ifdef HAVE_SOURCE_HIGHLIGHT
 /* If Gnulib redirects 'open' and 'close' to its replacements
@@ -116,7 +117,7 @@ source_cache::get_plain_source_lines (struct symtab *s,
   else if (current_program_space->exec_bfd ())
     mtime = current_program_space->ebfd_mtime;
 
-  if (mtime && mtime < st.st_mtime)
+  if (mtime && mtime < st.st_mtime && !ends_with (s->fullname (), "-embedded"))
     warning (_("Source file is more recent than executable."));
 
   std::vector<off_t> offsets;

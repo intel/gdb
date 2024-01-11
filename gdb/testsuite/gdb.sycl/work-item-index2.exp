@@ -66,12 +66,14 @@ foreach device $sycl_device_list {
 	set namespace_version [get_sycl_header_version]
 	if {$namespace_version == 0} {
 	    xfail "Test \"print wi pretty\" is not supported for compiler {[test_compiler_info]}."
-	} else {
-	    gdb_test_multiple "print wi" "print wi pretty" {
-		-re -wrap " = sycl::_V${namespace_version}::id<1> = \\{($decimal)\\}" {
-		    set wi_pretty $expect_out(1,string)
-		    pass $gdb_test_name
-		}
+	    xfail "Test \"print wiID pretty\" is not supported for compiler {[test_compiler_info]}."
+	    continue
+	}
+
+	gdb_test_multiple "print wi" "print wi pretty" {
+	    -re -wrap " = sycl::_V${namespace_version}::id<1> = \\{($decimal)\\}" {
+		set wi_pretty $expect_out(1,string)
+		pass $gdb_test_name
 	    }
 	}
 	verbose -log "wi_pretty: $wi_pretty"
@@ -94,14 +96,10 @@ foreach device $sycl_device_list {
 	gdb_test "up"
 
 	set wiID_pretty "wiID_pretty"
-	if {$namespace_version == 0} {
-	    xfail "Test \"print wiID pretty\" is not supported for compiler {[test_compiler_info]}."
-	} else {
-	    gdb_test_multiple "print wiID" "print wiID pretty" {
-		-re -wrap " = sycl::_V${namespace_version}::id<1> = \\{($decimal)\\}" {
-		    set wiID_pretty $expect_out(1,string)
-		    pass $gdb_test_name
-		}
+	gdb_test_multiple "print wiID" "print wiID pretty" {
+	    -re -wrap " = sycl::_V${namespace_version}::id<1> = \\{($decimal)\\}" {
+		set wiID_pretty $expect_out(1,string)
+		pass $gdb_test_name
 	    }
 	}
 	verbose -log "wiID_pretty: $wiID_pretty"

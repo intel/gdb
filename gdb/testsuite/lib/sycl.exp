@@ -180,7 +180,7 @@ gdb_caching_proc init_sycl_devices_list {
 
     set result 1
     gdb_test_multiple "continue" "continue" {
-	-re "SYCL: List of Target devices: \\\[(.*)\\\]" {
+	-re "SYCL: List of Target devices: \\\[(\[^\r\n\]+)\\\]" {
 	    set sycl_device_list [split $expect_out(1,string) ","]
 	    exp_continue
 	}

@@ -2698,6 +2698,8 @@ attach_command (const char *args, int from_tty)
   if (non_stop && !attach_target->supports_non_stop ())
     error (_("Cannot attach to this target in non-stop mode"));
 
+  inferior->needs_setup = true;
+
   attach_target->attach (args, from_tty);
   /* to_attach should push the target, so after this point we
      shouldn't refer to attach_target again.  */
@@ -2733,8 +2735,6 @@ attach_command (const char *args, int from_tty)
   /* Set up execution context to know that we should return from
      wait_for_inferior as soon as the target reports a stop.  */
   init_wait_for_inferior ();
-
-  inferior->needs_setup = true;
 
   if (target_is_non_stop_p ())
     {

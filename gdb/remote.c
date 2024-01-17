@@ -2988,7 +2988,8 @@ remote_target::remote_notice_new_inferior (ptid_t currthread, bool executing)
 	{
 	  bool fake_pid_p = !m_features.remote_multi_process_p ();
 
-	  inf = remote_add_inferior (fake_pid_p, pid, -1, 1);
+	  bool try_open_exec = !current_inf->needs_setup;
+	  inf = remote_add_inferior (fake_pid_p, pid, -1, try_open_exec);
 	}
 
       /* We may have received the event for a process in general.
@@ -6609,6 +6610,8 @@ extended_remote_target::attach (const char *args, int from_tty)
   putpkt (rs->buf);
   getpkt (&rs->buf);
 
+  ptid_t curr_ptid = null_ptid;
+
   switch (m_features.packet_ok (rs->buf, PACKET_vAttach))
     {
     case PACKET_OK:
@@ -6617,6 +6620,9 @@ extended_remote_target::attach (const char *args, int from_tty)
 	  /* Save the reply for later.  */
 	  wait_status = (char *) alloca (strlen (rs->buf.data ()) + 1);
 	  strcpy (wait_status, rs->buf.data ());
+
+	  /* Save the target's current thread to restore later.  */
+	  curr_ptid = remote_current_thread (ptid_t (pid));
 	}
       else if (strcmp (rs->buf.data (), "OK") != 0)
 	error (_("Attaching to %s failed with: %s"),
@@ -6630,14 +6636,33 @@ extended_remote_target::attach (const char *args, int from_tty)
 	     target_pid_to_str (ptid_t (pid)).c_str ());
     }
 
-  switch_to_inferior_no_thread (remote_add_inferior (false, pid, 1, 0));
+  /* The target may interpret PID in its own way and create inferiors
+     with different process ids.  Instead of blindly adding an
+     inferior with the given PID, rely on the thread-update mechanism
+     to add new inferiors and threads with the correct ids, as
+     reported by the target.
 
-  inferior_ptid = ptid_t (pid);
+     Updating the threads may notice and add multiple new inferiors.
+     Remember the current one.  */
+  inferior *current_inf = current_inferior ();
+
+  {
+    /* Because we are attaching, pretend that the target is starting
+       up, so that the new inferior(s) will be set up accordingly.  */
+    scoped_mark_target_starting target_is_starting (this);
+    this->has_delta_thread_list = false;
+    update_thread_list ();
+
+    /* Check if this target has a delta list of threads.  */
+    this->has_delta_thread_list = remote_query_delta_thread_list ();
+  }
+
+  pid = current_inf->pid;
 
   if (target_is_non_stop_p ())
     {
-      /* Get list of threads.  */
-      update_thread_list ();
+      switch_to_inferior_no_thread (current_inf);
+      inferior_ptid = ptid_t (pid);
 
       thread_info *thread = first_thread_of_inferior (current_inferior ());
       if (thread != nullptr)
@@ -6645,26 +6670,23 @@ extended_remote_target::attach (const char *args, int from_tty)
 
       /* Invalidate our notion of the remote current thread.  */
       record_currthread (rs, minus_one_ptid);
+
+      gdb_assert (wait_status == nullptr);
+      gdb_assert (target_can_async_p ());
     }
   else
     {
-      /* Now, if we have thread information, update the main thread's
-	 ptid.  */
-      ptid_t curr_ptid = remote_current_thread (ptid_t (pid));
+      /* Adding multiple new inferiors in update_thread_list may have
+	 changed the remote's general thread to fetch the target
+	 description correctly.  Change the general thread back
+	 to what we stored before.  */
+      gdb_assert (curr_ptid != null_ptid);
+      set_general_thread (curr_ptid);
 
-      /* Add the main thread to the thread list.  We add the thread
-	 silently in this case (the final true parameter).  */
-      thread_info *thr = remote_add_thread (curr_ptid, true, true, true);
-
+      thread_info *thr = this->find_thread (curr_ptid);
+      gdb_assert (thr != nullptr);
       switch_to_thread (thr);
-    }
 
-  /* Next, if the target can specify a description, read it.  We do
-     this before anything involving memory or registers.  */
-  target_find_description ();
-
-  if (!target_is_non_stop_p ())
-    {
       /* Use the previously fetched status.  */
       gdb_assert (wait_status != NULL);
 
@@ -6672,12 +6694,6 @@ extended_remote_target::attach (const char *args, int from_tty)
 	=  remote_notif_parse (this, &notif_client_stop, wait_status);
 
       push_stop_reply ((struct stop_reply *) reply);
-    }
-  else
-    {
-      gdb_assert (wait_status == NULL);
-
-      gdb_assert (target_can_async_p ());
     }
 }
 

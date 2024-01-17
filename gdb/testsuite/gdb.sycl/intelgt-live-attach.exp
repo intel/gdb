@@ -53,27 +53,48 @@ proc spawn_sycl_proc {executable device} {
 # Find the stopped threads, check their backtrace, and return the
 # thread ids.
 
-proc test_attach {testpid} {
-    global srcfile gdb_prompt
+proc test_attach {testpid non_stop} {
+    global srcfile gdb_prompt decimal
+
+    # It is expected to find 4 threads exactly, as the input data size
+    # is 64 and subgroup size is 16.  These values can be controlled
+    # with DATA_SIZE (64 by default) and SUB_GROUP_SIZE (16 by
+    # default) flags, if needed.
+    set num_spinning_threads 4
 
     # Attach GDB to the process.
-    #
-    # We use gdb_test_multiple since in non-stop mode, there may be
-    # further stop messages after the prompt.
-    gdb_test_multiple "attach $testpid" "attach" {
-	-re "Attaching to program.*$gdb_prompt" {
-	    pass $gdb_test_name
+    if {!$non_stop} {
+	gdb_test "attach $testpid" "Attaching to program.*" "attach"
+    } else {
+	# In non-stop mode, threads are interrupted and we see the
+	# stop events.  GDB, however, does not show the first stop
+	# event; this is a feature of the attach command.  We make
+	# sure we receive the stop events of N - 1 GPU threads
+	# before we attempt to find their ids.
+
+	set stopped 0
+	gdb_test_multiple "attach $testpid" "attach" {
+	    -re "Attaching to program.*$gdb_prompt" {
+		incr stopped
+		exp_continue
+	    }
+	    -re "Thread 1\.$decimal stopped" {
+		exp_continue
+	    }
+	    -re "Thread $decimal\.$decimal stopped" {
+		incr stopped
+		if {$stopped < $num_spinning_threads} {
+		    exp_continue
+		}
+	    }
 	}
+	gdb_assert {$stopped == $num_spinning_threads} \
+	    "stop events received"
     }
 
-    # Get the spinning kernel line.
+    # Get the spinning kernel line and find the thread ids.
     set spinning_line [gdb_get_line_number "spinning-line"]
 
-    # Find all spinning threads.  It is expected to find 4 threads exactly,
-    # as the input data size is 64 and subgroup size is 16.  These values
-    # can be controlled with DATA_SIZE (64 by default) and SUB_GROUP_SIZE
-    # (16 by default) flags, if needed.
-    set num_spinning_threads 4
     set spinning_threads [get_stopped_threads $srcfile $spinning_line]
     verbose -log "spinning threads: $spinning_threads"
     gdb_assert { [llength $spinning_threads] == $num_spinning_threads } \
@@ -126,7 +147,7 @@ foreach device $sycl_device_list {
 	    verbose -log "spawn id: $test_spawn_id, test pid: $test_pid"
 
 	    with_test_prefix "first attach" {
-		set spinning_threads_1 [test_attach $test_pid]
+		set spinning_threads_1 [test_attach $test_pid $non_stop]
 	    }
 
 	    # Detach from the host application and attach again.
@@ -135,7 +156,7 @@ foreach device $sycl_device_list {
 
 	    # Re-attach and test the spinning threads, again.
 	    with_test_prefix "second attach" {
-		set spinning_threads_2 [test_attach $test_pid]
+		set spinning_threads_2 [test_attach $test_pid $non_stop]
 	    }
 
 	    # For each spinning thread, stop spinning.

@@ -215,6 +215,7 @@ class IntelgtAutoAttach:
         self.hook_bp = None
         self.the_bp = None
         self.enable_schedule_multiple_at_gt_removal = False
+        self.gt_inferior_init_pending = False
         # Env variable to pass custom flags to gdbserver such as
         # "--debug" and "--remote-debug" for debugging purposes.
         self.gdbserver_args = self.get_env_variable(
@@ -263,7 +264,7 @@ class IntelgtAutoAttach:
                 # initialization has not happened yet.  In that case we try
                 # again later via the hook BP.
                 DebugLogger.log("context might already be initialized.")
-                self.init_gt_inferiors()
+                self.gt_inferior_init_pending = True
             return
 
         if ('libze_loader.so' in event.new_objfile.filename or
@@ -295,10 +296,7 @@ class IntelgtAutoAttach:
         nonstop_info = gdb.execute("show non-stop", False, True)
         self.is_nonstop = nonstop_info.endswith("on.\n")
 
-        if self.is_nonstop:
-            command_suffix = "\ncontinue -a"
-        else:
-            command_suffix = "\ncontinue"
+        command_suffix = "\ncontinue"
 
         eclipse = self.get_env_variable("ECLIPSE")
         if eclipse is not None and eclipse.endswith("1"):
@@ -333,6 +331,16 @@ class IntelgtAutoAttach:
         for gt_inf in gt_infs:
             if gt_inf.pid != 0:
                 gdb.execute(f"detach inferiors {gt_inf.num}", False, False)
+
+        # We need to explicitly make gdbserver-ze quit.
+        if gt_infs and gdb.selected_inferior() not in gt_infs:
+            cmd = f"inferior {gt_infs[0].num}"
+            self.protected_gdb_execute(cmd, True)
+
+        # Check if switching to gt inf was successful.
+        # Otherwise, we cannot send 'monitor exit' command.
+        if gdb.selected_inferior() in gt_infs:
+            gdb.execute("monitor exit")
 
         # Switch to host to be able to remove gt infs.
         # Catch exceptions, since the switch will likely raise
@@ -401,6 +409,10 @@ class IntelgtAutoAttach:
         """Handler for GDB's 'before prompt' event.  Remove a gt inferior
         if such an inferior was stored for removal."""
         self.remove_gt_inf_if_stored_for_removal()
+
+        """If the host was attached, we init gt inferiors here."""
+        if self.gt_inferior_init_pending:
+            self.init_gt_inferiors()
 
     @DebugLogger.log_call
     def handle_exited_event(self, event):
@@ -502,9 +514,9 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
 
         binary = "gdbserver-ze " + self.gdbserver_args
         if platform.system() == "Windows":
-            gdbserver_attach_str = f"{binary} --attach 127.0.0.1:PORT_PLACE_HOLDER {inf.pid}"
+            gdbserver_attach_str = f"{binary} --multi --once 127.0.0.1:PORT_PLACE_HOLDER"
         else:
-            gdbserver_attach_str = f"{binary} --once --attach - {inf.pid}"
+            gdbserver_attach_str = f"{binary} --multi --once -"
 
         if gdbserver_path_env_var:
             gdbserver_attach_str = \
@@ -545,12 +557,34 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
             print(f"intelgt: connecting to gdbserver-ze "
                   f"on port {gdbserver_port}.")
             IntelgtErrorReport.execute_with_errorcapture(
-                f"target remote :{gdbserver_port}", capture_output)
+                f"target extended-remote :{gdbserver_port}", capture_output)
         else:
             IntelgtErrorReport.execute_with_errorcapture(
-                f"target remote | {target_remote_str}", capture_output)
+                f"target extended-remote | {target_remote_str}", capture_output)
             print(f"intelgt: gdbserver-ze started for "
                   f"process {inf.pid}.")
+
+        # In non-stop mode, if the auto-attach script is triggered
+        # from the hook BP, we execute the attach command in async
+        # mode, so that GDB will interrupt only one thread and resume
+        # it right after.  This is much less intrusive and is fine to
+        # do because the host thread is blocked on the hook BP.
+        #
+        # However, if we are performing a live-attach in non-stop
+        # mode, we do not do an async attach.  In this case, we must
+        # be within an 'attach' command for the host inferior.
+        # Therefore, we do a synchronous attach to the device and let
+        # the user resume the threads.
+        #
+        # NOTE: If the user executed an 'attach &' for the host
+        # inferior, we would need to attach to the device and resume
+        # completely.  This case is not handled, yet.  The user still
+        # needs to resume the device explicitly.
+
+        async_mode = (self.is_nonstop and not self.gt_inferior_init_pending)
+        attach_cmd = f"attach {inf.pid}" + (" &" if async_mode else "")
+        gdb.execute(f"with print thread-events off -- {attach_cmd}",
+                    False, capture_output)
 
     @DebugLogger.log_call
     def init_gt_inferiors(self):
@@ -611,6 +645,7 @@ Connection name '{connection}' not recognized.""")
                 gdb.execute("set schedule-multiple on")
 
             self.set_suppress_notifications("on" if cli_suppressed else "off")
+            self.gt_inferior_init_pending = False
             return
 
     @staticmethod

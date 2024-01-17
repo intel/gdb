@@ -3202,7 +3202,8 @@ remote_target::remote_notice_new_inferior (ptid_t currthread, bool executing)
 	{
 	  bool fake_pid_p = !m_features.remote_multi_process_p ();
 
-	  inf = remote_add_inferior (fake_pid_p, pid, -1, 1);
+	  bool try_open_exec = !current_inf->needs_setup;
+	  inf = remote_add_inferior (fake_pid_p, pid, -1, try_open_exec);
 	}
 
       /* We may have received the event for a process in general.
@@ -6987,6 +6988,8 @@ extended_remote_target::attach (const char *args, int from_tty)
   putpkt (rs->buf);
   getpkt (&rs->buf);
 
+  ptid_t curr_ptid = null_ptid;
+
   packet_result result = m_features.packet_ok (rs->buf, PACKET_vAttach);
   switch (result.status ())
     {
@@ -6996,6 +6999,19 @@ extended_remote_target::attach (const char *args, int from_tty)
 	  /* Save the reply for later.  */
 	  wait_status = (char *) alloca (strlen (rs->buf.data ()) + 1);
 	  strcpy (wait_status, rs->buf.data ());
+
+	  /* Save the target's current thread to restore later.  Note
+	     that this may return a process-only ptid and we handle
+	     this case below for the all-stop path.  */
+	  curr_ptid = remote_current_thread (ptid_t (pid));
+
+	  /* In case there are multiple processes in the target, they
+	     would be detected and added to GDB below in
+	     update_thread_list.  But for a smooth setup of the
+	     inferiors, we want the one reported in the stop reply to
+	     be the current inferior.  Hence, add the inferior
+	     now.  */
+	  remote_notice_new_inferior (ptid_t (curr_ptid.pid ()), false);
 	}
       else if (strcmp (rs->buf.data (), "OK") != 0)
 	error (_("Attaching to %s failed with: %s"),
@@ -7009,14 +7025,41 @@ extended_remote_target::attach (const char *args, int from_tty)
 	     target_pid_to_str (ptid_t (pid)).c_str (), result.err_msg ());
     }
 
-  switch_to_inferior_no_thread (remote_add_inferior (false, pid, 1, 0));
+  /* The target may interpret PID in its own way and create inferiors
+     with different process ids.  Instead of blindly adding an
+     inferior with the given PID, rely on the thread-update mechanism
+     to add new inferiors and threads with the correct ids, as
+     reported by the target.
 
-  inferior_ptid = ptid_t (pid);
+     Updating the threads may notice and add multiple new inferiors.
+     Remember the current one.  */
+  inferior *current_inf = current_inferior ();
+
+  {
+    /* Because we are attaching, pretend that the target is starting
+       up, so that the new inferior(s) will be set up accordingly.  */
+    scoped_mark_target_starting target_is_starting (this);
+
+    /* Check if this target has a delta list of threads.  */
+    this->has_delta_thread_list = remote_query_delta_thread_list ();
+
+    update_thread_list ();
+  }
+
+/* Sometimes, we may only receive a process ptid (with tid and lwp set to 0),
+   which will inevitably cause find_thread in the all-stop path to fail to
+   find a thread.  We attempt to retrieve the current remote thread again, but
+   this still might not yield a thread ptid.  Therefore, as a fallback, we
+   also try to select any available thread below.  */
+  if (!target_is_non_stop_p () && curr_ptid.is_pid ())
+    curr_ptid = remote_current_thread (ptid_t (pid));
+
+  pid = current_inf->pid;
 
   if (target_is_non_stop_p ())
     {
-      /* Get list of threads.  */
-      update_thread_list ();
+      switch_to_inferior_no_thread (current_inf);
+      inferior_ptid = ptid_t (pid);
 
       thread_info *thread = first_thread_of_inferior (current_inferior ());
       if (thread != nullptr)
@@ -7024,38 +7067,39 @@ extended_remote_target::attach (const char *args, int from_tty)
 
       /* Invalidate our notion of the remote current thread.  */
       record_currthread (rs, minus_one_ptid);
+
+      gdb_assert (wait_status == nullptr);
+      gdb_assert (target_can_async_p ());
     }
   else
     {
-      /* Now, if we have thread information, update the main thread's
-	 ptid.  */
-      ptid_t curr_ptid = remote_current_thread (ptid_t (pid));
+      /* Adding multiple new inferiors in update_thread_list may have
+	 changed the remote's general thread to fetch the target
+	 description correctly.  Change the general thread back
+	 to what we stored before.  */
+      gdb_assert (curr_ptid != null_ptid);
+      set_general_thread (curr_ptid);
 
-      /* Add the main thread to the thread list.  We add the thread
-	 silently in this case (the final true parameter).  */
-      thread_info *thr = remote_add_thread (curr_ptid, true, true, true);
-
+      /* Switches the current thread context based on the provided ptid.
+	 If the ptid represents a process ID, the first thread of the
+	 current inferior is selected.  Otherwise, the thread corresponding to
+	 the ptid is located.  Ensures that the selected thread is valid and not
+	 null, then switches the execution context to the selected thread.  */
+      thread_info *thr = curr_ptid.is_pid ()
+			   ? first_thread_of_inferior (current_inf)
+			   : this->find_thread (curr_ptid);
+      gdb_assert (thr != nullptr);
       switch_to_thread (thr);
-    }
 
-  /* Next, if the target can specify a description, read it.  We do
-     this before anything involving memory or registers.  */
-  target_find_description ();
-
-  if (!target_is_non_stop_p ())
-    {
       /* Use the previously fetched status.  */
       gdb_assert (wait_status != NULL);
 
       notif_event_up reply
 	= remote_notif_parse (this, &notif_client_stop, wait_status);
-      push_stop_reply (as_stop_reply_up (std::move (reply)));
-    }
-  else
-    {
-      gdb_assert (wait_status == NULL);
-
-      gdb_assert (target_can_async_p ());
+      stop_reply_up stop_reply = as_stop_reply_up (std::move (reply));
+      if (stop_reply->ptid == null_ptid)
+	stop_reply->ptid = curr_ptid;
+      push_stop_reply (std::move (stop_reply));
     }
 }
 

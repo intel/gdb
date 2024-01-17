@@ -169,6 +169,7 @@ foreach device $sycl_device_list {
 	    set cmd "continue"
 	    if {$non_stop == "on"} {
 		set cmd "continue -a"
+		setup_kfail "JIRA IGDB/4529" "*-*-*"
 	    }
 	    gdb_test $cmd "$inferior_exited_re normally].*"
 

@@ -1157,8 +1157,7 @@ public: /* Remote specific methods.  */
   char *remote_get_noisy_reply ();
   int remote_query_attached (int pid);
   bool remote_query_delta_thread_list ();
-  inferior *remote_add_inferior (bool fake_pid_p, int pid, int attached,
-				 int try_open_exec);
+  inferior *remote_add_inferior (bool fake_pid_p, int pid);
 
   ptid_t remote_current_thread (ptid_t oldpid);
   ptid_t get_current_thread (const char *wait_status);
@@ -2833,21 +2832,17 @@ remote_target::remote_query_delta_thread_list ()
    inferior.  If ATTACHED is 1, then we had just attached to this
    inferior.  If it is 0, then we just created this inferior.  If it
    is -1, then try querying the remote stub to find out if it had
-   attached to the inferior or not.  If TRY_OPEN_EXEC is true then
-   attempt to open this inferior's executable as the main executable
-   if no main executable is open already.  */
+   attached to the inferior or not.  */
 
 inferior *
-remote_target::remote_add_inferior (bool fake_pid_p, int pid, int attached,
-				    int try_open_exec)
+remote_target::remote_add_inferior (bool fake_pid_p, int pid)
 {
   struct inferior *inf;
 
   /* Check whether this process we're learning about is to be
      considered attached, or if is to be considered to have been
      spawned by the stub.  */
-  if (attached == -1)
-    attached = remote_query_attached (pid);
+  bool attached = remote_query_attached (pid);
 
   if (gdbarch_has_global_solist (target_gdbarch ()))
     {
@@ -2900,7 +2895,7 @@ remote_target::remote_add_inferior (bool fake_pid_p, int pid, int attached,
 
   /* Attempt to open the file that was executed to create this
      inferior.  */
-  if (try_open_exec)
+  if (!inf->needs_setup)
     exec_file_locate_attach (pid, 0, 1);
 
   /* Check for exec file mismatch, and let the user solve it.  */
@@ -2988,8 +2983,7 @@ remote_target::remote_notice_new_inferior (ptid_t currthread, bool executing)
 	{
 	  bool fake_pid_p = !m_features.remote_multi_process_p ();
 
-	  bool try_open_exec = !current_inf->needs_setup;
-	  inf = remote_add_inferior (fake_pid_p, pid, -1, try_open_exec);
+	  inf = remote_add_inferior (fake_pid_p, pid);
 	}
 
       /* We may have received the event for a process in general.
@@ -4881,7 +4875,7 @@ remote_target::add_current_inferior_and_thread (const char *wait_status)
       fake_pid_p = true;
     }
 
-  remote_add_inferior (fake_pid_p, curr_ptid.pid (), -1, 1);
+  remote_add_inferior (fake_pid_p, curr_ptid.pid ());
 
   /* Add the main thread and switch to it.  Don't try reading
      registers yet, since we haven't fetched the target description

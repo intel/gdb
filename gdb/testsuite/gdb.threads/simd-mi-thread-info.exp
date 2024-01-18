@@ -125,9 +125,13 @@ foreach device $sycl_device_list {
 	set qid "$decimal\.$decimal"
 	set thread_list [get_mi_thread_list "in check_mi_thread_command_set"]
 	set result 1
+	set host_threads_count 0
 	foreach_with_prefix tid $thread_list {
 	    send_gdb "-thread-info --qid $tid\n"
 	    gdb_expect {
+		-re "qualified-id=\"1\.$decimal\".*$mi_gdb_prompt$" {
+		    incr host_threads_count
+		}
 		-re "qualified-id=.*$mi_gdb_prompt$" {
 		    # OK.
 		}
@@ -138,6 +142,7 @@ foreach device $sycl_device_list {
 	    }
 	}
 	gdb_assert {$result == 1} "qualified-id is included"
+	gdb_assert {$host_threads_count > 0} "host threads are included"
 
 	# Test without --qid argument with all threads.
 	set result 1

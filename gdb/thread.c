@@ -1553,7 +1553,8 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 
 	for (thread_info *tp : all_threads ())
 	  {
-	    /* Switch to the thread to evaluate its SIMD lane state.  */
+	    /* Switch to the thread to evaluate its SIMD lane state and update
+	       the thread's availability status.  */
 	    switch_to_thread (tp);
 
 	    if (!should_print_thread (requested_threads, default_inf_num,
@@ -1613,12 +1614,13 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	  if (tp == current_thread && tp->state == THREAD_EXITED)
 	    current_exited = true;
 
+	  /* Switch to the thread (and inferior / target).  This updates the
+	     thread's availability status.  */
+	  switch_to_thread (tp);
+
 	  if (!should_print_thread (requested_threads, default_inf_num,
 				    global_ids, pid, tp, opts))
 	    continue;
-
-	  /* Switch to the thread (and inferior / target).  */
-	  switch_to_thread (tp);
 
 	  /* Print single row.  */
 	  print_thread_row (uiout, tp, (tp == current_thread), opts);

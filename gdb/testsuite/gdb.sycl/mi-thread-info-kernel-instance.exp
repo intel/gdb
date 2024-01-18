@@ -50,29 +50,23 @@ foreach device $sycl_device_list {
 	mi_continue_to_line "${srcfile}:$kernel_line" \
 	    "continue to kernel"
 
-	set test "Test 'kernel-instance-id' in mi interface"
 	set kernel_instance_id_stopped 0
 	set kernel_instance_id_unavailable 0
 
-	# Test that the `kernel-instance-id` is only added to stopped threads.
-	send_gdb "-thread-info\n"
-	gdb_expect {
-	    -re "\\^done,threads=\\\[" {
-		exp_continue
-	    }
-	    -re "\{id=\"$decimal\",.*,kernel-instance-id=\"$hex\",.*,state=\"stopped\"\}" {
-		incr kernel_instance_id_stopped
-		exp_continue
-	    }
-	    -re "\{id=\"$decimal\",.*,kernel-instance-id=\"$hex\",.*,state=\"unavailable\"\}" {
-		incr kernel_instance_id_unavailable
-		exp_continue
-	    }
-	    -re ".*${mi_gdb_prompt}" {
-		pass "${test}"
-	    }
-	    timeout {
-		fail "${test}"
+	foreach_with_prefix tid [get_mi_thread_list ""] {
+	    send_gdb "-thread-info --qid $tid\n"
+	    # Test that the `kernel-instance-id` is only added to stopped threads.
+	    gdb_expect {
+		-re "kernel-instance-id=\"$hex\",.*,state=\"stopped\".*$mi_gdb_prompt$" {
+		    incr kernel_instance_id_stopped
+		}
+		-re "kernel-instance-id=\"$hex\",.*,state=\"unavailable\".*$mi_gdb_prompt$" {
+		    incr kernel_instance_id_unavailable
+		    break
+		}
+		-re "$mi_gdb_prompt$" {
+		    # OK.
+		}
 	    }
 	}
 

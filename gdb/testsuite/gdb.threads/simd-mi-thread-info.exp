@@ -117,8 +117,13 @@ foreach device $sycl_device_list {
 	send_gdb "-thread-info --qid\n"
 
 	set test "Check that qualified-id is included for all threads"
+	set host_threads_count 0
 	gdb_expect {
 	    -re "\\^done,threads=\\\[" {
+		exp_continue
+	    }
+	    -re "\{id=\"$decimal\",qualified-id=\"1\.$decimal\".*\}" {
+		incr host_threads_count
 		exp_continue
 	    }
 	    -re "\{id=\"$decimal\",qualified-id=\".*\".*(core=\"$decimal\"|state=\"stopped\")\}," {
@@ -138,6 +143,8 @@ foreach device $sycl_device_list {
 		fail "$test"
 	    }
 	}
+
+	gdb_assert {$host_threads_count > 0} "host threads are included"
 
 	# Test without --qid argument with all threads
 	send_gdb "-thread-info\n"

@@ -3014,7 +3014,9 @@ value::primitive_field (LONGEST offset, int fieldno, struct type *arg_type)
 
       gdb_assert (0 == offset);
       /* We expect an already resolved data location.  */
-      gdb_assert (TYPE_DATA_LOCATION (type)->is_constant ());
+      if (!TYPE_DATA_LOCATION (type)->is_constant ())
+	error (_("cannot read %s, expected an already resolved data "
+		 "location."), arg_type->field (fieldno).name ());
       /* For dynamic data types defer memory allocation
 	 until we actual access the value.  */
       v = value::allocate_lazy (type);

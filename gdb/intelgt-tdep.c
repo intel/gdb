@@ -2148,6 +2148,12 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
 			 dummy_frame_dtor_ftype **arch_dummy_dtor,
 			 void **dtor_data)
 {
+  /* Refuse to run the inferior call if unwindonsignal is on.
+     TODO Revisit this when the FC registers are writable.  */
+  if (unwind_on_signal_p)
+    error (_("Cannot run inferior calls with 'unwindonsignal on'.\n"
+	     "Please turn it off and try again."));
+
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
   target_memory_allocator *scratch_area = get_scratch_area (gdbarch);
 

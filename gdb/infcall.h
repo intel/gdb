@@ -117,4 +117,13 @@ extern value *
 default_get_inferior_call_return_value (gdbarch *gdbarch,
 					call_return_meta_info *ri);
 
+/* This boolean tells what gdb should do if a signal is received while
+   in a function called from gdb (call dummy).  If set, gdb unwinds
+   the stack and restore the context to what as it was before the
+   call.
+
+   The default is to stop in the frame where the signal was received.  */
+
+extern bool unwind_on_signal_p;
+
 #endif

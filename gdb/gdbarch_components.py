@@ -860,6 +860,17 @@ Method(
     predicate=True,
 )
 
+Value(
+    comment="""
+Some targets do not support the return command.  In such case the return
+command should be aborted and the call stack should remain intact.
+""",
+    type="bool",
+    name="supports_return_cmd",
+    predefault="true",
+    invalid=False,
+)
+
 Method(
     comment="""
 Return the return-value convention that will be used by FUNCTION

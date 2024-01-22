@@ -113,6 +113,7 @@ struct gdbarch
   gdbarch_pointer_to_address_ftype *pointer_to_address = unsigned_pointer_to_address;
   gdbarch_address_to_pointer_ftype *address_to_pointer = unsigned_address_to_pointer;
   gdbarch_integer_to_address_ftype *integer_to_address = nullptr;
+  bool supports_return_cmd = true;
   gdbarch_return_value_ftype *return_value = nullptr;
   gdbarch_return_value_as_value_ftype *return_value_as_value = default_gdbarch_return_value;
   gdbarch_get_return_buf_addr_ftype *get_return_buf_addr = default_get_return_buf_addr;
@@ -390,6 +391,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of pointer_to_address, invalid_p == 0 */
   /* Skip verify of address_to_pointer, invalid_p == 0 */
   /* Skip verify of integer_to_address, has predicate.  */
+  /* Skip verify of supports_return_cmd, invalid_p == 0 */
   /* Skip verify of return_value, invalid_p == 0 */
   if ((gdbarch->return_value_as_value == default_gdbarch_return_value) == (gdbarch->return_value == nullptr))
     log.puts ("\n\treturn_value_as_value");
@@ -832,6 +834,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: integer_to_address = <%s>\n",
 	      host_address_to_string (gdbarch->integer_to_address));
+  gdb_printf (file,
+	      "gdbarch_dump: supports_return_cmd = %s\n",
+	      plongest (gdbarch->supports_return_cmd));
   gdb_printf (file,
 	      "gdbarch_dump: return_value = <%s>\n",
 	      host_address_to_string (gdbarch->return_value));
@@ -2758,6 +2763,23 @@ set_gdbarch_integer_to_address (struct gdbarch *gdbarch,
 				gdbarch_integer_to_address_ftype integer_to_address)
 {
   gdbarch->integer_to_address = integer_to_address;
+}
+
+bool
+gdbarch_supports_return_cmd (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of supports_return_cmd, invalid_p == 0 */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_supports_return_cmd called\n");
+  return gdbarch->supports_return_cmd;
+}
+
+void
+set_gdbarch_supports_return_cmd (struct gdbarch *gdbarch,
+				 bool supports_return_cmd)
+{
+  gdbarch->supports_return_cmd = supports_return_cmd;
 }
 
 void

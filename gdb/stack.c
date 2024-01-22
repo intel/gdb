@@ -2769,6 +2769,9 @@ return_command (const char *retval_exp, int from_tty)
   thisfun = get_frame_function (thisframe);
   gdbarch = get_frame_arch (thisframe);
 
+  if (!gdbarch_supports_return_cmd (gdbarch))
+    error (_("This target does not support the return command."));
+
   if (get_frame_type (get_current_frame ()) == INLINE_FRAME)
     error (_("Can not force return from an inlined function."));
 

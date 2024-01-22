@@ -3813,6 +3813,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   frame_unwind_append_unwinder (gdbarch, &intelgt_unwinder);
 
   set_gdbarch_return_value (gdbarch, intelgt_return_value);
+  set_gdbarch_supports_return_cmd (gdbarch, false);
 
   set_gdbarch_memory_insert_breakpoint (gdbarch,
 					intelgt_memory_insert_breakpoint);

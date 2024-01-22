@@ -443,6 +443,12 @@ typedef CORE_ADDR (gdbarch_integer_to_address_ftype) (struct gdbarch *gdbarch, s
 extern CORE_ADDR gdbarch_integer_to_address (struct gdbarch *gdbarch, struct type *type, const gdb_byte *buf);
 extern void set_gdbarch_integer_to_address (struct gdbarch *gdbarch, gdbarch_integer_to_address_ftype *integer_to_address);
 
+/* Some targets do not support the return command.  In such case the return
+   command should be aborted and the call stack should remain intact. */
+
+extern bool gdbarch_supports_return_cmd (struct gdbarch *gdbarch);
+extern void set_gdbarch_supports_return_cmd (struct gdbarch *gdbarch, bool supports_return_cmd);
+
 /* Return the return-value convention that will be used by FUNCTION
    to return a value of type VALTYPE.  FUNCTION may be NULL in which
    case the return convention is computed based only on VALTYPE.

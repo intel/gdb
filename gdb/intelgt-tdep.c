@@ -773,6 +773,9 @@ intelgt_return_value (gdbarch *gdbarch, value *function,
   dprintf ("return type length %ld", valtype->length ());
   gdb_assert (inferior_ptid != null_ptid);
 
+  if (writebuf != nullptr)
+    error (_("intelgt target does not support the return command"));
+
   int address_size_byte = gdbarch_addr_bit (gdbarch) / 8;
   CORE_ADDR function_pc = function->address ();
   const unsigned int simd_width = get_simd_width_for_pc (function_pc);
@@ -3745,6 +3748,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   frame_unwind_append_unwinder (gdbarch, &intelgt_unwinder);
 
   set_gdbarch_return_value (gdbarch, intelgt_return_value);
+  set_gdbarch_supports_return_cmd (gdbarch, false);
 
   set_gdbarch_memory_insert_breakpoint (gdbarch,
 					intelgt_memory_insert_breakpoint);

@@ -835,6 +835,9 @@ intelgt_return_value_as_value (gdbarch *gdbarch, value *function,
   dprintf ("return type length %ld", valtype->length ());
   gdb_assert (inferior_ptid != null_ptid);
 
+  if (writebuf != nullptr)
+    error (_("intelgt target does not support the return command"));
+
   gdb_byte *readbuf = nullptr;
   if (read_value != nullptr)
     {
@@ -3971,6 +3974,7 @@ Device vendor id and target id not found in intelgt target description."));
   frame_unwind_append_unwinder (gdbarch, &intelgt_unwinder);
 
   set_gdbarch_return_value_as_value (gdbarch, intelgt_return_value_as_value);
+  set_gdbarch_supports_return_cmd (gdbarch, false);
 
   set_gdbarch_memory_insert_breakpoint (gdbarch,
 					intelgt_memory_insert_breakpoint);

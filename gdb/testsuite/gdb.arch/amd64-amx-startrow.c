@@ -1,6 +1,6 @@
 /* Test program for AMX startrow.
 
-   Copyright 2022 Free Software Foundation, Inc.
+   Copyright 2022-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 

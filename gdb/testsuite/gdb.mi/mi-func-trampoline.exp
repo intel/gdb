@@ -1,0 +1,68 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/> .
+
+# Test -stack-list-frames command for functions with trampoline
+# calls.  Also checks if trampoline frames are filtered while printing
+# stack.
+
+require allow_fortran_tests
+
+if {![test_compiler_info {ifx-*} f90]} {
+    untested "This test is only applicable for IFX, which emits the\
+	trampoline DIE in Dwarf."
+    return -1
+}
+
+load_lib fortran.exp
+load_lib mi-support.exp
+
+set MIFLAGS "-i=mi"
+
+if {[mi_clean_restart]} {
+    return
+}
+
+set testfile mi-func-trampoline
+set srcfile "${srcdir}/gdb.fortran/func-trampoline.f90"
+set binfile [standard_output_file $testfile]
+
+if { [gdb_compile "${srcfile}" "${binfile}" executable \
+	  {debug f90} ] != "" } {
+    untested "failed to compile"
+    return -1
+}
+
+mi_delete_breakpoints
+mi_gdb_reinitialize_dir $srcdir/$subdir
+mi_gdb_load ${binfile}
+
+set inner_loc [gdb_get_line_number "second-breakpt"]
+set fill "\[^\r\n\]*"
+
+set frame1_regx "\{level=\"0\",addr=\"$hex\",func=\"second\",file=\".*func-trampoline.f90\",fullname=\"${fullname_syntax}func-trampoline.f90\",line=\"$inner_loc\",arch=\".*\"\}"
+set frame2_regx "\{level=\"2\",addr=\"$hex\",func=\"first\",.*\}"
+set frame3_regx "\{level=\"4\",addr=\"$hex\",func=\"func_trampoline\",.*\}"
+
+# Set breakpoint inside the innermost function 'second'.
+mi_create_breakpoint "-t $srcfile:$inner_loc" \
+    "insert breakpoint at line $inner_loc " \
+    -number 1 -disp del -func second ".*trampoline.f90" $inner_loc $hex
+mi_run_cmd
+mi_expect_stop \
+    "breakpoint-hit" "second" ".*" ".*trampoline.f90" "\[0-9\]+" { "" "disp=\"del\"" } \
+    "run to breakpoint at line $inner_loc"
+
+mi_gdb_test "100-stack-list-frames" \
+    "100\\^done,stack=\\\[frame=${frame1_regx},frame=${frame2_regx},frame=${frame3_regx}\\\]"

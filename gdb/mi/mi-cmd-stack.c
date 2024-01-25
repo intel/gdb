@@ -179,6 +179,13 @@ mi_cmd_stack_list_frames (const char *command, const char *const *argv,
 	   i++, fi = get_prev_frame (fi))
 	{
 	  QUIT;
+	  if (skip_trampoline_functions)
+	    {
+	      for (int j = 0; (SAFE_TRAMPOLINE_CHAIN (j, fi)
+			       && in_trampoline_frame (fi)); ++j)
+		fi = get_prev_frame (fi);
+	    }
+
 	  /* Print the location and the address always, even for level 0.
 	     If args is 0, don't print the arguments.  */
 	  print_frame_info (user_frame_print_options,

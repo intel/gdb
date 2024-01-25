@@ -34993,7 +34993,9 @@ an error if @var{low-frame} is larger than the actual number of
 frames.  On the other hand, @var{high-frame} may be larger than the
 actual number of frames, in which case only existing frames will be
 returned.  If the option @code{--no-frame-filters} is supplied, then
-Python frame filters will not be executed.
+Python frame filters will not be executed.  If the option
+@code{skip-trampoline-functions} is set, @value{GDBN} will skip the trampoline
+frames while printing a backtrace.
 
 @subsubheading @value{GDBN} Command
 

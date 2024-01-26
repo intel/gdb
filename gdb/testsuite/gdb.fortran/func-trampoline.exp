@@ -1,0 +1,77 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/> .
+
+# Test "backtrace" and "backtrace -n" commands for functions with trampoline
+# calls.
+
+require allow_fortran_tests
+
+if {![test_compiler_info {ifx-*} f90]} {
+    untested "This test is only applicable for IFX, which emits the\
+	trampoline DIE in Dwarf."
+    return -1
+}
+
+standard_testfile ".f90"
+load_lib fortran.exp
+
+# Initialize the test by running the program to the innermost
+# function name "second".
+
+proc init_test {} {
+    global binfile srcfile inner_loc
+
+    clean_restart ${binfile}
+    if {![fortran_runto_main]} {
+	return -1
+    }
+
+    # Set breakpoint inside the innermost function 'second'.
+    gdb_breakpoint "$srcfile:$inner_loc"
+    gdb_continue_to_breakpoint "innermost-body" ".*$srcfile:$inner_loc.*"
+}
+
+if {[build_executable "failed to prepare" ${testfile} ${srcfile} \
+    {debug f90}]} {
+    return -1
+}
+
+set inner_loc [gdb_get_line_number "second-breakpt"]
+set middle_loc [gdb_get_line_number "first-breakpt"]
+set outer_loc [gdb_get_line_number "main-outer-loc"]
+set fill "\[^\r\n\]*"
+
+set inner_desc  "second \\(x=20, y=9\\) at ${fill}$srcfile:$inner_loc"
+set middle_desc "first \\(num1=16, num2=3\\) at ${fill}$srcfile:$middle_loc"
+set outer_desc  ".* at .*$srcfile:$outer_loc"
+
+with_test_prefix "backtrace" {
+    init_test
+
+    # Limit the backtrace to 3 frames and ensure both frames for first
+    # and second function are shown only and trampoline frames are filtered.
+    gdb_test "backtrace 3" [multi_line \
+	"#$decimal.* $inner_desc" \
+	"#$decimal.* $middle_desc" \
+	"#$decimal.* $outer_desc.*"]
+}
+
+with_test_prefix "backtrace outerframes" {
+    init_test
+
+    gdb_test "backtrace -3" [multi_line \
+	"#$decimal.* $middle_desc" \
+	"#$decimal.* $outer_desc.*"]
+}

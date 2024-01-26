@@ -191,7 +191,7 @@ static bool detach_fork = true;
    DW_AT_trampoline by the compiler.  If false, GDB will ignore the
    attribute.  */
 
-static bool skip_trampoline_functions = true;
+bool skip_trampoline_functions = true;
 
 bool debug_infrun = false;
 static void
@@ -10739,8 +10739,8 @@ Options are 'forward' or 'reverse'."),
 			  &skip_trampoline_functions, _("\
 Set whether gdb attempts to hide trampolines marked in the debug info."), _("\
 Show whether gdb attempts to hide trampolines marked in the debug info."), _("\
-If on, while stepping gdb will skip through functions and inlined functions\n\
-marked as trampolines by the compiler.  If off, gdb will treat trampolines as\n\
+If on, gdb will skip through functions and inlined functions marked as\n\
+trampolines by the compiler.  If off, gdb will treat trampolines as\n\
 normal functions."),
 			  nullptr, show_skip_trampoline_functions, &setlist,
 			  &showlist);

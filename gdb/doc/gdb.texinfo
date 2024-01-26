@@ -6539,6 +6539,12 @@ execution until leaving the trampoline region.  The @code{stepi} command
 is not affected by the setting which is enabled by default.  Currently, only
 DWARF trampolines marked via DW_AT_trampoline are supported by this.
 
+When issuing a @code{backtrace}, if @code{skip-trampoline-functions} is set,
+@value{GDBN} will skip trampoline frames while printing the stack.
+
+Currently, only DWARF trampolines marked via DW_AT_trampoline are supported by
+this.
+
 @item set skip-trampoline-functions off
 Causes @value{GDBN} to completely ignore any trampoline information a compiler
 might have emitted in its debug info.  Trampolines will be treated like any

@@ -35451,6 +35451,10 @@ variable object is updated, @value{GDBN} makes sure that the
 thread/frame combination the variable object is bound to still exists,
 and re-evaluates the variable object in context of that thread/frame.
 
+If the option @code{skip-trampoline-functions} is set for the
+@code{-stack-list-arguments}, @value{GDBN} will not show trampoline
+functions in the stack.
+
 The following is the complete set of @sc{gdb/mi} operations defined to
 access this functionality:
 

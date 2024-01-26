@@ -404,6 +404,13 @@ mi_cmd_stack_list_args (const char *command, const char *const *argv, int argc)
 	   i++, fi = get_prev_frame (fi))
 	{
 	  QUIT;
+	  if (skip_trampoline_functions)
+	    {
+	      for (int j = 0; (SAFE_TRAMPOLINE_CHAIN (j, fi)
+			       && in_trampoline_frame (fi)); ++j)
+		fi = get_prev_frame (fi);
+	    }
+
 	  ui_out_emit_tuple tuple_emitter (uiout, "frame");
 	  uiout->field_signed ("level", i);
 	  list_args_or_locals (user_frame_print_options,

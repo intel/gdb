@@ -13,9 +13,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/> .
 
-# Test -stack-list-frames command for functions with trampoline
-# calls.  Also checks if trampoline frames are filtered while printing
-# stack.
+# Test -stack-list-frames and -stack-list-arguments command for functions
+# with trampoline calls.  Also checks if trampoline frames are filtered
+# while printing stack.
 
 require allow_fortran_tests
 
@@ -55,6 +55,10 @@ set frame1_regx "\{level=\"0\",addr=\"$hex\",func=\"second\",file=\".*func-tramp
 set frame2_regx "\{level=\"2\",addr=\"$hex\",func=\"first\",.*\}"
 set frame3_regx "\{level=\"4\",addr=\"$hex\",func=\"func_trampoline\",.*\}"
 
+set arg1_regx "\{level=\"0\",args=\\\[name=\"x\",name=\"y\"\\\]\}"
+set arg2_regx "\{level=\"1\",args=\\\[name=\"num1\",name=\"num2\"\\\]\}"
+set arg3_regx "\{level=\"2\",args=\\\[\\\]\}"
+
 # Set breakpoint inside the innermost function 'second'.
 mi_create_breakpoint "-t $srcfile:$inner_loc" \
     "insert breakpoint at line $inner_loc " \
@@ -66,3 +70,6 @@ mi_expect_stop \
 
 mi_gdb_test "100-stack-list-frames" \
     "100\\^done,stack=\\\[frame=${frame1_regx},frame=${frame2_regx},frame=${frame3_regx}\\\]"
+
+mi_gdb_test "200-stack-list-arguments 0" \
+    "200\\^done,stack-args=\\\[frame=${arg1_regx},frame=${arg2_regx},frame=${arg3_regx}\\\]"

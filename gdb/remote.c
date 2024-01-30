@@ -8751,11 +8751,18 @@ remote_target::process_stop_reply (struct stop_reply *stop_reply,
 	    }
 	}
 
-      if (!target_is_non_stop_p ())
+      if (!target_is_non_stop_p () || ptid.is_pid ())
 	{
 	  /* If the target works in all-stop mode, a stop-reply indicates that
-	     all the target's threads stopped.  */
-	  for (thread_info *tp : all_non_exited_threads (this))
+	     all the target's threads stopped.
+
+	     In non-stop mode, a process-wide stop-reply indicates that
+	     all the threads of that process stopped.  */
+	  ptid_t filter_ptid = (!target_is_non_stop_p ()
+				? minus_one_ptid
+				: ptid);
+
+	  for (thread_info *tp : all_non_exited_threads (this, filter_ptid))
 	    get_remote_thread_info (tp)->set_not_resumed ();
 	}
     }

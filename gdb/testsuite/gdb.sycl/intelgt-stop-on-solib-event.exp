@@ -79,6 +79,10 @@ proc test_solib {device stop_on_solib_events auto_solib_add non_stop_mode} {
 		    exp_continue
 		}
 	    }
+	    -re -wrap "Switching to thread\[^\r\n]+Thread $hex.*" {
+		setup_kfail "JIRA IGDB/3766" "*-*-*"
+		fail $gdb_test_name
+	    }
 	    -re -wrap "Inferior unloaded (${in_memory_lib}(\[\\s\r\n\])*)+" {
 		pass "stopped at module unload event"
 		send_gdb "continue\n"

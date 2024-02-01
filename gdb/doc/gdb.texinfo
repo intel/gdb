@@ -6542,9 +6542,9 @@ DWARF trampolines marked via DW_AT_trampoline are supported by this.
 When issuing a @code{backtrace}, if @code{skip-trampoline-functions} is set,
 @value{GDBN} will skip trampoline frames while printing the stack.
 
-When issuing a @code{finish}, @code{reverse-finish} or @code{up}, if
-@code{skip-trampoline-functions} is set, @value{GDBN} will skip trampoline
-frames while returning from the target function.
+When issuing a @code{finish}, @code{reverse-finish}, @code{up} or
+@code{return}, if @code{skip-trampoline-functions} is set, @value{GDBN} will
+skip trampoline frames while returning from the target function.
 
 Currently, only DWARF trampolines marked via DW_AT_trampoline are supported by
 this.

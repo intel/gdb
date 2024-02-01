@@ -2635,6 +2635,13 @@ up_silently_base (const char *count_exp)
   frame = find_relative_frame (get_selected_frame ("No stack."), &count);
   if (count != 0 && count_exp == NULL)
     error (_("Initial frame selected; you cannot go up."));
+
+  if (skip_trampoline_functions)
+    {
+      for (int i = 0; (SAFE_TRAMPOLINE_CHAIN (i, frame)
+		       && in_trampoline_frame (frame)); ++i)
+	frame = get_prev_frame (frame);
+    }
   select_frame (frame);
 }
 

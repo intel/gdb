@@ -31,20 +31,23 @@ if ![runto_main] {
 
 set break_line [gdb_get_line_number "break here"]
 
-# Return current thread's number.
+namespace eval continue_pending_status {
+    namespace export get_current_thread
 
-proc get_current_thread {} {
-    global gdb_prompt
+    # Return current thread's number.
+    proc get_current_thread {} {
+	global gdb_prompt
 
-    set thread ""
-    set msg "get thread number"
-    gdb_test_multiple "print /x \$_thread" $msg {
-	-re "\\$\[0-9\]* = (0x\[0-9a-zA-Z\]+).*$gdb_prompt $" {
-	    set thread $expect_out(1,string)
-	    pass "$msg"
+	set thread ""
+	set msg "get thread number"
+	gdb_test_multiple "print /x \$_thread" $msg {
+	    -re "\\$\[0-9\]* = (0x\[0-9a-zA-Z\]+).*$gdb_prompt $" {
+		set thread $expect_out(1,string)
+		pass "$msg"
+	    }
 	}
+	return ${thread}
     }
-    return ${thread}
 }
 
 # There are two threads in the program that are running the same tight
@@ -77,7 +80,7 @@ for {set i 0} {$i < $attempts} {incr i} {
 	# thus may have a pending status).  At the time this test was
 	# written this was necessary to make linux-nat.c short-circuit
 	# the resume and go straight to consuming the pending event.
-	set thread [get_current_thread]
+	set thread [continue_pending_status::get_current_thread]
 	if {$thread == 2} {
 	    incr saw_thread_2
 	    set thread 3

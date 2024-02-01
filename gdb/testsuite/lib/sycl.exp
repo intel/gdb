@@ -637,3 +637,16 @@ proc sycl_perftest_initialize {} {
 
     return ""
 }
+
+proc spawn_sycl_proc {executable device} {
+    # We directly use 'remote_spawn' to be able to pass
+    # the program arguments.
+    set command [list $executable]
+    foreach arg [sycl_get_device_args $device] {
+	lappend command $arg
+    }
+    verbose -log "command: $command"
+
+    set spawn_id [remote_spawn target $command]
+    return $spawn_id
+}

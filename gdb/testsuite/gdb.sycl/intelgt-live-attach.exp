@@ -35,21 +35,6 @@ if {[build_executable "failed to compile $srcfile" \
     return -1
 }
 
-proc spawn_sycl_proc {executable device} {
-    # We directly use 'remote_spawn' to be able to pass
-    # the program arguments.
-    set command [list "$executable"]
-    foreach arg [sycl_get_device_args $device] {
-	lappend command $arg
-    }
-    verbose -log "command: $command"
-
-    set spawn_id [remote_spawn target "$command"]
-    sleep 2
-
-    return $spawn_id
-}
-
 # Find the stopped threads, check their backtrace, and return the
 # thread ids.
 
@@ -135,6 +120,11 @@ foreach device $sycl_device_list {
 
 	    # Spawn sycl proc and attach.
 	    set test_spawn_id [spawn_sycl_proc $binfile $device]
+
+	    # Sleep for two seconds to ensure the workload is offloaded to
+	    # device and we can attach to a program with actively running
+	    # GPU threads.
+	    sleep 2
 
 	    # Return early if it is failed to spawn a sycl proc.
 	    if {$test_spawn_id == -1} {

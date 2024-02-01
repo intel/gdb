@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/> .
 
-# Test "backtrace", "backtrace -n", "finish" and "up"  commands for
+# Test "backtrace", "backtrace -n", "finish", "up" and "return" commands for
 # functions with trampoline calls.
 
 require allow_fortran_tests
@@ -91,4 +91,12 @@ with_test_prefix "up" {
     gdb_test "up" [multi_line \
 	"#$decimal.* $middle_desc" \
 	"${fill}first = second \\(num1 \\+ 4, num2 \\* 3\\).*${fill}"]
+}
+
+with_test_prefix "return" {
+    init_test
+
+    gdb_test "return" \
+	".*first = second \\(num1 \\+ 4, num2 \\* 3\\) \\! first-breakpt" \
+	"" "Make second return now.*y or n. $" "y"
 }

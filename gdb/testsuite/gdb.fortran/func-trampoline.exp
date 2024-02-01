@@ -13,8 +13,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/> .
 
-# Test "backtrace" and "backtrace -n" commands for functions with trampoline
-# calls.
+# Test "backtrace", "backtrace -n" and "finish"  commands for functions with
+# trampoline calls.
 
 require allow_fortran_tests
 
@@ -74,4 +74,13 @@ with_test_prefix "backtrace outerframes" {
     gdb_test "backtrace -3" [multi_line \
 	"#$decimal.* $middle_desc" \
 	"#$decimal.* $outer_desc.*"]
+}
+
+with_test_prefix "finish" {
+    init_test
+
+    gdb_test "finish" [multi_line \
+	"Run till exit from #0 $fill second \\(x=20, y=9\\) $fill" \
+	"${fill}first \\(num1=16, num2=3\\)${fill}" \
+	"${fill}(\r\nValue returned is $valnum_re = 180)"]
 }

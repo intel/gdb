@@ -945,8 +945,9 @@ show skip-trampoline-functions
   recognize function calls that have been marked as trampolines in the debug
   info.  It improves stepping behavior in that it steps over the trampoline
   code and hides it from the user.  It improves the printing of the stack by
-  hiding trampoline functions from the backtrace.  Currently, only DWARF
-  trampolines are supported.
+  hiding the trampoline frames from the backtrace and skips trampoline
+  functions while returning from the target function of a trampoline call.
+  Currently, only DWARF trampolines are supported.
 
   If this is turned off, GDB will handle @dfn{trampoline functions} the same
   as any other function.

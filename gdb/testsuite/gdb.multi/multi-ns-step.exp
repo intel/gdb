@@ -1,0 +1,158 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests that GDB in non-stop mode sends vCont requests only for inferiors
+# with stopped threads.
+
+load_lib gdbserver-support.exp
+
+standard_testfile
+require allow_gdbserver_tests
+require can_spawn_for_attach
+
+if { [build_executable "build" $testfile $srcfile {debug}] == -1 } {
+    return -1
+}
+
+save_vars { ::GDBFLAGS } {
+    # If GDB and GDBserver are both running locally, set the sysroot to avoid
+    # reading files via the remote protocol.
+    if { ![is_remote host] && ![is_remote target] } {
+	set ::GDBFLAGS "${::GDBFLAGS} -ex \"set sysroot\""
+    }
+    clean_restart ${binfile}
+}
+
+# We explicitly use a remote target and do the setup.  In case we are
+# using a gdbserver board file, we need to disconnect first to be able
+# to connect to the gdbserver we spawn.  This is harmless with a
+# native target.
+gdb_test "disconnect" ""
+
+gdb_test_no_output "set non-stop on" "enable non-stop"
+
+# Start gdbserver mode so we can attach to multiple processes.
+set res [gdbserver_start "--multi" ""]
+set gdbserver_gdbport [lindex $res 1]
+gdb_target_cmd "extended-remote" $gdbserver_gdbport
+
+# Start 2 instances of test app.
+set spawn_id_list [spawn_wait_for_attach [list $binfile $binfile]]
+
+set test_spawn_id1 [lindex $spawn_id_list 0]
+set test_spawn_id2 [lindex $spawn_id_list 1]
+set testpid1 [spawn_id_get_pid $test_spawn_id1]
+set testpid2 [spawn_id_get_pid $test_spawn_id2]
+
+gdb_test_multiple "attach $testpid1" "attaching to the first process" {
+    -re "Attaching to program:.*, process $testpid1.*$gdb_prompt " {
+	pass $gdb_test_name
+    }
+}
+
+# Add new inferior for the second process.
+gdb_test "add-inferior" "Added inferior 2.*"
+
+gdb_test "inferior 2" \
+    "Switching to inferior 2.*" \
+    "switch to the second inferior"
+
+gdb_test_multiple "attach $testpid2" "attaching to second process" {
+    -re "Attaching to process $testpid2.*$gdb_prompt " {
+	pass $gdb_test_name
+    }
+}
+
+# Put a breakpoint to run to by second inferior.
+set line [gdb_get_line_number "break-here"]
+gdb_breakpoint "$srcfile:$line inferior 2"
+
+gdb_test_multiple "continue -a" "hit bp in inferior 2" {
+    -re -wrap "Thread 2\.2 .*hit Breakpoint .*$srcfile:$line.*" {
+	pass $gdb_test_name
+    }
+}
+
+# Iterate over all available threads and check if all are running
+# and only thread 2.2 is stopped.
+set running_threads_count 0
+set thread_2_2_stopped false
+gdb_test_multiple "info thread" "check stopped threads" {
+    -re "($decimal).($decimal)  Thread.*$srcfile:$line" {
+	set inf $expect_out(1,string)
+	set num $expect_out(2,string)
+	set thread_2_2_stopped [ expr { $inf == 2 && $num == 2 } ]
+	exp_continue
+    }
+    -re "$decimal.$decimal  Thread\[^\r\n\]*\\\(running\\\)" {
+	incr running_threads_count
+	exp_continue
+    }
+    -re "$gdb_prompt.*" {
+	gdb_assert { $thread_2_2_stopped && $running_threads_count == 5 }
+    }
+}
+
+# Interrupting one more thread, but this thread should not be
+# included in vCont.
+gdb_test "thread 2.3" "Switching to thread 2.3.*"
+gdb_test_multiple "interrupt" "interrupt" -lbl {
+    -re "Thread 2.3.*stopped.\r\n" {
+	pass $gdb_test_name
+    }
+    -re "\r\n" {
+	exp_continue
+    }
+}
+
+gdb_test "thread 2.2" "Switching to thread 2.2.*"
+
+gdb_test_no_output -nopass "set debug remote on"
+
+set f_pid_in_hex [format %x $testpid1]
+set s_pid_in_hex [format %x $testpid2]
+
+# Wildcard vCont package for the first inferior.
+set v_f_proc_vcont "vCont;.*p${f_pid_in_hex}.-1"
+
+set plain_hex "\[0-9a-fA-F\]+"
+set continue_msg_filter "vCont;c:p${s_pid_in_hex}\.$plain_hex#$plain_hex"
+
+set wildcard_c_for_first 0
+set thread_specific_c 0
+
+set fill "\[^\r\n\]*"
+set test "send continue request"
+gdb_test_multiple "continue" $test -lbl {
+    -re "\r\n${fill}${v_f_proc_vcont}" {
+	incr wildcard_c_for_first
+	exp_continue
+    }
+    -re "\r\n${fill}${continue_msg_filter}" {
+	incr thread_specific_c
+	exp_continue
+    }
+    -re "\r\n$gdb_prompt.*" {
+	# Wildcard vCont for the second should not be there.
+	verbose -log "wildcard_c_for_first: $wildcard_c_for_first"
+	verbose -log "thread_specific_c: $thread_specific_c"
+	gdb_assert { $wildcard_c_for_first == 0 && $thread_specific_c > 0 }
+    }
+}
+
+gdb_test -nopass "set debug remote off"
+
+kill_wait_spawned_process $test_spawn_id1
+kill_wait_spawned_process $test_spawn_id2

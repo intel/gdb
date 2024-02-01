@@ -7145,6 +7145,13 @@ struct remote_inferior : public private_inferior
 {
   /* Whether we can send a wildcard vCont for this process.  */
   bool may_wildcard_vcont = true;
+
+  /* Whether there exist threads that can be resumed with a wildcard
+     resume vCont.
+
+     While the flag above denotes if we are allowed to send a wildcard
+     resume, this flag denotes if it is needed.  */
+  bool has_wildcard_resumable_pending_vconts = 0;
 };
 
 /* Get the remote private inferior data associated to INF.  */
@@ -7328,6 +7335,7 @@ remote_target::commit_resumed ()
       remote_inferior *priv = get_remote_inferior (inf);
 
       priv->may_wildcard_vcont = true;
+      priv->has_wildcard_resumable_pending_vconts = false;
     }
 
   /* Check for any pending events (not reported or processed yet) and
@@ -7416,6 +7424,11 @@ remote_target::commit_resumed ()
       if (info.step || info.sig != GDB_SIGNAL_0
 	  || !get_remote_inferior (tp->inf)->may_wildcard_vcont)
 	vcont_builder.push_action (tp->ptid, info.step, info.sig);
+      else
+	{
+	  remote_inferior *remote = get_remote_inferior (tp->inf);
+	  remote->has_wildcard_resumable_pending_vconts = true;
+	}
 
       remote_thr->set_resumed ();
     }
@@ -7427,11 +7440,15 @@ remote_target::commit_resumed ()
 
   for (inferior *inf : all_non_exited_inferiors (this))
     {
-      if (get_remote_inferior (inf)->may_wildcard_vcont)
-	{
-	  any_process_wildcard = true;
-	  break;
-	}
+      remote_inferior *remote = get_remote_inferior (inf);
+      if (remote->may_wildcard_vcont)
+	any_process_wildcard = true;
+
+      /* If there is nothing to resume with a wildcard, avoid a global
+	 wildcard.  Other inferiors can still be resumed with their
+	 own process-wide wildcard.  */
+      if (!remote->has_wildcard_resumable_pending_vconts)
+	may_global_wildcard_vcont = false;
     }
 
   if (any_process_wildcard)
@@ -7448,7 +7465,8 @@ remote_target::commit_resumed ()
 	{
 	  for (inferior *inf : all_non_exited_inferiors (this))
 	    {
-	      if (get_remote_inferior (inf)->may_wildcard_vcont)
+	      remote_inferior *remote = get_remote_inferior (inf);
+	      if (remote->has_wildcard_resumable_pending_vconts)
 		{
 		  vcont_builder.push_action (ptid_t (inf->pid),
 					     false, GDB_SIGNAL_0);

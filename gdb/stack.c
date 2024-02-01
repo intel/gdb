@@ -2920,6 +2920,17 @@ return_command (const char *retval_exp, int from_tty)
   if (get_frame_type (get_current_frame ()) == DUMMY_FRAME)
     frame_pop (get_current_frame ());
 
+  if (skip_trampoline_functions)
+    {
+      frame_info_ptr ret_frame = get_current_frame ();
+      for (int i = 0; (SAFE_TRAMPOLINE_CHAIN (i, ret_frame)
+		       && in_trampoline_frame (ret_frame)); ++i)
+	{
+	  frame_pop (ret_frame);
+	  ret_frame = get_current_frame ();
+	}
+    }
+
   select_frame (get_current_frame ());
   /* If interactive, print the frame that is now current.  */
   if (from_tty)

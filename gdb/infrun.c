@@ -8025,6 +8025,14 @@ process_event_stop_test (struct execution_control_state *ecs)
 	  keep_going (ecs);
 	  return;
 	}
+      else if (skip_trampoline_functions && in_trampoline_function (stop_pc))
+	{
+	  /* While reverse stepping if we are in a trampoline function call
+	     we will just continue single step in the hope of leaving the
+	     trampoline again soon.  */
+	  keep_going (ecs);
+	  return;
+	}
     }
 
   /* This always returns the sal for the inner-most frame when we are in a

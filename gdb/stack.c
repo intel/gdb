@@ -2686,6 +2686,13 @@ find_relative_frame (frame_info_ptr frame, int *level_offset_ptr)
     {
       frame_info_ptr prev = get_prev_frame (frame);
 
+      if (skip_trampoline_functions)
+	{
+	  for (int i = 0; (SAFE_TRAMPOLINE_CHAIN (i, prev)
+			   && in_trampoline_frame (prev)); ++i)
+	    prev = get_prev_frame (prev);
+	}
+
       if (!prev)
 	break;
       (*level_offset_ptr)--;

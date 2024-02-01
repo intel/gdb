@@ -82,6 +82,11 @@ infrun_debug_show_threads (const char *title, ThreadRange threads)
    information.  */
 #define MAX_TRAMPOLINE_CHAIN_SIZE 10
 
+/* True if the trampoline index "i" is less then the maximum allowed size
+   of a trampoline chain.  */
+#define SAFE_TRAMPOLINE_CHAIN(i, frame) \
+  (i < MAX_TRAMPOLINE_CHAIN_SIZE && (frame != nullptr))
+
 /* Nonzero if we want to give control to the user when we're notified
    of shared library events by the dynamic linker.  */
 extern int stop_on_solib_events;

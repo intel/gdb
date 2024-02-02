@@ -18,7 +18,7 @@
 /* Utility file for SYCL test programs to get list of available devices.  */
 
 #include <sycl/sycl.hpp>
-#include <unordered_set>
+#include <map>
 
 static std::string
 get_backend_name (sycl::backend backend_arg)
@@ -72,7 +72,7 @@ main ()
       exit (1);
     }
 
-  std::unordered_set<std::string> device_types;
+  std::map<std::string, int> device_types;
 
   for (const sycl::device &device : devices)
     {
@@ -86,16 +86,20 @@ main ()
       const std::string type
 	= get_device_type (device.get_info<sycl::info::device::device_type> ());
 
-      if (backend_name != "")
-	device_types.insert (dev_name + ";" + backend_name + ";" + version + ";" + type);
+      if (backend_name == "")
+	continue;
+
+      std::string dev_key {dev_name + ";" + backend_name + ";" + version
+			   + ";" + type};
+      device_types[dev_key]++;
     }
 
   std::cout << "SYCL: List of Target devices: [";
   int index = 0;
-  for (const std::string &dev : device_types)
+  for (const auto& [dev_key, count] : device_types)
     {
       index++;
-      std::cout << dev;
+      std::cout << dev_key << ";" << count;
       if (index < device_types.size ())
 	std::cout << ",";
     }

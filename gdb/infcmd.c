@@ -1993,6 +1993,11 @@ info_program_command (const char *args, int from_tty)
 	  gdb_printf (_("Selected thread is running.\n"));
 	  return;
 	}
+      else if (tp->is_unavailable ())
+	{
+	  gdb_printf (_("Selected thread is unavailable.\n"));
+	  return;
+	}
     }
   else
     {
@@ -2019,6 +2024,12 @@ info_program_command (const char *args, int from_tty)
       if (tp->state == THREAD_RUNNING)
 	{
 	  gdb_printf (_("Thread is now running.\n"));
+	  return;
+	}
+
+      if (tp->is_unavailable ())
+	{
+	  gdb_printf (_("Thread is unavailable.\n"));
 	  return;
 	}
     }

@@ -1,0 +1,75 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests that the 'info program' command prints the thread's PC when
+# attaching to a running program where the kernel is submitted to a
+# GPU device other than the first device.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {[sycl_get_device_count $device] < 2} {
+	    unsupported "test is aimed at multi-device machines"
+	    return 0
+	}
+
+	# Spawn sycl proc and attach.
+	set test_spawn_id [spawn_sycl_proc $binfile $device]
+
+	# Sleep for two seconds to ensure the workload is offloaded to
+	# device and we can attach to a program with actively running
+	# GPU threads.
+	sleep 2
+
+	# Return early if it failed to spawn a sycl proc.
+	if {$test_spawn_id == -1} {
+	    fail "failed to spawn a sycl proc to attach"
+	    continue
+	}
+
+	# Obtain PID to attach.
+	set test_pid [spawn_id_get_pid $test_spawn_id]
+	verbose -log "spawn id: $test_spawn_id, test pid: $test_pid"
+
+	gdb_test "attach $test_pid" "Attaching to program.*" "attach"
+
+	gdb_test "info program" \
+	    "Program stopped at $hex\.\r\nType \"info stack\" or \"info registers\" for more information\."
+
+	# Should make sure process is killed just in case.
+	kill_wait_spawned_process $test_spawn_id
+    }
+}

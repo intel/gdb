@@ -506,9 +506,17 @@ proc is_sycl_device_filtered {device} {
     return 1
 }
 
+# Returns number of devices found in device string.
+
+proc sycl_get_device_count {device} {
+    set device_info [split "$device" ";"]
+    set device_count [lindex $device_info 4]
+    return $device_count
+}
+
 # Gets the list of args required for running the SYCL tests, where input device
 # contains ";" separated following information:
-# Device name;Backend Type;Backend Platform version;Device Type.
+# Device name;Backend Type;Backend Platform version;Device Type;count.
 # See an example in init_sycl_devices_list.
 
 proc sycl_get_device_args {device} {

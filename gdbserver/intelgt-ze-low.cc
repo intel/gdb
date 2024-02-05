@@ -901,14 +901,20 @@ intelgt_ze_target::add_regset (target_desc *tdesc, const ze_device_info &dinfo,
   switch (regprop.type)
     {
     case ZET_DEBUG_REGSET_TYPE_GRF_INTEL_GPU:
-      feature = tdesc_create_feature (tdesc, intelgt::feature_grf);
+      {
+	feature = tdesc_create_feature (tdesc, intelgt::feature_grf);
 
-      expedite.push_back ("r0");
-      intelgt_add_regset (feature, regnum, "r", regprop.count, "grf",
-			  regprop.bitSize, regset.is_writeable,
-			  intelgt_uint_reg_type (feature, regprop.bitSize,
-						 32u),
-			  expedite);
+	expedite.push_back ("r0");
+	std::string rname (std::string ("r")
+			   + std::to_string (regprop.count - 1));
+	expedite.push_back (rname.c_str ());
+
+	intelgt_add_regset (feature, regnum, "r", regprop.count, "grf",
+			    regprop.bitSize, regset.is_writeable,
+			    intelgt_uint_reg_type (feature, regprop.bitSize,
+						   32u),
+			    expedite);
+      }
       break;
 
     case ZET_DEBUG_REGSET_TYPE_ADDR_INTEL_GPU:

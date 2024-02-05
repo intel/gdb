@@ -938,6 +938,10 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
       feature = tdesc_create_feature (tdesc, intelgt::feature_grf);
 
       expedite.push_back ("r0");
+      expedite.push_back (
+	(std::string ("r") + std::to_string (regprop.count - 1))
+	  .c_str ());
+
       intelgt_add_regset (feature, regnum, "r", regprop.count, "grf",
 			  regprop.bitSize,
 			  intelgt_uint_reg_type (feature, regprop.bitSize),

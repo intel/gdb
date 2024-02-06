@@ -895,8 +895,14 @@ x86_linux_read_description ()
 	   regset->fill_function != nullptr;
 	   regset++)
 	{
+
 	  if (regset->get_request == PTRACE_GETREGSET)
-	    regset->size = xsave_len;
+	    {
+	      if (regset->nt_type == NT_X86_XSTATE)
+		regset->size = xsave_len;
+	      else
+		gdb_assert_not_reached ("invalid regset type.");
+	    }
 	  else if (regset->type != GENERAL_REGS)
 	    regset->size = 0;
 	}

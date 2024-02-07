@@ -818,6 +818,34 @@ static int xsave_xmm_avx512_offset[] =
   (xsave + (tdep)->xsave_layout.zmm_offset				\
    + xsave_xmm_avx512_offset[regnum - I387_XMM16_REGNUM (tdep)])
 
+/* At xsave_apx_egpr_offset[REGNUM] you'll find the relative offset
+   within the APX region of the XSAVE extended state where the GDB
+   registers r16 - r31 is stored.  */
+
+static int xsave_apx_egpr_offset[] =
+{
+  0 * 8,			/* r11...r31 registers.  */
+  1 * 8,
+  2 * 8,
+  3 * 8,
+  4 * 8,
+  5 * 8,
+  6 * 8,
+  7 * 8,
+  8 * 8,
+  9 * 8,
+  10 * 8,
+  11 * 8,
+  12 * 8,
+  13 * 8,
+  14 * 8,
+  15 * 8
+};
+
+#define XSAVE_APX_EGPR_ADDR(tdep, xsave, regnum)		\
+  (xsave + (tdep)->xsave_layout.apx_offset			\
+   + xsave_apx_egpr_offset[regnum - I387_R16_REGNUM (tdep)])
+
 /* At xsave_avx512_k_offset[REGNUM] you'll find the relative offset
    within the K region of the XSAVE extended state where the AVX512
    opmask register K0 + REGNUM is stored.  */
@@ -937,6 +965,7 @@ i387_guess_xsave_layout (uint64_t xcr0, size_t xsave_size,
     {
       /* Intel CPUs supporting AMX.  */
       layout.avx_offset = 576;
+      layout.apx_offset = 960;
       layout.k_offset = 1088;
       layout.zmm_h_offset = 1152;
       layout.zmm_offset = 1664;
@@ -948,6 +977,7 @@ i387_guess_xsave_layout (uint64_t xcr0, size_t xsave_size,
     {
       /* Intel CPUs supporting PKRU.  */
       layout.avx_offset = 576;
+      layout.apx_offset = 960;
       layout.k_offset = 1088;
       layout.zmm_h_offset = 1152;
       layout.zmm_offset = 1664;
@@ -966,6 +996,7 @@ i387_guess_xsave_layout (uint64_t xcr0, size_t xsave_size,
     {
       /* Intel CPUs supporting AVX512.  */
       layout.avx_offset = 576;
+      layout.apx_offset = 960;
       layout.k_offset = 1088;
       layout.zmm_h_offset = 1152;
       layout.zmm_offset = 1664;
@@ -996,6 +1027,7 @@ i387_fallback_xsave_layout (uint64_t xcr0)
     {
       /* Intel CPUs supporting AMX.  */
       layout.avx_offset = 576;
+      layout.apx_offset = 960;
       layout.k_offset = 1088;
       layout.zmm_h_offset = 1152;
       layout.zmm_offset = 1664;
@@ -1008,6 +1040,7 @@ i387_fallback_xsave_layout (uint64_t xcr0)
     {
       /* Intel CPUs supporting PKRU.  */
       layout.avx_offset = 576;
+      layout.apx_offset = 960;
       layout.k_offset = 1088;
       layout.zmm_h_offset = 1152;
       layout.zmm_offset = 1664;
@@ -1018,6 +1051,7 @@ i387_fallback_xsave_layout (uint64_t xcr0)
     {
       /* Intel CPUs supporting AVX512.  */
       layout.avx_offset = 576;
+      layout.apx_offset = 960;
       layout.k_offset = 1088;
       layout.zmm_h_offset = 1152;
       layout.zmm_offset = 1664;
@@ -1085,9 +1119,10 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
       pkeys = 0x100,
       tilecfg = 0x200,
       tiledata = 0x400,
+      apx = 0x800,
       all = x87 | sse | avxh | avx512_k | avx512_zmm0_h | avx512_zmm16_h
 	    | avx512_ymmh_avx512 | avx512_xmm_avx512 | pkeys | tilecfg
-	    | tiledata
+	    | tiledata | apx
     } regclass;
 
   gdb_assert (regs != NULL);
@@ -1096,6 +1131,9 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
 
   if (regnum == -1)
     regclass = all;
+  else if (regnum >= I387_R16_REGNUM (tdep)
+	   && regnum < I387_APX_END_REGNUM (tdep))
+    regclass = apx;
   else if (regnum == I387_TILECFG_RAW_REGNUM (tdep))
     regclass = tilecfg;
   else if (regnum == I387_TILEDATA_REGNUM (tdep))
@@ -1145,6 +1183,13 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
     {
     case none:
       break;
+
+    case apx:
+      if ((clear_bv & X86_XSTATE_APX_F))
+	regcache->raw_supply_zeroed (regnum);
+      else
+	regcache->raw_supply (regnum, XSAVE_APX_EGPR_ADDR (tdep, regs, regnum));
+      return;
 
     case tilecfg:
       if ((clear_bv & X86_XSTATE_TILECFG))
@@ -1341,6 +1386,25 @@ i387_supply_xsave (struct regcache *regcache, int regnum,
 	    }
 	}
 
+      /* Handle the APX register.  */
+      if ((tdep->xcr0 & X86_XSTATE_APX_F) != 0)
+	{
+	  if ((clear_bv & X86_XSTATE_APX_F) != 0)
+	    {
+	      for (i = I387_R16_REGNUM (tdep);
+		   i < I387_APX_END_REGNUM (tdep);
+		   i++)
+		regcache->raw_supply_zeroed (i);
+	    }
+	  else
+	    {
+	      for (i = I387_R16_REGNUM (tdep);
+		   i < I387_APX_END_REGNUM (tdep);
+		   i++)
+		regcache->raw_supply (i, XSAVE_APX_EGPR_ADDR (tdep, regs, i));
+	    }
+	}
+
       /* Handle the tilecfg register.  */
       if ((tdep->xcr0 & X86_XSTATE_TILECFG) != 0)
 	{
@@ -1527,9 +1591,10 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
       pkeys = 0x200,
       tilecfg = 0x400,
       tiledata = 0x800,
+      apx = 0x1000,
       all = x87 | sse | avxh | avx512_k | avx512_zmm0_h | avx512_zmm16_h
 	    | avx512_ymmh_avx512 | avx512_xmm_avx512 | pkeys | tilecfg
-	    | tiledata
+	    | tiledata | apx
     } regclass;
 
   gdb_assert (tdep->st0_regnum >= I386_ST0_REGNUM);
@@ -1537,6 +1602,9 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
 
   if (regnum == -1)
     regclass = all;
+  else if (regnum >= I387_R16_REGNUM (tdep)
+	   && regnum < I387_APX_END_REGNUM (tdep))
+    regclass = apx;
   else if (regnum == I387_TILECFG_RAW_REGNUM (tdep))
     regclass = tilecfg;
   else if (regnum == I387_TILEDATA_REGNUM (tdep))
@@ -1605,6 +1673,14 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
      seem justified at this point.  */
   if (clear_bv)
     {
+      if ((clear_bv & X86_XSTATE_APX_F))
+	{
+	  for (i = I387_R16_REGNUM (tdep);
+	       i < I387_APX_END_REGNUM (tdep);
+	       i++)
+	    memset (XSAVE_APX_EGPR_ADDR (tdep, regs, i), 0, 8);
+	}
+
       if ((clear_bv & X86_XSTATE_TILECFG))
 	{
 	  i = I387_TILECFG_RAW_REGNUM (tdep);
@@ -1683,6 +1759,23 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
 
   if (regclass == all)
     {
+      /* Check if any APX registers are changed.  */
+      if ((tdep->xcr0 & X86_XSTATE_APX_F))
+	{
+	  for (i = I387_R16_REGNUM (tdep);
+	       i < I387_APX_END_REGNUM (tdep);
+	       i++)
+	    {
+	      regcache->raw_collect (i, raw);
+	      p = XSAVE_APX_EGPR_ADDR (tdep, regs, i);
+	      if (memcmp (raw, p, 8) != 0)
+		{
+		  xstate_bv |= X86_XSTATE_APX_F;
+		  memcpy (p, raw, 8);
+		}
+	    }
+	}
+
       /* Check if the tilecfg register is changed.  */
       if ((tdep->xcr0 & X86_XSTATE_TILECFG))
 	{
@@ -1860,6 +1953,16 @@ i387_collect_xsave (const struct regcache *regcache, int regnum,
 	{
 	default:
 	  internal_error (_("invalid i387 regclass"));
+
+	case apx:
+	  regcache->raw_collect (regnum, raw);
+	  p = XSAVE_APX_EGPR_ADDR (tdep, regs, regnum);
+	  if (memcmp (raw, p, 8))
+	    {
+	      xstate_bv |= X86_XSTATE_APX_F;
+	      memcpy (p, raw, 8);
+	    }
+	  break;
 
 	case tilecfg:
 	  /* This is a tilecfg register.  */

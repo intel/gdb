@@ -58,8 +58,6 @@ i386_create_target_description (uint64_t xcr0, bool is_linux, bool segments)
   if (xcr0 & X86_XSTATE_AVX)
     regnum = create_feature_i386_32bit_avx (tdesc.get (), regnum);
 
-  /* APX will take up the space left behind by the deprecated MPX registers.  */
-
   if (xcr0 & X86_XSTATE_AVX512)
     regnum = create_feature_i386_32bit_avx512 (tdesc.get (), regnum);
 

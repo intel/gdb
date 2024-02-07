@@ -112,6 +112,8 @@ int amd64_linux_gregset_reg_offset[] =
   -1, 				/* CET user mode register PL3_SSP.  */
   -1,				/* TILECFG register (AMX).  */
   -1,			 	/* TILEDATA registers tmm0 ... tmm7 (AMX).  */
+  -1, -1, -1, -1, -1, -1, -1, -1,     /* r16 ... r31.  */
+  -1, -1, -1, -1, -1, -1, -1, -1,
 
   /* End of hardware registers */
   21 * 8, 22 * 8,		      /* fs_base and gs_base.  */
@@ -1622,9 +1624,10 @@ amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32,
 {
   static target_desc *amd64_linux_tdescs \
     [2/*AVX*/][2/*AVX512*/][2/*PKRU*/][2/*PL3_SSP*/]\
-    [2/*AMX*/] = {};
+    [2/*AMX*/][2/*APX*/] = {};
   static target_desc *x32_linux_tdescs \
-    [2/*AVX*/][2/*AVX512*/][2/*PKRU*/][2/*PL3_SSP*/][2/*AMX*/] = {};
+    [2/*AVX*/][2/*AVX512*/][2/*PKRU*/][2/*PL3_SSP*/][2/*AMX*/]\
+    [2/*APX*/] = {};
 
   target_desc **tdesc;
 
@@ -1634,7 +1637,8 @@ amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32,
 	[(xcr0_features_bit & X86_XSTATE_AVX512) ? 1 : 0]
 	[(xcr0_features_bit & X86_XSTATE_PKRU) ? 1 : 0]
 	[ssp_enabled ? 1 : 0]
-	[(xcr0_features_bit & X86_XSTATE_AMX) ? 1 : 0];
+	[(xcr0_features_bit & X86_XSTATE_AMX) ? 1 : 0]
+	[(xcr0_features_bit & X86_XSTATE_APX_F) ? 1 : 0];
     }
   else
     {
@@ -1642,7 +1646,8 @@ amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32,
 	[(xcr0_features_bit & X86_XSTATE_AVX512) ? 1 : 0]
 	[(xcr0_features_bit & X86_XSTATE_PKRU) ? 1 : 0]
 	[ssp_enabled ? 1 : 0]
-	[(xcr0_features_bit & X86_XSTATE_AMX) ? 1 : 0];
+	[(xcr0_features_bit & X86_XSTATE_AMX) ? 1 : 0]
+	[(xcr0_features_bit & X86_XSTATE_APX_F) ? 1 : 0];
     }
 
   if (*tdesc == NULL)

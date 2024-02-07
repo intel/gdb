@@ -378,6 +378,7 @@ target_debug_print_x86_xsave_layout (const x86_xsave_layout &layout)
   POFFS(pkru);
   POFFS(tilecfg);
   POFFS(tiledata);
+  POFFS(apx);
 
 #undef POFFS
 

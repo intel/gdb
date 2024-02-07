@@ -1,0 +1,106 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Please email any bugs, comments, and/or additions to this file to:
+# bug-gdb@gnu.org
+
+# Test apx dword, word, byte and raw registers.
+
+set nr_regs 16
+set regs(1) r16
+set regs(2) r17
+set regs(3) r18
+set regs(4) r19
+set regs(5) r20
+set regs(6) r21
+set regs(7) r22
+set regs(8) r23
+set regs(9) r24
+set regs(10) r25
+set regs(11) r26
+set regs(12) r27
+set regs(13) r28
+set regs(14) r29
+set regs(15) r30
+set regs(16) r31
+
+proc get_reg_val { type r } {
+    set hexr [format %x [expr $r-1]]
+    if { $type == "d"} {
+	return 0x${hexr}4${hexr}3${hexr}2${hexr}1
+    }
+    if { $type == "w" } {
+	return 0x${hexr}2${hexr}1
+    }
+    if { $type == "l" } {
+	return 0x${hexr}1
+    }
+    if { $type == "" } {
+	return 0x00000000${hexr}4${hexr}3${hexr}2${hexr}1
+    }
+}
+
+proc check_reg_content { type } {
+    global nr_regs
+    global regs
+
+    for { set r 1 } { $r <= $nr_regs  } { incr r } {
+	set regval [get_reg_val $type $r]
+	gdb_test "print/z \$$regs($r)$type" "= $regval"
+    }
+}
+
+require allow_apx_tests
+
+standard_testfile
+
+if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
+	{debug additional_flags=-mapxf}] } {
+    return -1
+}
+
+if { ![runto_main] } {
+    return -1
+}
+
+set line [gdb_get_line_number "break here"]
+gdb_breakpoint $line
+gdb_continue_to_breakpoint "break here" ".*$srcfile:$line.*"
+
+# Run test for dword, word, byte pseudo registers, as well as raw registers.
+set regtypes [list  "d" "w" "l" ""]
+set regtype_names [list  "dword" "word" "byte" "raw"]
+
+# Check initial register content written by testprogram.
+for { set i 0 } { $i < [llength $regtypes] } { incr i } {
+    set type [lindex $regtypes $i]
+    set type_name [lindex $regtype_names $i]
+    with_test_prefix "$type_name register" {
+	check_reg_content $type
+    }
+}
+
+# Check writing registers with GDB.
+for { set i 0 } { $i < [llength $regtypes] } { incr i } {
+    set type [lindex $regtypes $i]
+    set type_name [lindex $regtype_names $i]
+    with_test_prefix "$type_name register" {
+	for { set r 1 } { $r <= $nr_regs  } { incr r } {
+	    set val [expr $r + $i]
+	    gdb_test_no_output "set var \$$regs($r)$type = $val"
+	    gdb_test "print \$$regs($r)$type" "= $val"
+	}
+    }
+}

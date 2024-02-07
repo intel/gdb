@@ -66,6 +66,11 @@ init_target_desc (struct target_desc *tdesc,
 {
   int offset = 0;
 
+#ifndef IN_PROCESS_AGENT
+  /* Drop the contents of the previous vector, if any.  */
+  tdesc->expedite_regs.clear ();
+#endif
+
   /* Go through all the features and populate reg_defs.  */
   for (const tdesc_feature_up &feature : tdesc->features)
     for (const tdesc_reg_up &treg : feature->registers)
@@ -81,7 +86,15 @@ init_target_desc (struct target_desc *tdesc,
 	tdesc->reg_defs.emplace_back (treg->name.c_str (), offset,
 				      treg->bitsize);
 	offset += treg->bitsize;
-      }
+
+#ifndef IN_PROCESS_AGENT
+	/* Collect all expedites register names.  This will be used to
+	   build the array of expedites used when outputting expedites to
+	   GDB.  */
+	if (treg->is_expedited && expedite_regs == nullptr)
+	  tdesc->expedite_regs.push_back (treg->name.c_str ());
+#endif
+    }
 
   tdesc->registers_size = offset / 8;
 
@@ -96,13 +109,14 @@ init_target_desc (struct target_desc *tdesc,
 
 
 #ifndef IN_PROCESS_AGENT
-  /* Drop the contents of the previous vector, if any.  */
-  tdesc->expedite_regs.clear ();
-
-  /* Initialize the vector with new expedite registers contents.  */
-  int expedite_count = 0;
-  while (expedite_regs[expedite_count] != nullptr)
-    tdesc->expedite_regs.push_back (expedite_regs[expedite_count++]);
+  /* Ignore the passed in expedite_regs since we built this information
+     here.  For targets that pass in a valid pointer, use it instead.  */
+  if (expedite_regs != nullptr)
+    {
+      int expedite_count = 0;
+      while (expedite_regs[expedite_count] != nullptr)
+	tdesc->expedite_regs.push_back (expedite_regs[expedite_count++]);
+    }
 #endif
 }
 

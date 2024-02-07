@@ -67,10 +67,6 @@ typedef std::unique_ptr<ze_regset_info_t> ze_regset_info_up;
    terminated with a single nullptr entry.  */
 typedef std::vector<const char *> expedite_t;
 
-/* Each tdesc cache entry will keep one of these that get initialised in
-   create_tdesc.  */
-typedef std::unique_ptr<expedite_t> ze_expedites_up;
-
 /* A list of debug events.  */
 
 typedef std::list<zet_debug_event_t> events_t;
@@ -85,7 +81,6 @@ struct ze_tdesc
 {
   target_desc_up tdesc;
   ze_regset_info_up regset_info;
-  ze_expedites_up expedites;
 };
 
 struct ze_tdesc_cache
@@ -94,7 +89,7 @@ struct ze_tdesc_cache
 
 public:
   void add (const ze_regset_properties_v_t &regsets, target_desc_up tdesc,
-	    ze_regset_info_up regset_info, ze_expedites_up expedites);
+	    ze_regset_info_up regset_info);
 
   /* We map from regsets to ze_tdesc.  */
   const ze_tdesc *find (const ze_regset_properties_v_t &regsets) const;

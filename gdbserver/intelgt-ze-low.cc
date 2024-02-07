@@ -303,8 +303,7 @@ private:
      accordingly.  */
   void add_regset (target_desc *tdesc, const ze_device_info &dinfo,
 		   const zet_debug_regset_properties_t &regprop,
-		   long &regnum, ze_regset_info_t &regsets,
-		   expedite_t &expedite);
+		   long &regnum, ze_regset_info_t &regsets);
 };
 
 bool
@@ -504,23 +503,20 @@ intelgt_ze_target::create_tdesc
 
   long regnum = 0;
   ze_regset_info_up regset_info { new ze_regset_info_t };
-  ze_expedites_up expedites { new expedite_t };
   for (const zet_debug_regset_properties_t &regprop : regset_properties)
     add_regset (tdesc.get (), *dinfo, regprop, regnum,
-		*regset_info, *expedites);
+		*regset_info);
 
-  /* Tdesc expects a nullptr-terminated array.  */
-  expedites->push_back (nullptr);
 
   target_desc *tret = tdesc.get ();
-  init_target_desc (tret, expedites->data (), GDB_OSABI_LINUX);
+  init_target_desc (tret, nullptr, GDB_OSABI_LINUX);
 
   /* Devices can have several tdescs.  One is created during attach to the
      device.  Others may be created during thread stop event
      handling as threads may have their own regset properties.  E.g. the number
      of GRF registers is dependent on the GRF mode.  */
   dinfo->tdesc_cache.add (regset_properties, std::move (tdesc),
-			  std::move (regset_info), std::move (expedites));
+			  std::move (regset_info));
 
   return tret;
 }
@@ -868,9 +864,9 @@ intelgt_ze_target::prepare_thread_resume (thread_info *tp)
 void
 intelgt_ze_target::add_regset (target_desc *tdesc, const ze_device_info &dinfo,
 			       const zet_debug_regset_properties_t &regprop,
-			       long &regnum, ze_regset_info_t &regsets,
-			       expedite_t &expedite)
+			       long &regnum, ze_regset_info_t &regsets)
 {
+  expedite_t expedite;
   tdesc_feature *feature = nullptr;
   const ze_device_properties_t &device = dinfo.properties;
 

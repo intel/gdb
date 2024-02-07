@@ -95,7 +95,7 @@ void copy_target_description (struct target_desc *dest,
    EXPEDITE_REGS.  */
 
 void init_target_desc (struct target_desc *tdesc,
-		       const char **expedite_regs);
+		       const char **expedite_regs = nullptr);
 
 /* Return the target description corresponding to the given THREAD.  */
 

@@ -53,6 +53,71 @@ void target_desc::accept (tdesc_element_visitor &v) const
 #endif
 }
 
+#ifndef IN_PROCESS_AGENT
+/* Build the list of implicit expedited registers for the given target
+   description.  This function iterates through the features and registers
+   of the provided target description and adds the names of registers
+   marked as expedited to the expedite_regs list.
+
+   TDESC - Pointer to the target description object containing features
+	   and registers.  */
+static void
+build_implicit_expedites (target_desc *tdesc)
+{
+  for (const tdesc_feature_up &feature : tdesc->features)
+    for (const tdesc_reg_up &treg : feature->registers)
+      {
+	if (treg->is_expedited)
+	  tdesc->expedite_regs.push_back (treg->name.c_str ());
+      }
+}
+
+/* Build the list of explicitly expedited registers for the target
+   description TDESC.
+
+   TDESC - The target description object to update with expedited
+	   registers.
+   EXPEDITE_REGS - A null-terminated array of strings representing
+		   the names of registers to be expedited.  */
+
+static void
+build_explicit_expedites (target_desc *tdesc, const char **expedite_regs)
+{
+  gdb_assert (expedite_regs != nullptr);
+
+  for (int i = 0; expedite_regs[i] != nullptr; ++i)
+    tdesc->expedite_regs.push_back (expedite_regs[i]);
+}
+
+/* Set up the expedite registers for the given target description.
+
+   This function initializes the expedite registers for the target
+   description TDESC.  If EXPLICIT_REGS is provided, it builds the
+   expedite registers explicitly using the provided list.  Otherwise,
+   it builds the expedite registers implicitly.
+
+   Legacy code uses the expedite_regs array, new code can use the
+   is_expedited flags in the register descriptions.  Options are
+   exclusive, if both are present the manual list takes precedence.
+
+   - TDESC: The target description for which expedite registers are
+	    being set up.
+   - EXPEDITE_REGS: A null-terminated array of register names to be
+		    expedited, or nullptr to use implicit expedite
+		    registers.  */
+static void
+setup_expedite_registers (target_desc *tdesc,
+			  const char **expedite_regs)
+{
+  tdesc->expedite_regs.clear ();
+
+  if (expedite_regs != nullptr)
+    build_explicit_expedites (tdesc, expedite_regs);
+  else
+    build_implicit_expedites (tdesc);
+}
+#endif /* IN_PROCESS_AGENT */
+
 void
 init_target_desc (struct target_desc *tdesc,
 		  const char **expedite_regs,
@@ -75,7 +140,7 @@ init_target_desc (struct target_desc *tdesc,
 	tdesc->reg_defs.emplace_back (treg->name.c_str (), offset,
 				      treg->bitsize);
 	offset += treg->bitsize;
-      }
+    }
 
   tdesc->registers_size = offset / 8;
 
@@ -88,15 +153,9 @@ init_target_desc (struct target_desc *tdesc,
   gdb_assert (2 * tdesc->registers_size + 32 <= PBUFSIZ);
 #endif
 
-
 #ifndef IN_PROCESS_AGENT
-  /* Drop the contents of the previous vector, if any.  */
-  tdesc->expedite_regs.clear ();
-
-  /* Initialize the vector with new expedite registers contents.  */
-  int expedite_count = 0;
-  while (expedite_regs[expedite_count] != nullptr)
-    tdesc->expedite_regs.push_back (expedite_regs[expedite_count++]);
+  /* Setup expedite registers using appropriate strategy.  */
+  setup_expedite_registers (tdesc, expedite_regs);
 
   set_tdesc_osabi (tdesc, osabi);
 #endif

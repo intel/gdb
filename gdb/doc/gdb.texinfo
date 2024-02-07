@@ -51200,6 +51200,10 @@ describe one config user mode register @samp{tilecfg_raw} that has
 64 bytes and one @samp{tiledata} register that has 8192 bytes.
 All AMX registers are valid only for amd64.
 
+The @samp{org.gnu.gdb.i386.apx} feature is optional.  It should describe
+16 Extended General Purpose registers (EGPRs) @samp{r16} - @samp{r31} with
+64 bits each.  All APX registers are valid only on amd64.
+
 @node LoongArch Features
 @subsection LoongArch Features
 @cindex target descriptions, LoongArch Features

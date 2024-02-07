@@ -117,6 +117,8 @@ int amd64_linux_gregset_reg_offset[] =
   -1,				/* TILECFG register (AMX).  */
   -1,			 	/* TILEDATA register for the pseudo
 				   registers tmm0 ... tmm7 (AMX).  */
+  -1, -1, -1, -1, -1, -1, -1, -1,     /* r16 ... r31.  */
+  -1, -1, -1, -1, -1, -1, -1, -1,
 
   /* End of hardware registers */
   21 * 8, 22 * 8,		      /* fs_base and gs_base.  */

@@ -32,11 +32,27 @@
 static enum x86_linux_tdesc
 xcr0_to_tdesc_idx (uint64_t xcr0, bool is_x32)
 {
-  if (!is_x32 && ((xcr0 & X86_XSTATE_AMX) != 0))
-    return X86_TDESC_AVX_AVX512_PKU_AMX;
+  if (!is_x32 && (xcr0 & X86_XSTATE_AMX) != 0)
+    {
+      if ((xcr0 & X86_XSTATE_APX_F) != 0)
+	return X86_TDESC_AVX_AVX512_PKU_AMX_APX;
+      else
+	return X86_TDESC_AVX_AVX512_PKU_AMX;
+    }
 
   if (xcr0 & X86_XSTATE_PKRU)
     {
+      if ((xcr0 & X86_XSTATE_APX_F) != 0)
+	{
+	  if (is_x32)
+	    {
+	      /* No x32 PKU, fall back to avx_avx512_apx.  */
+	      return X86_TDESC_AVX_AVX512_APX;
+	    }
+	  else
+	    return X86_TDESC_AVX_AVX512_PKU_APX;
+	}
+
       if (is_x32)
 	{
 	  /* No x32 PKU, fall back to avx_avx512.  */
@@ -46,7 +62,10 @@ xcr0_to_tdesc_idx (uint64_t xcr0, bool is_x32)
 	return X86_TDESC_AVX_AVX512_PKU;
     }
   else if (xcr0 & X86_XSTATE_AVX512)
-    return X86_TDESC_AVX_AVX512;
+    if ((xcr0 & X86_XSTATE_APX_F) != 0)
+      return X86_TDESC_AVX_AVX512_APX;
+    else
+      return X86_TDESC_AVX_AVX512;
   else if (xcr0 & X86_XSTATE_AVX)
     return X86_TDESC_AVX;
   else if (xcr0 & X86_XSTATE_SSE)

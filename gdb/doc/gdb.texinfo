@@ -50423,6 +50423,10 @@ The @samp{org.gnu.gdb.i386.pl3_ssp} feature is optional.  It should describe the
 user mode register @samp{pl3_ssp} which has 64 bits on amd64.  Following the
 restriction of the Linux kernel, only amd64 is supported for now.
 
+The @samp{org.gnu.gdb.i386.apx} feature is optional.  It should describe
+16 Extended General Purpose registers (EGPRs) @samp{r16} - @samp{r31} with
+64 bits each.  All APX registers are valid only on amd64.
+
 @node LoongArch Features
 @subsection LoongArch Features
 @cindex target descriptions, LoongArch Features

@@ -3,6 +3,10 @@
 
 *** Changes since GDB 15
 
+* Support for Intel APX registers on amd64 GNU/Linux.
+  Support displaying and modifying Intel APX registers (Extended GPRs
+  $r16 - $r31) including byte, word and dword pseudo registers.
+
 * Debugging support for Intel MPX has been removed.  This includes the
   removal of
   ** MPX register support

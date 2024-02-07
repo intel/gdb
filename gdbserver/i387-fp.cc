@@ -23,6 +23,7 @@
 /* Default to SSE.  */
 static unsigned long long x86_xcr0 = X86_XSTATE_SSE_MASK;
 
+static const int num_apx_registers = 16;
 static const int num_avx512_k_registers = 8;
 static const int num_pkeys_registers = 1;
 
@@ -116,7 +117,9 @@ public:
   unsigned char *ymmh_space ()
   { return xsave () + xsave_layout.avx_offset; }
 
-  /* APX will take up the space left behind by the deprecated MPX registers.  */
+  /* Memory address of 16 EGPR register values of 64 bits.  */
+  unsigned char *apx_space ()
+  { return xsave () + xsave_layout.apx_offset; }
 
   /* Memory address of 8 OpMask register values of 64 bits.  */
   unsigned char *k_space ()
@@ -327,6 +330,10 @@ i387_cache_to_xsave (struct regcache *regcache, void *buf)
 	  memset (fp->tilecfg_space (), 0, 64);
 	  memset (fp->tiledata_space (), 0, 8192);
 	}
+
+     if ((clear_bv & X86_XSTATE_APX_F))
+	for (i = 0; i < num_apx_registers; i++)
+	  memset (fp->apx_space () + i * 8, 0, 8);
     }
 
   /* This used to blindly allocate 64 bytes of space.
@@ -496,6 +503,23 @@ i387_cache_to_xsave (struct regcache *regcache, void *buf)
 	{
 	  xstate_bv |= X86_XSTATE_TILEDATA;
 	  memcpy (p, raw, 8192);
+	}
+    }
+
+  /* Check if any APX registers are changed.  */
+  if ((x86_xcr0 & X86_XSTATE_APX_F))
+    {
+      int r16_regnum = find_regno (regcache->tdesc, "r16");
+
+      for (i = 0; i < num_apx_registers; i++)
+	{
+	  collect_register (regcache, i + r16_regnum, raw);
+	  p = fp->apx_space () + i * 8;
+	  if (memcmp (raw, p, 8) != 0)
+	    {
+	      xstate_bv |= X86_XSTATE_APX_F;
+	      memcpy (p, raw, 8);
+	    }
 	}
     }
 
@@ -857,6 +881,23 @@ i387_xsave_to_cache (struct regcache *regcache, const void *buf)
 	{
 	  p = fp->tiledata_space ();
 	  supply_register (regcache, tiledata_regnum, p);
+	}
+    }
+
+  if ((x86_xcr0 & X86_XSTATE_APX_F) != 0)
+    {
+      int r16_regnum = find_regno (regcache->tdesc, "r16");
+
+      if ((clear_bv & X86_XSTATE_APX_F) != 0)
+	{
+	  for (i = 0; i < num_apx_registers; i++)
+	    supply_register_zeroed (regcache, i + r16_regnum);
+	}
+      else
+	{
+	  p = fp->apx_space ();
+	  for (i = 0; i < num_apx_registers; i++)
+	    supply_register (regcache, i + r16_regnum, p + i * 8);
 	}
     }
 

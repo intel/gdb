@@ -3179,8 +3179,7 @@ ze_target::set_thread_changed (thread_info *thread, bool state)
 
 void
 ze_tdesc_cache::add (const ze_regset_properties_v_t &regsets,
-		     target_desc_up tdesc, ze_regset_info_up regset_info,
-		     ze_expedites_up expedites)
+		     target_desc_up tdesc, ze_regset_info_up regset_info)
 {
   /* We have already seen this regset layout.  */
   if (find (regsets) != nullptr)
@@ -3190,7 +3189,7 @@ ze_tdesc_cache::add (const ze_regset_properties_v_t &regsets,
     }
 
   tdescs_m[regsets]
-    = { std::move (tdesc), std::move (regset_info), std::move (expedites) };
+    = { std::move (tdesc), std::move (regset_info) };
 }
 
 /* Find a target description given a regset vector.  This also tells us

@@ -1,0 +1,66 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDB handling of kernel breakpoint after forcefully terminating
+# it while GPU offload is running for an application with large number
+# of threads on the IntelGT architecture.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    sycl_with_intelgt_lock $device {
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    continue
+	}
+
+	clean_restart "${binfile}"
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	gdb_test_multiple "continue" "" {
+	    -re ".*intelgt: gdbserver-ze started for process..*" {
+		# Send ctrl-c after 3 seconds.
+		after 3000 {send_gdb "\003"}
+		gdb_test "" "received signal SIGINT.*" "stop with control-c"
+	    }
+	}
+
+	set kernel_line_break [gdb_get_line_number "kernel-line-break"]
+
+	with_test_prefix "restart" {
+	    clean_restart "${binfile}"
+	    if {![runto_main [sycl_get_device_args $device]]} {
+		continue
+	    }
+	    gdb_breakpoint $kernel_line_break {temporary}
+	    gdb_continue_to_breakpoint "kernel line break" \
+		".*$srcfile:$kernel_line_break.*"
+	}
+    }
+}

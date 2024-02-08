@@ -1378,14 +1378,19 @@ print_thread_row (ui_out *uiout, thread_info *tp, bool is_current,
 
   if (uiout->is_mi_like_p ())
     {
-      uiout->field_string ("target-id", target_pid_to_str (tp->ptid));
+      std::string target_id = target_pid_to_str (tp->ptid);
+      uiout->field_fmt ("target-id", "Thread %u", tp->global_num);
 
       const char *extra_info = target_extra_thread_info (tp);
       if (extra_info != nullptr)
 	uiout->field_string ("details", extra_info);
 
       const char *name = thread_name (tp);
-      if (name != NULL)
+      if (name == nullptr)
+	uiout->field_fmt ("name", "%s (%s)",
+			  tp->get_qualified_id ().c_str (),
+			  target_id.c_str ());
+      else
 	uiout->field_string ("name", name);
     }
   else

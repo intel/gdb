@@ -25,7 +25,7 @@ if {[llength $sycl_device_list] == 0} {
     return 0
 }
 
-proc step_over_atomic {displaced_stepping} {
+proc step_over_atomic {displaced_stepping device} {
     global hex decimal
 
     set fill "\[^\r\n\]*"
@@ -73,6 +73,9 @@ proc step_over_atomic {displaced_stepping} {
 
     set pc_test_name "check PC after atomic step over"
     set pc [get_hexadecimal_valueof "\$pc" "invalid" "read PC"]
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     if {($displaced_stepping eq "on" && $pc eq $next_pc)
 	|| ($displaced_stepping eq "off" && $pc > $next_pc)} {
 	pass $pc_test_name
@@ -127,7 +130,7 @@ foreach device $sycl_device_list {
 		    continue
 		}
 	    }
-	    step_over_atomic $displaced_stepping
+	    step_over_atomic $displaced_stepping $device
 	}
     }
 }

@@ -46,6 +46,9 @@ foreach device $sycl_device_list {
 	gdb_breakpoint $outside
 
 	gdb_continue_to_breakpoint "inside" ".*$srcfile:$inside.*"
+	if {[is_pvc $device]} {
+	    setup_kfail "JIRA GSD/6668" "*-*-*"
+	}
 	gdb_test "print second(3, 4)" "= 528" "infcall inside kernel"
 
 	gdb_continue_to_breakpoint "outside" ".*$srcfile:$outside.*"

@@ -3868,7 +3868,7 @@ intelgt_adjust_breakpoint_address (gdbarch *gdbarch, CORE_ADDR bpaddr)
   int err = target_read_memory (start, inst_block.data (), inst_block.size ());
   if (err != 0)
       error (_("Cannot read instructions block at %s"),
-	     paddress (target_gdbarch (), start));
+	     paddress (gdbarch, start));
 
   CORE_ADDR addr = start;
   bool inside_atomic_region = false;
@@ -3887,7 +3887,7 @@ intelgt_adjust_breakpoint_address (gdbarch *gdbarch, CORE_ADDR bpaddr)
     }
 
   error (_("Couldn't adjust breakpoint to skip atomic region at %s"),
-	 paddress (target_gdbarch (), bpaddr));
+	 paddress (gdbarch, bpaddr));
 }
 
 /* Architecture initialization.  */

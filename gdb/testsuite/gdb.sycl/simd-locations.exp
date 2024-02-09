@@ -59,8 +59,14 @@ proc test_bp_2 {device {lane 0} } {
     set v2 [get_valueof "" "gid" "NONE"]
     gdb_assert {$v1 eq $v2} "pgid.operator() (wi) == gid"
 
+    if {[require_sycl_device $device "gpu" "Intel*"]} {
+	setup_kfail "JIRA IGDB/4643" "*-*-*"
+    }
     set v1 [get_valueof "" "atmp\[gid\].a" "NONE"]
     set v2 [get_valueof "" "in" "NONE"]
+    if {[require_sycl_device $device "gpu" "Intel*"]} {
+	setup_kfail "JIRA IGDB/4643" "*-*-*"
+    }
     gdb_assert {$v1 eq $v2} "atmp\[gid\].a == in"
 
     gdb_test_expr_eq "aout\[gid\]" "out"

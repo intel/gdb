@@ -32,25 +32,43 @@ if {[build_executable "failed to compile $srcfile" \
 }
 
 # The main test sequence for GPU inferior calls.
-proc test_inferior_calls {simd_lane inside_kernel} {
+proc test_inferior_calls {simd_lane inside_kernel device} {
     global srcfile
     set real_f0_0 [get_hexadecimal_valueof \
 		   "\$f0\[0\]" "invalid" "F0\[0\] before infcalls"]
     set real_f0_1 [get_hexadecimal_valueof \
 		   "\$f0\[1\]" "invalid" "F0\[1\] before infcalls"]
     set real_ce [get_hexadecimal_valueof "\$ce" "invalid" "CE before infcalls"]
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "thread :$simd_lane" "Switching to thread .*:$simd_lane .*"
 
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "print no_args()" "= 20" \
 	"Inferior call of a function without arguments"
 
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "print integer_grf_args(3, 4, 5)" "= 60" \
 	"Arguments are passed on GRFs: 1"
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "print integer_grf_args(6, 7, 8)" "= 336" \
 	"Arguments are passed on GRFs: 2"
 
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "print bool_i8_i16_grf(true, 2, 3)" "= 16" \
 	"Arguments less than 4 bytes: 1"
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "print bool_i8_i16_grf(false, 11, 21)" "= 231" \
 	"Arguments less than 4 bytes: 2"
 
@@ -90,18 +108,36 @@ proc test_inferior_calls {simd_lane inside_kernel} {
     gdb_test "print vector_on_stack (1, 2, 3, 4, 5, 6, arr2_uchar10)" "= 176" \
 	"Vector is passed on the stack with the SoA layout: 2"
 
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "print small_vector_return_1()" "= \\{1, 2, 3, 4, 5\\}" \
 	"Small vectors are returned on GRFs: 1"
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "print small_vector_return_2()" "= \\{1, 2, 3, 4, 5, 6, 7, 8, 9, 10\\}" \
 	"Small vectors are returned on GRFs: 2"
 
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "print long_vector_return_1(2)" "= \\{2, 3, 4, 5, 6, 7, 8, 9, 10\\}" \
 	"Long vectors are returned on the stack: 1"
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "print long_vector_return_2(2)" "= \\{0, 2, 4, 6, 8, 10, 12, 14, 16, 18\\}" \
 	"Long vectors are returned on the stack: 2"
 
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "print complex_struct_return(1, 2, 3, 4)" "= \\{x = 1, y = 2, vec = \\{3, 4\\}\\}" \
 	"The struct value is returned on the stack: 1"
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "print complex_struct_return(5, 6, 7, 8)" "= \\{x = 5, y = 6, vec = \\{7, 8\\}\\}" \
 	"The struct value is returned on the stack: 2"
 
@@ -116,9 +152,15 @@ proc test_inferior_calls {simd_lane inside_kernel} {
 
     gdb_breakpoint "$srcfile:$inside_function" {temporary}
     gdb_test_no_output "set scheduler-locking on"
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "print integer_grf_args(6, 7, 8)" ".*$callee_function.*" \
 	"Break point inside the callee function"
 
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     # Limit the backtrace to 3 frames to get only caller/callee frames.
     gdb_test "backtrace 3" [multi_line \
 				"#0  $callee_function" \
@@ -128,20 +170,41 @@ proc test_inferior_calls {simd_lane inside_kernel} {
 
     set callee_ce "0x[format %x [expr 1 << $simd_lane]]"
     set dmask "0xff"
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "p/x \$ce & $dmask" "$callee_ce" "CE within infcall"
 
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "finish" [multi_line \
 			   "Run till exit from #0  $callee_function" \
 			   "$caller_function" \
 			   "$inside_kernel.*" \
 			   "Value returned is \\$\[0-9\]+ = 336"] \
 	"Finish the inferior call and get the returned result"
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test_no_output "set scheduler-locking off"
 
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "p/x \$f0\[0\]" "$real_f0_0" "F0\[0\] after infcall"
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "p/x \$f0\[1\]" "$real_f0_1" "F0\[1\] after infcall"
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "p/x \$ce" "$real_ce" "CE after infcall"
 }
+
+save_vars { env(ZE_FLAT_DEVICE_HIERARCHY) } {
+set env(ZE_FLAT_DEVICE_HIERARCHY) "COMPOSITE"
 
 foreach device $sycl_device_list {
     clean_restart "${binfile}"
@@ -150,6 +213,7 @@ foreach device $sycl_device_list {
 	    continue
 	}
 
+	kfail "JIRA GSD/6668" "isabase is not accessible for flat hierarchy."
 	# To run the tests with different SIMD_WIDTH (e.g. 16), please change
 	# the DATARANGE accordingly in the file "infcall-more.cpp" so that all lanes
 	# are active and there is no threads switching.
@@ -176,7 +240,7 @@ foreach device $sycl_device_list {
 
 	# Loop over the lanes to be tested and performe all the inferior calls tests.
 	foreach_with_prefix lane $lanes {
-	    test_inferior_calls $lane $inside_kernel
+	    test_inferior_calls $lane $inside_kernel $device
 	}
 
 	set then_branch [gdb_get_line_number "then-branch"]
@@ -184,20 +248,35 @@ foreach device $sycl_device_list {
 	set thread_branch [gdb_get_line_number "thread-branch"]
 
 	gdb_breakpoint "$srcfile:$thread_branch" {temporary}
+	if {[is_pvc $device]} {
+	    setup_kfail "JIRA GSD/6668" "*-*-*"
+	}
 	gdb_continue_to_breakpoint "at thread branching" \
 	    ".*$srcfile:$thread_branch.*"
 
+	if {[is_pvc $device]} {
+	    setup_kfail "JIRA GSD/6668" "*-*-*"
+	}
 	gdb_test_no_output "set scheduler-locking step"
 	set branches_step 0
 	foreach_with_prefix step {1 2} {
+	    if {[is_pvc $device]} {
+		setup_kfail "JIRA GSD/6668" "*-*-*"
+	    }
 	    gdb_test_multiple "next" "step over thread branching" {
 		-re -wrap "$then_branch.*" {
 		    incr branches_step
 		    pass "stepped into then-branch"
 		    set real_ce [get_hexadecimal_valueof "\$ce" "invalid" \
 				     "before infcalls at then-branch"]
+		    if {[is_pvc $device]} {
+			setup_kfail "JIRA GSD/6668" "*-*-*"
+		    }
 		    gdb_test "print integer_grf_args(8, 9, 10)" "= 720" \
 			"infcall at then-branch"
+		    if {[is_pvc $device]} {
+			setup_kfail "JIRA GSD/6668" "*-*-*"
+		    }
 		    gdb_test "p/x \$ce" "$real_ce" "unchanged CE at then-branch"
 		}
 		-re -wrap "$else_branch.*" {
@@ -205,12 +284,21 @@ foreach device $sycl_device_list {
 		    pass "stepped into else-branch"
 		    set real_ce [get_hexadecimal_valueof "\$ce" "invalid" \
 				     "before infcalls at else-branch"]
+		    if {[is_pvc $device]} {
+			setup_kfail "JIRA GSD/6668" "*-*-*"
+		    }
 		    gdb_test "print integer_grf_args(7, 6, 5)" "= 210" \
 			"infcall at else-branch"
+		    if {[is_pvc $device]} {
+			setup_kfail "JIRA GSD/6668" "*-*-*"
+		    }
 		    gdb_test "p/x \$ce" "$real_ce" "unchanged CE at else-branch"
 		}
 	    }
 	}
+	if {[is_pvc $device]} {
+	    setup_kfail "JIRA GSD/6668" "*-*-*"
+	}
 	gdb_assert {$branches_step == 2} "stepped into both branches"
     }
-}
+}}

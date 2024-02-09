@@ -51,12 +51,21 @@ foreach device $sycl_device_list {
 	    gdb_test "print in_elem != 0" "true" \
 		"non-null in_elem"
 
+	    if {[is_pvc $device]} {
+		setup_kfail "JIRA GSD/6668" "*-*-*"
+	    }
 	    gdb_test "print gid\[0\] == gid0" "true" \
 		"access element 0 of the work item index"
 
+	    if {[is_pvc $device]} {
+		setup_kfail "JIRA GSD/6668" "*-*-*"
+	    }
 	    gdb_test "print gid\[1\] == gid1" "true" \
 		"access element 1 of the work item index"
 
+	    if {[is_pvc $device]} {
+		setup_kfail "JIRA GSD/6668" "*-*-*"
+	    }
 	    gdb_test "print gid\[2\] == gid2" "true" \
 		"access element 2 of the work item index"
 

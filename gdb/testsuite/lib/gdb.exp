@@ -4285,19 +4285,13 @@ gdb_caching_proc allow_btrace_bts_tests {} {
     if ![runto_main] {
 	return 0
     }
-    # In case of an unexpected output, we return 2 as a fail value.
-    set allow_btrace_tests 2
+
+    set allow_btrace_tests 0
     gdb_test_multiple "record btrace bts" "check btrace bts support" {
-	-re "You can't do that when your target is.*\r\n$gdb_prompt $" {
-	    set allow_btrace_tests 0
-	}
-	-re "Target does not support branch tracing.*\r\n$gdb_prompt $" {
-	    set allow_btrace_tests 0
-	}
-	-re "Could not enable branch tracing.*\r\n$gdb_prompt $" {
-	    set allow_btrace_tests 0
-	}
-	-re "^record btrace bts\r\n$gdb_prompt $" {
+	-re -wrap "You can't do that when your target is.*" {}
+	-re -wrap "Target does not support branch tracing.*" {}
+	-re -wrap "Could not enable branch tracing.*" {}
+	-re -wrap "" {
 	    set allow_btrace_tests 1
 	}
     }
@@ -4332,24 +4326,16 @@ gdb_caching_proc allow_btrace_pt_tests {} {
     if ![runto_main] {
 	return 0
     }
-    # In case of an unexpected output, we return 2 as a fail value.
-    set allow_btrace_pt_tests 2
+
+    set allow_btrace_pt_tests 0
     gdb_test_multiple "record btrace pt" "check btrace pt support" {
-        -re "You can't do that when your target is.*\r\n$gdb_prompt $" {
-	    set allow_btrace_pt_tests 0
-        }
-        -re "Target does not support branch tracing.*\r\n$gdb_prompt $" {
-	    set allow_btrace_pt_tests 0
-        }
-        -re "Could not enable branch tracing.*\r\n$gdb_prompt $" {
-	    set allow_btrace_pt_tests 0
-        }
-        -re "support was disabled at compile time.*\r\n$gdb_prompt $" {
-	    set allow_btrace_pt_tests 0
-        }
-        -re "^record btrace pt\r\n$gdb_prompt $" {
+	-re -wrap "You can't do that when your target is.*" {}
+	-re -wrap "Target does not support branch tracing.*" {}
+	-re -wrap "Could not enable branch tracing.*" {}
+	-re -wrap "support was disabled at compile time.*" {}
+	-re -wrap "" {
 	    set allow_btrace_pt_tests 1
-        }
+	}
     }
     gdb_exit
     remote_file build delete $obj

@@ -1494,6 +1494,8 @@ print_thread_row (ui_out *uiout, thread_info *tp, bool is_current,
 
       if (tp->state == THREAD_RUNNING)
 	state = "running";
+      else if (tp->is_unavailable ())
+	state = "unavailable";
       uiout->field_string ("state", state);
     }
 

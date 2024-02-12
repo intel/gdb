@@ -617,6 +617,8 @@ struct intelgt_gdbarch_data
   /* libiga context for disassembly.  */
   iga_context_t iga_ctx = nullptr;
 #endif
+
+  struct type *siginfo_type = nullptr;
 };
 
 static const registry<gdbarch>::key<intelgt_gdbarch_data>
@@ -3714,6 +3716,69 @@ intelgt_update_architecture (gdbarch *gdbarch, const target_desc *tdesc)
   return gdbarch_find_by_info (info);
 }
 
+/* Return Intelgt siginfo type.  */
+
+static type *
+intelgt_get_siginfo_type (gdbarch *gdbarch)
+{
+  type_allocator alloc (gdbarch);
+  intelgt_gdbarch_data *intelgt_gdbarch_data
+    = get_intelgt_gdbarch_data (gdbarch);
+  if (intelgt_gdbarch_data->siginfo_type != NULL)
+    return intelgt_gdbarch_data->siginfo_type;
+
+  type *int_type = init_integer_type (alloc, gdbarch_int_bit (gdbarch),
+				      0, "int");
+  type *long_type = init_integer_type (alloc, gdbarch_long_bit (gdbarch),
+				       0, "long");
+  type *short_type = init_integer_type (alloc, gdbarch_short_bit (gdbarch),
+					0, "short");
+  type *void_ptr_type
+    = lookup_pointer_type (builtin_type (gdbarch)->builtin_void);
+
+  type *sigfault_type = arch_composite_type (gdbarch, NULL, TYPE_CODE_STRUCT);
+  sigfault_type->set_name (xstrdup ("_sigfault"));
+  append_composite_type_field (sigfault_type, "si_addr", void_ptr_type);
+  append_composite_type_field (sigfault_type, "_addr_lsb", short_type);
+
+  /* struct siginfo.  */
+  type *siginfo_type = arch_composite_type (gdbarch, NULL, TYPE_CODE_STRUCT);
+  siginfo_type->set_name (xstrdup ("siginfo"));
+  append_composite_type_field (siginfo_type, "si_signo", int_type);
+  append_composite_type_field (siginfo_type, "si_errno", int_type);
+  append_composite_type_field (siginfo_type, "si_code", int_type);
+  append_composite_type_field_aligned (siginfo_type,
+				       "_sigfault", sigfault_type,
+				       long_type->length ());
+
+  intelgt_gdbarch_data->siginfo_type = siginfo_type;
+
+  return siginfo_type;
+}
+
+/* Read siginfo data from the core, if possible.  Returns -1 on
+   failure.  Otherwise, returns the number of bytes read.  READBUF,
+   OFFSET, and LEN are all as specified by the to_xfer_partial
+   interface.  */
+
+static LONGEST
+intelgt_core_xfer_siginfo (gdbarch *gdbarch, gdb_byte *readbuf,
+			   ULONGEST offset, ULONGEST len)
+{
+  if (inferior_ptid == null_ptid)
+    return -1;
+
+  thread_section_name section_name (".note.linuxcore.siginfo", inferior_ptid);
+  asection *section = bfd_get_section_by_name (core_bfd, section_name.c_str ());
+  if (section == nullptr)
+    return -1;
+
+  if (!bfd_get_section_contents (core_bfd, section, readbuf, offset, len))
+    return -1;
+
+  return len;
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -3860,6 +3925,8 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_core_read_description
     (gdbarch, intelgt_core_read_description);
   set_gdbarch_entry_point (gdbarch, intelgt_entry_point);
+  set_gdbarch_get_siginfo_type (gdbarch, intelgt_get_siginfo_type);
+  set_gdbarch_core_xfer_siginfo (gdbarch, intelgt_core_xfer_siginfo);
 
 #if defined (USE_WIN32API)
   set_gdbarch_has_dos_based_file_system (gdbarch, 1);

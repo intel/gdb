@@ -244,6 +244,9 @@ public:
   all_non_exited_threads_iterator end () const
   { return all_non_exited_threads_iterator (); }
 
+  bool empty ()
+  { return begin () == end (); }
+
 private:
   process_stratum_target *m_filter_target;
   ptid_t m_filter_ptid;

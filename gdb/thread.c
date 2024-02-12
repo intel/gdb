@@ -1610,6 +1610,8 @@ print_thread_row (ui_out *uiout, const info_threads_opts &opts,
 
       if (tp->state == THREAD_RUNNING)
 	state = "running";
+      else if (tp->is_unavailable ())
+	state = "unavailable";
       uiout->field_string ("state", state);
     }
 

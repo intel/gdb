@@ -14,7 +14,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Tests that GDB does not assert if interrupting an empty remote target
-# in non-stop mode.
+# in non-stop mode.  Also tests that no 'vCont' package is sent for empty
+# remote targets.
 
 load_lib gdbserver-support.exp
 
@@ -43,7 +44,6 @@ gdb_test_no_output "set debug remote on"
 
 # Test that we do not see a 'vCont' package if we interrupt an empty
 # remote target.
-set fill "\[^\r\n\]*"
 gdb_test_multiple "interrupt -a" "no vCont is sent" {
     -re -wrap "vCont.*" {
 	fail $gdb_test_name

@@ -174,6 +174,40 @@ foreach device $sycl_device_list {
 	    "\\^error,msg=\"-thread-info: Unknown option ``qid''\"" \
 	    "wrong argument 3"
 
+	# Test an unavailable thread that it does not contain the execution mask,
+	# simd width and frame fields and contains state unavailable.
+	set thread_list [get_mi_thread_list "for unavailability check"]
+	set unavailable_thread_found 0
+
+	foreach thread $thread_list {
+	    # The input program does not utilize all the GPU threads.
+	    # Hence there must be some threads that are unavailable.
+	    # We check that the MI output is able to report unavailable threads
+	    # and that those threads do not contain simd-related and frame-related fields.
+	    set test "Check that thread is unavailable"
+	    gdb_test_multiple "-thread-info $thread" $test {
+		-re "threads=.*state=\"stopped\".*$mi_gdb_prompt$" {
+		    # Fine.  Do nothing.  Keep checking.
+		}
+		-re "threads=.*state=\"unavailable\".*$mi_gdb_prompt$" {
+		    verbose -log "Thread $thread is unavailable"
+
+		    set out $expect_out(0,string)
+		    gdb_assert {[string first "execution-mask" $out] == -1} \
+			"execution-mask field is not included"
+		    gdb_assert {[string first "simd-width" $out] == -1} \
+			"simd-width field is not included"
+		    gdb_assert {[string first "frame" $out] == -1} \
+			"frame field is not included"
+
+		    set unavailable_thread_found 1
+		    break
+		}
+	    }
+	}
+	# Check unavailable_thread_found at the end.
+	gdb_assert {$unavailable_thread_found} "found an unavailable thread"
+
 	# Expect a hit-lane-mask of 0x8.
 	set stopped_threads [mi_stopped_thread_ids $srcfile $odd_branch_line]
 	set second_thread_id [lindex $stopped_threads 1]

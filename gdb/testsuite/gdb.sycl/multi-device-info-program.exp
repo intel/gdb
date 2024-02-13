@@ -66,6 +66,7 @@ foreach device $sycl_device_list {
 
 	gdb_test "attach $test_pid" "Attaching to program.*" "attach"
 
+	setup_kfail "JIRA IGDB/4631" "*-*-*"
 	gdb_test "info program" \
 	    "Program stopped at $hex\.\r\nType \"info stack\" or \"info registers\" for more information\."
 

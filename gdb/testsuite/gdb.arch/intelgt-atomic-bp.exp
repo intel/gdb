@@ -38,7 +38,27 @@ foreach device $sycl_device_list {
 	    lappend flags optimize=-O2
 	    if {[build_executable "failed to compile $srcfile" "${binfile}" \
 		     $srcfile [concat $flags $aot_opts]]} {
-		return -1
+		kfail "JIRA GSD/4181" "Not all subgroups sizes are supported"
+		if {[is_atsm $device] || [is_dg2 $device]} {
+		    lappend flags additional_flags=-DSG_SIZE=8
+		    set aot_device "xe-hpg"
+		} elseif {[is_pvc $device]} {
+		    lappend flags additional_flags=-DSG_SIZE=16
+		    set aot_device "xe-hpc"
+		} else {
+		    unsupported "Unsupported device: $device"
+		    return -1
+		}
+
+		set aot_opts [list \
+				  "additional_flags=-fsycl-targets=spir64_gen" \
+				  "ldflags=-Xsycl-target-backend=spir64_gen \"-q -device $aot_device\""]
+		with_test_prefix "device-specific" {
+		    if {[build_executable "failed to compile $srcfile" "${binfile}" \
+			     $srcfile [concat $flags $aot_opts]]} {
+			return -1
+		    }
+		}
 	    }
 	}
     }

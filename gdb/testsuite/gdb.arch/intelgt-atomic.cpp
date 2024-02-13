@@ -19,7 +19,11 @@
 #include <algorithm>
 #include <cmath>
 
+#ifdef SG_SIZE
+static constexpr uint32_t sg_size = SG_SIZE;
+#else
 static constexpr uint32_t sg_size = 16;
+#endif
 static constexpr uint32_t m_tile = 8;
 static constexpr uint32_t n_tile = sg_size;
 static constexpr uint32_t k_tile = 16;

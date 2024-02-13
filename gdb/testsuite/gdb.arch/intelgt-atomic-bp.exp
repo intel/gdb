@@ -33,7 +33,14 @@ foreach device $sycl_device_list {
 
     if {[build_executable "failed to compile $srcfile" "${binfile}" \
 	    $srcfile [concat $flags $aot_opts]]} {
-	return -1
+	kfail "JIRA GSD/4081" "-O0 is not yet enabled for joint_matrix"
+	with_test_prefix "-O2" {
+	    lappend flags optimize=-O2
+	    if {[build_executable "failed to compile $srcfile" "${binfile}" \
+		     $srcfile [concat $flags $aot_opts]]} {
+		return -1
+	    }
+	}
     }
 
     clean_restart "${binfile}"
@@ -48,7 +55,10 @@ foreach device $sycl_device_list {
 	}
 
 	set first_line [gdb_get_line_number "kernel-line-1"]
-	gdb_breakpoint "$first_line" {temporary}
+
+	# With the optimized code we hit a BP with the host inferior, avoid
+	# it by setting the condition.
+	gdb_breakpoint "$first_line if \$_inferior > 1" {temporary}
 	gdb_continue_to_breakpoint "hit the BP at the first line"
 
 	set fill "\[^\r\n\]*"

@@ -489,6 +489,9 @@ private:
   /* Fetch and process events from DEVICE.  Return number of events.  */
   uint64_t fetch_events (ze_device_info &device);
 
+  /* Fetch events until no device has any resumed threads left.  */
+  void fetch_events_all_devices_no_resumed ();
+
   /* Return the number of threads that match the RESUME_PTID and have
      new events to report.  Also recover these threads' resume state
      to RKIND.  */

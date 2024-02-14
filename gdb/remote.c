@@ -1398,8 +1398,6 @@ public:
 
 struct stop_reply : public notif_event
 {
-  ~stop_reply ();
-
   /* The identifier of the thread about this event  */
   ptid_t ptid;
 
@@ -7828,10 +7826,6 @@ remote_notif_stop_can_get_pending_events (remote_target *remote,
   remote_state *rs = remote->get_remote_state ();
   mark_async_event_handler (rs->remote_async_inferior_event_token);
   return 0;
-}
-
-stop_reply::~stop_reply ()
-{
 }
 
 static notif_event_up

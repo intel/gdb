@@ -1416,7 +1416,7 @@ struct stop_reply : public notif_event
      efficient for those targets that provide critical registers as
      part of their normal status mechanism (as another roundtrip to
      fetch them is avoided).  */
-  std::vector<cached_reg_t> regcache;
+  std::vector<cached_reg_t> expedites_cache;
 
   /* The target description ID communicated in the stop reply packet.  */
   gdb::optional<ULONGEST> tdesc_id;
@@ -7822,7 +7822,7 @@ remote_notif_stop_can_get_pending_events (remote_target *remote,
 
 stop_reply::~stop_reply ()
 {
-  for (cached_reg_t &reg : regcache)
+  for (cached_reg_t &reg : expedites_cache)
     xfree (reg.data);
 }
 
@@ -8124,7 +8124,7 @@ remote_target::remote_parse_stop_reply (const char *buf, stop_reply *event)
   event->rs = get_remote_state ();
   event->ws.set_ignore ();
   event->stop_reason = TARGET_STOPPED_BY_NO_REASON;
-  event->regcache.clear ();
+  event->expedites_cache.clear ();
   event->core = -1;
 
   switch (buf[0])
@@ -8366,7 +8366,7 @@ Packet: '%s'\n"),
 		  if (fieldsize < register_size (event->arch, reg->regnum))
 		    warning (_("Remote reply is too short: %s"), buf);
 
-		  event->regcache.push_back (cached_reg);
+		  event->expedites_cache.push_back (cached_reg);
 		}
 	      else
 		{
@@ -8728,18 +8728,18 @@ remote_target::process_stop_reply (struct stop_reply *stop_reply,
 	}
 
       /* Expedited registers.  */
-      if (!stop_reply->regcache.empty ())
+      if (!stop_reply->expedites_cache.empty ())
 	{
 	  struct regcache *regcache
 	    = get_thread_arch_regcache (this, ptid, stop_reply->arch);
 
-	  for (cached_reg_t &reg : stop_reply->regcache)
+	  for (cached_reg_t &reg : stop_reply->expedites_cache)
 	    {
 	      regcache->raw_supply (reg.num, reg.data);
 	      xfree (reg.data);
 	    }
 
-	  stop_reply->regcache.clear ();
+	  stop_reply->expedites_cache.clear ();
 	}
 
       remote_notice_new_inferior (ptid, false);

@@ -2675,8 +2675,10 @@ attach_command (const char *args, int from_tty)
 {
   int async_exec;
   struct target_ops *attach_target;
-  struct inferior *inferior = current_inferior ();
   enum attach_post_wait_mode mode;
+  /* With the attach command, the target may add new inferiors and switch
+     to another inferior.  We still want to setup the current inferior.  */
+  current_inferior ()->needs_setup = true;
 
   dont_repeat ();		/* Not for the faint of heart */
 
@@ -2708,12 +2710,15 @@ attach_command (const char *args, int from_tty)
   if (non_stop && !attach_target->supports_non_stop ())
     error (_("Cannot attach to this target in non-stop mode"));
 
-  inferior->needs_setup = true;
-
   attach_target->attach (args, from_tty);
   /* to_attach should push the target, so after this point we
      shouldn't refer to attach_target again.  */
   attach_target = nullptr;
+
+  /* With the attach command, the target may add new inferiors and
+     switch to the one that reports a stop reply.  */
+  inferior *inferior = current_inferior ();
+  inferior->needs_setup = true;
 
   infrun_debug_show_threads ("immediately after attach",
 			     current_inferior ()->non_exited_threads ());

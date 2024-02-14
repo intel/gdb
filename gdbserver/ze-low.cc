@@ -1748,6 +1748,28 @@ ze_target::fetch_events (ze_device_info &device)
 }
 
 void
+ze_target::fetch_events_all_devices_no_resumed ()
+{
+  uint64_t nresumed = 0;
+  do {
+    nresumed = 0;
+    for (ze_device_info *device : devices)
+      {
+	gdb_assert (device != nullptr);
+
+	/* Ignore devices we're not modelling as processes.  */
+	if (device->process == nullptr)
+	  continue;
+
+	/* Event processing maintains the number of resumed threads.  */
+	fetch_events (*device);
+	nresumed += device->nresumed;
+      }
+  }
+  while (nresumed != 0);
+}
+
+void
 ze_target::init ()
 {
   ze_result_t status = zeInit (0);
@@ -1922,6 +1944,18 @@ ze_target::attach (unsigned long pid)
 
   if (nattached == 0)
     critical_error (0x02, sstream.str ().c_str ());
+
+  /* In all-stop mode above, we interrupted the devices.  Now we make sure
+     they come to a stop state.  So, we fetch events until no device has any
+     resumed threads left.  There might be low priority events (e.g.
+     'module load', 'process entry') we should fetch before fetching higher
+     priority events in the subsequent call of 'wait ()'.  If not done here,
+     we fetch the lower priority events in 'wait ()', report an UNAVAILABLE
+     status to GDB and then fetch the higher priority events in 'pause_all'.
+     In a live attach scenario, we don't receive a 'continue' resume request
+     and would miss the thread stopped event.  */
+  if (!non_stop)
+    fetch_events_all_devices_no_resumed ();
 
   return 0;
 }
@@ -2805,23 +2839,7 @@ ze_target::pause_all (bool freeze)
     }
 
   /* Fetch events until no device has any resumed threads left.  */
-  uint64_t nresumed = 0;
-  do {
-    nresumed = 0;
-    for (ze_device_info *device : devices)
-      {
-	gdb_assert (device != nullptr);
-
-	/* Ignore devices we're not modelling as processes.  */
-	if (device->process == nullptr)
-	  continue;
-
-	/* Event processing maintains the number of resumed threads.  */
-	fetch_events (*device);
-	nresumed += device->nresumed;
-      }
-  }
-  while (nresumed != 0);
+  fetch_events_all_devices_no_resumed ();
 
   /* Mark threads we interrupted paused so unpause_all can find then.  */
   for_each_thread ([] (thread_info *tp)

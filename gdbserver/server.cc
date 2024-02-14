@@ -348,7 +348,7 @@ attach_inferior (int pid)
 
   if (!non_stop)
     {
-      cs.last_ptid = mywait (ptid_t (pid), &cs.last_status, 0, 0);
+      cs.last_ptid = mywait (minus_one_ptid, &cs.last_status, 0, 0);
 
       /* GDB knows to ignore the first SIGSTOP after attaching to a running
 	 process using the "attach" command, but this is different; it's

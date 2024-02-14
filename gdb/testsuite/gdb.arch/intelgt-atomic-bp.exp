@@ -25,12 +25,17 @@ if {[llength $sycl_device_list] == 0} {
     return 0
 }
 
-if {[build_executable "failed to compile $srcfile" \
-    "${binfile}" $srcfile {sycl debug}]} {
-    return -1
-}
-
 foreach device $sycl_device_list {
+    set aot_device "xe-hpg,xe-hpc"
+    set aot_opts [list "additional_flags=-fsycl-targets=spir64_gen" \
+		     "ldflags=-Xsycl-target-backend=spir64_gen \"-q -device $aot_device\""]
+    set flags [list sycl debug]
+
+    if {[build_executable "failed to compile $srcfile" "${binfile}" \
+	    $srcfile [concat $flags $aot_opts]]} {
+	return -1
+    }
+
     clean_restart "${binfile}"
     with_test_prefix [sycl_get_device_prefix $device] {
 	if {![require_sycl_device "$device" "gpu" "Intel*"]} {

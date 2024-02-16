@@ -274,6 +274,11 @@ class IntelgtAutoAttach:
             "INTELGT_AUTO_ATTACH_GDBSERVER_ARGS", "")
         if self.gdbserver_args != "":
             self.gdbserver_args = " " + self.gdbserver_args
+        # Allow a user-defined hook breakpoint in addition to the one
+        # defined by the level-zero IntelGT driver.
+        hook_locspec = self.get_env_variable("INTELGT_AUTO_ATTACH_HOOK")
+        if hook_locspec:
+            self.setup_hook_bp(hook_locspec)
         self.gdbserver_path_env_var = None
         self.gdbserver_install_path = None
         self.set_gdbserver_ze_path()

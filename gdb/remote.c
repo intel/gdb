@@ -8156,7 +8156,6 @@ remote_target::decode_expedites (stop_reply *stop_reply, thread_info *thr)
 void
 remote_target::remote_parse_stop_reply (const char *buf, stop_reply *event)
 {
-  remote_arch_state *rsa = NULL;
   ULONGEST addr;
   const char *p;
   int skipregs = 0;
@@ -8331,61 +8330,14 @@ Packet: '%s'\n"),
 
 	      /* Maybe a real ``P'' register number.  */
 	      p_temp = unpack_varlen_hex (p, &pnum);
+
+	      p = strchrnul (p1 + 1, ';');
+
 	      /* If the first invalid character is the colon, we got a
 		 register number.  Otherwise, it's an unknown stop
 		 reason.  */
 	      if (p_temp == p1)
-		{
-		  /* If we haven't parsed the event's thread yet, find
-		     it now, in order to find the architecture of the
-		     reported expedited registers.  */
-		  if (event->ptid == null_ptid)
-		    {
-		      /* If there is no thread-id information then leave
-			 the event->ptid as null_ptid.  Later in
-			 process_stop_reply we will pick a suitable
-			 thread.  */
-		      const char *thr = strstr (p1 + 1, ";thread:");
-		      if (thr != NULL)
-			event->ptid = read_ptid (thr + strlen (";thread:"),
-						 NULL);
-		    }
-
-		  if (rsa == NULL)
-		    {
-		      inferior *inf
-			= (event->ptid == null_ptid
-			   ? NULL
-			   : find_inferior_ptid (this, event->ptid));
-		      /* If this is the first time we learn anything
-			 about this process, skip the registers
-			 included in this packet, since we don't yet
-			 know which architecture to use to parse them.
-			 We'll determine the architecture later when
-			 we process the stop reply and retrieve the
-			 target description, via
-			 remote_notice_new_inferior ->
-			 post_create_inferior.  */
-		      if (inf == NULL)
-			{
-			  p = strchrnul (p1 + 1, ';');
-			  p++;
-			  continue;
-			}
-
-		      event->arch = inf->gdbarch;
-		      rsa = event->rs->get_remote_arch_state (event->arch);
-		    }
-
-		  p = strchrnul (p1 + 1, ';');
-		  event->expedites_cache.emplace_back (pnum, p1 + 1, p);
-		}
-	      else
-		{
-		  /* Not a number.  Silently skip unknown optional
-		     info.  */
-		  p = strchrnul (p1 + 1, ';');
-		}
+		event->expedites_cache.emplace_back (pnum, p1 + 1, p);
 	    }
 
 	  if (*p != ';')

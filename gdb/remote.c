@@ -1165,6 +1165,7 @@ public: /* Remote specific methods.  */
   struct stop_reply *remote_notif_remove_queued_reply (ptid_t ptid);
   struct stop_reply *queued_stop_reply (ptid_t ptid);
   int peek_stop_reply (ptid_t ptid);
+  void decode_expedites (stop_reply *stop_reply, thread_info *thr);
   void remote_parse_stop_reply (const char *buf, stop_reply *event);
 
   void remote_stop_ns (ptid_t ptid);
@@ -1416,7 +1417,16 @@ struct stop_reply : public notif_event
      efficient for those targets that provide critical registers as
      part of their normal status mechanism (as another roundtrip to
      fetch them is avoided).  */
-  std::vector<cached_reg_t> expedites_cache;
+  struct raw_packet_reg
+  {
+    raw_packet_reg (ULONGEST pnum_p, const char* s, const char* e)
+      : pnum (pnum_p), content (s, e)
+      {}
+    ULONGEST pnum;
+    std::string content;
+  };
+
+  std::vector<raw_packet_reg> expedites_cache;
 
   /* The target description ID communicated in the stop reply packet.  */
   gdb::optional<ULONGEST> tdesc_id;
@@ -7822,8 +7832,6 @@ remote_notif_stop_can_get_pending_events (remote_target *remote,
 
 stop_reply::~stop_reply ()
 {
-  for (cached_reg_t &reg : expedites_cache)
-    xfree (reg.data);
 }
 
 static notif_event_up
@@ -8109,6 +8117,45 @@ remote_state::fetch_unknown_tdescs (remote_target *remote)
       m_tdescs[pair.first] = target_read_description_xml (remote, pair.first);
 }
 
+/* Decode all expedites cached in stop_reply during packet reception into
+   a thread's regcache.  */
+
+void
+remote_target::decode_expedites (stop_reply *stop_reply, thread_info *thr)
+{
+  struct gdbarch *gdbarch = (stop_reply->arch != nullptr
+			     ? stop_reply->arch
+			     : thr->inf->gdbarch);
+  struct remote_state *rs = get_remote_state ();
+  remote_arch_state *rsa = rs->get_remote_arch_state (gdbarch);
+  gdb_assert (rsa != nullptr);
+  struct regcache *regcache = get_thread_arch_regcache (this, thr->ptid,
+							gdbarch);
+  gdb_assert (regcache != nullptr);
+
+  gdb::byte_vector decode_buffer;
+
+  for (const stop_reply::raw_packet_reg &r : stop_reply->expedites_cache)
+    {
+      packet_reg *reg = packet_reg_from_pnum (gdbarch, rsa, r.pnum);
+
+      if (reg == nullptr)
+	error (_("Remote sent bad register number %s\n"), hex_string (r.pnum));
+
+      reg->in_e_packet = true;
+
+      const auto size = register_size (gdbarch, reg->regnum);
+      decode_buffer.resize (size);
+
+      int fieldsize = hex2bin (r.content.data (), decode_buffer.data (), size);
+      if (fieldsize < size)
+	warning (_("Remote reply is too short, expected %u, got %u "
+		   "(Raw: %s)\n"), size, fieldsize, r.content.c_str ());
+
+      regcache->raw_supply (reg->regnum, decode_buffer.data ());
+    }
+}
+
 /* Parse the stop reply in BUF.  Either the function succeeds, and the
    result is stored in EVENT, or throws an error.  */
 
@@ -8141,7 +8188,6 @@ remote_target::remote_parse_stop_reply (const char *buf, stop_reply *event)
       while (*p)
 	{
 	  const char *p1;
-	  int fieldsize;
 
 	  p1 = strchr (p, ':');
 	  if (p1 == NULL)
@@ -8276,14 +8322,6 @@ Packet: '%s'\n"),
 	      p = unpack_varlen_hex (++p1, &tdesc_id);
 	      event->rs->add_tdesc_id (tdesc_id);
 	      event->tdesc_id = tdesc_id;
-
-	      /* We need to skip processing expedites here because for
-		 this we would have to fetch missing target descriptions.
-		 However we cannot reliably do this here since during an
-		 attach in non-stop mode the remote target will not even
-		 have populated its thread list, which would make the
-		 target description fail.  */
-	      skipregs = 1;
 	    }
 	  else
 	    {
@@ -8345,28 +8383,8 @@ Packet: '%s'\n"),
 		      rsa = event->rs->get_remote_arch_state (event->arch);
 		    }
 
-		  packet_reg *reg
-		    = packet_reg_from_pnum (event->arch, rsa, pnum);
-		  cached_reg_t cached_reg;
-
-		  if (reg == NULL)
-		    error (_("Remote sent bad register number %s: %s\n\
-Packet: '%s'\n"),
-			   hex_string (pnum), p, buf);
-
-		  reg->in_e_packet = true;
-		  cached_reg.num = reg->regnum;
-		  cached_reg.data = (gdb_byte *)
-		    xmalloc (register_size (event->arch, reg->regnum));
-
-		  p = p1 + 1;
-		  fieldsize = hex2bin (p, cached_reg.data,
-				       register_size (event->arch, reg->regnum));
-		  p += 2 * fieldsize;
-		  if (fieldsize < register_size (event->arch, reg->regnum))
-		    warning (_("Remote reply is too short: %s"), buf);
-
-		  event->expedites_cache.push_back (cached_reg);
+		  p = strchrnul (p1 + 1, ';');
+		  event->expedites_cache.emplace_back (pnum, p1 + 1, p);
 		}
 	      else
 		{
@@ -8730,15 +8748,8 @@ remote_target::process_stop_reply (struct stop_reply *stop_reply,
       /* Expedited registers.  */
       if (!stop_reply->expedites_cache.empty ())
 	{
-	  struct regcache *regcache
-	    = get_thread_arch_regcache (this, ptid, stop_reply->arch);
-
-	  for (cached_reg_t &reg : stop_reply->expedites_cache)
-	    {
-	      regcache->raw_supply (reg.num, reg.data);
-	      xfree (reg.data);
-	    }
-
+	  if (thr != nullptr)
+	    decode_expedites (stop_reply, thr);
 	  stop_reply->expedites_cache.clear ();
 	}
 

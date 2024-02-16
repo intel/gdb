@@ -246,12 +246,6 @@ class IntelgtAutoAttach:
                 f"Skipping hook breakpoint for {event.new_objfile.filename} loaded event.")
             return
 
-        if not ('libze_loader.so' in event.new_objfile.filename or
-                'libze_intel_gpu.so' in event.new_objfile.filename or
-                'ze_loader.dll' in event.new_objfile.filename or
-                'ze_intel_gpu64.dll' in event.new_objfile.filename):
-            return
-
         if ('libze_intel_gpu.so' in event.new_objfile.filename or
             'ze_intel_gpu64.dll' in event.new_objfile.filename):
             DebugLogger.log(
@@ -269,14 +263,11 @@ class IntelgtAutoAttach:
 
         if ('libze_loader.so' in event.new_objfile.filename or
             'ze_loader.dll' in event.new_objfile.filename):
+            DebugLogger.log(
+                f"received {event.new_objfile.filename} loaded event. "
+                "Setting up bp hook.")
             self.the_bp = "zeContextCreate"
-        else:
-            return
-
-        DebugLogger.log(
-            f"received {event.new_objfile.filename} loaded event. "
-            "Setting up bp hook.")
-        self.setup_hook_bp()
+            self.setup_hook_bp()
 
     def setup_hook_bp(self):
         """Set a breakpoint at the location indicated by self.the_bp.  If

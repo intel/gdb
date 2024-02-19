@@ -14,6 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import gdb
+import gdb.printing
 from .startup import in_gdb_thread
 from .server import client_bool_capability
 from abc import ABC, abstractmethod

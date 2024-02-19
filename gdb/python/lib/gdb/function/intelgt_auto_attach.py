@@ -222,6 +222,18 @@ Set kernel parameter 'i915.debug_eu=1' or set /sys/class/drm/card*/prelim_enable
 
         return False
 
+# pylint: disable-next=too-few-public-methods
+class IntelgtDeleteHook:
+    "Delete a hook breakpoint when the corresponding objfile goes away"
+    def __init__(self, brkpoint, filename):
+        self.brkpoint = brkpoint
+        self.filename = filename
+
+    def __call__(self, event):
+        if (self.brkpoint is not None and
+            self.filename == event.objfile.filename):
+            self.brkpoint.delete()
+            self.brkpoint = None
 
 # pylint: disable-next=too-many-instance-attributes
 class IntelgtAutoAttach:
@@ -312,8 +324,10 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
             DebugLogger.log(
                 f"received {event.new_objfile.filename} loaded event. "
                 "Setting up bp hook.")
-            self.setup_hook_bp(f"-qualified zeContextCreate inferior "
-                               f"{gdb.selected_inferior()}")
+            hook = self.setup_hook_bp(f"-qualified zeContextCreate inferior "
+                                      f"{gdb.selected_inferior()}")
+            filename = event.new_objfile.filename
+            gdb.events.free_objfile.connect(IntelgtDeleteHook(hook, filename))
 
     def setup_hook_bp(self, locspec):
         """Set a breakpoint at the location indicated by locspec."""
@@ -331,6 +345,7 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
             command_suffix = ""
 
         hook_bp.commands = commands + command_suffix
+        return hook_bp
 
     @DebugLogger.log_call
     def remove_gt_inf_for(self, host_inf):

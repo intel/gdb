@@ -254,8 +254,6 @@ class IntelgtAutoAttach:
         gdb.events.before_prompt.connect(self.handle_before_prompt_event)
         self.inf_dict = {}
         self.host_inf_for_auto_remove = None
-        self.hook_bp = None
-        self.the_bp = None
         self.enable_schedule_multiple_at_gt_removal = False
         self.gt_inferior_init_pending = False
         # Env variable to pass custom flags to gdbserver such as
@@ -334,29 +332,25 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
             DebugLogger.log(
                 f"received {event.new_objfile.filename} loaded event. "
                 "Setting up bp hook.")
-            self.the_bp = "zeContextCreate"
-            self.setup_hook_bp()
+            self.setup_hook_bp(f"-qualified zeContextCreate inferior "
+                               f"{gdb.selected_inferior()}")
 
-    def setup_hook_bp(self):
-        """Set a breakpoint at the location indicated by self.the_bp.  If
-        not set, return and do nothing."""
-        if not self.the_bp:
-            DebugLogger.log("BP location for the hook is not set.")
-            return
+    def setup_hook_bp(self, locspec):
+        """Set a breakpoint at the location indicated by locspec."""
 
-        self.hook_bp = gdb.Breakpoint(self.the_bp, type=gdb.BP_BREAKPOINT,
-                                      internal=1, temporary=0)
-        self.hook_bp.silent = True
+        hook_bp = gdb.Breakpoint(locspec, type=gdb.BP_BREAKPOINT, internal=1,
+                                 temporary=0)
+        hook_bp.silent = True
         commands = ("python gdb.function.intelgt_auto_attach" +
                     ".INTELGT_AUTO_ATTACH.init_gt_inferiors()")
         command_suffix = "\ncontinue"
 
         eclipse = self.get_env_variable("ECLIPSE")
         if eclipse is not None and eclipse.endswith("1"):
-            self.hook_bp.silent = False
+            hook_bp.silent = False
             command_suffix = ""
 
-        self.hook_bp.commands = commands + command_suffix
+        hook_bp.commands = commands + command_suffix
 
     @DebugLogger.log_call
     def remove_gt_inf_for(self, host_inf):
@@ -655,8 +649,6 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
 Connection name '{connection}' not recognized.""")
             return
 
-        self.hook_bp.delete()
-
         if host_inf not in self.inf_dict or self.inf_dict[host_inf] is None:
             is_nonstop = gdb.execute("show non-stop",
                                      to_string = True).endswith("on.\n")
@@ -686,7 +678,6 @@ Connection name '{connection}' not recognized.""")
                 # should be retried by setting up the hook bp.
                 if "attempting to attach too early" in str(ex):
                     self.handle_error(host_inf)
-                    self.setup_hook_bp()
                 else:
                     self.handle_error(host_inf, details=str(ex))
                     IntelgtErrorReport.exit_intelgt_session(exception=ex)

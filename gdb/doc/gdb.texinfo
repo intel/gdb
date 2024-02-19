@@ -32237,8 +32237,6 @@ The inferior called @code{exec}.  This is reported when @code{catch exec}
 (@pxref{Set Catchpoints}) has been used.
 @item no-history
 There isn't enough history recorded to continue reverse execution.
-@item unavailable
-The inferior thread became unavailable.
 @end table
 
 The @var{id} field identifies the global thread ID of the thread

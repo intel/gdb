@@ -109,9 +109,6 @@ thread apply thread-list|all|all-lanes -unavailable
      is unique per kernel submission.  The term `kernel` refers to a function
      that is submitted to and runs on an appropriate device, e.g. a GPU device.
 
-  ** New possible value "unavailable" for the "reason" field in "stopped"
-     async record.
-
   ** New field in '-thread-info': 'thread-workgroup'
 
      Added a new field to the '-thread-info' command.  If the thread is

@@ -234,7 +234,6 @@ class IntelgtAutoAttach:
         gdb.events.before_prompt.connect(self.handle_before_prompt_event)
         self.inf_dict = {}
         self.host_inf_for_auto_remove = None
-        self.is_nonstop = False
         self.hook_bp = None
         self.the_bp = None
         self.enable_schedule_multiple_at_gt_removal = False
@@ -330,12 +329,6 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
         self.hook_bp.silent = True
         commands = ("python gdb.function.intelgt_auto_attach" +
                     ".INTELGT_AUTO_ATTACH.init_gt_inferiors()")
-        # Find out if we are in non-stop mode.  It is safe to do it
-        # here and only once, because the setting cannot be
-        # changed after the program starts executing.
-        nonstop_info = gdb.execute("show non-stop", False, True)
-        self.is_nonstop = nonstop_info.endswith("on.\n")
-
         command_suffix = "\ncontinue"
 
         eclipse = self.get_env_variable("ECLIPSE")
@@ -531,7 +524,7 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
         return connection_str
 
     @DebugLogger.log_call
-    def handle_attach_gdbserver_gt(self, inf):
+    def handle_attach_gdbserver_gt(self, inf, is_nonstop):
         """Attach gdbserver to gt inferior either locally or remotely."""
 
         # User may disable the auto attach from GDB command prompt.
@@ -557,7 +550,7 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
         DebugLogger.log(f"gdbserver-ze attach comand: {gdbserver_attach_str}")
 
         try:
-            self.make_native_gdbserver(inf, gdbserver_attach_str)
+            self.make_native_gdbserver(inf, is_nonstop, gdbserver_attach_str)
         except gdb.error as ex:
             """Explicitly raise exception to 'init_gt_inferior'.  This
             otherwise results in undhandled exception in 'init_gt_inferior'
@@ -567,7 +560,7 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
         return True
 
     @DebugLogger.log_call
-    def make_native_gdbserver(self, inf, gdbserver_cmd):
+    def make_native_gdbserver(self, inf, is_nonstop, gdbserver_cmd):
         """Spawn and connect to a native instance of gdbserver."""
         # Switch to the gt inferior.  It is the most recent inferior.
         gt_inf = gdb.inferiors()[-1]
@@ -615,7 +608,7 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
         # completely.  This case is not handled, yet.  The user still
         # needs to resume the device explicitly.
 
-        async_mode = (self.is_nonstop and not self.gt_inferior_init_pending)
+        async_mode = (is_nonstop and not self.gt_inferior_init_pending)
         attach_cmd = f"attach {inf.pid}" + (" &" if async_mode else "")
         gdb.execute(f"with print thread-events off -- {attach_cmd}",
                     False, capture_output)
@@ -644,7 +637,9 @@ Connection name '{connection}' not recognized.""")
         self.hook_bp.delete()
 
         if host_inf not in self.inf_dict or self.inf_dict[host_inf] is None:
-            if not self.is_nonstop:
+            is_nonstop = gdb.execute("show non-stop",
+                                     to_string = True).endswith("on.\n")
+            if not is_nonstop:
                 gdb.execute("set schedule-multiple off")
             gdb.execute("add-inferior -hidden -no-connection", False, True)
 
@@ -652,7 +647,7 @@ Connection name '{connection}' not recognized.""")
             # Attach gdbserver to gt inferior.
             # This represents the first device.
             try:
-                if not self.handle_attach_gdbserver_gt(host_inf):
+                if not self.handle_attach_gdbserver_gt(host_inf, is_nonstop):
                     return
                 # Get the most recent gt inferior.
                 gt_inf = gdb.inferiors()[-1]
@@ -675,7 +670,7 @@ Connection name '{connection}' not recognized.""")
                     self.handle_error(host_inf, details=str(ex))
                     IntelgtErrorReport.exit_intelgt_session(exception=ex)
 
-            if not self.is_nonstop:
+            if not is_nonstop:
                 gdb.execute("set schedule-multiple on")
 
             self.set_suppress_notifications("on" if cli_suppressed else "off")

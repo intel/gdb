@@ -416,11 +416,28 @@ record_btrace_target::stop_recording ()
 {
   DEBUG ("stop recording");
 
+  /* Remember the selected thread if it exists and is replaying.  */
+  thread_info *curr = nullptr;
+  if (inferior_ptid.lwp_p ())
+    {
+      curr = inferior_thread ();
+      if (!btrace_is_replaying (curr))
+	curr = nullptr;
+    }
+
+  record_stop_replaying ();
   record_btrace_auto_disable ();
 
   for (thread_info *tp : current_inferior ()->non_exited_threads ())
     if (tp->btrace.target != NULL)
       btrace_disable (tp);
+
+  /* Print the updated location in case we had stopped a replaying thread.  */
+  if (curr != nullptr)
+    {
+      curr->set_stop_pc (regcache_read_pc (get_thread_regcache (curr)));
+      print_stack_frame (get_selected_frame (), 1, SRC_AND_LOC, 1);
+    }
 }
 
 /* The disconnect method of target record-btrace.  */

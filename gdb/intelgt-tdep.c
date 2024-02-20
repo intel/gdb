@@ -648,6 +648,10 @@ struct intelgt_gdbarch_data
   int fc0_regnum = -1;
   /* Register number for the FC1 register.  */
   int fc1_regnum = -1;
+  /* Register number for the debugger scratch area.  */
+  int dbgscrbase_regnum = -1;
+  /* Register number for the size of debugger scratch area.  */
+  int dbgscrsize_regnum = -1;
   /* Assigned regnum ranges for DWARF regsets.  */
   regnum_range regset_ranges[intelgt::regset_count];
   /* Enabled pseudo-register for the current target description.  */
@@ -1773,6 +1777,10 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
     data->fc0_regnum = possible_regnum;
   else if (strcmp ("fc1", reg_name) == 0)
     data->fc1_regnum = possible_regnum;
+  else if (strcmp ("dbgscrbase", reg_name) == 0)
+    data->dbgscrbase_regnum = possible_regnum;
+  else if (strcmp ("dbgscrsize", reg_name) == 0)
+    data->dbgscrsize_regnum = possible_regnum;
 
   return possible_regnum;
 }
@@ -2372,40 +2380,72 @@ intelgt_unwind_sp (gdbarch *gdbarch, const frame_info_ptr &next_frame)
 static void
 intelgt_init_scratch_area (gdbarch *gdbarch)
 {
-  /* Layout of the debug area header.  */
-  struct debug_area_header
-  {
-    char magic[8] = "";
-    uint64_t reserved_1 = 0;
-    uint8_t version = 0;
-    uint8_t pgsize = 0;
-    uint8_t size = 0;
-    uint8_t reserved_2 = 0;
-    uint16_t scratch_begin = 0;
-    uint16_t scratch_end = 0;
-  } dbg_header;
-
+  CORE_ADDR start = 0ull, end = 0ull;
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
   regcache *regcache = get_thread_regcache (inferior_thread ());
-  CORE_ADDR isabase = intelgt_get_isabase (regcache);
-  int err = target_read_memory (isabase, (gdb_byte *)&dbg_header,
-				sizeof dbg_header);
-  if (err != 0)
-    error (_("Target failed to read the debug area header at %s"),
-	   paddress (gdbarch, isabase));
 
-  if (strcmp (dbg_header.magic, "dbgarea") != 0)
-    error (_("Failed to find scratch debug area at %s"),
-	   paddress (gdbarch, isabase));
+  /* Check if the DEBUG_SCRATCH registers are available, in such case,
+     DBGSCRBASE points to the start address of the debug scratch area, and
+     DBGSCRSIZE indicates its size in bytes.  */
+  if (data->dbgscrbase_regnum != -1 && data->dbgscrsize_regnum != -1)
+    {
+      std::string error_msg = _("Cannot determine debuger scratch area.");
+      uint64_t dbgscrbase;
+      intelgt_read_register_part (regcache, data->dbgscrbase_regnum, 0,
+				  sizeof (uint64_t), (gdb_byte *) &dbgscrbase,
+				  error_msg.c_str ());
+      start = (CORE_ADDR) dbgscrbase;
+      uint64_t dbgscrsize;
+      intelgt_read_register_part (regcache, data->dbgscrsize_regnum, 0,
+				  sizeof (uint64_t), (gdb_byte *) &dbgscrsize,
+				  error_msg.c_str ());
+      end = (CORE_ADDR) dbgscrsize + start;
+    }
+  else
+    {
+      /* We need to read the debug area header to determine the boundaries.  */
 
-  if (dbg_header.version != 0)
-    error (_("Unknown debug area header version 0x%x."),
-	     dbg_header.version);
+      if (data->dbgscrbase_regnum != -1 || data->dbgscrsize_regnum != -1)
+	dprintf ("Debugger registers are partially available.\n"
+		 "dbgscrbase regnum: %d, dbgscrsize regnum: %d.",
+		 data->dbgscrbase_regnum, data->dbgscrsize_regnum);
+
+      /* Layout of the debug area header.  */
+      struct debug_area_header
+      {
+	char magic[8] = "";
+	uint64_t reserved_1 = 0;
+	uint8_t version = 0;
+	uint8_t pgsize = 0;
+	uint8_t size = 0;
+	uint8_t reserved_2 = 0;
+	uint16_t scratch_begin = 0;
+	uint16_t scratch_end = 0;
+      } dbg_header;
+
+      CORE_ADDR isabase = intelgt_get_isabase (regcache);
+      int err = target_read_memory (isabase, (gdb_byte *)&dbg_header,
+				    sizeof dbg_header);
+      if (err != 0)
+	error (_("Target failed to read the debug area header at %s"),
+	       paddress (gdbarch, isabase));
+
+      if (strcmp (dbg_header.magic, "dbgarea") != 0)
+	error (_("Failed to find scratch debug area at %s"),
+	       paddress (gdbarch, isabase));
+
+      if (dbg_header.version != 0)
+	error (_("Unknown version of debug area header."));
+      start = isabase + dbg_header.scratch_begin;
+      end = isabase + dbg_header.scratch_end;
+    }
+
+  if (end < start)
+    error (_("Incorrect boundaries of scratch area: start %s, end %s"),
+	   paddress (gdbarch, start), paddress (gdbarch, end));
 
   /* Initialize SCRATCH_AREA.  */
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
-  data->scratch_area = new target_memory_allocator (
-    isabase + dbg_header.scratch_begin,
-    dbg_header.scratch_end - dbg_header.scratch_begin);
+  data->scratch_area = new target_memory_allocator (start, end - start);
 }
 
 /* Return a pointer to the scratch area object.  */

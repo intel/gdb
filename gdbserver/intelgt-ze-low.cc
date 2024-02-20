@@ -1101,6 +1101,38 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 			  expedite);
       break;
 
+    case ZET_DEBUG_REGSET_TYPE_DEBUG_SCRATCH_INTEL_GPU:
+      feature = tdesc_create_feature (tdesc, intelgt::feature_debugger);
+
+      switch (regprop.version)
+	{
+	case 0:
+	  {
+	    const char *regtype = intelgt_uint_reg_type (feature,
+							 regprop.bitSize,
+							 regprop.bitSize);
+	    const char *debugregs[] = {
+	      "dbgscrbase",
+	      "dbgscrsize",
+	      nullptr
+	    };
+	    int reg = 0;
+	    for (; (reg < regprop.count) && (debugregs[reg] != nullptr); ++reg)
+	      {
+		tdesc_create_reg (feature, debugregs[reg], regnum++,
+				  regset.is_writeable, "virtual",
+				  regprop.bitSize, regtype, false);
+	      }
+	  }
+	  break;
+
+	default:
+	  warning (_("Ignoring unknown DEBUG_SCRATCH regset version %u in %s"),
+		   regprop.version, device.name);
+	  break;
+	}
+      break;
+
     case ZET_DEBUG_REGSET_TYPE_INVALID_INTEL_GPU:
     case ZET_DEBUG_REGSET_TYPE_FORCE_UINT32:
       break;

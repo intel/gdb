@@ -123,7 +123,6 @@ public:
   ptid_t wait (ptid_t, struct target_waitstatus *, target_wait_flags) override;
 
   void stop (ptid_t) override;
-  void update_thread_list () override;
   bool thread_alive (ptid_t ptid) override;
   void goto_record_begin () override;
   void goto_record_end () override;
@@ -2210,7 +2209,7 @@ record_btrace_target::resume (ptid_t ptid, int step, enum gdb_signal signal)
      make progress, we may need to explicitly move replaying threads to the end
      of their execution history.  */
   if ((::execution_direction != EXEC_REVERSE)
-      && !record_is_replaying (minus_one_ptid))
+      && !record_is_replaying (ptid_t (ptid.pid ())))
     {
       this->beneath ()->resume (ptid, step, signal);
       return;
@@ -2630,7 +2629,7 @@ record_btrace_target::wait (ptid_t ptid, struct target_waitstatus *status,
 
   /* As long as we're not replaying, just forward the request.  */
   if ((::execution_direction != EXEC_REVERSE)
-      && !record_is_replaying (minus_one_ptid))
+      && !record_is_replaying (ptid_t (ptid.pid ())))
     {
       return this->beneath ()->wait (ptid, status, options);
     }
@@ -2751,7 +2750,7 @@ record_btrace_target::stop (ptid_t ptid)
 
   /* As long as we're not replaying, just forward the request.  */
   if ((::execution_direction != EXEC_REVERSE)
-      && !record_is_replaying (minus_one_ptid))
+      && !record_is_replaying (ptid_t (ptid.pid ())))
     {
       this->beneath ()->stop (ptid);
     }
@@ -2781,7 +2780,7 @@ record_btrace_target::can_execute_reverse ()
 bool
 record_btrace_target::stopped_by_sw_breakpoint ()
 {
-  if (record_is_replaying (minus_one_ptid))
+  if (record_is_replaying (ptid_t (inferior_ptid.pid ())))
     {
       struct thread_info *tp = inferior_thread ();
 
@@ -2796,7 +2795,7 @@ record_btrace_target::stopped_by_sw_breakpoint ()
 bool
 record_btrace_target::stopped_by_hw_breakpoint ()
 {
-  if (record_is_replaying (minus_one_ptid))
+  if (record_is_replaying (ptid_t (inferior_ptid.pid ())))
     {
       struct thread_info *tp = inferior_thread ();
 
@@ -2806,26 +2805,13 @@ record_btrace_target::stopped_by_hw_breakpoint ()
   return this->beneath ()->stopped_by_hw_breakpoint ();
 }
 
-/* The update_thread_list method of target record-btrace.  */
-
-void
-record_btrace_target::update_thread_list ()
-{
-  /* We don't add or remove threads during replay.  */
-  if (record_is_replaying (minus_one_ptid))
-    return;
-
-  /* Forward the request.  */
-  this->beneath ()->update_thread_list ();
-}
-
 /* The thread_alive method of target record-btrace.  */
 
 bool
 record_btrace_target::thread_alive (ptid_t ptid)
 {
   /* We don't add or remove threads during replay.  */
-  if (record_is_replaying (minus_one_ptid))
+  if (record_is_replaying (ptid_t (ptid.pid ())))
     return true;
 
   /* Forward the request.  */

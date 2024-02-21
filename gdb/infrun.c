@@ -4491,7 +4491,23 @@ do_target_wait (ptid_t wait_ptid, execution_control_state *ecs,
 
   auto do_wait = [&] (inferior *inf)
   {
-    ecs->ptid = do_target_wait_1 (inf, wait_ptid, &ecs->ws, options);
+    ptid_t ptid { inf->pid };
+
+    /* Make sure we're not widening WAIT_PTID.  */
+    if (!ptid.matches (wait_ptid)
+	/* Targets that cannot async will be asked for a blocking wait.
+
+	   Blocking wait does not work inferior-by-inferior if the target
+	   provides more than one inferior.  Fall back to waiting for
+	   WAIT_PTID in that case.  */
+	|| !target_can_async_p () || ((options & TARGET_WNOHANG) == 0)
+	/* FIXME: I don't see why we should have inferiors with zero pid,
+	   which indicates that the respective ptid is not a process.
+	   They do exist, though, and we cannot wait for them.  */
+	|| !ptid.is_pid ())
+      ptid = wait_ptid;
+
+    ecs->ptid = do_target_wait_1 (inf, ptid, &ecs->ws, options);
     ecs->target = inf->process_target ();
     return (ecs->ws.kind () != TARGET_WAITKIND_IGNORE);
   };
@@ -4500,6 +4516,12 @@ do_target_wait (ptid_t wait_ptid, execution_control_state *ecs,
      here spuriously after the target is all stopped and we've already
      reported the stop to the user, polling for events.  */
   scoped_restore_current_thread restore_thread;
+
+  /* The first TARGET_WAITKIND_NO_RESUMED execution state.
+
+     If we do not find a more interesting event, we will report that.  */
+  execution_control_state no_resumed {};
+  no_resumed.ptid = null_ptid;
 
   intrusive_list_iterator<inferior> start
     = inferior_list.iterator_to (*selected);
@@ -4511,7 +4533,13 @@ do_target_wait (ptid_t wait_ptid, execution_control_state *ecs,
       inferior *inf = &*it;
 
       if (inferior_matches (inf) && do_wait (inf))
-	return true;
+	{
+	  if (ecs->ws.kind () != TARGET_WAITKIND_NO_RESUMED)
+	    return true;
+
+	  if (no_resumed.ptid == null_ptid)
+	    no_resumed = *ecs;
+	}
     }
 
   for (intrusive_list_iterator<inferior> it = inferior_list.begin ();
@@ -4521,7 +4549,19 @@ do_target_wait (ptid_t wait_ptid, execution_control_state *ecs,
       inferior *inf = &*it;
 
       if (inferior_matches (inf) && do_wait (inf))
-	return true;
+	{
+	  if (ecs->ws.kind () != TARGET_WAITKIND_NO_RESUMED)
+	    return true;
+
+	  if (no_resumed.ptid == null_ptid)
+	    no_resumed = *ecs;
+	}
+    }
+
+  if (no_resumed.ptid != null_ptid)
+    {
+      *ecs = no_resumed;
+      return true;
     }
 
   ecs->ws.set_ignore ();

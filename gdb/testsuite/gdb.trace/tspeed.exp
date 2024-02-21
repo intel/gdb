@@ -25,6 +25,12 @@ if [gdbserver_debug_enabled] {
 standard_testfile
 set executable $testfile
 
+set ipalib [get_in_proc_agent]
+if { $ipalib == "" } {
+    unsupported "In-Process Agent library not found."
+    return -1
+}
+
 # Check that the target supports trace.
 if { [gdb_compile "$srcdir/$subdir/$srcfile" $binfile executable $options] != "" } {
     untested "failed to compile"
@@ -43,8 +49,6 @@ if ![gdb_target_supports_trace] {
 }
 
 # Compile the test case with the in-process agent library.
-set ipalib [get_in_proc_agent]
-
 if { [gdb_compile "$srcdir/$subdir/$srcfile" $binfile \
 	  executable [concat {debug c} shlib=$ipalib]] != "" } {
     untested "failed to compile"

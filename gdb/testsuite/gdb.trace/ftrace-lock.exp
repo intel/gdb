@@ -37,6 +37,12 @@ with_test_prefix "runtime trace support check" {
 	return
     }
 
+    set libipa [get_in_proc_agent]
+    if { $libipa == "" } {
+	unsupported "In-Process Agent library not found."
+	return -1
+    }
+
     if ![runto_main] {
 	return -1
     }
@@ -48,7 +54,6 @@ with_test_prefix "runtime trace support check" {
 }
 
 # Compile the test case with the in-process agent library.
-set libipa [get_in_proc_agent]
 set remote_libipa [gdb_load_shlib $libipa]
 
 lappend options shlib=$libipa

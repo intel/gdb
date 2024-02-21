@@ -30,6 +30,12 @@ if [prepare_for_testing "failed to prepare" $executable $srcfile \
     return -1
 }
 
+set libipa [get_in_proc_agent]
+if { $libipa == "" } {
+    unsupported "In-Process Agent library not found."
+    return -1
+}
+
 if ![runto_main] {
     return -1
 }
@@ -39,7 +45,6 @@ if ![gdb_target_supports_trace] {
     return -1
 }
 
-set libipa [get_in_proc_agent]
 set remote_libipa [gdb_load_shlib $libipa]
 
 # Can't use prepare_for_testing, because that splits compiling into

@@ -495,6 +495,10 @@ pending_tracepoint_installed_during_trace "trace"
 
 # Re-compile test case with IPA.
 set libipa [get_in_proc_agent]
+if { $libipa == "" } {
+    unsupported "In-Process Agent library not found."
+    return -1
+}
 gdb_load_shlib $libipa
 
 lappend exec_opts "shlib=$libipa"

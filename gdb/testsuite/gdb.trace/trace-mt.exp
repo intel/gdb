@@ -104,6 +104,10 @@ step_over_tracepoint $binfile "trace"
 require allow_shlib_tests
 
 set libipa [get_in_proc_agent]
+if { $libipa == "" } {
+    unsupported "In-Process Agent library not found."
+    return -1
+}
 set remote_libipa [gdb_load_shlib $libipa]
 
 # Compile test case again with IPA.

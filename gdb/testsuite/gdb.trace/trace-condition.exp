@@ -25,6 +25,12 @@ set additional_flags [gdb_target_symbol_prefix_flags]
 
 require gdb_trace_common_supports_arch
 
+set libipa [get_in_proc_agent]
+if { $libipa == "" } {
+    unsupported "In-Process Agent library not found."
+    return -1
+}
+
 if [prepare_for_testing "failed to prepare" $executable $srcfile \
 	[list debug $additional_flags]] {
     return -1
@@ -39,7 +45,6 @@ if ![gdb_target_supports_trace] {
     return -1
 }
 
-set libipa [get_in_proc_agent]
 set remote_libipa [gdb_load_shlib $libipa]
 
 # Can't use prepare_for_testing, because that splits compiling into

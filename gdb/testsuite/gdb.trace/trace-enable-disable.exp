@@ -30,6 +30,12 @@ if { [gdb_compile "$srcdir/$subdir/$srcfile" $binfile executable $options] != ""
     return -1
 }
 
+set libipa [get_in_proc_agent]
+if { $libipa == "" } {
+    unsupported "In-Process Agent library not found."
+    return -1
+}
+
 clean_restart ${testfile}
 
 if ![runto_main] {
@@ -42,7 +48,6 @@ if ![gdb_target_supports_trace] {
 }
 
 # Compile the test case with the in-process agent library.
-set libipa [get_in_proc_agent]
 gdb_load_shlib $libipa
 
 lappend options shlib=$libipa

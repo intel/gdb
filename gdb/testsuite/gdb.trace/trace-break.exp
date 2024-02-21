@@ -345,6 +345,10 @@ break_trace_same_addr_6 "trace" "disable" "trace" "enable"
 require allow_shlib_tests
 
 set libipa [get_in_proc_agent]
+if { $libipa == "" } {
+    unsupported "In-Process Agent library not found."
+    return -1
+}
 set remote_libipa [gdb_load_shlib $libipa]
 
 # Can't use prepare_for_testing, because that splits compiling into

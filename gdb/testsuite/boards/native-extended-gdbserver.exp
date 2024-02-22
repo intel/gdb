@@ -40,13 +40,14 @@ load_lib mi-support.exp
 # gdbserver is started with --once, causing it to exit once GDB
 # disconnects.
 proc gdb_start { } {
-    # Spawn GDB.
-    default_gdb_start
+    # Spawn GDB and return on failure.
+    set res [default_gdb_start]
+    if {$res != 0} {
+	return $res
+    }
 
     # And then GDBserver, ready for extended-remote mode.
-    gdbserver_start_multi
-
-    return 0
+    return [gdbserver_start_multi]
 }
 
 # Likewise, for MI.

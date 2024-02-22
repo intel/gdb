@@ -199,6 +199,29 @@ Set kernel parameter 'i915.debug_eu=1' or set /sys/class/drm/card*/prelim_enable
 
         return False
 
+class IntelgtHookBreakpoint(gdb.Breakpoint):
+    """Class to initialize IntelGT inferiors upon hit."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.used_once = False
+        self.silent = True
+
+    def stop(self):
+        """Called when the breakpoint is hit.  Initializes IntelGT inferiors
+        on the first hit and prevents further actions on subsequent hits.
+        Always returns False to ensure that the program does not stop at this
+        breakpoint."""
+        if not self.used_once:
+            self.used_once = True
+            INTELGT_AUTO_ATTACH.gt_inferior_init_pending = False
+            INTELGT_AUTO_ATTACH.init_gt_inferiors()
+        return False
+
+    def was_stopped(self):
+        """Return True if the breakpoint was already used, otherwise False."""
+        return self.used_once
+
 # pylint: disable-next=too-few-public-methods
 class IntelgtDeleteHook:
     "Delete a hook breakpoint when the corresponding objfile goes away"
@@ -288,19 +311,13 @@ class IntelgtAutoAttach:
     def setup_hook_bp(self, locspec):
         """Set a breakpoint at the location indicated by locspec."""
 
-        hook_bp = gdb.Breakpoint(locspec, type=gdb.BP_BREAKPOINT, internal=1,
-                                 temporary=0)
-        hook_bp.silent = True
-        commands = ("python gdb.function.intelgt_auto_attach" +
-                    ".INTELGT_AUTO_ATTACH.init_gt_inferiors()")
-        command_suffix = "\ncontinue"
+        hook_bp = IntelgtHookBreakpoint(locspec, type=gdb.BP_BREAKPOINT,
+                                        internal=1, temporary=0)
 
         eclipse = self.get_env_variable("ECLIPSE")
         if eclipse is not None and eclipse.endswith("1"):
             hook_bp.silent = False
-            command_suffix = ""
 
-        hook_bp.commands = commands + command_suffix
         return hook_bp
 
     @DebugLogger.log_call
@@ -403,6 +420,7 @@ class IntelgtAutoAttach:
                 return True
             raise
 
+    @DebugLogger.log_call
     def handle_before_prompt_event(self):
         """Handler for GDB's 'before prompt' event.  Remove a gt inferior
         if such an inferior was stored for removal."""
@@ -489,7 +507,7 @@ class IntelgtAutoAttach:
         return connection_str
 
     @DebugLogger.log_call
-    def handle_attach_gdbserver_gt(self, inf, is_nonstop):
+    def handle_attach_gdbserver_gt(self, inf):
         """Attach gdbserver to gt inferior either locally or remotely."""
 
         # User may disable the auto attach from GDB command prompt.
@@ -521,7 +539,7 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
               f"{gdbserver_path_env_var}/{gdbserver_attach_str}"
 
         try:
-            self.make_native_gdbserver(inf, is_nonstop, gdbserver_attach_str)
+            self.make_native_gdbserver(inf, gdbserver_attach_str)
         except gdb.error as ex:
             """Explicitly raise exception to 'init_gt_inferior'.  This
             otherwise results in undhandled exception in 'init_gt_inferior'
@@ -531,7 +549,7 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
         return True
 
     @DebugLogger.log_call
-    def make_native_gdbserver(self, inf, is_nonstop, gdbserver_cmd):
+    def make_native_gdbserver(self, inf, gdbserver_cmd):
         """Spawn and connect to a native instance of gdbserver."""
         # Switch to the gt inferior.  It is the most recent inferior.
         gt_inf = gdb.inferiors()[-1]
@@ -562,11 +580,11 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
             print(f"intelgt: gdbserver-ze started for "
                   f"process {inf.pid}.")
 
-        # In non-stop mode, if the auto-attach script is triggered
-        # from the hook BP, we execute the attach command in async
-        # mode, so that GDB will interrupt only one thread and resume
-        # it right after.  This is much less intrusive and is fine to
-        # do because the host thread is blocked on the hook BP.
+        # We execute the attach command in async mode, so that GDB
+        # will interrupt only one thread and resume it right after.
+        # This is much less intrusive and is fine to do because the
+        # host thread is blocked on the hook BP but will be resumed
+        # soon.
         #
         # However, if we are performing a live-attach in non-stop
         # mode, we do not do an async attach.  In this case, we must
@@ -579,8 +597,9 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
         # completely.  This case is not handled, yet.  The user still
         # needs to resume the device explicitly.
 
-        async_mode = (is_nonstop and not self.gt_inferior_init_pending)
+        async_mode = not self.gt_inferior_init_pending
         attach_cmd = f"attach {inf.pid}" + (" &" if async_mode else "")
+        DebugLogger.log(f"command: {attach_cmd}")
         gdb.execute(f"with print thread-events off -- {attach_cmd}",
                     False, capture_output)
 
@@ -616,13 +635,14 @@ Connection name '{connection}' not recognized.""")
             # Attach gdbserver to gt inferior.
             # This represents the first device.
             try:
-                if not self.handle_attach_gdbserver_gt(host_inf, is_nonstop):
+                if not self.handle_attach_gdbserver_gt(host_inf):
                     return
                 # Get the most recent gt inferior.
                 gt_inf = gdb.inferiors()[-1]
                 # For the --attach scenario we use gt_inf; for the
                 # --multi scenario we use gt_inf's connection num.
                 self.inf_dict[host_inf] = (gt_inf, gt_inf.connection_num)
+
                 # Switch to the host inferior.
                 gdb.execute(f"inferior {host_inf.num}", False, True)
             # Fix ctrl-c while attaching to gt inferior.

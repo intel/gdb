@@ -883,6 +883,14 @@ extern struct type *value_actual_type (struct value *value,
 				       int resolve_simple_types,
 				       int *real_type_found);
 
+/* Called before we attempt to allocate or reallocate a buffer for the
+   contents of a value.  TYPE is the type of the value for which we are
+   allocating the buffer.  If the buffer is too large (based on the user
+   controllable setting "max-value-size") then throw an error.  If this
+   function returns then we should attempt to allocate the buffer.  */
+
+extern void check_type_length_before_alloc (const struct type *type);
+
 /* For lval_computed values, this structure holds functions used to
    retrieve and set the value (or portions of the value).
 

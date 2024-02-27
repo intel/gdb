@@ -793,13 +793,9 @@ show_max_value_size (struct ui_file *file, int from_tty,
 		max_value_size);
 }
 
-/* Called before we attempt to allocate or reallocate a buffer for the
-   contents of a value.  TYPE is the type of the value for which we are
-   allocating the buffer.  If the buffer is too large (based on the user
-   controllable setting) then throw an error.  If this function returns
-   then we should attempt to allocate the buffer.  */
+/* See value.h.  */
 
-static void
+void
 check_type_length_before_alloc (const struct type *type)
 {
   ULONGEST length = type->length ();

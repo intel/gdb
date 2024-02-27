@@ -325,6 +325,11 @@ extern enum return_value_convention default_gdbarch_return_value
       struct regcache *regcache, struct value **read_value,
       const gdb_byte *writebuf);
 
+/* Default implementation of gdbarch default_get_shadow_stack_pointer
+   method.  */
+extern std::optional<CORE_ADDR> default_get_shadow_stack_pointer
+  (gdbarch *gdbarch);
+
 /* Default implementation of gdbarch update_architecture method.  */
 extern struct gdbarch *
 default_update_architecture (struct gdbarch *gdbarch, const target_desc *tdesc);

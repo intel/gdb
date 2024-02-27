@@ -1924,6 +1924,8 @@ extern void set_gdbarch_update_architecture (struct gdbarch *gdbarch, gdbarch_up
    technologies.  For example, the Control-flow Enforcement Technology (CET)
    on x86 provides a shadow stack and indirect branch tracking.
    To enable inferior calls the function shadow_stack_push has to be provided.
+   The method get_shadow_stack_pointer has to be provided to enable displaced
+   stepping.
 
    Push the address NEW_ADDR on the shadow stack and updates the shadow stack
    pointer. */
@@ -1933,3 +1935,7 @@ extern bool gdbarch_shadow_stack_push_p (struct gdbarch *gdbarch);
 typedef void (gdbarch_shadow_stack_push_ftype) (struct gdbarch *gdbarch, CORE_ADDR new_addr);
 extern void gdbarch_shadow_stack_push (struct gdbarch *gdbarch, CORE_ADDR new_addr);
 extern void set_gdbarch_shadow_stack_push (struct gdbarch *gdbarch, gdbarch_shadow_stack_push_ftype *shadow_stack_push);
+
+typedef std::optional<CORE_ADDR> (gdbarch_get_shadow_stack_pointer_ftype) (struct gdbarch *gdbarch);
+extern std::optional<CORE_ADDR> gdbarch_get_shadow_stack_pointer (struct gdbarch *gdbarch);
+extern void set_gdbarch_get_shadow_stack_pointer (struct gdbarch *gdbarch, gdbarch_get_shadow_stack_pointer_ftype *get_shadow_stack_pointer);

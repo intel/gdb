@@ -5166,6 +5166,7 @@ process_serial_event (void)
       /* Fallthrough.  */
     case 'z':  /* remove_ ... */
       {
+	require_running_or_break (cs.own_buf);
 	char *dataptr;
 	ULONGEST addr;
 	int kind;

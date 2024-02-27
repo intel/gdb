@@ -3027,6 +3027,8 @@ Some targets support special hardware-assisted control-flow protection
 technologies.  For example, Intel's Control-flow Enforcement Technology (CET)
 provides a shadow stack and indirect branch tracking.
 To enable inferior calls the function shadow_stack_push has to be provided.
+The method get_shadow_stack_pointer has to be provided to enable displaced
+stepping.
 
 Push the address NEW_ADDR on the shadow stack and updates the shadow stack
 pointer.
@@ -3035,4 +3037,12 @@ pointer.
     name="shadow_stack_push",
     params=[("CORE_ADDR", "new_addr")],
     predicate=True,
+)
+
+Method(
+    type="std::optional<CORE_ADDR>",
+    name="get_shadow_stack_pointer",
+    params=[],
+    predefault="default_get_shadow_stack_pointer",
+    invalid=False,
 )

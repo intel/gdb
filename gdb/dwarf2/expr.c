@@ -1115,6 +1115,7 @@ dwarf_expr_context::fetch_result (struct type *type, struct type *subobj_type,
 	    if (subobj_offset + len > max)
 	      invalid_synthetic_pointer ();
 
+	    check_type_length_before_alloc (subobj_type);
 	    retval = value::allocate (subobj_type);
 
 	    /* The given offset is relative to the actual object.  */

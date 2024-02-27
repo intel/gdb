@@ -1913,3 +1913,9 @@ extern bool gdbarch_shadow_stack_push_p (struct gdbarch *gdbarch);
 typedef void (gdbarch_shadow_stack_push_ftype) (struct gdbarch *gdbarch, CORE_ADDR new_addr);
 extern void gdbarch_shadow_stack_push (struct gdbarch *gdbarch, CORE_ADDR new_addr);
 extern void set_gdbarch_shadow_stack_push (struct gdbarch *gdbarch, gdbarch_shadow_stack_push_ftype *shadow_stack_push);
+
+extern bool gdbarch_get_shadow_stack_pointer_p (struct gdbarch *gdbarch);
+
+typedef bool (gdbarch_get_shadow_stack_pointer_ftype) (struct gdbarch *gdbarch, CORE_ADDR *ssp);
+extern bool gdbarch_get_shadow_stack_pointer (struct gdbarch *gdbarch, CORE_ADDR *ssp);
+extern void set_gdbarch_get_shadow_stack_pointer (struct gdbarch *gdbarch, gdbarch_get_shadow_stack_pointer_ftype *get_shadow_stack_pointer);

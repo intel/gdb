@@ -3022,3 +3022,11 @@ pointer.
     predicate=True,
     invalid=True,
 )
+
+Method(
+    type="bool",
+    name="get_shadow_stack_pointer",
+    params=[("CORE_ADDR *", "ssp")],
+    predicate=True,
+    invalid=True,
+)

@@ -3,6 +3,9 @@
 
 *** Changes since GDB 15
 
+* The MPX commands "show/set mpx bound" have been deprecated, as Intel
+  listed MPX as removed in 2019.
+
 * GDB now supports printing of ptwrite payloads from the Intel Processor
   Trace during 'record instruction-history', 'record function-call-history'
   and all stepping commands.  The payload is also accessible in Python as a

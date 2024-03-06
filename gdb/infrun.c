@@ -3746,32 +3746,43 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
       proceed_resume_thread_checked (cur_thr);
     else
       {
-	/* All-stop mode.  */
+	/* All-stop mode.
 
-	if (target_is_non_stop_p ())
+	   Start all other threads that are implicitly resumed, too.
+	   Iterate over targets to be able to handle non-stop and
+	   all-stop targets separately.  */
+	for (process_stratum_target *target
+	       : all_non_exited_process_targets ())
 	  {
-	    INFRUN_SCOPED_DEBUG_START_END
-	      ("resuming threads, all-stop-on-top-of-non-stop");
+	    if (resume_target != nullptr && resume_target != target)
+	      continue;
 
-	    /* In all-stop, but the target is always in non-stop mode.
-	       Start all other threads that are implicitly resumed too.  */
-	    for (thread_info *tp : all_non_exited_threads (resume_target,
-							   resume_ptid))
+	    switch_to_target_no_thread (target);
+
+	    if (target_is_non_stop_p ())
 	      {
-		switch_to_thread_no_regs (tp);
-		proceed_resume_thread_checked (tp);
-	      }
-	  }
-	else
-	  {
-	    if (started.count (cur_thr->inf->process_target ()) > 0)
-	      {
-		/* A new displaced stepping sequence was started.  In
-		   all-stop, we can't talk to the target anymore until
-		   it next stops.  */
+		INFRUN_SCOPED_DEBUG_START_END
+		  ("resuming threads, all-stop-on-top-of-non-stop");
+
+		for (thread_info *tp : all_non_exited_threads (target,
+							       resume_ptid))
+		  {
+		    switch_to_thread_no_regs (tp);
+		    proceed_resume_thread_checked (tp);
+		  }
 	      }
 	    else
-	      proceed_resume_thread_checked (cur_thr);
+	      {
+		if (started.count (target) > 0)
+		  {
+		    /* A new displaced stepping sequence was started.  In
+		       all-stop, we can't talk to the target anymore until
+		       it next stops.  */
+		    continue;
+		  }
+
+		proceed_resume_thread_checked (cur_thr);
+	      }
 	  }
       }
 

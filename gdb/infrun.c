@@ -3781,7 +3781,39 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 		    continue;
 		  }
 
-		proceed_resume_thread_checked (cur_thr);
+		/* Pick a thread of the target to proceed.
+
+		   Prefer a pending thread, if exists, so that the resume
+		   flow would do the right state-tracking and avoid
+		   actually resuming the target.  Otherwise, prefer the
+		   current thread, if it belongs to this target.  As the
+		   final resort, just pick any live thread.  */
+		thread_info *tp = nullptr;
+		for (thread_info *thread
+		       : all_non_exited_threads (target, minus_one_ptid))
+		  {
+		    if (thread->has_pending_waitstatus ())
+		      {
+			tp = thread;
+			break;
+		      }
+		  }
+
+		if (tp == nullptr)
+		  {
+		    if (target == cur_thr->inf->process_target ())
+		      tp = cur_thr;
+		    else
+		      tp = any_live_thread_of_inferior (current_inferior ());
+		  }
+
+		gdb_assert (tp != nullptr);
+
+		INFRUN_SCOPED_DEBUG_START_END
+		  ("resuming threads, all-stop");
+
+		switch_to_thread_no_regs (tp);
+		proceed_resume_thread_checked (tp);
 	      }
 	  }
       }

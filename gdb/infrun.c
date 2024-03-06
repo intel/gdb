@@ -3535,27 +3535,38 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 	   other thread was already doing one.  In either case, don't
 	   resume anything else until the step-over is finished.  */
       }
-    else if (step_over_started && !target_is_non_stop_p ())
+    else if (non_stop)
+      proceed_resume_thread_checked (cur_thr);
+    else
       {
-	/* A new displaced stepping sequence was started.  In all-stop,
-	   we can't talk to the target anymore until it next stops.  */
-      }
-    else if (!non_stop && target_is_non_stop_p ())
-      {
-	INFRUN_SCOPED_DEBUG_START_END
-	  ("resuming threads, all-stop-on-top-of-non-stop");
+	/* All-stop mode.  */
 
-	/* In all-stop, but the target is always in non-stop mode.
-	   Start all other threads that are implicitly resumed too.  */
-	for (thread_info *tp : all_non_exited_threads (resume_target,
-						       resume_ptid))
+	if (target_is_non_stop_p ())
 	  {
-	    switch_to_thread_no_regs (tp);
-	    proceed_resume_thread_checked (tp);
+	    INFRUN_SCOPED_DEBUG_START_END
+	      ("resuming threads, all-stop-on-top-of-non-stop");
+
+	    /* In all-stop, but the target is always in non-stop mode.
+	       Start all other threads that are implicitly resumed too.  */
+	    for (thread_info *tp : all_non_exited_threads (resume_target,
+							   resume_ptid))
+	      {
+		switch_to_thread_no_regs (tp);
+		proceed_resume_thread_checked (tp);
+	      }
+	  }
+	else
+	  {
+	    if (step_over_started)
+	      {
+		/* A new displaced stepping sequence was started.  In
+		   all-stop, we can't talk to the target anymore until
+		   it next stops.  */
+	      }
+	    else
+	      proceed_resume_thread_checked (cur_thr);
 	  }
       }
-    else
-      proceed_resume_thread_checked (cur_thr);
 
     disable_commit_resumed.reset_and_commit ();
   }

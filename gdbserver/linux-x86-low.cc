@@ -234,6 +234,8 @@ static const int x86_64_regmap[] =
   -1, -1, -1, -1, -1, -1, -1, -1,
   ORIG_RAX * 8,
   21 * 8,  22 * 8,
+  /* MPX is deprecated.  Yet we keep this to not give the registers below
+     a new number.  That could break older gdbs.  */
   -1, -1, -1, -1,			/* MPX registers BND0 ... BND3.  */
   -1, -1,				/* MPX registers BNDCFGU, BNDSTATUS.  */
   -1, -1, -1, -1, -1, -1, -1, -1,       /* xmm16 ... xmm31 (AVX512)  */
@@ -951,10 +953,6 @@ x86_linux_read_description (void)
 	  /* Get XCR0 from XSAVE extended state.  */
 	  xcr0 = xstateregs[(I386_LINUX_XSAVE_XCR0_OFFSET
 			     / sizeof (uint64_t))];
-
-	  /* No MPX on x32.  */
-	  if (machine == EM_X86_64 && !is_elf64)
-	    xcr0 &= ~X86_XSTATE_MPX;
 
 	  xsave_len = x86_xsave_length ();
 

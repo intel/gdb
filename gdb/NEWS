@@ -3,6 +3,11 @@
 
 *** Changes since GDB 15
 
+* Debugging support for Intel MPX has been removed.  This includes the
+  removal of
+  ** MPX register support
+  ** the deprecated commands "show/set mpx bound"
+
 * The MPX commands "show/set mpx bound" have been deprecated, as Intel
   listed MPX as removed in 2019.
 

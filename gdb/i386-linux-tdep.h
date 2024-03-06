@@ -49,12 +49,6 @@ extern uint64_t i386_linux_core_read_xsave_info (bfd *abfd,
 extern bool i386_linux_core_read_x86_xsave_layout (struct gdbarch *gdbarch,
 						   x86_xsave_layout &layout);
 
-/* Handle and display information related to the MPX bound violation
-   to the user.  */
-extern void i386_linux_report_signal_info (struct gdbarch *gdbarch,
-					   struct ui_out *uiout,
-					   enum gdb_signal siggnal);
-
 /* Return the target description according to XCR0.  */
 extern const struct target_desc *i386_linux_read_description (uint64_t xcr0);
 
@@ -79,8 +73,5 @@ extern const struct target_desc *i386_linux_read_description (uint64_t xcr0);
 #define I386_LINUX_XSAVE_XCR0_OFFSET 464
 
 extern int i386_linux_gregset_reg_offset[];
-
-/* Return x86 siginfo type.  */
-extern struct type *x86_linux_get_siginfo_type (struct gdbarch *gdbarch);
 
 #endif /* i386-linux-tdep.h */

@@ -33,34 +33,20 @@ static enum x86_linux_tdesc
 xcr0_to_tdesc_idx (uint64_t xcr0, bool is_x32)
 {
   if (!is_x32 && ((xcr0 & X86_XSTATE_AMX) != 0))
-    return X86_TDESC_AVX_MPX_AVX512_PKU_AMX;
+    return X86_TDESC_AVX_AVX512_PKU_AMX;
 
   if (xcr0 & X86_XSTATE_PKRU)
     {
       if (is_x32)
 	{
-	  /* No x32 MPX and PKU, fall back to avx_avx512.  */
+	  /* No x32 PKU, fall back to avx_avx512.  */
 	  return X86_TDESC_AVX_AVX512;
 	}
       else
-	return X86_TDESC_AVX_MPX_AVX512_PKU;
+	return X86_TDESC_AVX_AVX512_PKU;
     }
   else if (xcr0 & X86_XSTATE_AVX512)
     return X86_TDESC_AVX_AVX512;
-  else if ((xcr0 & X86_XSTATE_AVX_MPX_MASK) == X86_XSTATE_AVX_MPX_MASK)
-    {
-      if (is_x32) /* No MPX on x32.  */
-	return X86_TDESC_AVX;
-      else
-	return X86_TDESC_AVX_MPX;
-    }
-  else if (xcr0 & X86_XSTATE_MPX)
-    {
-      if (is_x32) /* No MPX on x32.  */
-	return X86_TDESC_AVX;
-      else
-	return X86_TDESC_MPX;
-    }
   else if (xcr0 & X86_XSTATE_AVX)
     return X86_TDESC_AVX;
   else if (xcr0 & X86_XSTATE_SSE)

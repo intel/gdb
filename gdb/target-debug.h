@@ -372,8 +372,8 @@ target_debug_print_x86_xsave_layout (const x86_xsave_layout &layout)
     string_appendf (s, ", " #region "_offset=%d", layout.region##_offset);
 
   POFFS(avx);
-  POFFS(bndregs);
-  POFFS(bndcfg);
+  /* APX will take up the space left behind by the deprecated MPX
+     registers.  */
   POFFS(k);
   POFFS(zmm_h);
   POFFS(zmm);

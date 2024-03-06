@@ -169,21 +169,6 @@ struct i386_gdbarch_tdep : gdbarch_tdep_base
   /* YMM16-31 register names.  Only used for tdesc_numbered_register.  */
   const char * const *ymm16h_register_names = nullptr;
 
-  /* Register number for %bnd0r.  Set this to -1 to indicate the absence
-     bound registers.  */
-  int bnd0r_regnum = 0;
-
-  /* Register number for pseudo register %bnd0.  Set this to -1 to indicate the absence
-     bound registers.  */
-  int bnd0_regnum = 0;
-
-  /* Register number for %bndcfgu. Set this to -1 to indicate the absence
-     bound control registers.  */
-  int bndcfgu_regnum = 0;
-
-  /* MPX register names.  Only used for tdesc_numbered_register.  */
-  const char * const *mpx_register_names = nullptr;
-
   /* Register number for %zmm0h.  Set this to -1 to indicate the absence
      of ZMM_HI256 register support.  */
   int zmm0h_regnum = 0;
@@ -274,7 +259,6 @@ struct i386_gdbarch_tdep : gdbarch_tdep_base
   struct type *i386_ymm_type = nullptr;
   struct type *i386_zmm_type = nullptr;
   struct type *i387_ext_type = nullptr;
-  struct type *i386_bnd_type = nullptr;
   struct type *i386_tilecfg_type = nullptr;
 
   /* tmm registers are pseudo registers that are re-computed every time.
@@ -332,6 +316,8 @@ enum i386_regnum
   I386_MXCSR_REGNUM = 40,	/* %mxcsr */ 
   I386_YMM0H_REGNUM,		/* %ymm0h */
   I386_YMM7H_REGNUM = I386_YMM0H_REGNUM + 7,
+  /* MPX is deprecated.  Yet we keep this to not give the registers below
+     a new number.  That could break older gdbservers.  */
   I386_BND0R_REGNUM,
   I386_BND3R_REGNUM = I386_BND0R_REGNUM + 3,
   I386_BNDCFGU_REGNUM,
@@ -383,7 +369,6 @@ enum record_i386_regnum
 
 #define I386_SSE_NUM_REGS	(I386_MXCSR_REGNUM + 1)
 #define I386_AVX_NUM_REGS	(I386_YMM7H_REGNUM + 1)
-#define I386_MPX_NUM_REGS	(I386_BNDSTATUS_REGNUM + 1)
 #define I386_AVX512_NUM_REGS	(I386_ZMM7H_REGNUM + 1)
 #define I386_PKEYS_NUM_REGS	(I386_PKRU_REGNUM + 1)
 #define I386_NUM_REGS		(I386_GSBASE_REGNUM + 1)
@@ -402,7 +387,6 @@ extern int i386_xmm_regnum_p (struct gdbarch *gdbarch, int regnum);
 extern int i386_xmm_avx512_regnum_p (struct gdbarch * gdbarch, int regnum);
 extern int i386_ymm_regnum_p (struct gdbarch *gdbarch, int regnum);
 extern int i386_ymm_avx512_regnum_p (struct gdbarch *gdbarch, int regnum);
-extern int i386_bnd_regnum_p (struct gdbarch *gdbarch, int regnum);
 extern int i386_k_regnum_p (struct gdbarch *gdbarch, int regnum);
 extern int i386_zmm_regnum_p (struct gdbarch *gdbarch, int regnum);
 extern int i386_zmmh_regnum_p (struct gdbarch *gdbarch, int regnum);
@@ -507,10 +491,6 @@ extern int i386_process_record (struct gdbarch *gdbarch,
 				struct regcache *regcache, CORE_ADDR addr);
 extern const struct target_desc *i386_target_description (uint64_t xcr0,
 							  bool segments);
-
-/* Return true iff the current target is MPX enabled.  */
-extern int i386_mpx_enabled (void);
-
 
 /* Functions and variables exported from i386-bsd-tdep.c.  */
 

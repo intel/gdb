@@ -93,6 +93,8 @@ int amd64_linux_gregset_reg_offset[] =
   -1, -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1,
+  /* MPX is deprecated.  Yet we keep this to not give the registers below
+     a new number.  That could break older gdbservers.  */
   -1, -1, -1, -1,		/* MPX registers BND0 ... BND3.  */
   -1, -1,			/* MPX registers BNDCFGU and BNDSTATUS.  */
   -1, -1, -1, -1, -1, -1, -1, -1,     /* xmm16 ... xmm31 (AVX512)  */
@@ -1617,7 +1619,7 @@ amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32,
 			      bool ssp_enabled)
 {
   static target_desc *amd64_linux_tdescs \
-    [2/*AVX*/][2/*MPX*/][2/*AVX512*/][2/*PKRU*/][2/*PL3_SSP*/]\
+    [2/*AVX*/][2/*AVX512*/][2/*PKRU*/][2/*PL3_SSP*/]\
     [2/*AMX*/] = {};
   static target_desc *x32_linux_tdescs \
     [2/*AVX*/][2/*AVX512*/][2/*PKRU*/][2/*PL3_SSP*/][2/*AMX*/] = {};
@@ -1635,7 +1637,6 @@ amd64_linux_read_description (uint64_t xcr0_features_bit, bool is_x32,
   else
     {
       tdesc = &amd64_linux_tdescs[(xcr0_features_bit & X86_XSTATE_AVX) ? 1 : 0]
-	[(xcr0_features_bit & X86_XSTATE_MPX) ? 1 : 0]
 	[(xcr0_features_bit & X86_XSTATE_AVX512) ? 1 : 0]
 	[(xcr0_features_bit & X86_XSTATE_PKRU) ? 1 : 0]
 	[ssp_enabled ? 1 : 0]
@@ -2000,9 +2001,6 @@ amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch,
 
   set_gdbarch_process_record (gdbarch, i386_process_record);
   set_gdbarch_process_record_signal (gdbarch, amd64_linux_record_signal);
-
-  set_gdbarch_get_siginfo_type (gdbarch, x86_linux_get_siginfo_type);
-  set_gdbarch_report_signal_info (gdbarch, i386_linux_report_signal_info);
 
   set_gdbarch_remove_non_addr_bits_wpt (gdbarch,
 					amd64_linux_remove_non_addr_bits_wpt);

@@ -77,6 +77,7 @@
 #include "extension.h"
 #include "disasm.h"
 #include "interps.h"
+#include <set>
 
 /* Prototypes for local functions */
 
@@ -103,7 +104,7 @@ static void wait_for_inferior (inferior *inf);
 static void restart_threads (struct thread_info *event_thread,
 			     inferior *inf = nullptr);
 
-static bool start_step_over (void);
+static std::set<process_stratum_target *> start_step_over ();
 
 static bool step_over_info_valid_p (void);
 
@@ -2054,17 +2055,23 @@ static bool keep_going_stepped_thread (struct thread_info *tp);
 static step_over_what thread_still_needs_step_over (struct thread_info *tp);
 
 /* Are there any pending step-over requests?  If so, run all we can
-   now and return true.  Otherwise, return false.  */
+   now.  Return the set of targets where
+     - we started an in-line step-over, or
+     - the target is all-stop and we started a step-over.
+   This way, the callers can know they should not talk to those
+   targets anymore.  */
 
-static bool
-start_step_over (void)
+static std::set<process_stratum_target *>
+start_step_over ()
 {
   INFRUN_SCOPED_DEBUG_ENTER_EXIT;
+
+  std::set<process_stratum_target *> started_targets;
 
   /* Don't start a new step-over if we already have an in-line
      step-over operation ongoing.  */
   if (step_over_info_valid_p ())
-    return false;
+    return started_targets;
 
   /* Steal the global thread step over chain.  As we try to initiate displaced
      steps, threads will be enqueued in the global chain if no buffers are
@@ -2075,8 +2082,6 @@ start_step_over (void)
 
   infrun_debug_printf ("stealing global queue of threads to step, length = %d",
 		       thread_step_over_chain_length (threads_to_step));
-
-  bool started = false;
 
   /* On scope exit (whatever the reason, return or exception), if there are
      threads left in the THREADS_TO_STEP chain, put back these threads in the
@@ -2102,6 +2107,15 @@ start_step_over (void)
     {
       step_over_what step_what;
       int must_be_in_line;
+
+      process_stratum_target *proc_target = tp->inf->process_target ();
+      if (started_targets.count (proc_target) > 0)
+	{
+	  /* We either started an in-line step-over and therefore we
+	     shall not resume other threads, or this is an all-stop
+	     target and we cannot talk to it anymore.  */
+	  continue;
+	}
 
       gdb_assert (!tp->stop_requested);
 
@@ -2191,12 +2205,13 @@ start_step_over (void)
 	  gdb_assert (thread_is_in_step_over_chain (tp));
 	}
 
-      /* If we started a new in-line step-over, we're done.  */
+      /* If we started a new in-line step-over, we're done
+	 with this target.  */
       if (step_over_info_valid_p ())
 	{
 	  gdb_assert (tp->control.trap_expected);
-	  started = true;
-	  break;
+	  started_targets.insert (proc_target);
+	  continue;
 	}
 
       if (!target_is_non_stop_p ())
@@ -2209,8 +2224,8 @@ start_step_over (void)
 	  /* With remote targets (at least), in all-stop, we can't
 	     issue any further remote commands until the program stops
 	     again.  */
-	  started = true;
-	  break;
+	  started_targets.insert (proc_target);
+	  continue;
 	}
 
       /* Either the thread no longer needed a step-over, or a new
@@ -2219,7 +2234,7 @@ start_step_over (void)
 	 displaced step on a thread of other process. */
     }
 
-  return started;
+  return started_targets;
 }
 
 /* Update global variables holding ptids to hold NEW_PTID if they were
@@ -3527,7 +3542,7 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 
   {
     scoped_disable_commit_resumed disable_commit_resumed ("proceeding");
-    bool step_over_started = start_step_over ();
+    std::set<process_stratum_target *> started = start_step_over ();
 
     if (step_over_info_valid_p ())
       {
@@ -3557,7 +3572,7 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 	  }
 	else
 	  {
-	    if (step_over_started)
+	    if (started.count (cur_thr->inf->process_target ()) > 0)
 	      {
 		/* A new displaced stepping sequence was started.  In
 		   all-stop, we can't talk to the target anymore until
@@ -7912,7 +7927,7 @@ restart_stepped_thread (process_stratum_target *resume_target,
 {
   /* Do all pending step-overs before actually proceeding with
      step/next/etc.  */
-  if (start_step_over ())
+  if (!start_step_over ().empty ())
     return true;
 
   for (thread_info *tp : all_threads_safe ())

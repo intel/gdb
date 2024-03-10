@@ -21019,6 +21019,7 @@ $as_echo "$as_me: WARNING: linux/perf_event.h missing or too old; some features 
 
 
 
+
     use_additional=yes
 
   acl_save_prefix="$prefix"
@@ -21908,6 +21909,7 @@ fi
 
 
   if test "x$with_xxhash" != "xno"; then
+
 
 
 
@@ -23087,6 +23089,7 @@ $as_echo "found xgettext program is not GNU xgettext; ignore it" >&6; }
 
 
 
+
     use_additional=yes
 
   acl_save_prefix="$prefix"
@@ -23933,6 +23936,7 @@ $as_echo "$LIBICONV" >&6; }
     LIBICONV=
     LTLIBICONV=
   fi
+
 
 
 
@@ -27442,6 +27446,7 @@ else
 
 
 
+
     use_additional=yes
 
   acl_save_prefix="$prefix"
@@ -29088,6 +29093,7 @@ ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
 
 
 
+
     use_additional=yes
 
   acl_save_prefix="$prefix"
@@ -29132,12 +29138,12 @@ fi
 
 # Check whether --with-libyaml-cpp-type was given.
 if test "${with_libyaml_cpp_type+set}" = set; then :
-  withval=$with_libyaml_cpp_type;  with_libyaml-cpp_type=$withval
+  withval=$with_libyaml_cpp_type;  with_libyaml_cpp_type=$withval
 else
-   with_libyaml-cpp_type=auto
+   with_libyaml_cpp_type=auto
 fi
 
-  lib_type=`eval echo \$with_libyaml-cpp_type`
+  lib_type=`eval echo \$with_libyaml_cpp_type`
 
       LIBYAML_CPP=
   LTLIBYAML_CPP=
@@ -29579,6 +29585,7 @@ ac_cpp='$CXXCPP $CPPFLAGS'
 ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
 ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
 
 
 
@@ -32731,6 +32738,7 @@ $as_echo "$with_lzma" >&6; }
 
 
 
+
     use_additional=yes
 
   acl_save_prefix="$prefix"
@@ -34094,6 +34102,7 @@ else
   # safe to save and restore CFLAGS here.
   saved_CFLAGS=$CFLAGS
   CFLAGS="$CFLAGS -Werror"
+
 
 
 

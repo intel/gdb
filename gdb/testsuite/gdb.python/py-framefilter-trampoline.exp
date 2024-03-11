@@ -1,0 +1,77 @@
+# Copyright (C) 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This file is part of the GDB testsuite.  It tests skipping of trampolines
+# in the backtrace command in case Python-based frame-filters are enabled.
+
+load_lib gdb-python.exp
+
+require allow_python_tests allow_fortran_tests
+
+if {![test_compiler_info {ifx-*} f90]} {
+    untested "This test is only applicable for IFX, which emits the\
+	trampoline DIE in Dwarf."
+    return -1
+}
+
+load_lib fortran.exp
+
+set testfile py-framefilter-trampoline
+set srcfile "${srcdir}/gdb.fortran/func-trampoline.f90"
+set binfile [standard_output_file $testfile]
+
+if {[build_executable $testfile.exp $testfile $srcfile {debug f90}] == -1} {
+    return -1
+}
+
+# Start with a fresh gdb.
+gdb_exit
+gdb_start
+
+gdb_test "info frame-filter" \
+    "No frame filters\\." \
+    "info frame filter before loading filters"
+
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
+
+if {![runto_main]} {
+    return
+}
+gdb_test_no_output "set python print-stack full" \
+    "set python print-stack to full"
+
+# Load frame-filters
+set remote_python_file [gdb_remote_download host \
+			    ${srcdir}/${subdir}/${testfile}.py]
+gdb_test_no_output "source ${remote_python_file}" "load python file"
+
+set inner_loc [gdb_get_line_number "second-breakpt"]
+set middle_loc [gdb_get_line_number "first-breakpt"]
+set outer_loc [gdb_get_line_number "main-outer-loc"]
+set fill "\[^\r\n\]*"
+
+set inner_desc  "second \\(x=20, y=9\\) at ${fill}$srcfile:$inner_loc"
+set middle_desc "first \\(num1=16, num2=3\\) at ${fill}$srcfile:$middle_loc"
+set outer_desc  ".* at .*$srcfile:$outer_loc"
+
+# Set breakpoint inside the innermost function 'second'.
+gdb_breakpoint "$srcfile:$inner_loc"
+gdb_continue_to_breakpoint "innermost-body" ".*$srcfile:$inner_loc.*"
+
+# Test with frame filter.
+gdb_test "bt" [multi_line \
+    "#$decimal.* $middle_desc" \
+    "#$decimal.* $outer_desc.*"]

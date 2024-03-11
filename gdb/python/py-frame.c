@@ -70,6 +70,17 @@ frame_object_to_frame_info (PyObject *obj)
   if (frame_obj->frame_id_is_next)
     frame = get_prev_frame (frame);
 
+  if (skip_trampoline_functions)
+    {
+      for (int i = 0; (SAFE_TRAMPOLINE_CHAIN (i, frame)
+		       && in_trampoline_frame (frame)); ++i)
+	{
+	  frame = get_prev_frame (frame);
+	  if (frame ==  nullptr)
+	    return nullptr;
+	}
+    }
+
   return frame;
 }
 

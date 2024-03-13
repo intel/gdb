@@ -159,6 +159,11 @@ std::unordered_map<std::string, implicit_args_value_pair> implicit_args_cache;
 static implicit_args_value_pair &
 intelgt_implicit_args_find_value_pair (gdbarch *gdbarch, thread_info *tp);
 
+/* Return the real SIMD width of the thread TP.  */
+
+static uint8_t
+intelgt_get_hw_simd_width (gdbarch *gdbarch, thread_info *tp);
+
 /* Read and write vectors on the stack while considering the SIMD
    vectorization.
 
@@ -771,6 +776,53 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
   return -1;
 }
 
+/* Return the dispatch mask of the thread TP.  */
+
+static lanes_mask_t
+intelgt_dispatch_mask (gdbarch *gdbarch, thread_info *tp)
+{
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  regcache *regcache = get_thread_regcache (tp);
+
+  uint32_t sr0_2 = 0;
+  /* The dispatch mask is SR0.2, SR0 elements are 4 byte wide.  */
+  intelgt_read_register_part (regcache, data->sr0_regnum,
+			      sizeof (uint32_t) * 2, sizeof (sr0_2),
+			      (gdb_byte *) &sr0_2,
+			      _("Failed to read the dispatch mask."));
+
+  dprintf ("sr0_2: %x", sr0_2);
+  intelgt::xe_version device_version
+    = intelgt::get_xe_version (get_device_id (tp->inf));
+  if (device_version == intelgt::XE_HP || device_version == intelgt::XE_HPG)
+    {
+      /* The higher bits of dmask are undefined if they are outside the
+	 SIMD width.  Clear them explicitly.  */
+      unsigned int width = 0;
+      try
+	{
+	  width = intelgt_get_hw_simd_width (gdbarch, tp);
+	}
+      catch (const gdb_exception_error &e)
+	{
+	  /* If we failed to read the hardware SIMD width, it is
+	     most probably a bug in the runtime.  We do not throw here,
+	     as then many commands would fail on intelgt target.  Print
+	     a warning to make the failure noticeable.  */
+	  warning (_("Failed to read the hardware SIMD width: %s.  SIMD lanes"
+		     " might be displayed inaccurately."), e.what ());
+	  width = tp->get_simd_width ();
+	}
+
+      uint64_t width_mask = (1ull << width) - 1;
+      dprintf ("width: %d, width_mask: %lx", width, width_mask);
+
+      sr0_2 &= width_mask;
+    }
+
+  return sr0_2;
+}
+
 /* Return active lanes mask for the specified thread TP.  */
 
 static lanes_mask_t
@@ -792,14 +844,23 @@ intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
 
   /* The higher bits of CE are undefined if they are outside the
      dispatch mask range.  Clear them explicitly using the dispatch
-     mask, which is at SR0.2.  SR0 elements are 4 byte wide.  */
-  uint32_t sr0_2 = 0;
-  thread_regcache->raw_read_part (data->sr0_regnum, sizeof (uint32_t) * 2,
-				  sizeof (sr0_2), (gdb_byte *) &sr0_2);
+     mask.  */
+  lanes_mask_t dispatch_mask = ~0ull;
+  try
+    {
+      dispatch_mask = intelgt_dispatch_mask (gdbarch, tp);
+    }
+  catch (const gdb_exception_error &e)
+    {
+      /* We failed to read the dispatch mask.  Keep it as a warning, as
+	 the debugger might still be usable.  */
+      warning (_("%s.  SIMD lanes might be displayed inaccurately."),
+	       e.what ());
+    }
 
-  dprintf ("ce: %lx, dmask: %x", ce, sr0_2);
+  dprintf ("ce: 0x%lx, dmask: 0x%" PRI_lanes_mask, ce, dispatch_mask);
 
-  return ce & sr0_2;
+  return ce & dispatch_mask;
 }
 
 /* Return the PC of the first real instruction.  */
@@ -3369,6 +3430,91 @@ struct zeinfo
 
 /* zeinfo cache with the key of the corresponding bfd.  */
 std::unordered_map<bfd *, zeinfo> zeinfo_cache;
+
+/* Compute kernel name out of the SECTION.  */
+
+static std::optional<std::string>
+intelgt_get_kernel_name (obj_section *section)
+{
+  if (section == nullptr
+      || section->the_bfd_section == nullptr
+      || section->the_bfd_section->name == nullptr)
+    return {};
+
+  const std::string name { section->the_bfd_section->name };
+  const std::string text_prefix {".text."};
+  if (name.size () <= text_prefix.size ()
+      || name.compare (0, text_prefix.size (), text_prefix) != 0)
+    return {};
+
+  return name.substr (text_prefix.size ());
+}
+
+/* Return kernel zeinfo of a given PC.  */
+
+static const zeinfo::kernel&
+zeinfo_from_pc (gdbarch *gdbarch, CORE_ADDR pc)
+{
+  obj_section *section = find_pc_section (pc);
+  if (section == nullptr)
+    error (_("Cannot find section containing PC %s."),
+	   paddress (gdbarch, pc));
+
+  /* Try to access zeinfo.  */
+  if (section->objfile == nullptr)
+    error (_("Objfile is NULL for PC %s."), paddress (gdbarch, pc));
+
+  bfd *abfd = section->objfile->obfd.get ();
+  if (zeinfo_cache.find (abfd) == zeinfo_cache.end ())
+    error (_("Cannot find zeinfo for PC %s."), paddress (gdbarch, pc));
+
+  const std::optional<std::string> kernel_name
+    = intelgt_get_kernel_name (section);
+  if (!kernel_name.has_value ())
+    error (_("Cannot get kernel name."));
+
+  auto it = zeinfo_cache[abfd].kernels.find (*kernel_name);
+  if (it == zeinfo_cache[abfd].kernels.end ())
+    error (_("Cannot find zeinfo for kernel \"%s\"."),
+	   kernel_name->c_str ());
+
+  return it->second;
+}
+
+/* Get zeinfo for kernel currently processed by the thread TP.  */
+
+static const zeinfo::kernel&
+intelgt_get_kernel_zeinfo (gdbarch *gdbarch, thread_info *tp)
+{
+  regcache *regcache
+    = get_thread_arch_regcache (tp->inf, tp->ptid, gdbarch);
+  CORE_ADDR pc = regcache_read_pc (regcache);
+
+  return zeinfo_from_pc (gdbarch, pc);
+}
+
+static uint8_t
+intelgt_get_hw_simd_width (gdbarch *gdbarch, thread_info *tp)
+{
+  try
+    {
+      const zeinfo::kernel &kernel = intelgt_get_kernel_zeinfo (gdbarch, tp);
+      return kernel.simd_size;
+    }
+  catch (const gdb_exception_error &e)
+    {
+      /* We haven't found the section for PC or zeinfo is unavailable.
+	 Roll back to implicit arguments.  This is a backup option, as
+	 implicit arguments are cached on request and have to be updated
+	 after every resume.  */
+      dprintf ("Cannot access zeinfo (%s).  Try implicit arguments.",
+	       e.what ());
+      const auto &implicit_args_v0
+	= intelgt_implicit_args_find_value_pair (gdbarch, tp).first;
+
+      return implicit_args_v0.simd_width;
+    }
+}
 
 #if defined (HAVE_LIBYAML_CPP)
 

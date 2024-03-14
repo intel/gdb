@@ -77,6 +77,9 @@ foreach device $sycl_device_list {
 		}
 	    }
 	}
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    setup_kfail "JIRA GSD/8253" "*-*-*"
+	}
 	gdb_assert {$pagefault_seen} "saw the pagefault"
     }
 }

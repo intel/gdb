@@ -34,7 +34,7 @@ main (int argc, char *argv[])
 	{
 	  int *src = nullptr;  /* line-before-pagefault */
 	  int num = *src;      /* pagefault-line */
-	  numbers[0] = num;
+	  numbers[0] = num;    /* last-line */
 	});
     });
   deviceQueue.wait ();

@@ -34,7 +34,9 @@ main (int argc, char *argv[])
 	{
 	  int *p = nullptr;
 	  int num = numbers[0];
+	  long long count = 1e8;
 	  *p = num;             /* pagefault-line */
+	  while (count) count--;    /* dummy-line */
 	});
     });
   deviceQueue.wait ();

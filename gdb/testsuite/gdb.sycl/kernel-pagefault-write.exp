@@ -50,4 +50,41 @@ foreach device $sycl_device_list {
 	}
 	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*"
     }
+
+    # Single-stepping over a page-faulting instruction should report
+    # the SIGSEGV.
+    clean_restart "${binfile}"
+    sycl_with_intelgt_lock $device { with_test_prefix "stepping" {
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set pagefault_line [gdb_get_line_number "pagefault-line"]
+	gdb_breakpoint "$pagefault_line"
+	gdb_continue_to_breakpoint "pagefault line" \
+	    "$srcfile:$pagefault_line.*"
+
+	gdb_test_no_output "set scheduler-locking step"
+
+	set pagefault_seen 0
+	set iter 1
+	while {$iter > 0} {
+	    gdb_test_multiple "stepi" "step $iter" {
+		-re -wrap "signal SIGSEGV, Segmentation fault.*" {
+		    set pagefault_seen 1
+		    set iter 0
+		}
+		-re -wrap "dummy-line.*" {
+		    # Stepped over all the instructions on the
+		    # pagefaulting line.  We are done.
+		    set iter 0
+		}
+		-re -wrap ".*" {
+		    # An ordinary instruction was stepped.  Keep going.
+		    incr iter
+		}
+	    }
+	}
+	gdb_assert {$pagefault_seen} "saw the pagefault"
+    }}
 }

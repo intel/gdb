@@ -3685,9 +3685,18 @@ intelgt_kernel_entry_point ()
 			      sizeof (uint32_t), sizeof (uint32_t),
 			      (gdb_byte *) &kernel_entry_address,
 			      error_msg.c_str ());
-
-  CORE_ADDR isabase = intelgt_get_isabase (regcache);
-  kernel_entry_address += isabase;
+  if (is_heapless (regcache))
+    {
+      /* In heapless mode, the kernel entry address is available as virtual
+	 64b address in dbg0.{1,2}.  */
+      uint32_t dbg0_2 = 0u;
+      intelgt_read_register_part (regcache, data->dbg0_regnum,
+				  2 * sizeof (uint32_t), sizeof (uint32_t),
+				  (gdb_byte *) &dbg0_2, error_msg.c_str ());
+      kernel_entry_address += ((CORE_ADDR) dbg0_2) << 32;
+    }
+  else
+    kernel_entry_address += intelgt_get_isabase (regcache);
 
   bound_minimal_symbol kernel_symbol
     = lookup_minimal_symbol_by_pc (kernel_entry_address);

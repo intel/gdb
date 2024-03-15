@@ -59,6 +59,7 @@ constexpr const char *feature_sp = "org.gnu.gdb.intelgt.sp";
 constexpr const char* feature_sba = "org.gnu.gdb.intelgt.sba";
 constexpr const char *feature_dbg = "org.gnu.gdb.intelgt.dbg";
 constexpr const char *feature_fc = "org.gnu.gdb.intelgt.fc";
+constexpr const char *feature_mf = "org.gnu.gdb.intelgt.mf";
 constexpr const char *feature_debugger = "org.gnu.gdb.intelgt.debugger";
 constexpr const char *feature_scratch = "org.gnu.gdb.intelgt.scratch";
 

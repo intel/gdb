@@ -652,6 +652,8 @@ struct intelgt_gdbarch_data
   int dbgscrbase_regnum = -1;
   /* Register number for the size of debugger scratch area.  */
   int dbgscrsize_regnum = -1;
+  /* Register number for the first MODE_FLAGS register.  */
+  int mf0_regnum = -1;
   /* Assigned regnum ranges for DWARF regsets.  */
   regnum_range regset_ranges[intelgt::regset_count];
   /* Enabled pseudo-register for the current target description.  */
@@ -816,6 +818,26 @@ intelgt_find_pseudo_register_by_number (gdbarch *gdbarch, int pseudo_regnum)
   gdb_assert (index >= 0);
 
   return &data->enabled_pseudo_regs[index];
+}
+
+/* Return whether the target is in heapless mode.  */
+
+static bool
+is_heapless (readable_regcache *regcache)
+{
+  gdbarch *gdbarch = regcache->arch ();
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  if (data->mf0_regnum == -1)
+    return false;
+
+  /* We are interested in the first byte of MF0.  */
+  gdb_byte mf0byte = 0x0;
+  intelgt_read_register_part (regcache, data->mf0_regnum, 0, sizeof (gdb_byte),
+			      &mf0byte, _("Cannot determine the heap mode."));
+
+  /* The first bit of MF0 indicates heapless mode if set and heapful mode if
+     clear.  */
+  return (mf0byte & 0x1) == 0x1;
 }
 
 static int
@@ -1187,6 +1209,34 @@ intelgt_unwind_pc (gdbarch *gdbarch, const frame_info_ptr &next_frame)
 	  = frame_unwind_register_unsigned (next_frame,
 					    data->isabase_regnum);
 
+	return isabase + prev_ip;
+      }
+
+    case intelgt::XE3P_XPC:
+      {
+	/* The heap mode does not change during the kernel execution,
+	   it should be safe to determine the mode using the current regcache.
+	   In heapless mode, we have PC = IP.  */
+	int ip_regnum = intelgt_pseudo_register_num (gdbarch, "ip");
+	CORE_ADDR prev_ip = frame_unwind_register_unsigned (next_frame,
+							    ip_regnum);
+	regcache *regcache = get_thread_regcache (inferior_thread ());
+	if (is_heapless (regcache))
+	  {
+	    dprintf ("prev_ip: %s", paddress (gdbarch, prev_ip));
+	    return prev_ip;
+	  }
+
+	/* In heapful mode, IP is stored as a 32b address,
+	   we have PC = IP + ISABASE.
+
+	   When unwinding the IP register, a 64-bit address is read.
+	   However, in heapful mode, we must truncate this to a 32-bit
+	   address to match the IP storage format.  */
+	prev_ip = (uint32_t) prev_ip;
+	dprintf ("prev_ip: %s", paddress (gdbarch, prev_ip));
+
+	CORE_ADDR isabase = intelgt_get_isabase (regcache);
 	return isabase + prev_ip;
       }
 
@@ -1617,6 +1667,22 @@ intelgt_read_pc (readable_regcache *regcache)
 	CORE_ADDR isabase = intelgt_get_isabase (regcache);
 	return isabase + ip;
       }
+    case intelgt::XE3P_XPC:
+      {
+	bool heapless = is_heapless (regcache);
+	int ip_size = (heapless ? sizeof (uint64_t) : sizeof (uint32_t));
+	/* Instruction pointer is stored in CR0.{2,3} in heapless mode,
+	   and in CR0.2 in heapful mode.  */
+	uint64_t ip = 0x0;
+	intelgt_read_register_part (
+	  regcache, data->cr0_regnum, sizeof (uint32_t) * 2, ip_size,
+	  (gdb_byte *) &ip, _("Cannot compute PC."));
+
+	/* Heapless: PC = IP (8 bytes).
+	   Heapful: PC = IP (4 bytes) + ISABASE.  */
+	return (CORE_ADDR) ip
+	       + (heapless ? 0x0 : intelgt_get_isabase (regcache));
+      }
 
     case intelgt::XE_INVALID:
       break;
@@ -1654,6 +1720,35 @@ intelgt_write_pc (struct regcache *regcache, CORE_ADDR pc)
 	intelgt_write_register_part (regcache, data->cr0_regnum,
 				     sizeof (uint32_t) * 2,
 				     sizeof (uint32_t), (gdb_byte *) &ip,
+				     _("Cannot write IP into CR0."));
+	return;
+      }
+    case intelgt::XE3P_XPC:
+      {
+	/* Heapless: PC = IP (8 bytes).
+	   Heapful: PC = IP (4 bytes) + ISABASE.  */
+
+	bool heapless = is_heapless (regcache);
+	int ip_size = (heapless ? sizeof (uint64_t) : sizeof (uint32_t));
+	uint64_t ip = pc;
+	if (!heapless)
+	  {
+	    /* In heapful mode, program counter is $ip + $isabase, can
+	       only modify $ip.  Need to ensure that the new value fits
+	       within $ip modification range and propagate the write
+	       accordingly.  */
+	    CORE_ADDR isabase = intelgt_get_isabase (regcache);
+	    if (pc < isabase || pc > isabase + UINT32_MAX)
+	      error (_("Can't update $pc to value 0x%lx, out of range"), pc);
+
+	    ip = pc - isabase;
+	  }
+
+	/* Write instruction pointer to CR0.{2,3} in heapless and to CR0.2
+	   in heapful.  */
+	intelgt_write_register_part (regcache, data->cr0_regnum,
+				     sizeof (uint32_t) * 2,
+				     ip_size, (gdb_byte *) &ip,
 				     _("Cannot write IP into CR0."));
 	return;
       }
@@ -1698,14 +1793,57 @@ intelgt_pseudo_register_read_value (gdbarch *arch,
   intelgt_pseudo_register *ptype
     = intelgt_find_pseudo_register_by_number (arch, pseudo_regnum);
 
-  int regsize = register_size (arch, pseudo_regnum);
-
   gdb_assert (ptype->raw_regnum != -1);
-  gdb_assert (regsize + ptype->offset
-	      <= register_size (arch, ptype->raw_regnum));
 
-  return pseudo_from_raw_part (next_frame, pseudo_regnum, ptype->raw_regnum,
-			       ptype->offset);
+  uint32_t device_id = get_device_id (current_inferior ());
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	int regsize = register_size (arch, pseudo_regnum);
+
+	gdb_assert (regsize + ptype->offset
+		    <= register_size (arch, ptype->raw_regnum));
+
+	return pseudo_from_raw_part (next_frame, pseudo_regnum,
+				     ptype->raw_regnum, ptype->offset);
+      }
+
+    case intelgt::XE3P_XPC:
+      if (ptype->name == "ip")
+	{
+	  /* Instruction pointer is stored in CR0.2 in heapful mode, and
+	     in CR0.{2,3} in heapless mode (64bit address).  CR0 elements
+	     are 4 byte wide.  */
+	  regcache *regcache = get_thread_regcache (inferior_thread ());
+	  int ip_size = (is_heapless (regcache) ? sizeof (uint64_t)
+						: sizeof (uint32_t));
+
+	  /* Read CR0 directly from regcache.  */
+	  value *cr0 = regcache->cooked_read_value (ptype->raw_regnum);
+	  value *result = value::allocate_register (next_frame, pseudo_regnum);
+	  int cr0_size = register_size (arch, ptype->raw_regnum);
+	  if (ip_size + 2 * sizeof (uint32_t) > cr0_size)
+	    error (_("Cannot read IP register: IP size %d, CR0 size %d"),
+		   ip_size, cr0_size);
+	  cr0->contents_copy (result, 0, 2 * sizeof (uint32_t), ip_size);
+	  return result;
+	}
+
+      return pseudo_from_raw_part (next_frame, pseudo_regnum,
+				   ptype->raw_regnum, ptype->offset);
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
 }
 
 /* Write the value of a pseudo-register REGNUM.  */
@@ -1725,9 +1863,53 @@ intelgt_pseudo_register_write (gdbarch *arch,
   gdb_assert (ptype->raw_regnum != -1);
   int raw_size = register_size (arch, ptype->raw_regnum);
 
-  int reg_size = register_size (arch, pseudo_regnum);
-  gdb_assert (reg_size + ptype->offset <= raw_size);
-  pseudo_to_raw_part (next_frame, buf, ptype->raw_regnum, ptype->offset);
+  uint32_t device_id = get_device_id (current_inferior ());
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	int reg_size = register_size (arch, pseudo_regnum);
+	gdb_assert (reg_size + ptype->offset <= raw_size);
+	pseudo_to_raw_part (next_frame, buf, ptype->raw_regnum, ptype->offset);
+	return;
+      }
+
+    case intelgt::XE3P_XPC:
+      if (ptype->name == "ip")
+	{
+	  /* IP register has a variable size based on the heap mode.  Thus it
+	     needs to be handled differently.  Instruction pointer is stored
+	     in CR0.2 in heapful mode, and in CR0.{2,3} in heapless mode
+	     (64-bit address). CR0 elements are 4 bytes wide.  */
+	  regcache *regcache = get_thread_regcache (inferior_thread ());
+	  size_t ip_size = (is_heapless (regcache) ? 2 * sizeof (uint32_t)
+						       : sizeof (uint32_t));
+	  std::string error_msg = _("Cannot write to IP register.");
+	  if (ptype->offset + ip_size > raw_size)
+	    error (_("Cannot write to IP register: "
+		     "Unexpected 'cr0' register size: %d bytes."), raw_size);
+	  gdb::byte_vector raw_buf_part (ip_size, 0);
+	  memcpy (raw_buf_part.data (), buf.data (), ip_size);
+	  put_frame_register_bytes
+	    (next_frame, ptype->raw_regnum, ptype->offset,
+	     gdb::make_array_view (raw_buf_part.data (), ip_size));
+	  return;
+	}
+
+      pseudo_to_raw_part (next_frame, buf, ptype->raw_regnum, ptype->offset);
+      return;
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
 }
 
 /* Called by tdesc_use_registers each time a new regnum
@@ -1781,6 +1963,8 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
     data->dbgscrbase_regnum = possible_regnum;
   else if (strcmp ("dbgscrsize", reg_name) == 0)
     data->dbgscrsize_regnum = possible_regnum;
+  else if (strcmp ("mf0", reg_name) == 0)
+    data->mf0_regnum = possible_regnum;
 
   return possible_regnum;
 }
@@ -5630,17 +5814,9 @@ Device vendor id and target id not found in intelgt target description."));
 
       const struct builtin_type *bt = builtin_type (gdbarch);
 
-      switch (device_version)
+      auto check_legacy_registers = [data] ()
 	{
-	case intelgt::XE_HP:
-	case intelgt::XE_HPG:
-	case intelgt::XE_HPC:
-	case intelgt::XE2:
-	case intelgt::XE3:
-	case intelgt::XE3P_XPC:
-	  /* Now check the collected metadata to ensure that all
-	     mandatory pieces are in place.  */
-
+	  /* Check that debugger mandatory registers are available.  */
 	  if (data->ce_regnum == -1)
 	    error (_("Debugging requires $ce provided by the target"));
 	  if (data->retval_regnum == -1)
@@ -5652,6 +5828,16 @@ Device vendor id and target id not found in intelgt target description."));
 	  if (data->sr0_regnum == -1)
 	    error (_("Debugging requires state register to be provided by "
 		     "the target"));
+	};
+
+      switch (device_version)
+	{
+	case intelgt::XE_HP:
+	case intelgt::XE_HPG:
+	case intelgt::XE_HPC:
+	case intelgt::XE2:
+	case intelgt::XE3:
+	  check_legacy_registers ();
 
 	  /* Add the 'framedesc' register as a structured user register.  */
 	  user_reg_add (gdbarch, "framedesc",
@@ -5661,6 +5847,18 @@ Device vendor id and target id not found in intelgt target description."));
 	  data->enabled_pseudo_regs.push_back ({"ip", data->cr0_regnum,
 						8 /* Raw offset.  */,
 						bt->builtin_uint32});
+	  break;
+
+	case intelgt::XE3P_XPC:
+	  check_legacy_registers ();
+
+	  if (data->mf0_regnum == -1)
+	    error (_("Debugging requires $mf0 provided by the target"));
+	  user_reg_add (gdbarch, "framedesc",
+			intelgt_value_of_framedesc_user_reg, nullptr);
+	  data->enabled_pseudo_regs.push_back ({"ip", data->cr0_regnum,
+						8 /* Raw offset.  */,
+						bt->builtin_uint64});
 	  break;
 
 	default:

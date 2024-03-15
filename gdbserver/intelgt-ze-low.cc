@@ -318,6 +318,9 @@ private:
   void add_regset (target_desc *tdesc, const ze_device_info &dinfo,
 		   const zet_debug_regset_properties_t &regprop,
 		   long &regnum, ze_regset_info_t &regsets);
+
+  /* Return whether the target is in heapless mode.  */
+  bool is_heapless (regcache *regcache);
 };
 
 bool
@@ -359,13 +362,22 @@ CORE_ADDR
 intelgt_ze_target::read_pc (regcache *regcache)
 {
   uint32_t ip = intelgt_read_cr0 (regcache, 2);
+  CORE_ADDR pc = (CORE_ADDR) ip;
+  if (is_heapless (regcache))
+    {
+      uint32_t cr0_3 = intelgt_read_cr0 (regcache, 3);
+      pc += ((CORE_ADDR) cr0_3) << 32;
+      return pc;
+    }
+
+  /* Fallback to heapful IP computation.  */
   uint64_t isabase;
   collect_register_by_name (regcache, "isabase", &isabase);
 
   if (UINT32_MAX < ip)
     warning (_("IP '0x%" PRIx32 "' outside of ISA range."), ip);
 
-  CORE_ADDR pc = (CORE_ADDR) isabase + (CORE_ADDR) ip;
+  pc += (CORE_ADDR) isabase;
   if (pc < isabase)
     warning (_("PC '%s' outside of ISA range."),
 	     core_addr_to_string_nz (pc));
@@ -376,6 +388,14 @@ intelgt_ze_target::read_pc (regcache *regcache)
 void
 intelgt_ze_target::write_pc (regcache *regcache, CORE_ADDR pc)
 {
+  if (is_heapless (regcache))
+    {
+      intelgt_write_cr0 (regcache, 2, (uint32_t) pc);
+      intelgt_write_cr0 (regcache, 3, (uint32_t) (pc >> 32));
+      return;
+    }
+
+  /* Fallback to heapful IP computation.  */
   uint64_t isabase;
   collect_register_by_name (regcache, "isabase", &isabase);
 
@@ -1316,6 +1336,23 @@ intelgt_ze_target::add_regset (target_desc *tdesc, const ze_device_info &dinfo,
   regsets.push_back (regset);
 }
 
+bool
+intelgt_ze_target::is_heapless (regcache *regcache)
+{
+  /* To determine if heapless mode is enabled, we check the first bit of
+     the first register in the MODE_FLAGS regset.  */
+  std::optional<int> regnum = find_regno_no_throw (regcache->tdesc, "mf0");
+  if (!regnum.has_value ())
+    return false;
+
+  int mf0regno = *regnum;
+
+  gdb_byte mf0byte = 0x0;
+  intelgt_read_register_part
+    (regcache, mf0regno, 0, gdb::make_array_view (&mf0byte, sizeof (mf0byte)));
+
+  return (mf0byte & 0x1) == 0x1;
+}
 
 /* The Intel GT target ops object.  */
 

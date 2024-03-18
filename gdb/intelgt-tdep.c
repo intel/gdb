@@ -3866,7 +3866,20 @@ get_address (gdbarch *gdbarch, thread_info *tp)
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       {
+	if (is_heapless (regcache))
+	  {
+	    /* In heapless mode, the implicit arguments address is stored
+	       as a virtual 64b address in r0.{14,15}.  */
+	    intelgt_read_register_part (regcache, data->r0_regnum,
+					14 * sizeof (uint32_t),
+					sizeof (uint64_t),
+					(gdb_byte *) &implicit_args_address,
+					error_msg.c_str ());
+	    return (CORE_ADDR) implicit_args_address;
+	  }
+
 	/* The implicit arguments address is stored as
 	   r0.0[31:6] as a general state offset.  */
 	intelgt_read_register_part (regcache, data->r0_regnum, 0,

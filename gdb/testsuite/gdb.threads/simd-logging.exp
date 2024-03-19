@@ -41,7 +41,7 @@ if {[build_executable "failed to compile $srcfile" \
     return -1
 }
 
-proc test_running_thread {running_thread} {
+proc test_running_thread {running_thread {is_kfail no}} {
     global testfile srcfile decimal
     # These globals are set by this test file.
     global fill odd_branch_inf odd_branch_thread bp_odd_branch
@@ -54,6 +54,9 @@ proc test_running_thread {running_thread} {
 	"\\\[Current thread is $odd_branch_inf.$running_thread $fill" \
 	"print thread info for an executing thread, no error shall occur"
 
+    if {$is_kfail} {
+	setup_kfail "JIRA IGDB/4783" "*-*-*"
+    }
     set first_thread_lane 1
     gdb_test "thread :$first_thread_lane" \
 	"Thread $odd_branch_inf.$running_thread is executing, cannot check SIMD lane status: Cannot specify SIMD lane" \
@@ -99,11 +102,17 @@ proc test_running_thread {running_thread} {
 
     # Test warning if we try to apply a command to a specific lane on
     # an executing thread.
+    if {$is_kfail} {
+	setup_kfail "JIRA IGDB/4783" "*-*-*"
+    }
     gdb_test "thread apply :3 -unavailable thread" \
 	"warning: Thread $odd_branch_inf\.$running_thread is executing, cannot check SIMD lane status: Cannot apply command on SIMD lane" \
 	"thread apply warning for an executing thread if run for a specific lane."
 
     # Test warning if we try to apply a command on lanes.
+    if {$is_kfail} {
+	setup_kfail "JIRA IGDB/4783" "*-*-*"
+    }
     gdb_test "thread apply :* -unavailable thread" \
 	"warning: Thread $odd_branch_inf\.$running_thread is executing, cannot check SIMD lane status: Cannot apply command on SIMD lane" \
 	"thread apply warning for an executing thread if run for lanes."
@@ -156,6 +165,9 @@ foreach device $sycl_device_list {
 	    -re "$gdb_prompt " {
 		exp_continue
 	    }
+	    timeout {
+		setup_kfail "JIRA IGDB/4784" "*-*-*"
+	    }
 	}
 
 	gdb_assert {$num_hits == $num_threads} "all threads stopped"
@@ -204,7 +216,11 @@ foreach device $sycl_device_list {
 	# Frame arguments are irrelevant.  Ignore them for faster results.
 	set wpfa "with print frame-arguments none -- "
 	set running_thread "invalid"
-	gdb_test_multiple "${wpfa}info threads" "extract running thread" {
+	# The IntelGT target uses the first thread to report events
+	# during attach.  To pick a thread for which no events are
+	# reported, search in range 2-100.  This is a hack.
+	gdb_test_multiple "${wpfa}info threads $odd_branch_inf.2-100" \
+	    "extract running thread" {
 	    -re "  $odd_branch_inf\.($decimal)${fill}\\\(running\\\)" {
 		if {$running_thread eq "invalid"} {
 		    set running_thread $expect_out(1,string)
@@ -236,7 +252,7 @@ foreach device $sycl_device_list {
 	# the threads that remain as "running" belong to category (1).
 	# Below we test such a thread.
 	with_test_prefix "never stopped" {
-	    test_running_thread $running_thread
+	    test_running_thread $running_thread yes
 	}
 
 	# Next, test the output for a thread that becomes running
@@ -245,6 +261,7 @@ foreach device $sycl_device_list {
 	    gdb_test "thread $odd_branch_inf.$odd_branch_other_thread:1" \
 		"Switching to thread $odd_branch_inf.$odd_branch_other_thread:1 .*" \
 		"switch to the other stopped thread"
+	    setup_kfail "JIRA IGDB/4784" "*-*-*"
 	    gdb_test "continue &" ".*" "resume the thread"
 	    gdb_test "info thread $odd_branch_inf.$odd_branch_other_thread" \
 		" $odd_branch_inf\.$odd_branch_other_thread${fill}\\\(running\\\)" \

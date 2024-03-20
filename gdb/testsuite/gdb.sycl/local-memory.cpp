@@ -43,11 +43,13 @@ main (int argc, char *argv[])
 	    int local_var = 32;
 	    int *local_ptr = &local_var;
 	    int &local_ref = local_var;
-	    *local_ptr = 33; /* BP1. */
+	    *local_ptr = 33; /* BP1.  */
 
 	    wg.parallel_for_work_item ([&] (sycl::h_item<1> wi)
 	      {
 		int generic_var = 421;
+		int private_var = 123;
+		int *generic_ptr = &private_var;
 		local_mem_ptr[0] = &local_mem[0];
 		local_mem_ptr[1] = &generic_var;
 
@@ -57,14 +59,14 @@ main (int argc, char *argv[])
 		sycl::raw_local_ptr<int *> r_local_ptr
 		  = local_mem_ptr.get_multi_ptr<sycl::access::decorated::no> ();
 
-		int *generic_ptr = &local_mem[1];
+		generic_ptr = &local_mem[1]; /* BP2.  */
 		*local_ptr += 1;
 		local_ref += 1;
-		generic_var = 11 + local_var; /* BP2. */
+		generic_var = 11 + local_var; /* BP3.  */
 		generic_ptr = &generic_var;
-		generic_var = 3; /* BP3. */
+		generic_var = 3; /* BP4.  */
 		generic_ptr = &local_mem[2];
-		generic_var = 4; /* BP4. */
+		generic_var = 4; /* BP5.  */
 		*generic_ptr += local_mem[2];
 		generic_var = 5;
 	      });

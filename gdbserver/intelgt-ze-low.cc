@@ -218,6 +218,19 @@ intelgt_decode_tagged_address (CORE_ADDR addr)
   return (unsigned int) ZET_DEBUG_MEMORY_SPACE_TYPE_DEFAULT;
 }
 
+static CORE_ADDR
+intelgt_untag_address (CORE_ADDR addr)
+{
+  /* We need to clear tags from addresses before passing the read / write
+     request to level-zero.  Copy bits [56:59] to [61:63] to preserve
+     canonical form.  */
+  constexpr CORE_ADDR clear_bit_mask = ~(0x7ull << 61);
+  constexpr CORE_ADDR copy_from_bit_mask = (0x7ull << 56);
+
+  return (addr & clear_bit_mask)
+	  | ((addr & copy_from_bit_mask) << 5);
+}
+
 /* Return a human-readable device UUID string.  */
 
 static std::string
@@ -605,6 +618,8 @@ intelgt_ze_target::read_memory (thread_info *tp, CORE_ADDR memaddr,
   if (addr_space == (unsigned int) ZET_DEBUG_MEMORY_SPACE_TYPE_DEFAULT)
     addr_space = intelgt_decode_tagged_address (memaddr);
 
+  memaddr = intelgt_untag_address (memaddr);
+
   return ze_target::read_memory (tp, memaddr, myaddr, len, addr_space);
 }
 
@@ -615,6 +630,8 @@ intelgt_ze_target::write_memory (thread_info *tp, CORE_ADDR memaddr,
 {
   if (addr_space == (unsigned int) ZET_DEBUG_MEMORY_SPACE_TYPE_DEFAULT)
     addr_space = intelgt_decode_tagged_address (memaddr);
+
+  memaddr = intelgt_untag_address (memaddr);
 
   return ze_target::write_memory (tp, memaddr, myaddr, len, addr_space);
 }

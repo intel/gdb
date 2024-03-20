@@ -43,10 +43,12 @@ foreach device $sycl_device_list {
 	set line2 [gdb_get_line_number "BP2"]
 	set line3 [gdb_get_line_number "BP3"]
 	set line4 [gdb_get_line_number "BP4"]
+	set line5 [gdb_get_line_number "BP5"]
 	gdb_breakpoint $line1 {temporary}
 	gdb_breakpoint $line2 {temporary}
 	gdb_breakpoint $line3 {temporary}
 	gdb_breakpoint $line4 {temporary}
+	gdb_breakpoint $line5 {temporary}
 	gdb_continue_to_breakpoint "slm BP1" ".*$srcfile:$line1.*"
 
 	with_test_prefix "via variable in parallel_for_work_group" {
@@ -91,12 +93,20 @@ foreach device $sycl_device_list {
 
 	gdb_continue_to_breakpoint "slm BP2" ".*$srcfile:$line2.*"
 
+	with_test_prefix "access private memory via generic pointer" {
+	    gdb_test "print *generic_ptr" "= 123" "read"
+	    gdb_test_no_output "set *generic_ptr = 456"
+	    gdb_test "print *generic_ptr" "= 456" "test write"
+	}
+
 	# Test reading and writing
 	with_test_prefix "via variable" {
 	    gdb_test "print local_mem\[0\]" "= 1"
 	    gdb_test_no_output "set local_mem\[0\] = 42"
 	    gdb_test "print local_mem\[0\]" "= 42" "test write"
 	}
+
+	gdb_continue_to_breakpoint "slm BP3" ".*$srcfile:$line3.*"
 
 	with_test_prefix "via generic pointer" {
 	    gdb_test "print *generic_ptr" "= 2" "read"
@@ -171,7 +181,7 @@ foreach device $sycl_device_list {
 	    "${addr}.*${one_pattern_found}" \
 	    "find address pattern with generic pointer"
 
-	gdb_continue_to_breakpoint "slm BP3" ".*$srcfile:$line3.*"
+	gdb_continue_to_breakpoint "slm BP4" ".*$srcfile:$line4.*"
 
 	# Test reading and writing after the generic pointer has switched the
 	# address space it is pointing to.
@@ -181,7 +191,7 @@ foreach device $sycl_device_list {
 	    gdb_test "print *generic_ptr" "= 444" "test write"
 	}
 
-	gdb_continue_to_breakpoint "slm BP4" ".*$srcfile:$line4.*"
+	gdb_continue_to_breakpoint "slm BP5" ".*$srcfile:$line5.*"
 
 	# Test watchpoints in SLM.
 	gdb_test "watch *generic_ptr" \

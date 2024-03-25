@@ -503,6 +503,12 @@ public:
     m_thread_fsm = std::move (fsm);
   }
 
+  /* Return a string which contains a qualified ID of the thread.
+     The result contains either a decimal number in case there is just one
+     inferior with number 1 or <inferior num>.<thread num> otherwise.  */
+
+  std::string get_qualified_id ();
+
   int current_line = 0;
   struct symtab *current_symtab = NULL;
 

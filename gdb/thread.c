@@ -278,6 +278,15 @@ thread_info::get_simd_width ()
   return 1;
 }
 
+std::string
+thread_info::get_qualified_id ()
+{
+  if (show_inferior_qualified_tids ())
+    return string_printf ("%d.%d", inf->num, per_inf_num);
+
+  return std::to_string (per_inf_num);
+}
+
 /* See gdbthread.h.  */
 
 int
@@ -1361,13 +1370,7 @@ print_thread_row (ui_out *uiout, thread_info *tp, bool is_current,
     uiout->field_signed ("id", tp->global_num);
 
   if (opts.show_qualified_ids)
-    {
-      if (show_inferior_qualified_tids ())
-	uiout->field_string ("qualified-id", std::to_string (tp->inf->num)
-	  + std::string (".") + std::to_string (tp->per_inf_num));
-      else
-	uiout->field_string ("qualified-id", std::to_string (tp->per_inf_num));
-    }
+    uiout->field_string ("qualified-id", tp->get_qualified_id ().c_str ());
 
   /* For the CLI, we stuff everything into the target-id field.
      This is a gross hack to make the output come out looking
@@ -1901,11 +1904,7 @@ print_thread_id_string (thread_info *thr, unsigned long lane_mask,
   if (lane_mask != 0)
     lanes_str = ":" + make_ranges_from_mask (lane_mask, current_lane);
 
-  if (show_inferior_qualified_tids ())
-    result = std::to_string (thr->inf->num) + "."
-      + std::to_string (thr->per_inf_num) + lanes_str;
-  else
-    result = std::to_string (thr->per_inf_num) + lanes_str;
+  result = thr->get_qualified_id () + lanes_str;
 
   /* Test if the thread's ID, possibly including a lane mask, fits into
      the print buffer.  Truncate the lane mask if the full thread ID

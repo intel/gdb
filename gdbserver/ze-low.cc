@@ -1647,12 +1647,7 @@ ze_target::fetch_events (ze_device_info &device)
 			zetp->waitstatus.set_ignore ();
 			ze_set_resume_state (tp, resume_continue);
 
-			bool should_resume = ze_prepare_for_resuming (tp);
-			gdb_assert (should_resume);
-			prepare_thread_resume (tp);
-			regcache_invalidate_thread (tp);
-			ze_resume (device, zetp->id);
-
+			resume_single_thread (tp);
 			return;
 		      }
 
@@ -2040,6 +2035,21 @@ ze_target::resume (ze_device_info &device)
 
   ze_device_thread_t all = ze_thread_id_all ();
   ze_resume (device, all);
+}
+
+void
+ze_target::resume_single_thread (thread_info *thread)
+{
+  ze_device_info *device = ze_thread_device (thread);
+  gdb_assert (device != nullptr);
+  ze_thread_info *zetp = ze_thread (thread);
+  gdb_assert (zetp != nullptr);
+
+  bool should_resume = ze_prepare_for_resuming (thread);
+  gdb_assert (should_resume);
+  prepare_thread_resume (thread);
+  regcache_invalidate_thread (thread);
+  ze_resume (*device, zetp->id);
 }
 
 size_t
@@ -2596,13 +2606,7 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 	      zetp->waitstatus.set_ignore ();
 	      gdb_assert (zetp->resume_state == ze_thread_resume_step);
 
-	      ze_device_info *device = ze_thread_device (thread);
-	      bool should_resume = ze_prepare_for_resuming (thread);
-	      gdb_assert (should_resume);
-	      prepare_thread_resume (thread);
-	      regcache_invalidate_thread (thread);
-	      ze_resume (*device, zetp->id);
-
+	      resume_single_thread (thread);
 	      continue;
 	    }
 
@@ -2972,7 +2976,7 @@ ze_target::unpause_all (bool unfreeze)
       gdb_assert (device != nullptr);
 
       int pid = ze_device_pid (*device);
-      for_each_thread (pid, [this, device] (thread_info *tp)
+      for_each_thread (pid, [this] (thread_info *tp)
 	{
 	  ze_thread_info *zetp = ze_thread (tp);
 	  gdb_assert (zetp != nullptr);
@@ -3002,11 +3006,7 @@ ze_target::unpause_all (bool unfreeze)
 	      return;
 
 	    case ze_thread_state_paused:
-	      bool should_resume = ze_prepare_for_resuming (tp);
-	      gdb_assert (should_resume);
-	      prepare_thread_resume (tp);
-	      regcache_invalidate_thread (tp);
-	      ze_resume (*device, zetp->id);
+	      resume_single_thread (tp);
 	      return;
 	    }
 	});

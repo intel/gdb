@@ -500,6 +500,12 @@ private:
   /* Resume all threads on DEVICE.  */
   void resume (ze_device_info &device);
 
+  /* Resume a single thread.  This is a helper method that prepares
+     the thread for resuming, invalidates its regcache, and then
+     resumes.  The method should be called only when we are sure the
+     thread should be resumed.  */
+  void resume_single_thread (thread_info *thread);
+
   /* Return true if TP has single-stepped within its stepping range.  */
   bool is_range_stepping (thread_info *tp);
 

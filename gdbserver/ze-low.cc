@@ -720,6 +720,11 @@ ze_has_priority_waitstatus (const thread_info *tp)
 	  && (zetp->waitstatus.sig () == GDB_SIGNAL_TRAP))
 	return (zetp->resume_state == ze_thread_resume_stop);
 
+      /* If this thread stopped spuriously, it is not interesting.  */
+      if ((zetp->stop_reason == TARGET_STOPPED_BY_NO_REASON)
+	  && (zetp->waitstatus.sig () == GDB_SIGNAL_0))
+	return false;
+
       return true;
 
     default:
@@ -1633,24 +1638,6 @@ ze_target::fetch_events (ze_device_info &device)
 		      zetp->exec_state = ze_thread_state_stopped;
 
 		    zetp->stop_reason = reason;
-
-		    /* Resume any thread we didn't want stopped.  */
-		    if ((reason == TARGET_STOPPED_BY_NO_REASON)
-			&& (signal == GDB_SIGNAL_0))
-		      {
-			dprintf ("silently resuming thread %s (%s)",
-				 tp->id.to_string ().c_str (),
-				 ze_thread_id_str (zetp->id).c_str ());
-
-			/* Undo any previous holding of the event.  */
-			zetp->exec_state = ze_thread_state_stopped;
-			zetp->waitstatus.set_ignore ();
-			ze_set_resume_state (tp, resume_continue);
-
-			resume_single_thread (tp);
-			return;
-		      }
-
 		    zetp->waitstatus.set_stopped (signal);
 		    nstopped += 1;
 		  }
@@ -2605,6 +2592,24 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 
 	      zetp->waitstatus.set_ignore ();
 	      gdb_assert (zetp->resume_state == ze_thread_resume_step);
+
+	      resume_single_thread (thread);
+	      continue;
+	    }
+
+	  /* Resume any thread we didn't want stopped.  */
+	  if ((zetp->stop_reason == TARGET_STOPPED_BY_NO_REASON)
+	      && (zetp->waitstatus.kind () == TARGET_WAITKIND_STOPPED)
+	      && (zetp->waitstatus.sig () == GDB_SIGNAL_0))
+	    {
+	      dprintf ("silently resuming thread %s (%s)",
+		       thread->id.to_string ().c_str (),
+		       ze_thread_id_str (zetp->id).c_str ());
+
+	      /* Undo any previous holding of the event.  */
+	      zetp->exec_state = ze_thread_state_stopped;
+	      zetp->waitstatus.set_ignore ();
+	      ze_set_resume_state (thread, resume_continue);
 
 	      resume_single_thread (thread);
 	      continue;

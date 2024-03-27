@@ -1804,6 +1804,16 @@ proc mi_tbreak {location test} {
 
     global mi_gdb_prompt
 
+    # Add srcfile info for pre-built packages testing.  Otherwise packages
+    # built on other system are not able to set kernel breakpoints.
+    if {$::OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"} {
+	set line_num [lindex [split $location " "]  0]
+	if {[lsearch -exact $location $::srcfile] == -1
+	    && [string is integer $line_num]} {
+	    set location $::srcfile:$location
+	}
+    }
+
     mi_gdb_test "-break-insert -t $location" \
 	{\^done,bkpt=.*} \
 	$test
@@ -1884,6 +1894,16 @@ proc mi_send_resuming_command {command test} {
 # Does not check that the line is the same as requested.
 # The caller can check itself if required.
 proc_with_prefix mi_continue_to_line {location test} {
+    # Add srcfile info for pre-built packages testing.  Otherwise packages
+    # built on other system are not able to set kernel breakpoints.
+    if {$::OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"} {
+	set line_num [lindex [split $location " "]  0]
+	if {[lsearch -exact $location $::srcfile] == -1
+	    && [string is integer $line_num]} {
+	    set location $::srcfile:$location
+	}
+    }
+
     with_test_prefix $test {
 	mi_tbreak $location "set temporary breakpoint"
 	mi_send_resuming_command "exec-continue" "continue to breakpoint"

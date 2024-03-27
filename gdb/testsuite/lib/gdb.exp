@@ -699,6 +699,16 @@ proc gdb_breakpoint { linespec args } {
 	set print_pass 1
     }
 
+    # Add srcfile info for pre-built packages testing.  Otherwise packages
+    # built on other system are not able to set kernel breakpoints.
+    if {$::OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"} {
+	set line_num [lindex [split $linespec " "] 0]
+	if {[lsearch -exact $linespec $::srcfile] == -1
+	    && [string is integer $line_num]} {
+	    set linespec $::srcfile:$linespec
+	}
+    }
+
     set test_name "gdb_breakpoint: set breakpoint at $linespec"
     # The first two regexps are what we get with -g, the third is without -g.
     gdb_test_multiple "$break_command $linespec" $test_name {

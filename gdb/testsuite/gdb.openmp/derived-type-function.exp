@@ -50,6 +50,10 @@ foreach device_info ${device_list} {
 	gdb_breakpoint [gdb_get_line_number "breakpt"]
 	gdb_continue_to_breakpoint "breakpt"
 
+	# Expected failure with new drivers.
+	if {[require_openmp_device "GPU"]} {
+	    setup_kfail "JIRA CMPLRLLVM/35066" "*-*-*"
+	}
 	gdb_test "print aRec" "= \\( a = 2, b = 3 \\)" \
 	    "Print rectangle structure with members' name"
 

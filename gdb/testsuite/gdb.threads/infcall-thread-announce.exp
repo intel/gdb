@@ -39,6 +39,9 @@ proc check_thread_count { adjustment } {
 	"^\\\$$::decimal = $::thr_count"
 }
 
+# Make sure scheduler-locking for inferior calls is off.
+gdb_test_no_output "set scheduler-locking eval off"
+
 with_test_prefix "starting threads" {
     gdb_test "call (void) start_thread()" \
 	"\\\[New Thread \[^\r\n\]+\\\]" \

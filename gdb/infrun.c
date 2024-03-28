@@ -2450,7 +2450,7 @@ static const char schedlock_replay[] = "replay";
 
 schedlock schedlock {
   {
-    {"eval", false},
+    {"eval", true},
     {"cont", false},
     {"step", false}
   },

@@ -393,6 +393,8 @@ intelgt_ze_target::is_device_supported
   bool have_cr = false;
   bool have_sr = false;
   bool have_ce = false;
+  bool have_sba = false;
+  bool have_scrbase = false;
   for (const zet_debug_regset_properties_t &regprop : regset_properties)
     {
       if (regprop.count < 1)
@@ -421,6 +423,7 @@ intelgt_ze_target::is_device_supported
 	  break;
 
 	case ZET_DEBUG_REGSET_TYPE_SBA_INTEL_GPU:
+	  have_sba = true;
 	  /* We need 'isabase', which is at position 5 in version 1.  */
 	  if ((regprop.version == 0) && (regprop.count >= 5))
 	    have_isabase = true;
@@ -428,7 +431,19 @@ intelgt_ze_target::is_device_supported
 	    warning (_("Ignoring unknown SBA regset version %u in %s."),
 		     regprop.version, properties.name);
 	  break;
+
+	case ZET_DEBUG_REGSET_TYPE_THREAD_SCRATCH_INTEL_GPU:
+	  have_scrbase = true;
+	  break;
 	}
+    }
+
+  if (have_sba && have_scrbase)
+    {
+      warning (_("Unsupported device (ID: %" PRIx32 "): "
+		 "Cannot have both SBA and THREAD_SCRATCH register sets."),
+		 properties.deviceId);
+      return false;
     }
 
   if (have_grf && have_isabase && have_cr && have_sr && have_ce)
@@ -1131,6 +1146,16 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 		   regprop.version, device.name);
 	  break;
 	}
+      break;
+
+    case ZET_DEBUG_REGSET_TYPE_THREAD_SCRATCH_INTEL_GPU:
+      feature = tdesc_create_feature (tdesc, intelgt::feature_scratch);
+
+      intelgt_add_regset (feature, regnum, "scrbase", regprop.count, "virtual",
+			  regprop.bitSize, regset.is_writeable,
+			  intelgt_uint_reg_type (feature, regprop.bitSize,
+						 regprop.bitSize),
+			  expedite);
       break;
 
     case ZET_DEBUG_REGSET_TYPE_INVALID_INTEL_GPU:

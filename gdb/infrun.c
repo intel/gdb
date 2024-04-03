@@ -99,8 +99,6 @@ static bool maybe_software_singlestep (struct gdbarch *gdbarch);
 
 static void resume (gdb_signal sig);
 
-static void wait_for_inferior (inferior *inf);
-
 static void restart_threads (struct thread_info *event_thread,
 			     inferior *inf = nullptr);
 
@@ -4625,14 +4623,9 @@ stop_all_threads_if_all_stop_mode ()
     stop_all_threads ("presenting stop to user in all-stop");
 }
 
-/* Wait for control to return from inferior to debugger.
+/* See infrun.h.  */
 
-   If inferior gets a signal, we may decide to start it up again
-   instead of returning.  That is why there is a loop in this function.
-   When this function actually returns it means the inferior
-   should be left stopped and GDB should read more commands.  */
-
-static void
+void
 wait_for_inferior (inferior *inf)
 {
   infrun_debug_printf ("wait_for_inferior ()");

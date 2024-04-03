@@ -93,6 +93,9 @@ proc run_test { spawn_inferior } {
     }
 
     # Switch to thread 2.
+    if {$spawn_inferior && [target_info gdb_protocol] == "extended-remote"} {
+	setup_kfail "JIRA IGDB/5121" "*-*-*"
+    }
     gdb_test "thread 2" \
 	[multi_line \
 	     "Switching to thread 2\[^\r\n\]*" \

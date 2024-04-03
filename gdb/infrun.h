@@ -336,6 +336,15 @@ extern void all_uis_on_sync_execution_starting (void);
    detach.  */
 extern void restart_after_all_stop_detach (process_stratum_target *proc_target);
 
+/* Wait for control to return from inferior to debugger.
+
+   If inferior gets a signal, we may decide to start it up again
+   instead of returning.  That is why there is a loop in this function.
+   When this function actually returns it means the inferior
+   should be left stopped and GDB should read more commands.  */
+extern void wait_for_inferior (inferior *inf);
+
+
 /* RAII object to temporarily disable the requirement for target
    stacks to commit their resumed threads.
 

@@ -160,6 +160,13 @@ qXfer:features:read:target.xml
   that can be used for passing information when the remote inferior
   represents a device, e.g.  a GPU.
 
+qXfer:threads:read
+
+  The XML that is sent as a response can now include an "id_str"
+  attribute for a thread element.  The attribute indicates what GDB
+  should print as the target ID of the thread, for example in the
+  "info threads" command or when switching to the thread.
+
 *** Changes in GDB 15
 
 * The MPX commands "show/set mpx bound" have been deprecated, as Intel

@@ -81,6 +81,10 @@ proc run_test { spawn_inferior } {
 	# Send a simple command now just to resync the command prompt.
 	gdb_test "p 1 + 2" " = 3"
 
+	# In non-stop mode, we may end up in the second thread as our
+	# current thread.  Set the context to thread 1 explicitly.
+	gdb_test "thread 1"
+
 	# Set thread 1 (the current thread) running again.
 	gdb_test "continue&"
     } else {

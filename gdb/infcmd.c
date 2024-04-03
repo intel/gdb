@@ -2722,23 +2722,18 @@ attach_command (const char *args, int from_tty)
 	 STOP_QUIETLY_NO_SIGSTOP is for.  */
       inferior->control.stop_soon = STOP_QUIETLY_NO_SIGSTOP;
 
-      /* Wait for stop.  */
-      inferior->add_continuation ([=] ()
-	{
-	  attach_post_wait (from_tty, mode);
-	});
-
       /* Let infrun consider waiting for events out of this
 	 target.  */
       inferior->process_target ()->threads_executing = true;
 
       if (!target_is_async_p ())
 	mark_infrun_async_event_handler ();
-      return;
-    }
-  else
-    attach_post_wait (from_tty, mode);
 
+      /* Wait for stop.  */
+      wait_for_inferior (inferior);
+    }
+
+  attach_post_wait (from_tty, mode);
   disable_commit_resumed.reset_and_commit ();
 }
 
@@ -2780,10 +2775,8 @@ notice_new_inferior (thread_info *thr, bool leave_running, int from_tty)
       inferior->control.stop_soon = STOP_QUIETLY_REMOTE;
 
       /* Wait for stop before proceeding.  */
-      inferior->add_continuation ([=] ()
-	{
-	  attach_post_wait (from_tty, mode);
-	});
+      wait_for_inferior (inferior);
+      attach_post_wait (from_tty, mode);
 
       return;
     }

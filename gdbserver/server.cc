@@ -2148,6 +2148,7 @@ handle_qxfer_threads_worker (thread_info *thread, std::string *buffer)
   int core = the_target->core_of_thread (ptid);
   char core_s[21];
   const char *name = the_target->thread_name (ptid);
+  std::string id_str = target_thread_id_str (thread);
   int handle_len;
   gdb_byte *handle;
   bool handle_status = the_target->thread_handle (ptid, &handle, &handle_len);
@@ -2171,6 +2172,9 @@ handle_qxfer_threads_worker (thread_info *thread, std::string *buffer)
 
   if (name != NULL)
     string_xml_appendf (*buffer, " name=\"%s\"", name);
+
+  if (!id_str.empty ())
+    string_xml_appendf (*buffer, " id_str=\"%s\"", id_str.c_str ());
 
   if (handle_status)
     {

@@ -1,0 +1,133 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test non-stop functionality for SYCL for a case when thread is running.
+# Hit a breakpoint, resume all threads and interrupt one of the running
+# threads.  Also checks if interrupting an interrupted thread gives
+# no output.
+
+load_lib sycl.exp
+
+standard_testfile spinning-kernel.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+
+    sycl_with_intelgt_lock $device {
+
+	set fill "\[^\r\n\]*"
+	set tid_re "$decimal\(\.$decimal\)?"
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	clean_restart "${binfile}"
+
+	gdb_test_no_output "set non-stop on"
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	# Stop in kernel to select a kernel thread.
+	set spinning_line [gdb_get_line_number "spinning-line"]
+	gdb_breakpoint "$srcfile:$spinning_line"
+
+	set kernel_thread "invalid"
+	set num_stopped 0
+	gdb_test_multiple "continue -a" "continue to the breakpoint" {
+	    -re "Thread ($tid_re)$fill hit Breakpoint $fill$srcfile:$spinning_line\r\n" {
+		set kernel_thread $expect_out(1,string)
+		incr num_stopped
+		if {$num_stopped == 4} {
+		    pass $gdb_test_name
+		} else {
+		    exp_continue
+		}
+	    }
+	    -re "$gdb_prompt " {
+		exp_continue
+	    }
+	}
+
+	set running_threads ""
+	gdb_test_multiple "info threads" "" {
+	    -re "\r\n. $tid_re$fill at ${srcfile}:$spinning_line" {
+		exp_continue
+	    }
+	    -re "\r\n. (\[2-9\]+\.$decimal)$fill .running." {
+		lappend running_threads $expect_out(1,string)
+		exp_continue
+	    }
+	    -re "\r\n. $tid_re$fill .running." {
+		# Consume potential running host threads.
+		exp_continue
+	    }
+	    -re "$gdb_prompt $" {
+		pass $gdb_test_name
+	    }
+	}
+
+	gdb_assert {$kernel_thread ne "invalid"}
+	set running_thread_idx [expr {[llength $running_threads] / 2}]
+	set running_thread_id [lindex $running_threads $running_thread_idx]
+	verbose -log "Selected running thread: $running_thread_id"
+
+	gdb_test "thread ${running_thread_id}" \
+	    ".Switching to thread ${running_thread_id}.*running."
+
+	gdb_test_no_output "interrupt"
+
+	# We receive the updated thread list asynchronously in non-stop mode.
+	# Wait some time to ensure thread list is updated.
+	sleep 1
+	gdb_test "info thread $running_thread_id" \
+	    "${fill}\\\*?${running_thread_id}${fill}.unavailable."
+	gdb_test "print/x \$pc" "PC not available"
+
+	# Switch to a stopped thread, resume it.
+	gdb_test  "thread $kernel_thread" \
+	    "Switching to thread ${kernel_thread}.*" \
+	    "switch to a kernel thread"
+
+	gdb_test "continue &" ".*" "continuing kernel thread"
+
+	gdb_test_multiple "interrupt" "interrupt running thread" {
+	    -re "Thread ${kernel_thread} ${fill}stopped.*" {
+		pass $gdb_test_name
+	    }
+	    -re "$gdb_prompt " {
+		exp_continue
+	    }
+	}
+
+	# Print a dummy expression to re-sync the prompt.
+	gdb_test "print 1 + 2" "= 3"
+
+	# Interrupt an already interrupted thread.
+	gdb_test_no_output "interrupt" "interrupt stopped thread"
+    }
+}

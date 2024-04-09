@@ -35903,12 +35903,14 @@ this command will still succeed (and do nothing).
 
 @smallexample
  -var-create @{@var{name} | "-"@}
-    @{@var{frame-addr} | "*" | "@@"@} @var{expression}
+    @{@var{frame-addr} | "*" | "@@"@} @var{expression} [ @var{lane mask} ]
 @end smallexample
 
-This operation creates a variable object, which allows the monitoring of
-a variable, the result of an expression, a memory cell or a CPU
-register.
+This operation creates one or more variable objects, which allow the monitoring
+of a variable, the result of an expression, a memory cell or a CPU register.
+Multiple objects are created if and only if the lane mask argument is specified.
+In this case a variable is created per each lane from the mask.  Otherwise,
+a single object is created.
 
 The @var{name} parameter is the string by which the object can be
 referenced.  It must be unique.  If @samp{-} is specified, the varobj
@@ -35923,6 +35925,15 @@ object must be created.
 
 @var{expression} is any expression valid on the current language set (must not
 begin with a @samp{*}), or one of the following:
+
+@var{lane mask} is a hexadecimal mask encoding the SIMD lanes for which
+variables should be created.  The mask must be non-zero, the underlying
+thread must have SIMD lanes.  If present, for every lane specified by
+the mask the command creates a variable object bound to the lane.  In this
+case the command returns a list of created variable objects.  The name
+of each object is extended with ``-<lane number>'' suffix.  If the underlying
+thread has no SIMD lanes or the @var{lane-mask} exceeds the SIMD width of
+the thread, then the command results in an error.
 
 @itemize @bullet
 @item

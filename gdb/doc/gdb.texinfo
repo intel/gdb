@@ -35524,6 +35524,11 @@ would be printed by the @value{GDBN} CLI.  If @samp{print object}
 If a variable object is bound to a specific thread, then this is the
 thread's global identifier.
 
+@item lane
+If a variable object is bound to a specific thread and this thread has
+SIMD lanes, then this is the lane for which the variable has to be
+evaluated.
+
 @item has_more
 For a dynamic varobj, this indicates whether there appear to be any
 children available.  For a non-dynamic varobj, this will be 0.

@@ -109,6 +109,11 @@ thread apply thread-list|all|all-lanes -unavailable
 
 * MI changes
 
+  ** New field in '-var-create' output: 'lane'
+
+     If a var object is created for a thread with SIMD lanes, store the lane
+     for which the value is evaluated.
+
   ** New field in '-thread-info': 'kernel-instance-id'
 
      Added a new thread field to the '-thread-info' command.  If the thread is

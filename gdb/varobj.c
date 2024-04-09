@@ -33,6 +33,7 @@
 #include "gdbarch.h"
 #include <algorithm>
 #include "observable.h"
+#include "gdbthread.h"
 
 #if HAVE_PYTHON
 #include "python/python.h"
@@ -92,6 +93,13 @@ struct varobj_root
      When 0, indicates that the thread list was empty when the varobj_root
      was created.  */
   int thread_id = 0;
+
+ /*  The SIMD lane number to which this varobj_root is bound.  This field
+     is only valid if thread_id field is a valid thread ID.
+     When not -1, it defines the lane context of the value of the variable.
+     When -1, indicates that the thread did not have SIMD lanes when
+     the varobj_root was created.  */
+  int simd_lane = -1;
 
   /* If true, the -var-update always recomputes the value in the
      current thread and frame.  Otherwise, variable object is
@@ -357,7 +365,10 @@ varobj_create (const char *objname,
 	    error (_("Failed to find the specified frame"));
 
 	  var->root->frame = get_frame_id (fi);
-	  var->root->thread_id = inferior_thread ()->global_num;
+	  thread_info *tp = inferior_thread ();
+	  var->root->thread_id = tp->global_num;
+	  if (tp->has_simd_lanes ())
+	    var->root->simd_lane = tp->current_simd_lane ();
 	  old_id = get_frame_id (get_selected_frame (NULL));
 	  select_frame (fi);	 
 	}
@@ -545,6 +556,15 @@ varobj_get_thread_id (const struct varobj *var)
     return var->root->thread_id;
   else
     return -1;
+}
+
+/* If the variable object is bound to a specific lane within a thread,
+   returns lane number -- which is always non-negative.  Otherwise,
+   returns -1.  */
+int
+varobj_get_simd_lane (const varobj *var)
+{
+  return var->root->simd_lane;
 }
 
 void
@@ -1968,6 +1988,24 @@ value_of_root_1 (struct varobj **var_handle)
 	}
     }
 
+  scoped_restore_current_simd_lane restore_lane;
+  if (inferior_ptid != null_ptid)
+    {
+      thread_info *thread = inferior_thread ();
+      if (thread->has_simd_lanes () && (var->root->simd_lane >= 0))
+	thread->set_current_simd_lane (var->root->simd_lane);
+      else if (!thread->has_simd_lanes () && (var->root->simd_lane < 0))
+	{
+	  /* No action required.  */
+	}
+      else
+	{
+	  /* SIMD expectations do not match: either thread has SIMD lanes
+	     but var object is not bound to any lane, or thread has no SIMD
+	     lanes and the var object is bound to a lane.  */
+	  within_scope = false;
+	}
+    }
   if (within_scope)
     {
 

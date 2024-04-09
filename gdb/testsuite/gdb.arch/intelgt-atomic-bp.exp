@@ -25,15 +25,50 @@ if {[llength $sycl_device_list] == 0} {
     return 0
 }
 
-if {[build_executable "failed to compile $srcfile" \
-    "${binfile}" $srcfile {sycl debug}]} {
-    return -1
-}
-
 foreach device $sycl_device_list {
     if {![require_sycl_device "$device" "gpu" "Intel*"]} {
 	unsupported "test is aimed at Intel GPUs only"
 	continue
+    }
+
+    # Running joint_matrix with sub group size 16 is currently not supported on
+    # ATS-M (GSD-4181).
+    set sg_size 16
+    if {[is_xe_hpg $device]} {
+	set sg_size 8
+    }
+    verbose -log "subgroup size: $sg_size"
+    # joint_matrix is currently not supported with O0 (GSD-4081).
+    set flags [list sycl debug optimize=-O2 additional_flags=-DSG_SIZE=$sg_size]
+    set large_flag_opt "-ze-opt-large-register-file"
+
+    if {[is_xe2 $device]} {
+	set aot_device "xe2"
+    } elseif {[is_xe3 $device]} {
+	set aot_device "xe3"
+    } elseif {[is_xe_hpc $device]} {
+	set aot_device "pvc"
+	set large_flag_opt "-ftarget-register-alloc-mode=pvc:large"
+    } elseif {[is_xe_hpg $device]} {
+	# The joint_matrix prefetch and checked API calls helps to generate
+	# atomic instructions in the disassembly on XE-HPC, XE2 and XE3.
+	# However, XE-HPG devices do not support these APIs.  Hence
+	# application without these API calls is used in this case.
+	standard_testfile intelgt-atomic-legacy.cpp
+	set aot_device "xe-hpg"
+	set large_flag_opt ""
+    } else {
+	unsupported "Unsupported device $device"
+	continue
+    }
+    set aot_opts [list \
+	"additional_flags=-fsycl-targets=spir64_gen" \
+	"ldflags=-Xsycl-target-backend=spir64_gen \"-q -device $aot_device \
+	-options $large_flag_opt\""]
+
+    if {[build_executable "failed to compile $srcfile" "${binfile}" $srcfile  \
+	    [concat $flags $aot_opts]]} {
+	return -1
     }
 
     sycl_with_intelgt_lock $device {

@@ -32,6 +32,7 @@
 #include "mi-parse.h"
 #include "gdbsupport/gdb_optional.h"
 #include "inferior.h"
+#include <cmath>
 
 static void varobj_update_one (struct varobj *var,
 			       enum print_values print_values,
@@ -102,11 +103,32 @@ mi_cmd_var_create (const char *command, const char *const *argv, int argc)
   const char *expr;
   enum varobj_type var_type;
 
-  if (argc != 3)
-    error (_("-var-create: Usage: NAME FRAME EXPRESSION."));
+  if (argc != 3 && argc != 4)
+    error (_("-var-create: Usage: NAME FRAME EXPRESSION [LANES]."));
 
   frame = argv[1];
   expr = argv[2];
+  unsigned int lanes = 0;
+  if (argc == 4)
+    {
+      if (inferior_ptid == null_ptid)
+	error (_("-var-create: cannot specify lanes mask without a thread."));
+
+      thread_info *tp = inferior_thread ();
+      if (!tp->has_simd_lanes ())
+	error (_("-var-create: cannot specify lanes mask for a thread"
+		 " without SIMD lanes."));
+
+      lanes = strtoul (argv[3], nullptr, 16);
+      if (lanes == 0x0)
+	error (_("-var-create: lanes mask must be greater than zero."));
+
+      int bit_width = static_cast<int> (std::floor (std::log2 (lanes))) + 1;
+      unsigned int simd_width = tp->get_simd_width ();
+      if (bit_width > simd_width)
+	error (_("-var-create: lanes mask %x exceeds thread's SIMD width %u."),
+	       lanes, simd_width);
+    }
 
   const char *name = argv[0];
   std::string gen_name;
@@ -129,18 +151,52 @@ mi_cmd_var_create (const char *command, const char *const *argv, int argc)
     }
 
   if (varobjdebug)
-    gdb_printf (gdb_stdlog,
-		"Name=\"%s\", Frame=\"%s\" (%s), Expression=\"%s\"\n",
-		name, frame, hex_string (frameaddr), expr);
+    {
+      if (lanes == 0x0)
+	gdb_printf (gdb_stdlog,
+		    "Name=\"%s\", Frame=\"%s\" (%s), Expression=\"%s\"\n",
+		    name, frame, hex_string (frameaddr), expr);
+      else
+	gdb_printf (gdb_stdlog,
+		    "Name=\"%s\", Frame=\"%s\" (%s), Expression=\"%s\", "
+		    "Lanes=\"0x%xu\"\n",
+		    name, frame, hex_string (frameaddr), expr, lanes);
+    }
 
-  var = varobj_create (name, expr, frameaddr, var_type);
+  /* Routine to create a var object.  */
+  auto var_create = [&] (const char *var_name)
+    {
+      var = varobj_create (var_name, expr, frameaddr, var_type);
 
-  if (var == NULL)
-    error (_("-var-create: unable to create variable object"));
+      if (var == nullptr)
+	error (_("-var-create: unable to create variable object"));
 
-  print_varobj (var, PRINT_ALL_VALUES, 0 /* don't print expression */);
+      print_varobj (var, PRINT_ALL_VALUES, 0 /* Don't print expression.  */);
 
-  uiout->field_signed ("has_more", varobj_has_more (var, 0));
+      uiout->field_signed ("has_more", varobj_has_more (var, 0));
+    };
+
+  if (lanes == 0x0)
+    {
+      /* No lanes.  */
+      var_create (name);
+      return;
+    }
+
+  thread_info *tp = inferior_thread ();
+  scoped_restore_current_simd_lane restore_lane {tp};
+  ui_out_emit_list list_emitter (uiout, "vars");
+
+  /* Create vars for every lane from the mask.  */
+  for_active_lanes (lanes, [&] (int lane)
+    {
+      /* Lane specific name.  */
+      std::string var_name = string_printf ("%s-%d", name, lane);
+      tp->set_current_simd_lane (lane);
+      ui_out_emit_tuple child_emitter (uiout, "var");
+      var_create (var_name.c_str ());
+      return true;
+    });
 }
 
 void

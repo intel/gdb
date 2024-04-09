@@ -59,6 +59,10 @@ foreach device $sycl_device_list {
 
 	mi_clean_restart $binfile
 
+	mi_gdb_test "-var-create" \
+	    "\\^error,msg=\"-var-create: Usage: NAME FRAME EXPRESSION \\\[LANES\\\]\.\"" \
+	    "error usage"
+
 	mi_gdb_test "-var-create - * 9999 0xff" \
 	    "\\^error,msg=\"-var-create: cannot specify lanes mask without a thread\.\"" \
 	    "error without thread"
@@ -66,6 +70,10 @@ foreach device $sycl_device_list {
 	if {![mi_runto_main [sycl_get_device_args $device]]} {
 	    continue
 	}
+
+	mi_gdb_test "-var-create - * 9999 0xff" \
+	    "\\^error,msg=\"-var-create: cannot specify lanes mask for a thread without SIMD lanes\.\"" \
+	    "error for thread w/o lanes"
 
 	set kernel_third_line [gdb_get_line_number "kernel-third-line"]
 	mi_continue_to_line $kernel_third_line \
@@ -101,5 +109,49 @@ foreach device $sycl_device_list {
 	mi_gdb_test "-var-update var1" "\\^done,changelist=\\\[\{name=\"var1\".*" "update var1"
 	mi_gdb_test "-var-evaluate-expression var1" \
 	    "\\^done,value=\"${val_lane_3}\"" "check updated var1 object"
+
+	mi_gdb_test "-var-create - * 9999 0x0" \
+	    "\\^error,msg=\"-var-create: lanes mask must be greater than zero\.\"" \
+	    "error for zero lanes mask"
+
+	mi_gdb_test "-var-create - * 9999 0xffffffff" \
+	    "\\^error,msg=\"-var-create: lanes mask ffffffff exceeds thread's SIMD width 16\.\"" \
+	    "error for too wide lanes mask"
+
+	set lanes [list 4 5 6 7]
+	set mask 0xf0
+
+	# Build the list of the expected var objects.
+	set vars {}
+	foreach i $lanes {
+	    set val_lane_$i [mi_get_integer_valueof "in_elem" "-1" $thread $i]
+	    lappend vars "var={[var_obj_regex $i var2-$i [set val_lane_$i]]}"
+	}
+	set vars [join $vars ","]
+
+	# Create var object for lanes specified by the mask.
+	mi_gdb_test "-var-create - * in_elem $mask" \
+	    "\\^done,vars=\\\[$vars\\\]" \
+	    "create variables for several lanes"
+
+	# Step to the next line, the value of the in_elem has changed.
+	mi_next_extra ".*" "step to next line 2"
+
+	foreach i $lanes {
+	    mi_gdb_test "-var-evaluate-expression var2-$i" \
+		"\\^done,value=\"[set val_lane_$i]\"" "check var2-$i is unchanged"
+	}
+
+	# Update variables.
+	mi_gdb_test "-var-update *" "\\^done,.*" "update all variables"
+
+	# Check values of updated variables.
+	foreach i $lanes {
+	    set val [mi_get_integer_valueof "in_elem" "-1" $thread $i \
+			 "get updated value for lane $i"]
+	    gdb_assert {$val != [set val_lane_$i]} "in_elem for lane $i has changed"
+	    mi_gdb_test "-var-evaluate-expression var2-$i" \
+		"\\^done,value=\"$val\"" "check updated var2-$i object"
+	}
     }
 }

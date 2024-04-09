@@ -1,0 +1,106 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests SIMD extension for MI variable object interface:
+# -var-create
+# -var-update
+
+
+load_lib sycl.exp
+load_lib mi-support.exp
+
+standard_testfile simd.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+	 "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+proc var_obj_regex {lane name value} {
+    global decimal
+    if {$lane ne ""} {
+	set lane "lane=\"$lane\","
+    }
+    return [join [list \
+		      "name=\"$name\"" \
+		      "numchild=\"${decimal}\"" \
+		      "value=\"-?${decimal}\"" \
+		      "type=\"\\w*\"" \
+		      "thread-id=\"${decimal}\"" \
+		      "${lane}has_more=\"\[01\]\""] \
+		","]
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	mi_clean_restart $binfile
+
+	mi_gdb_test "-var-create - * 9999 0xff" \
+	    "\\^error,msg=\"-var-create: cannot specify lanes mask without a thread\.\"" \
+	    "error without thread"
+
+	if {![mi_runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set kernel_third_line [gdb_get_line_number "kernel-third-line"]
+	mi_continue_to_line $kernel_third_line \
+	    "Continue to 'kernel_third_line' and stop at breakpoint"
+
+	# Get global ID of the current thread.
+	set thread [mi_get_integer_valueof "\$_gthread" "-1"]
+
+	mi_gdb_test "thread :3" ".*Switching to.*:3.*lane 3.*" \
+	    "switch to non-zero lane"
+
+	# Create var object and check its value.
+	set val_lane_3 [mi_get_integer_valueof "in_elem" "-1"]
+	mi_gdb_test "-var-create - * in_elem" \
+	    "\\^done,[var_obj_regex 3 var1 ${val_lane_3}]" \
+	    "create variable var1 with default lane 3"
+
+	# Switch to a different lane and check the value again.
+	mi_gdb_test "thread :0" ".*Switching to.*:0.*lane 0.*" \
+	    "switch to lane 0"
+	mi_gdb_test "-var-evaluate-expression var1" \
+	    "\\^done,value=\"${val_lane_3}\"" "check var1 is unchanged"
+
+	# Step to the next line, the value of the in_elem has changed.
+	mi_next_extra ".*" "step to next line 1"
+
+	mi_gdb_test "-var-evaluate-expression var1" \
+	    "\\^done,value=\"${val_lane_3}\"" "check var1 is unchanged after step"
+
+	# Get the new value of in_elem.
+	set val_lane_3 [mi_get_integer_valueof "in_elem" "-1" $thread 3 \
+			    "get updated value for lane 3"]
+	mi_gdb_test "-var-update var1" "\\^done,changelist=\\\[\{name=\"var1\".*" "update var1"
+	mi_gdb_test "-var-evaluate-expression var1" \
+	    "\\^done,value=\"${val_lane_3}\"" "check updated var1 object"
+    }
+}

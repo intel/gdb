@@ -83,6 +83,12 @@ thread apply thread-list|all|all-lanes -unavailable
 
 * MI changes
 
+  ** New optional argument in '-var-create': lane mask
+
+     Added a new optional argument to '-var-create' command.  If present,
+     the command creates a list of variable objects, one per lane specified
+     by the lane mask.
+
   ** New field in '-var-create' output: 'lane'
 
      If a var object is created for a thread with SIMD lanes, store the lane

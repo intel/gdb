@@ -25,11 +25,6 @@ if {[llength $sycl_device_list] == 0} {
     return 0
 }
 
-if {[build_executable "failed to compile $srcfile" \
-    "${binfile}" $srcfile {sycl debug}]} {
-    return -1
-}
-
 proc step_over_atomic {displaced_stepping} {
     global hex decimal
 
@@ -90,6 +85,18 @@ proc step_over_atomic {displaced_stepping} {
 }
 
 foreach device $sycl_device_list {
+    # Running joint_matrix with sub group size 16 is currently not supported on
+    # ATS-M (GSD-4181).
+    set sg_size 8
+    if {[is_pvc $device]} {
+	set sg_size 16
+    }
+    verbose -log "subgroup size: $sg_size"
+    # joint_matrix is currently not supported with O0 (GSD-4081).
+    set flags [list sycl debug optimize=-O2 additional_flags=-DSG_SIZE=$sg_size]
+    if {[build_executable "failed to compile $srcfile" "${binfile}" $srcfile $flags]} {
+	return -1
+    }
 
     sycl_with_intelgt_lock $device {
 	if {![require_sycl_device "$device" "gpu" "Intel*"]} {

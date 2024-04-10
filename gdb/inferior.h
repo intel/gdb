@@ -510,14 +510,6 @@ public:
   /* Delete all threads in the thread list, silently.  */
   void clear_thread_list ();
 
-  /* Continuations-related methods.  A continuation is an std::function
-     to be called to finish the execution of a command when running
-     GDB asynchronously.  A continuation is executed after any thread
-     of this inferior stops.  Continuations are used by the attach
-     command and the remote target when a new inferior is detected.  */
-  void add_continuation (std::function<void ()> &&cont);
-  void do_all_continuations ();
-
   /* Set/get file name for default use for standard in/out in the inferior.
 
      On Unix systems, we try to make TERMINAL_NAME the inferior's controlling
@@ -692,9 +684,6 @@ private:
 
   /* The name of terminal device to use for I/O.  */
   std::string m_terminal;
-
-  /* The list of continuations.  */
-  std::list<std::function<void ()>> m_continuations;
 
   /* The arguments string to use when running.  */
   std::string m_args;

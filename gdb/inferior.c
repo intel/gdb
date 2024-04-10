@@ -85,8 +85,6 @@ inferior::~inferior ()
      that target, leaving its reference count artificially high.  However,
      this is not critical as the dummy_target is a singleton.  */
   gdb_assert (m_target_stack.top ()->stratum () == dummy_stratum);
-
-  m_continuations.clear ();
 }
 
 inferior::inferior (int pid_, bool hidden)
@@ -178,23 +176,6 @@ void
 inferior::set_args (gdb::array_view<char * const> args)
 {
   set_args (construct_inferior_arguments (args));
-}
-
-void
-inferior::add_continuation (std::function<void ()> &&cont)
-{
-  m_continuations.emplace_front (std::move (cont));
-}
-
-void
-inferior::do_all_continuations ()
-{
-  while (!m_continuations.empty ())
-    {
-      auto iter = m_continuations.begin ();
-      (*iter) ();
-      m_continuations.erase (iter);
-    }
 }
 
 /* Notify interpreters and observers that inferior INF was added.  */

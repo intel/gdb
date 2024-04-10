@@ -3930,9 +3930,8 @@ intelgt_core_xfer_siginfo (gdbarch *gdbarch, gdb_byte *readbuf,
 /* Return true if the instruction is a branch instruction.  */
 
 static bool
-is_branch (const gdb_byte inst[])
+is_branch (const gdb_byte inst[], uint32_t device_id)
 {
-  uint32_t device_id = get_device_id (current_inferior ());
   xe_version device_version = get_xe_version (device_id);
   switch (device_version)
     {
@@ -3940,76 +3939,14 @@ is_branch (const gdb_byte inst[])
     case XE_HPG:
     case XE_HPC:
       {
-	uint8_t opcode = inst[0] & intelgt::opc_mask;
-	switch (opcode)
+	/* Check the opcode.  */
+	switch (inst[0] & 0x7f)
 	  {
-	  case intelgt::opc_branchd:
-	  case intelgt::opc_branchc:
-	  case intelgt::opc_goto:
+	  case 0x21: /* BRANCHD.  */
+	  case 0x23: /* BRANCHC.  */
+	  case 0x2e: /* GOTO.  */
 	    return true;
 
-	  default:
-	    return false;
-	  }
-      }
-    }
-  error (_("Unsupported device id 0x%x"), device_id);
-}
-
-/* A helper function to check if a compact instruction is atomic.
-   TRANSFORMED_CTR is an optional argument output that holds the non-atomic
-   value of the control index in case the instruction is atomic.  */
-
-static bool
-is_compact_atomic (const gdb_byte inst[], int *transformed_ctr = nullptr)
-{
-  gdb_assert (intelgt::is_compacted_inst (inst));
-
-  /* DPAS_CONTROL_INDEX is used for DPAS control index mapping.
-     DPAS_CONTROL_INDEX[INDEX] = {TRUE, 4} implies that the control index of
-     value INDEX is atomic, and the non-atomic transformation is 4.
-     The second field is NOT_AVAILABLE if atomic/non-atomic transformation is
-     not possible.  */
-  constexpr uint8_t not_available = 0xff;
-  static constexpr std::pair<bool, uint8_t> dpas_control_index[]
-    {{true, 4},
-    {true, not_available},
-    {true, not_available},
-    {true, 5},
-    {false, 0},
-    {false, 3},
-    {true, 10},
-    {true, not_available},
-    {true, not_available},
-    {true, not_available},
-    {false, 6},
-    {true, 15},
-    {true, not_available},
-    {true, not_available},
-    {true, not_available},
-    {false, 11}};
-
-  uint32_t device_id = get_device_id (current_inferior ());
-  xe_version device_version = get_xe_version (device_id);
-  switch (device_version)
-    {
-    case XE_HP:
-    case XE_HPG:
-    case XE_HPC:
-      {
-	switch (inst[0] & intelgt::opc_mask)
-	  {
-	  case intelgt::opc_dpas:
-	  case intelgt::opc_dpasw:
-	    {
-	      uint8_t ctr_idx3 = (inst[2] & 0x3c) >> 2;
-	      gdb_assert (ctr_idx3 < ARRAY_SIZE (dpas_control_index));
-
-	      if (transformed_ctr != nullptr)
-		*transformed_ctr = dpas_control_index[ctr_idx3].second;
-
-	      return dpas_control_index[ctr_idx3].first;
-	    }
 	  default:
 	    return false;
 	  }
@@ -4021,12 +3958,46 @@ is_compact_atomic (const gdb_byte inst[], int *transformed_ctr = nullptr)
 /* Return true if the instruction is atomic.  */
 
 static bool
-is_atomic (const gdb_byte inst[])
+is_atomic (const gdb_byte inst[], uint32_t device_id)
 {
-  if (intelgt::is_compacted_inst (inst))
-    return is_compact_atomic (inst);
+  xe_version device_version = get_xe_version (device_id);
+  switch (device_version)
+    {
+    case XE_HP:
+    case XE_HPG:
+    case XE_HPC:
+      {
+	/* For instructions with CompactCtrl clear, we can check AtomicCtrl.  */
+	if ((inst[3] & 0x20) == 0)
+	  return (inst[4] & 0x1) != 0;
 
-  return intelgt::get_inst_bit (inst, intelgt::ctrl_atomic);
+	/* For compacted instructions, we need to check the opcode.  */
+	switch (inst[0] & 0x7f)
+	  {
+	  case 0x59: /* DPAS.  */
+	  case 0x5a: /* DPASW.  */
+	    {
+	      /* For DPAS, the DPAS Control Index determines which flavors are
+		 atomic.  */
+	      switch (inst[2] & 0x3c)
+		{
+		case 0x10:
+		case 0x14:
+		case 0x28:
+		case 0x3c:
+		  return false;
+
+		default:
+		  return true;
+		}
+	    }
+
+	  default:
+	    return false;
+	  }
+      }
+    }
+  error (_("Unsupported device id 0x%x"), device_id);
 }
 
 /* If we are setting a breakpoint within an atomic sequence, we are required to
@@ -4080,17 +4051,18 @@ intelgt_adjust_breakpoint_address (gdbarch *gdbarch, CORE_ADDR bpaddr)
 
   CORE_ADDR addr = start;
   bool inside_atomic_region = false;
+  uint32_t device_id = get_device_id (current_inferior ());
   for (; addr <= end; addr += intelgt::inst_length (&inst_block[addr - start]))
     {
       if ((bpaddr <= addr) && !inside_atomic_region)
 	return addr;
 
       const gdb_byte *inst = &inst_block[addr - start];
-      if (inside_atomic_region && is_branch (inst))
+      if (inside_atomic_region && is_branch (inst, device_id))
 	error (_("Unexpected branch in atomic sequence"));
 
       /* The AtomicCtrl affects the next instruction.  */
-      inside_atomic_region = is_atomic (inst);
+      inside_atomic_region = is_atomic (inst, device_id);
     }
 
   error (_("Couldn't adjust breakpoint to skip atomic region at %s"),

@@ -52,11 +52,6 @@ inferior_event_handler (enum inferior_event_type event_type)
 	    target_async (false);
 	}
 
-      /* Do all continuations associated with the whole inferior (not
-	 a particular thread).  */
-      if (inferior_ptid != null_ptid)
-	current_inferior ()->do_all_continuations ();
-
       /* When running a command list (from a user command, say), these
 	 are only run when the command list is all done.  */
       if (current_ui->async)

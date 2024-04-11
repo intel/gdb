@@ -3082,3 +3082,19 @@ Return a gdbarch corresponding to the given target description.
     predefault="default_update_architecture",
     invalid=False,
 )
+
+Method(
+    comment="""
+Some targets support special hardware-assisted control-flow protection
+technologies.  For example, the Intel Control-Flow Enforcement Technology
+(Intel CET) on x86 provides a shadow stack and indirect branch tracking.
+To enable inferior calls the function shadow_stack_push has to be provided.
+
+Push the address NEW_ADDR on the shadow stack and update the shadow stack
+pointer.
+""",
+    type="void",
+    name="shadow_stack_push",
+    params=[("CORE_ADDR", "new_addr"), ("regcache *", "regcache")],
+    predicate=True,
+)

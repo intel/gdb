@@ -1952,6 +1952,65 @@ amd64_linux_remove_non_addr_bits_wpt (gdbarch *gdbarch, CORE_ADDR addr)
   return addr;
 }
 
+/* Read the shadow stack pointer register and assign its value to SSP.
+   Return true if reading was successful, false otherwise.  */
+
+static bool
+amd64_linux_get_shadow_stack_pointer (gdbarch *gdbarch, CORE_ADDR *ssp)
+{
+  const i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
+
+  if (tdep == nullptr || tdep->ssp_regnum < 0)
+    return false;
+
+  regcache *regcache = get_current_regcache ();
+  if (regcache_raw_read_unsigned (regcache, tdep->ssp_regnum, ssp)
+      != REG_VALID)
+    return false;
+
+  /* Starting with v6.6., the Linux kernel supports CET shadow stack.
+     Dependent on the target the ssp register can be invalid or nullptr
+     when shadow stack is supported by HW and the linux kernel but not
+     enabled for the current thread.  */
+  return (*ssp != 0x0);
+}
+
+/* If shadow stack is enabled, push the address NEW_ADDR on the shadow
+   stack and increment the shadow stack pointer accordingly.  */
+
+static void
+amd64_linux_shadow_stack_push (gdbarch *gdbarch, CORE_ADDR new_addr)
+{
+  CORE_ADDR ssp;
+  if (!amd64_linux_get_shadow_stack_pointer (gdbarch, &ssp))
+    return;
+
+  /* The shadow stack grows downwards.  To push addresses on the stack,
+     we need to decrement SSP.
+     For x32 the shadow stack elements are still 64-bit aligned.  Thus, we
+     cannot use gdbarch_addr_bit to compute the new stack pointer.  */
+  const bfd_arch_info *binfo = gdbarch_bfd_arch_info (gdbarch);
+  const int bytes_per_word = (binfo->bits_per_word / binfo->bits_per_byte);
+  const CORE_ADDR new_ssp = ssp - bytes_per_word;
+
+  /* Starting with v6.6., the Linux kernel supports CET shadow stack.
+     Using /proc/PID/smaps we can only check if NEW_SSP points to shadow
+     stack memory.  If it doesn't, we assume the stack is full.  */
+  std::pair<CORE_ADDR, CORE_ADDR> memrange;
+  if (!linux_address_in_shadow_stack_mem_range (new_ssp, &memrange))
+    error (_("No space left on the shadow stack."));
+
+  const int addr_size = gdbarch_addr_bit (gdbarch) / binfo->bits_per_byte;
+  const bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+
+  write_memory_unsigned_integer (new_ssp, addr_size, byte_order,
+				 (ULONGEST) new_addr);
+
+  i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
+  regcache *regcache = get_current_regcache ();
+  regcache_raw_write_unsigned (regcache, tdep->ssp_regnum, new_ssp);
+}
+
 static value *
 amd64_linux_dwarf2_prev_ssp (frame_info_ptr this_frame, void **this_cache,
 			     int regnum)
@@ -2072,6 +2131,7 @@ amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch,
 
   set_gdbarch_remove_non_addr_bits_wpt (gdbarch,
 					amd64_linux_remove_non_addr_bits_wpt);
+  set_gdbarch_shadow_stack_push (gdbarch, amd64_linux_shadow_stack_push);
   dwarf2_frame_set_init_reg (gdbarch, amd64_init_reg);
 }
 

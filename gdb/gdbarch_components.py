@@ -3035,5 +3035,4 @@ pointer.
     name="shadow_stack_push",
     params=[("CORE_ADDR", "new_addr")],
     predicate=True,
-    invalid=True,
 )

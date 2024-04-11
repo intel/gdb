@@ -13,15 +13,67 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Test shadow stack enabling for frame level update and the return command.
+# Test shadow stack enabling for frame level update, the return and the
+# call command.
+# As potential CET violations often only occur after resuming normal
+# execution, test normal program continuation after each return or call
+# command.
 
 require allow_ssp_tests
 
 standard_testfile amd64-shadow-stack.c
 
+proc restart_and_run_infcall_call2 {} {
+    global binfile
+    clean_restart ${binfile}
+    if { ![runto_main] } {
+	return -1
+    }
+    set inside_infcall_str "The program being debugged stopped while in a function called from GDB"
+    gdb_breakpoint [ gdb_get_line_number "break call2" ]
+    gdb_continue_to_breakpoint "break call2" ".*break call2.*"
+    gdb_test "call (int) call2()" \
+	"Breakpoint \[0-9\]*, call2.*$inside_infcall_str.*"
+}
+
 if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
       {debug additional_flags="-fcf-protection=return"}] } {
     return -1
+}
+
+if { ![runto_main] } {
+    return -1
+}
+
+with_test_prefix "test inferior call and continue" {
+    gdb_breakpoint [ gdb_get_line_number "break call1" ]
+    gdb_continue_to_breakpoint "break call1" ".*break call1.*"
+
+    gdb_test "call (int) call2()" "= 42"
+
+    gdb_continue_to_end
+}
+
+with_test_prefix "test return inside an inferior call" {
+    restart_and_run_infcall_call2
+
+    gdb_test "return" "\#0.*call2.*" \
+	"Test shadow stack return inside an inferior call" \
+	"Make.*return now\\? \\(y or n\\) " "y"
+
+    gdb_continue_to_end
+}
+
+with_test_prefix "test return 'above' an inferior call" {
+    restart_and_run_infcall_call2
+
+    gdb_test "frame 2" "call2 ().*" "move to frame 'above' inferior call"
+
+    gdb_test "return" "\#0.*call1.*" \
+	"Test shadow stack return 'above' an inferior call" \
+	"Make.*return now\\? \\(y or n\\) " "y"
+
+    gdb_continue_to_end
 }
 
 clean_restart ${binfile}
@@ -55,9 +107,6 @@ with_test_prefix "test return from current frame" {
 	"Test shadow stack return from current frame" \
 	"Make.*return now\\? \\(y or n\\) " "y"
 
-    # Potential CET violations often only occur after resuming normal execution.
-    # Therefore, it is important to test normal program continuation after
-    # testing the return command.
     gdb_continue_to_end
 }
 
@@ -76,8 +125,5 @@ with_test_prefix "test return from past frame" {
 	"Test shadow stack return from past frame" \
 	"Make.*return now\\? \\(y or n\\) " "y"
 
-    # Potential CET violations often only occur after resuming normal execution.
-    # Therefore, it is important to test normal program continuation after
-    # testing the return command.
     gdb_continue_to_end
 }

@@ -1258,6 +1258,12 @@ call_function_by_hand_dummy (struct value *function,
 				bp_addr, args.size (), args.data (),
 				sp, return_method, struct_addr);
 
+  /* Pushes the return address of the inferior (bp_addr) on the shadow stack
+     and updates the shadow stack pointer.  As we don't execute a call
+     instruction to start the inferior we need to handle this manually.  */
+  if (gdbarch_shadow_stack_push_p (gdbarch))
+    gdbarch_shadow_stack_push (gdbarch, bp_addr);
+
   /* Set up a frame ID for the dummy frame so we can pass it to
      set_momentary_breakpoint.  We need to give the breakpoint a frame
      ID so that the breakpoint code can correctly re-identify the

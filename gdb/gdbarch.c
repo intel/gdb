@@ -277,6 +277,7 @@ struct gdbarch
   gdbarch_kernel_instance_id_ftype *kernel_instance_id = nullptr;
   gdbarch_entry_point_ftype *entry_point = nullptr;
   gdbarch_update_architecture_ftype *update_architecture = default_update_architecture;
+  gdbarch_shadow_stack_push_ftype *shadow_stack_push = nullptr;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -565,6 +566,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of kernel_instance_id, has predicate.  */
   /* Skip verify of entry_point, has predicate.  */
   /* Skip verify of update_architecture, invalid_p == 0.  */
+  /* Skip verify of shadow_stack_push, has predicate.  */
   if (!log.empty ())
     internal_error (_("verify_gdbarch: the following are invalid ...%s"),
 		    log.c_str ());
@@ -1508,6 +1510,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: update_architecture = <%s>\n",
 	      host_address_to_string (gdbarch->update_architecture));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_shadow_stack_push_p() = %d\n",
+	      gdbarch_shadow_stack_push_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: shadow_stack_push = <%s>\n",
+	      host_address_to_string (gdbarch->shadow_stack_push));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -5970,4 +5978,28 @@ set_gdbarch_update_architecture (struct gdbarch *gdbarch,
 				 gdbarch_update_architecture_ftype update_architecture)
 {
   gdbarch->update_architecture = update_architecture;
+}
+
+bool
+gdbarch_shadow_stack_push_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->shadow_stack_push != NULL;
+}
+
+void
+gdbarch_shadow_stack_push (struct gdbarch *gdbarch, CORE_ADDR new_addr)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->shadow_stack_push != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_shadow_stack_push called\n");
+  gdbarch->shadow_stack_push (gdbarch, new_addr);
+}
+
+void
+set_gdbarch_shadow_stack_push (struct gdbarch *gdbarch,
+			       gdbarch_shadow_stack_push_ftype shadow_stack_push)
+{
+  gdbarch->shadow_stack_push = shadow_stack_push;
 }

@@ -318,6 +318,37 @@ proc run_to_end_autoattach_check_errors {device quit env_value} {
     gdb_assert {$has_failure == 0}
 }
 
+# Stop just before auto-attach is triggered.  Step-over the statement.
+# The host thread should stop at the next line.
+
+proc step_over_auto_attach {device} {
+    global srcfile
+
+    if {![runto_main [sycl_get_device_args $device]]} {
+	return
+    }
+
+    set auto_attach_line [gdb_get_line_number "get_sycl_queue"]
+    gdb_breakpoint $auto_attach_line
+
+    set catch_bp [gdb_get_line_number "line-before-kernel"]
+    gdb_breakpoint $catch_bp
+
+    gdb_continue_to_breakpoint "auto attach line" \
+	".*$srcfile:$auto_attach_line.*"
+
+    # We should reach the next line instead of continuing and hitting
+    # the next BP.
+    gdb_test_multiple "next" "step over auto-attach" {
+	-re -wrap ".*$srcfile:$catch_bp.*" {
+	    fail $gdb_test_name
+	}
+	-re -wrap "intelgt: gdbserver-ze started .*sycl::buffer.*" {
+	    pass $gdb_test_name
+	}
+    }
+}
+
 foreach device $sycl_device_list {
 
     sycl_with_intelgt_lock $device {
@@ -330,6 +361,13 @@ foreach device $sycl_device_list {
 
 	if {![runto_main [sycl_get_device_args $device]]} {
 	    continue
+	}
+
+	# Stepping over the auto-attach mechanism should not distort
+	# the host thread's stepping state.
+	with_test_prefix "step-over" {
+	    clean_restart $binfile
+	    step_over_auto_attach $device
 	}
 
 	# Re-run multiple times until termination, with and without

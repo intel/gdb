@@ -4025,7 +4025,9 @@ for_each_just_stopped_thread (for_each_just_stopped_thread_callback_func func)
   else
     {
       /* In all-stop mode, all threads have stopped.  */
-      for (thread_info *tp : all_non_exited_threads ())
+      process_stratum_target *current_target
+	= current_inferior ()->process_target ();
+      for (thread_info *tp : all_non_exited_threads (current_target))
 	func (tp);
     }
 }

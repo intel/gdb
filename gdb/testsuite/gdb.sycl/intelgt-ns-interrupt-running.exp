@@ -102,8 +102,10 @@ foreach device $sycl_device_list {
 	# We receive the updated thread list asynchronously in non-stop mode.
 	# Wait some time to ensure thread list is updated.
 	sleep 1
+	setup_kfail "JIRA IGDB/4818" "*-*-*"
 	gdb_test "info thread $running_thread_id" \
 	    "${fill}\\\*?${running_thread_id}${fill}.unavailable."
+	setup_kfail "JIRA IGDB/4818" "*-*-*"
 	gdb_test "print/x \$pc" "PC not available"
 
 	# Switch to a stopped thread, resume it.

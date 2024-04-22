@@ -1210,11 +1210,9 @@ static void
 print_devices (ui_out *uiout)
 {
   /* Collect all known device inferiors (including hidden inferiors).  The
-     devices are displayed lexigraphically ordered by PCI slot, subdevice_id,
-     vendor_id and target_id.  */
-  std::map<std::tuple<std::string, std::string, std::string, std::string,
-		      std::string>,
-	   std::vector<const inferior *>> devices_to_print;
+     devices are displayed lexigraphically ordered by connection_id and
+     device_uuid.  */
+  std::map<std::tuple<int, std::string>, const inferior *> devices_to_print;
   for (const inferior *inf : all_inferiors ())
     {
       /* Only display devices connected to an inferior.  */
@@ -1222,20 +1220,13 @@ print_devices (ui_out *uiout)
 	continue;
 
       const target_desc *tdesc = gdbarch_target_desc (inf->gdbarch);
-      const std::string pci_slot
-	= tdesc_find_device_info_attribute (tdesc, "pci_slot");
-      const std::string subdev_id
-	= tdesc_find_device_info_attribute (tdesc, "subdevice_id");
-      const std::string vendor_id
-	= tdesc_find_device_info_attribute (tdesc, "vendor_id");
-      const std::string target_id
-	= tdesc_find_device_info_attribute (tdesc, "target_id");
       const std::string device_uuid
 	= tdesc_find_device_info_attribute (tdesc, "device_uuid");
+      const int connection_id
+	= inf->process_target ()->connection_number;
 
-      devices_to_print[std::make_tuple (pci_slot, subdev_id, vendor_id,
-					target_id, device_uuid)]
-	.push_back (inf);
+      devices_to_print[std::make_tuple (connection_id, device_uuid)]
+	= inf;
     }
 
   if (devices_to_print.empty ())
@@ -1255,9 +1246,10 @@ print_devices (ui_out *uiout)
 
     if (!uiout->is_mi_like_p ())
       {
-	table_emitter.emplace (uiout, 7, devices_to_print.size (),
+	table_emitter.emplace (uiout, 8, devices_to_print.size (),
 			       "InfoDevicesTable");
 	uiout->table_header (1, ui_left, "current", "");
+	uiout->table_header (5, ui_left, "number", "Num");
 	uiout->table_header (15, ui_left, "location", "Location");
 	uiout->table_header (12, ui_left, "sub-device", "Sub-device");
 	uiout->table_header (11, ui_left, "vendor-id", "Vendor Id");
@@ -1274,14 +1266,17 @@ print_devices (ui_out *uiout)
 
     for (const auto& device_id_desc_pair : devices_to_print)
       {
-	const std::vector<const inferior *> &inf = device_id_desc_pair.second;
-	/* gdbarch is the same for all inferiors.  */
-	const target_desc *tdesc = gdbarch_target_desc (inf[0]->gdbarch);
+	const inferior *inf = device_id_desc_pair.second;
+	const target_desc *tdesc = gdbarch_target_desc (inf->gdbarch);
 
-	const std::string &pci_slot = std::get<0> (device_id_desc_pair.first);
-	const std::string &subdev_id = std::get<1> (device_id_desc_pair.first);
-	const std::string &vendor_id = std::get<2> (device_id_desc_pair.first);
-	const std::string &target_id = std::get<3> (device_id_desc_pair.first);
+	const std::string pci_slot
+	  = tdesc_find_device_info_attribute (tdesc, "pci_slot");
+	const std::string subdev_id
+	  = tdesc_find_device_info_attribute (tdesc, "subdevice_id");
+	const std::string vendor_id
+	  = tdesc_find_device_info_attribute (tdesc, "vendor_id");
+	const std::string target_id
+	  = tdesc_find_device_info_attribute (tdesc, "target_id");
 	const std::string total_cores
 	  = tdesc_find_device_info_attribute (tdesc, "total_cores");
 	const std::string device_name
@@ -1289,8 +1284,7 @@ print_devices (ui_out *uiout)
 
 	ui_out_emit_tuple tuple_emitter (uiout, nullptr);
 
-	if (std::find (inf.begin (), inf.end (), current_inferior ())
-	    != inf.end ())
+	if (inf == current_inferior ())
 	  {
 	    current_device = counter;
 	    if (!uiout->is_mi_like_p ())
@@ -1299,8 +1293,7 @@ print_devices (ui_out *uiout)
 	else if (!uiout->is_mi_like_p ())
 	  uiout->field_skip ("current");
 
-	if (uiout->is_mi_like_p ())
-	  uiout->field_unsigned ("number", counter);
+	uiout->field_unsigned ("number", counter);
 
 	uiout->field_string ("location",
 			     (uiout->is_mi_like_p ()
@@ -1323,11 +1316,8 @@ print_devices (ui_out *uiout)
 	if (!uiout->is_mi_like_p ())
 	  uiout->text ("\n");
 	else
-	  {
-	    ui_out_emit_list group_list_emitter (uiout, "thread-groups");
-	    for (const inferior *i : inf)
-	      uiout->field_fmt (nullptr, "i%d", i->num);
-	  }
+	  uiout->field_string ("thread-groups",
+			       string_printf ("i%d", inf->num));
 
 	counter++;
       }

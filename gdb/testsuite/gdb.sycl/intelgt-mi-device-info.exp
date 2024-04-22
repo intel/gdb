@@ -64,7 +64,7 @@ foreach device $sycl_device_list {
 	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
 	    # On GPU.
 	    mi_gdb_test "-device-info" \
-		"\\^done,devices=\\\[\{number=\"${decimal}\",location=\"${any_location}\",sub-device=\"(${decimal}|-)\",vendor-id=\"${hex}\",target-id=\"${hex}\",cores=\"${decimal}\",device-name=\"${any_name}\",thread-groups=\\\[\"i${decimal}\"\\\]\}\\\],current-device=\"${decimal}\"" \
+		"\\^done,devices=\\\[\{number=\"${decimal}\",location=\"${any_location}\",sub-device=\"(${decimal}|-)\",vendor-id=\"${hex}\",target-id=\"${hex}\",cores=\"${decimal}\",device-name=\"${any_name}\",thread-groups=\"i${decimal}\"\}\\\],current-device=\"${decimal}\"" \
 		"device-info returns one device info"
 	} else {
 	    # On CPU.

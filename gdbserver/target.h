@@ -94,9 +94,14 @@ public:
      PID is the process ID to attach to, specified by the user
      or a higher layer.
 
-     Returns -1 if attaching is unsupported, 0 on success, and calls
-     error() otherwise.  */
-  virtual int attach (unsigned long pid) = 0;
+     If attaching is unsupported, returns -1.
+
+     If successful, returns the ID of the process that was attached to.
+     This return value may be different from the argument PID, depending
+     on how the target interpreted the argument.
+
+     Calls error() in other cases.  */
+  virtual int attach (int pid) = 0;
 
   /* Kill process PROC.  Return -1 on failure, and 0 on success.  */
   virtual int kill (process_info *proc) = 0;

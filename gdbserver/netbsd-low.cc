@@ -107,7 +107,7 @@ netbsd_process_target::post_create_inferior ()
 /* Implement the attach target_ops method.  */
 
 int
-netbsd_process_target::attach (unsigned long pid)
+netbsd_process_target::attach (int pid)
 {
   /* Unimplemented.  */
   return -1;

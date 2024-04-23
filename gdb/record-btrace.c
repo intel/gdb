@@ -1163,13 +1163,21 @@ btrace_get_bfun_name (const struct btrace_function *bfun)
 static void
 btrace_print_aux_insn (struct ui_out *uiout,
 		       const struct btrace_function *bfun,
-		       const struct btrace_thread_info *btinfo)
+		       const struct btrace_thread_info *btinfo,
+		       int level)
 {
   for (const btrace_insn &insn : bfun->insn)
     {
       if (insn.iclass == BTRACE_INSN_AUX)
 	{
-	  uiout->text ("\t\t[");
+	  /* Indent to the function level.  */
+	  uiout->text ("\t");
+	  /* Adjust for RECORD_PRINT_INDENT_CALLS and indent one
+	     additional level.  */
+	  for (int i = 0; i <= level; ++i)
+	    uiout->text ("  ");
+
+	  uiout->text ("[");
 	  uiout->field_fmt ("aux-data", "%s",
 			    btinfo->aux_data.at (insn.aux_data_index).c_str ());
 	  uiout->text ("]\n");
@@ -1197,6 +1205,7 @@ btrace_call_history (struct ui_out *uiout,
       const struct btrace_function *bfun;
       struct minimal_symbol *msym;
       struct symbol *sym;
+      int level = 0;
 
       bfun = btrace_call_get (&it);
       sym = bfun->sym;
@@ -1223,9 +1232,9 @@ btrace_call_history (struct ui_out *uiout,
 
       if ((flags & RECORD_PRINT_INDENT_CALLS) != 0)
 	{
-	  int level = bfun->level + btinfo->level, i;
+	  level = bfun->level + btinfo->level;
 
-	  for (i = 0; i < level; ++i)
+	  for (int i = 0; i < level; ++i)
 	    uiout->text ("  ");
 	}
 
@@ -1255,7 +1264,7 @@ btrace_call_history (struct ui_out *uiout,
 
       if (((flags & RECORD_DONT_PRINT_AUX) == 0)
 	  && ((bfun->flags & BFUN_CONTAINS_AUX) != 0))
-	btrace_print_aux_insn(uiout, bfun, btinfo);
+	btrace_print_aux_insn (uiout, bfun, btinfo, level);
     }
 }
 

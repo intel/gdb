@@ -314,16 +314,26 @@ static int
 attach_inferior (int pid)
 {
   client_state &cs = get_client_state ();
-  /* myattach should return -1 if attaching is unsupported,
-     0 if it succeeded, and call error() otherwise.  */
 
   if (find_process_pid (pid) != nullptr)
     error ("Already attached to process %d\n", pid);
 
-  if (myattach (pid) != 0)
+  /* If attaching is unsupported, myattach returns -1.  If successful,
+     it returns the PID of the process that was attached to.  In other
+     cases, it calls error().  */
+  int new_pid = myattach (pid);
+  if (new_pid == -1)
     return -1;
 
-  fprintf (stderr, "Attached; pid = %d\n", pid);
+  if (new_pid == pid)
+    fprintf (stderr, "Attached; pid = %d\n", pid);
+  else
+    {
+      fprintf (stderr, "Attached; given pid = %d, updated to %d\n",
+	       pid, new_pid);
+      pid = new_pid;
+    }
+
   fflush (stderr);
 
   /* FIXME - It may be that we should get the SIGNAL_PID from the

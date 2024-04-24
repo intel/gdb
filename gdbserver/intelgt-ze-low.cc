@@ -412,6 +412,7 @@ intelgt_ze_target::is_device_supported
   bool have_ce = false;
   bool have_sba = false;
   bool have_scrbase = false;
+  bool have_modeflags = false;
   for (const zet_debug_regset_properties_t &regprop : regset_properties)
     {
       if (regprop.count < 1)
@@ -452,6 +453,10 @@ intelgt_ze_target::is_device_supported
 	case ZET_DEBUG_REGSET_TYPE_THREAD_SCRATCH_INTEL_GPU:
 	  have_scrbase = true;
 	  break;
+
+	case ZET_DEBUG_REGSET_TYPE_MODE_FLAGS_INTEL_GPU:
+	  have_modeflags = true;
+	  break;
 	}
     }
 
@@ -463,7 +468,8 @@ intelgt_ze_target::is_device_supported
       return false;
     }
 
-  if (have_grf && have_isabase && have_cr && have_sr && have_ce)
+  if (have_grf && have_cr && have_sr && have_ce
+      && (have_isabase || have_modeflags))
     return true;
 
   dprintf ("unsupported device (%" PRIx32 "): %s", properties.deviceId,

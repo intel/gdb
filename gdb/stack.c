@@ -1014,6 +1014,86 @@ get_user_print_what_frame_info (std::optional<enum print_what> *what)
 	(user_frame_print_options.print_frame_info);
 }
 
+/* Return true if PRINT_WHAT is configured to print the location of a
+   frame.  */
+
+static bool
+should_print_location (print_what print_what)
+{
+  return (print_what == LOCATION
+	  || print_what == SRC_AND_LOC
+	  || print_what == LOC_AND_ADDRESS
+	  || print_what == SHORT_LOCATION);
+}
+
+/* Print the source information for PC and SAL to UIOUT.  Based on the
+   user-defined configuration disassemble-next-line, display disassembly
+   of the next source line, in addition to displaying the source line
+   itself.  Print annotations describing source file and and line number
+   based on MID_STATEMENT information.  If SHOW_ADDRESS is true, print the
+   program counter PC including, if non-empty, PC_ADDRESS_FLAGS.  */
+
+static void
+print_source (ui_out *uiout, gdbarch *gdbarch, CORE_ADDR pc,
+	      symtab_and_line sal, bool show_address, int mid_statement,
+	      const std::string &pc_address_flags)
+{
+  if (sal.symtab == nullptr)
+    {
+      /* If disassemble-next-line is set to auto or on and doesn't have
+	 the line debug messages for $pc, output the next instruction.  */
+      if (disassemble_next_line == AUTO_BOOLEAN_AUTO
+	  || disassemble_next_line == AUTO_BOOLEAN_TRUE)
+	do_gdb_disassembly (gdbarch, 1, pc, pc + 1);
+
+      /* If we do not have symtab information, we cannot print any source
+	 line and must return here.  */
+      return;
+    }
+
+  if (annotation_level > 0
+      && annotate_source_line (sal.symtab, sal.line, mid_statement, pc))
+    {
+      /* The call to ANNOTATE_SOURCE_LINE already printed the annotation
+	 for this source line, so we avoid the two cases below and do not
+	 print the actual source line.  The documentation for annotations
+	 makes it clear that the source line annotation is printed
+	 __instead__ of printing the source line, not as well as.
+
+	 However, if we fail to print the source line, which usually means
+	 either the source file is missing, or the requested line is out
+	 of range of the file, then we don't print the source annotation,
+	 and will pass through the "normal" print source line code below,
+	 the expectation is that this code will print an appropriate
+	 error.  */
+    }
+  else if (deprecated_print_frame_info_listing_hook)
+    deprecated_print_frame_info_listing_hook (sal.symtab, sal.line,
+					      sal.line + 1, 0);
+  else
+    {
+      /* We used to do this earlier, but that is clearly wrong.  This
+	 function is used by many different parts of gdb, including
+	 normal_stop in infrun.c, which uses this to print out the current
+	 PC when we stepi/nexti into the middle of a source line.  Only
+	 the command line really wants this behavior.  Other UIs probably
+	 would like the ability to decide for themselves if it is
+	 desired.  */
+      if (show_address)
+	{
+	  print_pc (uiout, gdbarch, pc_address_flags, pc);
+	  uiout->text ("\t");
+	}
+
+      print_source_lines (sal.symtab, sal.line, sal.line + 1, 0);
+    }
+
+    /* If disassemble-next-line is set to on and there is line debug
+       messages, output assembly codes for next line.  */
+    if (disassemble_next_line == AUTO_BOOLEAN_TRUE)
+      do_gdb_disassembly (gdbarch, -1, sal.pc, sal.end);
+}
+
 /* Print information about frame FRAME.  The output is format according
    to PRINT_LEVEL and PRINT_WHAT and PRINT_ARGS.  For the meaning of
    PRINT_WHAT, see enum print_what comments in frame.h.
@@ -1030,8 +1110,7 @@ do_print_frame_info (struct ui_out *uiout, const frame_print_options &fp_opts,
 		     int set_current_sal)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
-  int source_print;
-  int location_print;
+  ui_out *uiout = current_uiout;
 
   if (!current_uiout->is_mi_like_p ()
       && fp_opts.print_frame_info != print_frame_info_auto)
@@ -1133,75 +1212,25 @@ do_print_frame_info (struct ui_out *uiout, const frame_print_options &fp_opts,
       throw;
     }
 
-  location_print = (print_what == LOCATION
-		    || print_what == SRC_AND_LOC
-		    || print_what == LOC_AND_ADDRESS
-		    || print_what == SHORT_LOCATION);
-  if (location_print || !sal.symtab)
-    print_frame (uiout, fp_opts, frame, print_level,
-		 print_what, print_args, sal);
+  if (should_print_location (print_what) || sal.symtab == nullptr)
+    print_frame (fp_opts, frame, print_level, print_what, print_args, sal);
 
-  source_print = (print_what == SRC_LINE || print_what == SRC_AND_LOC);
-
-  /* If disassemble-next-line is set to auto or on and doesn't have
-     the line debug messages for $pc, output the next instruction.  */
-  if ((disassemble_next_line == AUTO_BOOLEAN_AUTO
-       || disassemble_next_line == AUTO_BOOLEAN_TRUE)
-      && source_print && !sal.symtab)
-    do_gdb_disassembly (get_frame_arch (frame), 1,
-			get_frame_pc (frame), get_frame_pc (frame) + 1);
-
-  if (source_print && sal.symtab)
+  if (print_what == SRC_LINE || print_what == SRC_AND_LOC)
     {
       int mid_statement = ((print_what == SRC_LINE)
 			   && frame_show_address (frame, sal));
-      if (annotation_level > 0
-	  && annotate_source_line (sal.symtab, sal.line, mid_statement,
-				   get_frame_pc (frame)))
-	{
-	  /* The call to ANNOTATE_SOURCE_LINE already printed the
-	     annotation for this source line, so we avoid the two cases
-	     below and do not print the actual source line.  The
-	     documentation for annotations makes it clear that the source
-	     line annotation is printed __instead__ of printing the source
-	     line, not as well as.
 
-	     However, if we fail to print the source line, which usually
-	     means either the source file is missing, or the requested
-	     line is out of range of the file, then we don't print the
-	     source annotation, and will pass through the "normal" print
-	     source line code below, the expectation is that this code
-	     will print an appropriate error.  */
-	}
-      else if (deprecated_print_frame_info_listing_hook)
-	deprecated_print_frame_info_listing_hook (sal.symtab, sal.line,
-						  sal.line + 1, 0);
-      else
-	{
-	  struct value_print_options opts;
+      value_print_options opts;
+      get_user_print_options (&opts);
 
-	  get_user_print_options (&opts);
-	  /* We used to do this earlier, but that is clearly
-	     wrong.  This function is used by many different
-	     parts of gdb, including normal_stop in infrun.c,
-	     which uses this to print out the current PC
-	     when we stepi/nexti into the middle of a source
-	     line.  Only the command line really wants this
-	     behavior.  Other UIs probably would like the
-	     ability to decide for themselves if it is desired.  */
-	  if (opts.addressprint && mid_statement)
-	    {
-	      print_pc (uiout, gdbarch, frame, get_frame_pc (frame));
-	      uiout->text ("\t");
-	    }
+      const bool print_address = opts.addressprint && mid_statement;
 
-	  print_source_lines (sal.symtab, sal.line, sal.line + 1, 0);
-	}
+      std::string pc_address_flags
+	= gdbarch_get_pc_address_flags (gdbarch, frame, get_frame_pc (frame));
 
-      /* If disassemble-next-line is set to on and there is line debug
-	 messages, output assembly codes for next line.  */
-      if (disassemble_next_line == AUTO_BOOLEAN_TRUE)
-	do_gdb_disassembly (get_frame_arch (frame), -1, sal.pc, sal.end);
+      print_source (uiout, gdbarch, get_frame_pc (frame), sal,
+		    print_address, mid_statement, pc_address_flags);
+
     }
 
   if (set_current_sal)

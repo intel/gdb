@@ -1624,18 +1624,24 @@ ze_target::fetch_events (ze_device_info &device)
 		    update_thread_tdesc (tp);
 
 		    gdb_signal signal = GDB_SIGNAL_0;
-		    target_stop_reason reason = get_stop_reason (tp, signal);
 
 		    /* If this is an unavailable thread with a 'stop'
 		       resume state, from GDB's point of view the
 		       thread was interrupted.  In all-stop mode, we
-		       keep the event held to not confuse GDB.  */
+		       keep the event held to not confuse GDB.
+
+		       Do the state update before get_stop_reason
+		       below, so that in case we access memory, we
+		       will do that using the right thread
+		       context.  */
 		    if (!non_stop
 			&& (zetp->exec_state == ze_thread_state_unavailable)
 			&& (zetp->resume_state == ze_thread_resume_stop))
 		      zetp->exec_state = ze_thread_state_held;
 		    else
 		      zetp->exec_state = ze_thread_state_stopped;
+
+		    target_stop_reason reason = get_stop_reason (tp, signal);
 
 		    zetp->stop_reason = reason;
 		    zetp->waitstatus.set_stopped (signal);

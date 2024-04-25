@@ -68,6 +68,12 @@ foreach device_info ${device_list} {
 	gdb_breakpoint "${srcfile}:${inner_loc}"
 	gdb_continue_to_breakpoint "innermost-body" ".*${srcfile}:${inner_loc}.*"
 
+	# Disable trampoline handling.
+	# TODO : This is a temporal fix to let the test pass with oneAPI
+	# BaseKit 2024.2, and needs to be replaced with a better one.
+	# See IGDB-4828.
+	gdb_test_no_output "set skip-trampoline-functions off"
+
 	setup_kfail "JIRA GSD/4271" "*-*-*"
 	# Limit the backtrace to 3 frames because frame #3
 	# and beyond are implementation-specific to the OpenMP runtime.

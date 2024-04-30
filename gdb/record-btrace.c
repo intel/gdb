@@ -835,7 +835,9 @@ btrace_insn_history (struct ui_out *uiout,
 
 	  uiout->field_fmt ("insn-number", "%u", btrace_insn_number (&it));
 	  uiout->text ("\t");
-	  uiout->spaces (3);
+	  /* Add 3 spaces to match the instructions and 2 to indent the aux
+	     string to make it more visible.  */
+	  uiout->spaces (5);
 	  uiout->text ("[");
 	  uiout->field_fmt ("aux-data", "%s",
 			    it.btinfo->aux_data.at

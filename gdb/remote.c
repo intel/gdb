@@ -5136,23 +5136,32 @@ remote_target::print_one_stopped_thread (thread_info *thread)
 {
   target_waitstatus ws;
 
+  bool is_unavailable
+    = (regcache_read_pc_protected (get_thread_regcache (thread)) == 0);
+
   /* If there is a pending waitstatus, use it.  If there isn't it's because
      the thread's stop was reported with TARGET_WAITKIND_STOPPED / GDB_SIGNAL_0
      and process_initial_stop_replies decided it wasn't interesting to save
-     and report to the core.  */
+     and report to the core.  Take it into account that the thread may be
+     unavailable.  */
   if (thread->has_pending_waitstatus ())
     {
       ws = thread->pending_waitstatus ();
       thread->clear_pending_waitstatus ();
     }
+  else if (is_unavailable)
+    ws.set_unavailable ();
   else
     {
       ws.set_stopped (GDB_SIGNAL_0);
     }
 
   switch_to_thread (thread);
-  thread->set_stop_pc (get_frame_pc (get_current_frame ()));
-  set_current_sal_from_frame (get_current_frame ());
+  if (!is_unavailable)
+    {
+      thread->set_stop_pc (get_frame_pc (get_current_frame ()));
+      set_current_sal_from_frame (get_current_frame ());
+    }
 
   /* For "info program".  */
   set_last_target_status (this, thread->ptid, ws);

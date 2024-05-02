@@ -171,60 +171,14 @@ proc get_sycl_supported_devices {sycl_device_list} {
 }
 
 # Run the program under debug by passing DEVICE as the command line
-# argument.  If the device is not Intel GT, stop at main.  If the
-# device is Intel GT, continue until the zeContextCreate API call and
-# attempt to create another inferior connected to an Intel GT
-# gdbserver target.
+# argument.  Stop at main.
 #
 # Return 1 on success, 0 on failure.
 
 proc sycl_start {device} {
-    global GDBSERVER_ZE
-
-    if {[require_sycl_device $device "gpu" "Intel*"]} {
-	# To debug an Intel GT device, we create an additional
-	# inferior.  For the multi-target setting to work, we
-	# need to operate in target-non-stop mode.
-	gdb_test_no_output "maint set target-non-stop on"
-    }
-
     if {![runto_main [sycl_get_device_args $device]]} {
 	return 0
     }
-
-    if {[require_sycl_device $device "gpu" "Intel*"]} {
-	# For the Intel GT target, define a "hook" BP at a
-	# Level-Zero API function at which the Level-Zero backend
-	# would have been already initialized, attaching to the
-	# device would be expected to succeed.  Once we hit the
-	# hook BP, we create the additional inferior.
-	gdb_breakpoint "zeContextCreate" {*}"allow-pending temporary"
-	set hook_bp_hit [gdb_continue_to_breakpoint "hook bp" \
-			     "zeContextCreate\[^\r\n\]*"]
-	if {$hook_bp_hit != 0} {
-	    return 0
-	}
-
-	# By default use the "gdbserver-ze" executable.  This can be
-	# overridden via the GDBSERVER_ZE parameter to RUNTESTFLAGS.
-	set gdbserver_ze "gdbserver-ze"
-	if {[info exists GDBSERVER_ZE]} {
-	    set gdbserver_ze $GDBSERVER_ZE
-	    verbose -log "SYCL: Using gdbserver-ze: ${gdbserver_ze}"
-	}
-
-	with_test_prefix "$device" {
-	    set inf_pid [get_inferior_pid]
-	    gdb_test "add-inferior -no-connection"
-	    gdb_test "inferior 2"
-	    gdb_test "target remote | $gdbserver_ze --once --attach - $inf_pid" \
-		"Remote debugging.*" "connect the remote target"
-	    gdb_test "inferior 1"
-	    gdb_test "set schedule-multi on"
-	    gdb_test "info inferior" ".*" "inferiors for logging"
-	}
-    }
-
     return 1
 }
 

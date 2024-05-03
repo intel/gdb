@@ -108,6 +108,9 @@ enum
     /* The position of the External Halt Status and Control bit in CR0.1.  */
     intelgt_cr0_1_external_halt_status = 30,
 
+    /* The position of the Software Exception Control bit in CR0.1.  */
+    intelgt_cr0_1_software_exception_control = 29,
+
     /* The position of the Illegal Opcode Exception Status bit in CR0.1.  */
     intelgt_cr0_1_illegal_opcode_status = 28,
 
@@ -521,7 +524,7 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
   };
 
   dprintf ("thread %s (%s) stopped, cr0.0=%" PRIx32 ", .1=%" PRIx32
-	   " [ %s%s%s%s%s], .2=%" PRIx32 ".", tp->id.to_string ().c_str (),
+	   " [ %s%s%s%s%s%s], .2=%" PRIx32 ".", tp->id.to_string ().c_str (),
 	   ze_thread_id_str (thread).c_str (), cr0[0], cr0[1],
 	   (((cr0[1] & (1 << intelgt_cr0_1_breakpoint_status)) != 0)
 	    ? "bp " : ""),
@@ -529,6 +532,8 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 	    ? "ill " : ""),
 	   (((cr0[1] & (1 << intelgt_cr0_1_force_exception_status)) != 0)
 	    ? "fe " : ""),
+	   (((cr0[1] & (1 << intelgt_cr0_1_software_exception_control)) != 0)
+	    ? "sw " : ""),
 	   (((cr0[1] & (1 << intelgt_cr0_1_external_halt_status)) != 0)
 	    ? "eh " : ""),
 	   (((cr0[1] & (1 << intelgt_cr0_1_pagefault_status)) != 0)
@@ -592,6 +597,15 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
       intelgt_write_cr0 (tp, 1, cr0[1]);
 
       signal = GDB_SIGNAL_ILL;
+      return TARGET_STOPPED_BY_NO_REASON;
+    }
+
+  if ((cr0[1] & (1 << intelgt_cr0_1_software_exception_control)) != 0)
+    {
+      cr0[1] &= ~(1 << intelgt_cr0_1_software_exception_control);
+      intelgt_write_cr0 (tp, 1, cr0[1]);
+
+      signal = GDB_EXC_SOFTWARE;
       return TARGET_STOPPED_BY_NO_REASON;
     }
 

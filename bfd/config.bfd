@@ -791,6 +791,10 @@ case "${targ}" in
     ;;
 
 #ifdef BFD64
+  intelgt_legacy-*-elf)
+    targ_defvec=intelgt_legacy_elf64_vec
+    want64=true
+    ;;
   intelgt-*-elf)
     targ_defvec=intelgt_elf64_vec
     want64=true

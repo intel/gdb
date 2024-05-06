@@ -514,6 +514,52 @@ private:
   data_block *blocks_list;
 };
 
+/* Return the machine code of the current elf.  */
+
+static int
+intelgt_get_current_machine_code ()
+{
+  regcache *regcache = get_thread_regcache (inferior_thread ());
+  CORE_ADDR pc = regcache_read_pc (regcache);
+
+  obj_section *section = find_pc_section (pc);
+  if (section != nullptr)
+    {
+      gdb_assert (section->objfile != nullptr);
+
+      bfd *abfd = section->objfile->obfd.get ();
+      const elf_backend_data *ebd = get_elf_backend_data (abfd);
+      if (ebd == nullptr)
+	error (_("Cannot find elf backend data: PC %s."),
+	       paddress (regcache->arch (), pc));
+      return ebd->elf_machine_code;
+    }
+
+  /* If the PC does not belong to any section (e.g. the PC is in the scratch
+     area when the infcall returns), we look if all the ELF files
+     agree on the machine code.  */
+  int global_machine_code = EM_NONE;
+  for (objfile *obj : current_program_space->objfiles ())
+    {
+      bfd *abfd = obj->obfd.get ();
+      const elf_backend_data *ebd = get_elf_backend_data (abfd);
+      if (ebd == nullptr)
+	error (_("Cannot find elf backend data: objfile %s."),
+	       paddress (regcache->arch (), obj->addr_low));
+
+      if (global_machine_code == EM_NONE)
+	global_machine_code = ebd->elf_machine_code;
+      else if (ebd->elf_machine_code != global_machine_code)
+	{
+	  dprintf ("All ELF files did not agree on the machine code");
+	  global_machine_code = EM_NONE;
+	  break;
+	}
+    }
+
+  return global_machine_code;
+}
+
 /* The 'gdbarch_data' stuff specific for this architecture.  */
 
 struct intelgt_gdbarch_data
@@ -554,9 +600,22 @@ struct intelgt_gdbarch_data
   int
   framedesc_base_regnum ()
   {
-    /* For EM_INTELGT frame descriptors are stored at MAX_GRF - 1.  */
-    gdb_assert (regset_ranges[intelgt::regset_grf].end > 1);
-    return regset_ranges[intelgt::regset_grf].end - 1;
+    int machine = intelgt_get_current_machine_code ();
+    if (machine == EM_INTELGT)
+      {
+	/* For EM_INTELGT frame descriptors are stored at MAX_GRF - 1.  */
+	gdb_assert (regset_ranges[intelgt::regset_grf].end > 1);
+	return regset_ranges[intelgt::regset_grf].end - 1;
+      }
+
+    if (machine == EM_INTEL_GEN)
+      {
+	/* For EM_INTEL_GEN frame descriptors are stored at MAX_GRF - 3.  */
+	gdb_assert (regset_ranges[intelgt::regset_grf].end > 3);
+	return regset_ranges[intelgt::regset_grf].end - 3;
+      }
+
+    gdb_assert_not_reached ("Machine code is unknown.");
   }
 
 #if defined (HAVE_LIBIGA64)

@@ -204,7 +204,8 @@ int path_expression ()
   /*: END: path_expression :*/
 }
 
-class Anonymous
+class AnonymousBase {};
+class Anonymous : AnonymousBase /* index: 0 */
 {
 public:
   struct { /* index: 0 */
@@ -218,16 +219,24 @@ public:
     struct { /* index: 1 */
       int e;
       struct { /* index: 0 */
-        int f;
-        union { /* index: 0 */
-          int g;
-          char h;
-        };
+	int f;
+	union { /* index: 0 */
+	  int g;
+	  char h;
+	};
       };
       union { /* index: 0 */
-        int i;
-        char j;
+	int i;
+	char j;
       };
+      struct { /* index: 1 */
+	int k;
+      private:
+	union { /* index: 0 */
+	  int l;
+	  char m;
+	};
+      } with_name;
     };
   };
 };

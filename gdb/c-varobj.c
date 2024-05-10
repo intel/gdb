@@ -23,6 +23,10 @@
 
 static void cplus_class_num_children (struct type *type, int children[3]);
 
+static int
+type_field_num_from_child_index (int index, const varobj *parent,
+				 type *parent_type);
+
 /* The names of varobjs representing anonymous structs or unions.  */
 #define ANONYMOUS_STRUCT_NAME _("<anonymous struct>")
 #define ANONYMOUS_UNION_NAME _("<anonymous union>")
@@ -164,8 +168,12 @@ c_is_path_expr_parent (const struct varobj *var)
 	    {
 	      const char *field_name;
 
-	      gdb_assert (var->index < parent_type->num_fields ());
-	      field_name = parent_type->field (var->index).name ();
+	      int type_index = type_field_num_from_child_index (var->index,
+								var->parent,
+								parent_type);
+
+	      gdb_assert (type_index < parent_type->num_fields ());
+	      field_name = parent_type->field (type_index).name ();
 	      return !(field_name == NULL || *field_name == '\0');
 	    }
 	}
@@ -688,6 +696,51 @@ match_accessibility (struct type *type, int index, enum accessibility acc)
     return 0;
 }
 
+/* Return the type-field index within the PARENT_TYPE for the child with
+   the var-index INDEX in the PARENT var object.  */
+
+static int
+type_field_num_from_child_index (int index, const varobj *parent,
+				 type *parent_type)
+{
+  gdb_assert (parent_type->code () == TYPE_CODE_STRUCT
+	      || parent_type->code () == TYPE_CODE_UNION);
+
+  /* If the parent is not an artificial layer, just return the index.  */
+  if (!CPLUS_FAKE_CHILD (parent))
+    return index;
+
+  /* The fields of the class type are ordered as they
+     appear in the class.  We are given an index for a
+     particular access control type ("public","protected",
+     or "private").  We must skip over fields that don't
+     have the access control we are looking for to properly
+     find the indexed field.  */
+  int type_index = TYPE_N_BASECLASSES (parent_type);
+  int vptr_fieldno;
+  type *basetype = nullptr;
+  accessibility acc = public_field;
+
+  if (parent->name == "private")
+    acc = private_field;
+  else if (parent->name == "protected")
+    acc = protected_field;
+
+  vptr_fieldno = get_vptr_fieldno (parent_type, &basetype);
+  while (index >= 0)
+    {
+      if ((parent_type == basetype && type_index == vptr_fieldno)
+	  || parent_type->field (type_index).is_artificial ())
+	{ /* Ignore vptr.  */ }
+      if (match_accessibility (parent_type, type_index, acc))
+	--index;
+      ++type_index;
+    }
+  --type_index;
+
+  return type_index;
+}
+
 static void
 cplus_describe_child (const struct varobj *parent, int index,
 		      std::string *cname, struct value **cvalue, struct type **ctype,
@@ -730,38 +783,12 @@ cplus_describe_child (const struct varobj *parent, int index,
 
       if (CPLUS_FAKE_CHILD (parent))
 	{
-	  /* The fields of the class type are ordered as they
-	     appear in the class.  We are given an index for a
-	     particular access control type ("public","protected",
-	     or "private").  We must skip over fields that don't
-	     have the access control we are looking for to properly
-	     find the indexed field.  */
-	  int type_index = TYPE_N_BASECLASSES (type);
-	  enum accessibility acc = public_field;
-	  int vptr_fieldno;
-	  struct type *basetype = NULL;
-	  const char *field_name;
-
-	  vptr_fieldno = get_vptr_fieldno (type, &basetype);
-	  if (parent->name == "private")
-	    acc = private_field;
-	  else if (parent->name == "protected")
-	    acc = protected_field;
-
-	  while (index >= 0)
-	    {
-	      if ((type == basetype && type_index == vptr_fieldno)
-		  || type->field (type_index).is_artificial ())
-		; /* ignore vptr */
-	      else if (match_accessibility (type, type_index, acc))
-		    --index;
-		  ++type_index;
-	    }
-	  --type_index;
+	  int type_index = type_field_num_from_child_index (index, parent,
+							    type);
 
 	  /* If the type is anonymous and the field has no name,
 	     set an appropriate name.  */
-	  field_name = type->field (type_index).name ();
+	  const char *field_name = type->field (type_index).name ();
 	  if (field_name == NULL || *field_name == '\0')
 	    {
 	      if (cname)

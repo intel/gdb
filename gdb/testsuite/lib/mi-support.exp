@@ -2477,6 +2477,10 @@ namespace eval ::varobj_tree {
       set is_compound 0
     }
 
+    if {$type eq $name} {
+	# This is the base type.
+	return "((class $type) $path_parent(path_expr))"
+    }
     if {[string index $parent(type) end] == "\]"} {
       # Parent is an array.
       return "($path_parent(path_expr))\[$name\]"

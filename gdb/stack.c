@@ -1347,6 +1347,60 @@ find_frame_funname (const frame_info_ptr &frame, enum language *funlang,
   return funname;
 }
 
+/*  Print the library LIB to UIOUT for the printing of frame
+    information.  */
+
+static void
+print_lib (ui_out *uiout, const char *lib)
+{
+  annotate_frame_where ();
+  uiout->wrap_hint (2);
+  uiout->text (" from ");
+  uiout->field_string ("from", lib, file_name_style.style ());
+}
+
+/*  Print the filenname of SAL to UIOUT for the printing of frame
+    information.  */
+
+static void
+print_filename (ui_out *uiout, symtab_and_line sal)
+{
+  annotate_frame_source_begin ();
+  const char *filename_display;
+
+  filename_display = symtab_to_filename_for_display (sal.symtab);
+  uiout->wrap_hint (3);
+  uiout->text (" at ");
+  annotate_frame_source_file ();
+  uiout->field_string ("file", filename_display, file_name_style.style ());
+
+  if (uiout->is_mi_like_p ())
+    {
+      const char *fullname = symtab_to_fullname (sal.symtab);
+      uiout->field_string ("fullname", fullname);
+    }
+
+  annotate_frame_source_file_end ();
+  uiout->text (":");
+  annotate_frame_source_line ();
+  uiout->field_signed ("line", sal.line);
+  annotate_frame_source_end ();
+}
+
+/*  If available, print FUNNAME to UIOUT for the printing of frame
+    information.  */
+
+static void
+print_funname (ui_out *uiout,
+	       gdb::unique_xmalloc_ptr<char> const &funname)
+{
+  annotate_frame_function_name ();
+  string_file stb;
+  gdb_puts (funname ? funname.get () : "??", &stb);
+  uiout->field_stream ("func", stb, function_name_style.style ());
+  uiout->wrap_hint (3);
+}
+
 static void
 print_frame (struct ui_out *uiout,
 	     const frame_print_options &fp_opts,
@@ -1393,12 +1447,8 @@ print_frame (struct ui_out *uiout,
 	  annotate_frame_address_end ();
 	  uiout->text (" in ");
 	}
-    annotate_frame_function_name ();
+    print_funname (uiout, funname);
 
-    string_file stb;
-    gdb_puts (funname ? funname.get () : "??", &stb);
-    uiout->field_stream ("func", stb, function_name_style.style ());
-    uiout->wrap_hint (3);
     annotate_frame_args ();
 
     uiout->text (" (");
@@ -1431,28 +1481,7 @@ print_frame (struct ui_out *uiout,
       }
     uiout->text (")");
     if (print_what != SHORT_LOCATION && sal.symtab)
-      {
-	const char *filename_display;
-      
-	filename_display = symtab_to_filename_for_display (sal.symtab);
-	annotate_frame_source_begin ();
-	uiout->wrap_hint (3);
-	uiout->text (" at ");
-	annotate_frame_source_file ();
-	uiout->field_string ("file", filename_display,
-			     file_name_style.style ());
-	if (uiout->is_mi_like_p ())
-	  {
-	    const char *fullname = symtab_to_fullname (sal.symtab);
-
-	    uiout->field_string ("fullname", fullname);
-	  }
-	annotate_frame_source_file_end ();
-	uiout->text (":");
-	annotate_frame_source_line ();
-	uiout->field_signed ("line", sal.line);
-	annotate_frame_source_end ();
-      }
+      print_filename (uiout, sal);
 
     if (print_what != SHORT_LOCATION
 	&& pc_p && (funname == NULL || sal.symtab == NULL))
@@ -1462,12 +1491,7 @@ print_frame (struct ui_out *uiout,
 				     get_frame_address_in_block (frame));
 
 	if (lib)
-	  {
-	    annotate_frame_where ();
-	    uiout->wrap_hint (2);
-	    uiout->text (" from ");
-	    uiout->field_string ("from", lib, file_name_style.style ());
-	  }
+	  print_lib (uiout, lib);
       }
     if (uiout->is_mi_like_p ())
       uiout->field_string ("arch",

@@ -48,11 +48,12 @@ foreach device $sycl_device_list {
 	}
 
 	# Set temporary breakpoint to line $kernel_dim0_line and continue.
-	mi_tbreak "get_dim" "define temp bp on get_dim"
-	mi_send_resuming_command "exec-continue" "-exec-continue to get_dim"
+	set odd_branch_line [gdb_get_line_number "kernel-odd-branch"]
+	mi_tbreak "$srcfile:$odd_branch_line" "define temp bp on odd branch"
+	mi_send_resuming_command "exec-continue" "-exec-continue to odd branch"
 	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" "$decimal" \
 	    [list ".*" ".*" {locno="[0-9]+"}] \
-	    "expect bp hit at get_dim"
+	    "expect bp hit at odd branch"
 
 	# Get global ID of the current thread.
 	set current_thread [mi_get_integer_valueof "\$_gthread" 0]
@@ -64,5 +65,21 @@ foreach device $sycl_device_list {
 	mi_gdb_test "-thread-info $current_thread" \
 	    "\\^done,threads=\\\[\{.*thread-workgroup-size=$id_pattern,.*\}\\\]" \
 	    "Check workgroup-size field"
+
+	# Despite being in odd branch we expect all local IDs to be present.
+	set simd_width [mi_get_integer_valueof "\$_simd_width" -1]
+	mi_gdb_test "-thread-info --lid $current_thread" \
+	    "\\^done,threads=\\\[\{.*local-ids=\\\[\($id_pattern,?\)\{$simd_width\}\\\].*\}\\\]" \
+	    "Check local-ids field"
+
+	# No local-ids should show up if --lid is not passed.
+	gdb_test_multiple "-thread-info $current_thread" "check no local ids" {
+	    -re "local-ids.*$mi_gdb_prompt" {
+		fail $gdb_test_name
+	    }
+	    -re "$mi_gdb_prompt" {
+		pass $gdb_test_name
+	    }
+	}
     }
 }

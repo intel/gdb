@@ -83,6 +83,15 @@ thread apply thread-list|all|all-lanes -unavailable
 
 * MI changes
 
+  ** New option in '-thread-info': '--lid'; and new field: 'local-ids'
+
+     If the option is present, then the new field 'local-ids' is included
+     for stopped threads which are processing work-items and whose arch
+     supports work-items.  The new field contains the list of work-item
+     local IDs, processed by the thread.  A local ID is a string containing
+     a three-dimensional tuple "x, y, z" that denotes the local coordinates of
+     the work-item within its work-group.
+
   ** New field in '-thread-info': 'thread-workgroup-size'
 
      Added a new field to the '-thread-info' command.  If a thread is

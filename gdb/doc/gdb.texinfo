@@ -34498,6 +34498,12 @@ the coordinates of the thread workgroup.
 A string containing a three-dimensional tuple that denotes the size of
 the workgroup in every dimension.
 
+@item local-ids
+Appears only if @var{--lid} option is supplied.  The field contains a list
+of work-item local IDs, which are processed by the thread.  A local ID is
+a string containing a three-dimensional tuple: "x, y, z" that denotes the local
+coordinates of a work-item within its workgroup.
+
 @end table
 
 @subsubheading Example
@@ -34520,13 +34526,17 @@ current-thread-id="1"
 With work-item and SIMD support:
 
 @smallexample
--thread-info 1
+-thread-info --lid 1
 ^done,threads=[@{id="1",target-id="Thread 1",
 		 frame=@{level="0",addr="0xffff8000ffec4ad0",func="foo",
 			 args=[],file="foo.cpp",fullname="/tmp/foo.cpp",
 			 line="25",arch="intelgt"@},
 		 execution-mask="0xffff",simd-width="16",hit-lanes-mask="0xffff",
 		 thread-workgroup="0,0,0",thread-workgroup-size="128,1,1",
+		 local-ids=["112,0,0","113,0,0","114,0,0","115,0,0",
+			    "116,0,0","117,0,0","118,0,0","119,0,0",
+			    "120,0,0","121,0,0","122,0,0","123,0,0",
+			    "124,0,0","125,0,0","126,0,0","127,0,0"],
 		 thread-group="i2",state="stopped"@}]
 @end smallexample
 

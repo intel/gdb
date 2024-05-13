@@ -57,6 +57,36 @@ foreach device $sycl_device_list {
 
 	# Get global ID of the current thread.
 	set current_thread [mi_get_integer_valueof "\$_gthread" 0]
+	set thread_list [get_mi_thread_list "get all thread ids"]
+
+	set unavailable_thread_found 0
+
+	foreach thread $thread_list {
+	    # The input program does not utilize all the GPU threads.
+	    # Hence there must be some threads that are unavailable.
+	    # We check that the MI output for an unavailable thread does
+	    # not contain work-item related fields.
+	    gdb_test_multiple "-thread-info $thread" "check thread $thread" {
+		-re "threads=.*state=\"stopped\".*$mi_gdb_prompt$" {
+		    # Do nothing, the thread is stopped.
+		}
+		-re "threads=.*state=\"unavailable\".*$mi_gdb_prompt$" {
+		    verbose -log "Thread $thread is unavailable"
+
+		    set out $expect_out(0,string)
+		    foreach field {"thread-workgroup" "thread-workgroup-size" \
+				       "local-ids"} {
+			gdb_assert {[string first $field $out] == -1} \
+			    "$field field is not included"
+		    }
+		    set unavailable_thread_found 1
+		    # We found and tested an unavailable thread.  No need to continue.
+		    break
+		}
+	    }
+	}
+
+	gdb_assert {$unavailable_thread_found} "found an unavailable thread"
 
 	set id_pattern "\"$decimal,$decimal,$decimal\""
 	mi_gdb_test "-thread-info $current_thread" \

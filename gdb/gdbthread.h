@@ -60,6 +60,8 @@ struct info_threads_opts
   bool show_stopped_threads = false;
   /* For MI only "--qid".  */
   bool show_qualified_ids = false;
+  /* For MI only "--lid".  */
+  bool show_local_ids = false;
 };
 
 /* Frontend view of the thread state.  Possible extensions: stepping,

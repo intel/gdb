@@ -586,6 +586,13 @@ ze_event_str (const zet_debug_event_t &event)
       sstream << "thread unavailable, thread="
 	      << ze_thread_id_str (event.info.thread.thread);
       return sstream.str ();
+
+    case ZET_DEBUG_EVENT_TYPE_PAGE_FAULT:
+      sstream << "page fault"
+	      << ", address=0x" << std::hex << event.info.page_fault.address
+	      << ", mask=0x" << std::hex << event.info.page_fault.mask
+	      << ", reason=0x" << std::hex << event.info.page_fault.reason;
+      return sstream.str ();
     }
 
   sstream << "unknown, code=" << event.type;
@@ -1721,6 +1728,23 @@ ze_target::fetch_events (ze_device_info &device)
 		  warning (_("ignoring spurious unavailable-all event on "
 			     "device %lu"), device.ordinal);
 	      }
+	  }
+	  continue;
+
+	case ZET_DEBUG_EVENT_TYPE_PAGE_FAULT:
+	  {
+	    /* This is a process event.  */
+	    process_info *process = device.process;
+	    if (process == nullptr)
+	      {
+		dprintf ("internal process info is not available");
+		continue;
+	      }
+
+	    process_info_private *zeproc = process->priv;
+	    gdb_assert (zeproc != nullptr);
+
+	    zeproc->waitstatus.set_signalled (GDB_SIGNAL_SEGV);
 	  }
 	  continue;
 	}

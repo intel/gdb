@@ -667,12 +667,14 @@ mi_cmd_thread_info (const char *command, const char *const *argv, int argc)
     {
       QID_OPT,
       STOPPED_OPT,
+      LID_OPT,
     };
 
   static const struct mi_opt opts[] =
   {
     {"-qid", QID_OPT, 0},
     {"-stopped", STOPPED_OPT, 0},
+    {"-lid", LID_OPT, 0},
     { 0, 0, 0 }
   };
 
@@ -680,6 +682,7 @@ mi_cmd_thread_info (const char *command, const char *const *argv, int argc)
   int oind = 0;
   const char *oarg;
   bool enable_qid = false;
+  bool enable_lid = false;
   bool enable_stopped = false;
 
   while (true)
@@ -696,13 +699,16 @@ mi_cmd_thread_info (const char *command, const char *const *argv, int argc)
 	case STOPPED_OPT:
 	  enable_stopped = true;
 	  break;
+	case LID_OPT:
+	  enable_lid = true;
+	  break;
 	}
     }
 
   if (argc - oind > 1)
     error ("-thread-info: too many arguments");
 
-  info_threads_opts it_opts {false, enable_stopped, enable_qid};
+  info_threads_opts it_opts {false, enable_stopped, enable_qid, enable_lid};
   print_thread_info (current_uiout, argv[oind], -1, it_opts);
 }
 

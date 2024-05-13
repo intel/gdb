@@ -1376,6 +1376,7 @@ thread_target_id_str (thread_info *tp)
 }
 
 using uint_3d = std::array<uint32_t, 3>;
+using uint_3d_vec= std::vector<uint_3d>;
 
 /* Print a three-dimensional DATA to the NAME field.  */
 
@@ -1385,16 +1386,26 @@ print_workitem_field (ui_out *uiout, const char *name, const uint_3d &data)
   uiout->field_fmt (name, "%u,%u,%u", data[0], data[1], data[2]);
 }
 
-/* Read the data with GET_DATA for the thread TP and print it to NAME field.  */
+/* Print the vector of three-dimensional tuples DATA to the NAME field.  */
 
 static void
+print_workitem_field (ui_out *uiout, const char *name, const uint_3d_vec &data)
+{
+  ui_out_emit_list list_emitter (uiout, name);
+  for (auto const &el : data)
+    print_workitem_field (uiout, nullptr, el);
+}
+
+/* Read the data with GET_DATA for the thread TP and print it to NAME field.  */
+
+template <typename T>
+static void
 read_and_print_workitem_field (ui_out *uiout, thread_info *tp, const char *name,
-			       std::function<uint_3d (gdbarch*,
-						      thread_info*)> get_data)
+			       std::function<T (gdbarch*, thread_info*)> getter)
 {
   try
     {
-      uint_3d data = get_data (tp->inf->arch (), tp);
+      T data = getter (tp->inf->arch (), tp);
       print_workitem_field (uiout, name, data);
     }
   catch (const gdb_exception &e)
@@ -1408,17 +1419,21 @@ read_and_print_workitem_field (ui_out *uiout, thread_info *tp, const char *name,
 /* Print all work-item related data of thread TP.  */
 
 static void
-print_workitem_data_mi (ui_out *uiout, thread_info *tp)
+print_workitem_data_mi (ui_out *uiout, thread_info *tp, bool show_local_ids)
 {
   gdb_assert (uiout->is_mi_like_p ());
 
   if (gdbarch_thread_workgroup_p (tp->inf->arch ()))
-    read_and_print_workitem_field (uiout, tp, "thread-workgroup",
-				   gdbarch_thread_workgroup);
+    read_and_print_workitem_field<uint_3d> (uiout, tp, "thread-workgroup",
+					    gdbarch_thread_workgroup);
 
   if (gdbarch_workitem_local_size_p (tp->inf->arch ()))
-    read_and_print_workitem_field (uiout, tp, "thread-workgroup-size",
-				   gdbarch_workitem_local_size);
+    read_and_print_workitem_field<uint_3d> (uiout, tp, "thread-workgroup-size",
+					    gdbarch_workitem_local_size);
+
+  if (show_local_ids && gdbarch_all_workitem_local_ids_p (tp->inf->arch ()))
+    read_and_print_workitem_field<uint_3d_vec> (uiout, tp, "local-ids",
+						gdbarch_all_workitem_local_ids);
 }
 
 /* Print one row in info thread table.
@@ -1536,7 +1551,7 @@ print_thread_row (ui_out *uiout, thread_info *tp,
 				      hit_lane_mask);
 		}
 
-	      print_workitem_data_mi (uiout, tp);
+	      print_workitem_data_mi (uiout, tp, opts.show_local_ids);
 
 	      if (gdbarch_kernel_instance_id_p (tp->inf->arch ()))
 		{

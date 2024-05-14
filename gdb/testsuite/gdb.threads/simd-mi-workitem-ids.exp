@@ -57,8 +57,12 @@ foreach device $sycl_device_list {
 	# Get global ID of the current thread.
 	set current_thread [mi_get_integer_valueof "\$_gthread" 0]
 
+	set id_pattern "\"$decimal,$decimal,$decimal\""
 	mi_gdb_test "-thread-info $current_thread" \
-	    "\\^done,threads=\\\[\{.*thread-workgroup=\"$decimal,$decimal,$decimal\",.*\}\\\]" \
+	    "\\^done,threads=\\\[\{.*thread-workgroup=$id_pattern,.*\}\\\]" \
 	    "Check workgroup field"
+	mi_gdb_test "-thread-info $current_thread" \
+	    "\\^done,threads=\\\[\{.*thread-workgroup-size=$id_pattern,.*\}\\\]" \
+	    "Check workgroup-size field"
     }
 }

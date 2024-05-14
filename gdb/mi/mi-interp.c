@@ -452,19 +452,6 @@ mi_interp::on_normal_stop (struct bpstat *bs, int print_frame)
       if (core != -1)
 	mi_uiout->field_signed ("core", core);
     }
-  else
-    {
-      /* For TARGET_WAITKIND_UNAVAILABLE we do not print the frame.  */
-      if (inferior_ptid != null_ptid)
-	{
-	  thread_info *tp = inferior_thread ();
-	  if (tp->is_unavailable ())
-	    {
-	      mi_uiout->field_string ("reason", "unavailable");
-	      mi_uiout->field_signed ("thread-id", tp->global_num);
-	    }
-	}
-    }
 
   gdb_puts ("*stopped", this->raw_stdout);
   mi_out_put (mi_uiout, this->raw_stdout);

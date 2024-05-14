@@ -426,4 +426,8 @@ extern void handle_solib_event (void);
 
 extern int solib_linker_namespace_count (program_space *pspace);
 
+/* Helper function to print the newly added or removed shared libraries.  */
+
+extern void print_solib_change ();
+
 #endif /* GDB_SOLIB_H */

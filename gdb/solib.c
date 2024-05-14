@@ -47,6 +47,7 @@
 #include "gdbsupport/scoped_fd.h"
 #include "source.h"
 #include "cli/cli-style.h"
+#include <iterator>
 
 /* See solib.h.  */
 
@@ -1872,6 +1873,44 @@ solib_linker_namespace_count (program_space *pspace)
     return ops->num_active_namespaces ();
 
   return 0;
+}
+
+/* See solib.h.  */
+
+void
+print_solib_change ()
+{
+  bool any_deleted = !current_program_space->deleted_solibs.empty ();
+  if (any_deleted)
+    {
+      current_uiout->text (_("  Inferior unloaded "));
+      ui_out_emit_list list_emitter (current_uiout, "removed");
+      for (int ix = 0; ix < current_program_space->deleted_solibs.size (); ix++)
+	{
+	  const std::string &name = current_program_space->deleted_solibs[ix];
+
+	  if (ix > 0)
+	    current_uiout->text ("    ");
+	  current_uiout->field_string ("library", name);
+	  current_uiout->text ("\n");
+	}
+    }
+
+  bool any_added = !current_program_space->added_solibs.empty ();
+  if (any_added)
+    {
+      current_uiout->text (_("  Inferior loaded "));
+      ui_out_emit_list list_emitter (current_uiout, "added");
+      bool first = true;
+      for (solib *iter : current_program_space->added_solibs)
+	{
+	  if (!first)
+	    current_uiout->text ("    ");
+	  first = false;
+	  current_uiout->field_string ("library", iter->name);
+	  current_uiout->text ("\n");
+	}
+    }
 }
 
 /* Implementation of the linker_namespace convenience variable.

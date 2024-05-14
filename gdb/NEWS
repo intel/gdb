@@ -83,6 +83,13 @@ thread apply thread-list|all|all-lanes -unavailable
 
 * MI changes
 
+  ** New field in '-thread-info': 'thread-workgroup-size'
+
+     Added a new field to the '-thread-info' command.  If a thread is
+     stopped, and workgroups are defined by its arch, the new field contains
+     a string containing a three-dimensional tuple that denotes the size of
+     the workgroup in each dimension.
+
   ** New optional argument in '-var-create': lane mask
 
      Added a new optional argument to '-var-create' command.  If present,

@@ -34494,6 +34494,10 @@ data returned by the command include the following additional information:
 A string containing a three-dimensional tuple: "x, y, z" that denotes
 the coordinates of the thread workgroup.
 
+@item thread-workgroup-size
+A string containing a three-dimensional tuple that denotes the size of
+the workgroup in every dimension.
+
 @end table
 
 @subsubheading Example
@@ -34522,7 +34526,8 @@ With work-item and SIMD support:
 			 args=[],file="foo.cpp",fullname="/tmp/foo.cpp",
 			 line="25",arch="intelgt"@},
 		 execution-mask="0xffff",simd-width="16",hit-lanes-mask="0xffff",
-		 thread-workgroup="0,0,0",thread-group="i2",state="stopped"@}]
+		 thread-workgroup="0,0,0",thread-workgroup-size="128,1,1",
+		 thread-group="i2",state="stopped"@}]
 @end smallexample
 
 @findex -thread-list-ids

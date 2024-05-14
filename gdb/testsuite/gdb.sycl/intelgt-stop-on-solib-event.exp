@@ -104,6 +104,11 @@ proc test_solib {device stop_on_solib_events auto_solib_add non_stop_mode} {
 		send_gdb "continue\n"
 		exp_continue
 	    }
+	    -re "Inferior loaded ${in_memory_lib}" {
+		# In non-stop mode we don't expect any stops.
+		pass $gdb_test_name
+		incr num_solib_event
+	    }
 	    -re -wrap "$inferior_exited_re normally].*" {
 		# Exitting the program normally.
 		pass "program exited normally"

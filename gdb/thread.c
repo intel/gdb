@@ -1415,6 +1415,10 @@ print_workitem_data_mi (ui_out *uiout, thread_info *tp)
   if (gdbarch_thread_workgroup_p (tp->inf->arch ()))
     read_and_print_workitem_field (uiout, tp, "thread-workgroup",
 				   gdbarch_thread_workgroup);
+
+  if (gdbarch_workitem_local_size_p (tp->inf->arch ()))
+    read_and_print_workitem_field (uiout, tp, "thread-workgroup-size",
+				   gdbarch_workitem_local_size);
 }
 
 /* Print one row in info thread table.

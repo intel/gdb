@@ -149,4 +149,8 @@ extern void set_cbfd_soname_build_id (gdb_bfd_ref_ptr abfd,
 				      const char *soname,
 				      const bfd_build_id *build_id);
 
+/* Helper function to print the newly added or removed shared libraries.  */
+
+extern void print_solib_change ();
+
 #endif /* SOLIB_H */

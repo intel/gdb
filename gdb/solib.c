@@ -48,6 +48,7 @@
 #include "debuginfod-support.h"
 #include "source.h"
 #include "cli/cli-style.h"
+#include <iterator>
 
 /* See solib.h.  */
 
@@ -1817,6 +1818,43 @@ void solib_ack_library (so_list *so)
 
   if (ops->ack_library != nullptr)
     (*ops->ack_library) (so);
+}
+
+
+/* See solib.h.  */
+
+void
+print_solib_change ()
+{
+  bool any_deleted = !current_program_space->deleted_solibs.empty ();
+  if (any_deleted)
+    {
+      current_uiout->text (_("  Inferior unloaded "));
+      ui_out_emit_list list_emitter (current_uiout, "removed");
+      std::vector<std::string> &solibs = current_program_space->deleted_solibs;
+      for (auto it = solibs.begin (); it < solibs.end (); it++)
+	{
+	  if (std::distance (it, solibs.begin ()) > 0)
+	    current_uiout->text ("    ");
+	  current_uiout->field_string ("library", *it);
+	  current_uiout->text ("\n");
+	}
+    }
+
+  bool any_added = !current_program_space->added_solibs.empty ();
+  if (any_added)
+    {
+      current_uiout->text (_("  Inferior loaded "));
+      ui_out_emit_list list_emitter (current_uiout, "added");
+      std::vector<so_list *> &solibs = current_program_space->added_solibs;
+      for (auto it = solibs.begin (); it < solibs.end (); it++)
+	{
+	  if (std::distance (it, solibs.begin ()) > 0)
+	    current_uiout->text ("    ");
+	  current_uiout->field_string ("library", (*it)->so_name);
+	  current_uiout->text ("\n");
+	}
+    }
 }
 
 void _initialize_solib ();

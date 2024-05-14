@@ -5188,35 +5188,7 @@ print_solib_event (bool is_catchpoint)
     current_uiout->field_string ("reason",
 				 async_reason_lookup (EXEC_ASYNC_SOLIB_EVENT));
 
-  if (any_deleted)
-    {
-      current_uiout->text (_("  Inferior unloaded "));
-      ui_out_emit_list list_emitter (current_uiout, "removed");
-      for (int ix = 0; ix < current_program_space->deleted_solibs.size (); ix++)
-	{
-	  const std::string &name = current_program_space->deleted_solibs[ix];
-
-	  if (ix > 0)
-	    current_uiout->text ("    ");
-	  current_uiout->field_string ("library", name);
-	  current_uiout->text ("\n");
-	}
-    }
-
-  if (any_added)
-    {
-      current_uiout->text (_("  Inferior loaded "));
-      ui_out_emit_list list_emitter (current_uiout, "added");
-      bool first = true;
-      for (so_list *iter : current_program_space->added_solibs)
-	{
-	  if (!first)
-	    current_uiout->text ("    ");
-	  first = false;
-	  current_uiout->field_string ("library", iter->so_name);
-	  current_uiout->text ("\n");
-	}
-    }
+  print_solib_change ();
 }
 
 /* Print a message indicating what happened.  This is called from

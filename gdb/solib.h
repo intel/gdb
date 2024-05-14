@@ -142,4 +142,9 @@ extern void update_solib_breakpoints (void);
 
 extern void handle_solib_event (void);
 
+
+/* Helper function to print the newly added or removed shared libraries.  */
+
+extern void print_solib_change ();
+
 #endif /* GDB_SOLIB_H */

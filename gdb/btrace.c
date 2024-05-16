@@ -1208,6 +1208,24 @@ pt_btrace_insn (const struct pt_insn &insn)
 	  pt_btrace_insn_flags (insn)};
 }
 
+#if defined (HAVE_PT_INSN_EVENT)
+/* Helper for events that will result in an aux_insn.  */
+
+static void
+handle_pt_aux_insn (btrace_thread_info *btinfo, btrace_function *bfun,
+		    std::string &aux_str, CORE_ADDR ip)
+{
+  btinfo->aux_data.emplace_back (std::move (aux_str));
+  bfun = ftrace_update_function (btinfo, ip);
+
+  btrace_insn insn {btinfo->aux_data.size () - 1, 0,
+		    BTRACE_INSN_AUX, 0};
+
+  ftrace_update_insns (bfun, insn);
+}
+
+#endif /* defined (HAVE_PT_INSN_EVENT) */
+
 /* Handle instruction decode events (libipt-v2).  */
 
 static int
@@ -1261,7 +1279,6 @@ handle_pt_insn_events (struct btrace_thread_info *btinfo,
 	  {
 	    uint64_t ip = 0;
 	    gdb::optional<std::string> ptw_string;
-	    btrace_insn_flags flags = 0;
 
 	    /* Lookup the ip if available.  */
 	    if (event.ip_suppressed == 0)
@@ -1278,31 +1295,7 @@ handle_pt_insn_events (struct btrace_thread_info *btinfo,
 	    if (!ptw_string.has_value ())
 	      *ptw_string = hex_string (event.variant.ptwrite.payload);
 
-	    btinfo->aux_data.emplace_back (std::move (*ptw_string));
-
-	    if (!btinfo->functions.empty ()
-		&& !btinfo->functions.back ().insn.empty ())
-	      flags = btinfo->functions.back ().insn.back ().flags;
-
-	    /* Update insn list with ptw payload insn.  */
-	    struct btrace_insn ptw_insn;
-	    ptw_insn.aux_data_index = btinfo->aux_data.size () - 1;
-	    ptw_insn.size = 0;
-	    ptw_insn.iclass = BTRACE_INSN_AUX;
-	    ptw_insn.flags = flags;
-
-	    if (ip != 0)
-	      bfun = ftrace_update_function (btinfo, ip);
-	    else
-	      {
-		if (btinfo->functions.empty ())
-		  bfun = ftrace_new_function (btinfo, NULL, NULL);
-		else
-		  bfun = &btinfo->functions.back ();
-	      }
-
-	    bfun->flags |= BFUN_CONTAINS_AUX;
-	    ftrace_update_insns (bfun, ptw_insn);
+	    handle_pt_aux_insn (btinfo, bfun, *ptw_string, ip);
 
 	    break;
 	  }

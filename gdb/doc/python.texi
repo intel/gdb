@@ -8102,12 +8102,12 @@ main (void)
 @group
 (gdb) record instruction-history 12,14
 12         0x0040074c <ptwrite64+16>:   ptwrite %rbx
-13         [0x42]
+13           [0x42]
 14         0x00400751 <ptwrite64+21>:   mov -0x8(%rbp),%rbx
 (gdb) record function-call-history
 1       main
 2       ptwrite64
-                [0x42]
+          [0x42]
 3       main
 @end group
 @end smallexample
@@ -8166,10 +8166,10 @@ An example:
 60      job()
 61      task(void*)
 62      ptwrite64(unsigned long)
-                [counter: 1, ip: 0x401156]
+          [counter: 1, ip: 0x401156]
 63      task(void*)
 64      ptwrite32(unsigned int)
-                [counter: 2, ip: 0x40116c]
+          [counter: 2, ip: 0x40116c]
 @end group
 
 @group
@@ -8192,10 +8192,10 @@ An example:
 10    start_thread
 11    task(void*)
 12    ptwrite64(unsigned long)
-              [0x42]
+        [0x42]
 13    task(void*)
 14    ptwrite32(unsigned int)
-              [0x43]
+        [0x43]
 @end group
 @end smallexample
 

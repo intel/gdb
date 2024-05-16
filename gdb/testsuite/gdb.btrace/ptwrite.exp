@@ -57,9 +57,9 @@ with_test_prefix "Default" {
     # Test record instruction-history
     gdb_test "record instruction-history 1" [multi_line \
 	".*\[0-9\]+\t   $hex <ptwrite1\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
-	"\[0-9\]+\t   \\\[0x42\\\]" \
+	"\[0-9\]+\t     \\\[0x42\\\]" \
 	".*\[0-9\]+\t   $hex <ptwrite2\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
-	"\[0-9\]+\t   \\\[0x43\\\].*" \
+	"\[0-9\]+\t     \\\[0x43\\\].*" \
 	]
 
     gdb_test "record instruction-history /a 1" [multi_line \
@@ -71,10 +71,10 @@ with_test_prefix "Default" {
     gdb_test "record function-call-history 1,4" [multi_line \
 	"1\tmain" \
 	"2\tptwrite1" \
-	"\t\t\\\[0x42\\\]" \
+	"\t  \\\[0x42\\\]" \
 	"3\tmain" \
 	"4\tptwrite2" \
-	"\t\t\\\[0x43\\\]" \
+	"\t  \\\[0x43\\\]" \
 	]
 
     gdb_test "record function-call-history /a 1,4" [multi_line \
@@ -140,7 +140,7 @@ with_test_prefix "Custom" {
 
     gdb_test "record instruction-history 1" [multi_line \
 	".*\[0-9\]+\t   $hex <ptwrite1\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
-	"\[0-9\]+\t   \\\[payload: 66, ip: $hex\\\]" \
+	"\[0-9\]+\t     \\\[payload: 66, ip: $hex\\\]" \
 	".*\[0-9\]+\t   $hex <ptwrite2\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
 	"\[0-9\]+\t   $hex <ptwrite2\\+\[0-9\]+>:.*" \
 	]
@@ -156,9 +156,9 @@ with_test_prefix "None" {
 
     gdb_test "record instruction-history 1" [multi_line \
 	".*\[0-9\]+\t   $hex <ptwrite1\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
-	"\[0-9\]+\t   \\\[0x42\\\]" \
+	"\[0-9\]+\t     \\\[0x42\\\]" \
 	".*\[0-9\]+\t   $hex <ptwrite2\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
-	"\[0-9\]+\t   \\\[0x43\\\].*" \
+	"\[0-9\]+\t     \\\[0x43\\\].*" \
 	]
 }
 
@@ -173,9 +173,9 @@ with_test_prefix "Lambdas" {
 
     gdb_test "record instruction-history 1" [multi_line \
 	".*\[0-9\]+\t   $hex <ptwrite1\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
-	"\[0-9\]+\t   \\\[68\\\]" \
+	"\[0-9\]+\t     \\\[68\\\]" \
 	".*\[0-9\]+\t   $hex <ptwrite2\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
-	"\[0-9\]+\t   \\\[69\\\].*" \
+	"\[0-9\]+\t     \\\[69\\\].*" \
 	] "Lambdas: record instruction-history 1"
 }
 
@@ -195,8 +195,8 @@ with_test_prefix "Functors" {
 
     gdb_test "record instruction-history 1" [multi_line \
 	".*\[0-9\]+\t   $hex <ptwrite1\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
-	"\[0-9\]+\t   \\\[1, 66\\\]" \
+	"\[0-9\]+\t     \\\[1, 66\\\]" \
 	".*\[0-9\]+\t   $hex <ptwrite2\\+\[0-9\]+>:\tptwrite %\[a-z\]+" \
-	"\[0-9\]+\t   \\\[2, 67\\\].*" \
+	"\[0-9\]+\t     \\\[2, 67\\\].*" \
 	] "Functors: record instruction-history 1"
 }

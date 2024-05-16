@@ -50,15 +50,16 @@ proc get_id {name pretty} {
     return $expected_id
 }
 
-proc compare_id {name pretty} {
+proc compare_id {name pretty {known_fail ""}} {
     with_test_prefix "check $name" {
 	global decimal
 	set expected_val [get_id $name $pretty]
+	if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
 	gdb_test "print \$_$name" "\\$$decimal = \\{$expected_val\\}" "check $name == {$expected_val}"
     }
 }
 
-proc check_ids {wg_dim_size} {
+proc check_ids {wg_dim_size {known_fail ""}} {
     global decimal
     set threads_to_test {}
     set workgroups_to_test {}
@@ -108,8 +109,8 @@ proc check_ids {wg_dim_size} {
 		    }
 		}
 		compare_id "thread_workgroup" 0
-		compare_id "workitem_local_id" 0
-		compare_id "workitem_global_id" 0
+		compare_id "workitem_local_id" 0 $known_fail
+		compare_id "workitem_global_id" 0 $known_fail
 	    }
 	}
 	incr num_threads_checked
@@ -120,13 +121,16 @@ proc check_ids {wg_dim_size} {
     set num_threads_in_workgroup \
 	[expr ($wg_dim_size * $wg_dim_size * $wg_dim_size + $simd_width - 1) / $simd_width]
     set expected_num [expr 2 * $num_threads_in_workgroup]
+    if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
     gdb_assert {$num_threads_checked == $expected_num} \
 	"# threads checked = $num_threads_checked, # expected = $expected_num"
 
     # Now test the pretty-printer format.
     gdb_test "enable pretty-printer global"
     compare_id "thread_workgroup" 1
+    if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
     compare_id "workitem_local_id" 1
+    if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
     compare_id "workitem_global_id" 1
 }
 
@@ -153,7 +157,7 @@ foreach device $sycl_device_list {
 	}
 	gdb_continue_to_breakpoint "kernel 2" ".*$srcfile:$last_line_2.*"
 	with_test_prefix "kernel 2, simd32" {
-	    check_ids 5
+	    check_ids 5 "JIRA IGDB/4839"
 	}
     }
 }

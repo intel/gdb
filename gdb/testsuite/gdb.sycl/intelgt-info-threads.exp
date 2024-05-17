@@ -76,10 +76,6 @@ foreach device $sycl_device_list {
 		-re -wrap "\\\*?$thread:\\\[\(\\\*?$decimal\\\s?\)+\\\]\[^\r\n\]* at $srcfile:$line" {
 		    pass $gdb_test_name
 		}
-		-re "$gdb_prompt" {
-		    kfail "JIRA IGDB/4839" \
-			"Unexpected output for info thread $thread"
-		}
 	    }
 	}
     }

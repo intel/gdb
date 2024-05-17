@@ -234,8 +234,13 @@ class IntelgtHookBreakpoint(gdb.Breakpoint):
         """Called when the breakpoint is hit.  Initializes IntelGT inferiors
         on the first hit and prevents further actions on subsequent hits.
         Always returns False to ensure that the program does not stop at this
-        breakpoint."""
-        if not self.used_once:
+        breakpoint.  Filter based on the library loaded at current PC.
+        This can be extended in the future to only start gdbserver-ze in the
+        context of GPU debugging."""
+        current_pc = gdb.selected_frame().pc()
+        solib_name = gdb.current_progspace().solib_name(current_pc)
+        if (not self.used_once and
+            solib_name in INTELGT_AUTO_ATTACH.loaded_objfiles):
             self.used_once = True
             INTELGT_AUTO_ATTACH.gt_inferior_init_pending = False
             INTELGT_AUTO_ATTACH.init_gt_inferiors()
@@ -268,6 +273,7 @@ class IntelgtAutoAttach:
         gdb.events.exited.connect(self.handle_exited_event)
         gdb.events.before_prompt.connect(self.handle_before_prompt_event)
         self.inf_dict = {}
+        self.loaded_objfiles = set()
         self.host_inf_for_auto_remove = None
         self.enable_schedule_multiple_at_gt_removal = False
         self.gt_inferior_init_pending = False
@@ -336,6 +342,7 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
             'ze_intel_gpu64.dll' in event.new_objfile.filename):
             DebugLogger.log(
                 f"received {event.new_objfile.filename} loaded event.")
+            self.loaded_objfiles.add(event.new_objfile.filename)
             if gdb.selected_inferior().was_attached:
                 # We just learnt about the library event and the inferior
                 # was attached.  It is possible that the level-zero backend
@@ -355,6 +362,7 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
             hook = self.setup_hook_bp(f"-qualified zeContextCreate inferior "
                                       f"{gdb.selected_inferior()}")
             filename = event.new_objfile.filename
+            self.loaded_objfiles.add(filename)
             gdb.events.free_objfile.connect(IntelgtDeleteHook(hook, filename))
 
     def setup_hook_bp(self, locspec):

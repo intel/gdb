@@ -1,0 +1,550 @@
+# Copyright 2024 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Support library for testing Vanilla NUMBA (aka. njit) and NUMBA-DPEX
+# (aka. dpex) GDB features.
+
+
+# This file defines following global variables:
+#  $NUMBA_BINFILE is the name and the path of the executable interpreter.
+#  $NUMBA_UNIFORM_MARKER is the uniform marker tag.
+#  $NUMBA_DPEX_TEST is zero while running a Vanilla NUMBA test, or non-zero
+#   while running NUMBA-DPEX test.
+#  $NJIT_CMPLR_VER is the detected version of the Vanilla NUMBA compiler.
+#  $DPEX_CMPLR_VER is the detected version of the NUMBA-DPEX compiler.
+#  $NUMBA_DEV_NAME is the name string of the currently used device.
+#  $OFFLOAD_DEVICE_GROUP is the filter for device group.
+
+if {![info exists numba_binfile]} {
+    set numba_binfile ""
+}
+if {![info exists numba_uniform_marker]} {
+    set numba_uniform_marker "numba-kernel-breakpoint"
+}
+if {![info exists numba_dpex_test]} {
+    set numba_dpex_test 0
+}
+if {![info exists OFFLOAD_DEVICE_GROUP]} {
+    set OFFLOAD_DEVICE_GROUP "cpu,gpu,accelerator"
+}
+
+
+# Get the Vanilla NUMBA compiler version.
+
+proc njit_compiler {} {
+    global njit_cmplr_ver
+    return $njit_cmplr_ver
+}
+
+
+# Get the NUMBA-DPEX compiler version.
+
+proc dpex_compiler {} {
+    global dpex_cmplr_ver
+    return $dpex_cmplr_ver
+}
+
+
+# Get the device filter string.
+
+proc numba_device_filter {} {
+    global numba_dev_fltr
+    return $numba_dev_fltr
+}
+
+
+# Get the device name string.
+
+proc numba_device_name {} {
+    global numba_dev_name
+    return $numba_dev_name
+}
+
+
+# Starts fresh GDB binary and loads the interpreter.
+#
+# Returns -1 if starting gdb or loading the interpreter failed.
+#
+# This is NUMBA replacement for the clean_restart in gdb.exp.
+
+proc numba_clean_restart { args } {
+    global srcdir subdir
+    global errcnt warncnt
+
+    if {[llength $args] != 1} {
+	error "bad number of args: [llength $args]"
+    }
+
+    gdb_exit
+
+    # This is a clean restart, so reset error and warning count.
+    set errcnt 0
+    set warncnt 0
+
+    gdb_start
+    if {$errcnt > 0} {
+	return -1
+    }
+
+    gdb_reinitialize_dir $srcdir/$subdir
+
+    # Numba compiler may generate files in the workspace.
+    # We want them into the test folder.
+    cd [standard_output_file ""]
+
+    set executable [lindex $args 0]
+    set retval [gdb_load ${executable}]
+    return $retval
+}
+
+
+# Get the line number of the marker.
+#
+# PY_SCRIPT is a full path to the Python script to read.
+# MARKER is a string literal, not a regular expression.
+#
+# This function is similar to gdb_get_line_number, but rather than calling
+# error, this function always returns.
+#
+# Returns -1, if the marker is not found.
+
+proc numba_get_line_number { py_script marker } {
+    if {[catch {set fd [open "${py_script}"]} message]} then {
+	verbose -log "NUMBA: failed to open ${py_script}" 0
+	return -1
+    }
+
+    set found -1
+    for {set line 1} {1} {incr line} {
+	if {[catch {set nchar [gets "$fd" body]} message]} then {
+	    break
+	}
+	if {$nchar < 0} then {
+	    break
+	}
+	if {[string first ${marker} "$body"] >= 0} then {
+	    set found $line
+	    break
+	}
+    }
+
+    if {[catch {close "$fd"} message]} then {
+	verbose -log "NUMBA: failed to close ${py_script}" 0
+	set found -1
+    }
+
+    return $found
+}
+
+
+# Issue a 'continue' command and expect to see program termination.
+#
+# MSG_SUFFIX is a string literal, to make unique test names.
+
+proc continue_numba_to_termination {{msg_suffix ""}} {
+    global gdb_prompt inferior_exited_re
+
+    set is_non_stop 0
+    gdb_test_multiple "show non-stop" "get non-stop mode" {
+	-re "non-stop mode is off.\r\n$gdb_prompt $" {
+	    set is_non_stop 0
+	}
+	-re "non-stop mode is on.\r\n$gdb_prompt $" {
+	    set is_non_stop 1
+	}
+    }
+
+    if {!$is_non_stop} {
+	gdb_test "continue" "$inferior_exited_re normally].*" \
+	    "continue to end $msg_suffix"
+    } else {
+	gdb_test "continue -a" "$inferior_exited_re normally].*" \
+	    "continue to end $msg_suffix"
+    }
+}
+
+
+# Create a list of devices supporting Vanilla NUMBA.
+#
+# INTERPRETER is the basename of the executable interpreter.
+#   If none given, "python3" is the default.
+# PATH is the path to the interpreter executable.
+#   If none given, OS command "which <interpreter>" is used.
+#
+# Returns a list of devices supporting Vanilla NUMBA.  For the format of
+# a device string, see is_device_filtered.
+
+proc init_numba_njit_devices_list {{interpreter "python3"} {path ""}} {
+    global numba_dpex_test
+    global numba_binfile
+
+    set numba_dpex_test 0
+
+    # The global variable $numba_binfile points to the executable.
+    # By default we use Python3, but user may give a different one.
+    if {"${path}" eq ""} {
+	# If user didn't specify the path, ask the OS.
+	if {[catch {set numba_binfile [exec which \
+						"${interpreter}"]}]} {
+	    verbose -log "NUMBA: failed to find the path to '${interpreter}'" 0
+	    gdb_exit
+	    return {}
+	}
+    } else {
+	# Use the user specified path.
+	set numba_binfile ${path}/${interpreter}
+    }
+    verbose -log "NUMBA: using interpreter '${numba_binfile}'"
+
+    set numba_device_list [get_njit_devices_list]
+    if {[llength $numba_device_list] == 0} {
+	unsupported "target does not support Vanilla NUMBA"
+    }
+
+    return $numba_device_list
+}
+
+
+# Create a list of devices supporting NUMBA-DPEX.
+#
+# INTERPRETER is the basename of the executable interpreter.
+#   If none given, "python3" is the default.
+# PATH is the path to the interpreter executable.
+#   If none given, OS command "which <interpreter>" is used.
+#
+# Returns a list of devices supporting NUMBA-DPEX.  For the format of
+# a device string, see is_device_filtered.
+
+proc init_numba_dpex_devices_list {{interpreter "python3"} {path ""}} {
+    global numba_dpex_test
+    global numba_binfile
+
+    set numba_dpex_test 1
+
+    # The global variable $numba_binfile points to the executable.
+    # By default we use Python3, but user may give a different one.
+    if {"${path}" eq ""} {
+	# If user didn't specify the path, ask the OS.
+	if {[catch {set numba_binfile [exec which \
+						"${interpreter}"]}]} {
+	    verbose -log "NUMBA: failed to find the path to '${interpreter}'" 0
+	    gdb_exit
+	    return {}
+	}
+    } else {
+	# Use the user specified path.
+	set numba_binfile ${path}/${interpreter}
+    }
+    verbose -log "NUMBA: using interpreter '${numba_binfile}'"
+
+    set numba_device_list [get_dpex_devices_list]
+    if {[llength $numba_device_list] == 0} {
+	unsupported "target does not support NUMBA-DPEX"
+    }
+
+    return $numba_device_list
+}
+
+
+# Start the Numba script and run to the uniform marker.
+#
+# DEVICE is the string initiated in init_xxx_devices_list.
+#
+# Returns the device filter string.  For the format of
+# a device and filter strings, see is_device_filtered.
+
+
+proc numba_init_device {device} {
+    global numba_binfile numba_uniform_marker
+    global numba_dev_fltr numba_dev_name
+    global srcdir subdir srcfile
+    global gdb_prompt
+
+    if {[string match "" $device]} {
+	return ""
+    }
+
+    verbose -log "NUMBA: Testing device '$device'"
+    # numba_binfile was set in init_numba_njit_devices_list and
+    # init_numba_dpex_devices_list.
+    if {[numba_clean_restart $numba_binfile] < 0} {
+	verbose -log "NUMBA: failed to start $numba_binfile" 0
+	gdb_exit
+	return ""
+    }
+
+    set numba_dev_name [lindex [split "$device" ";"] 0]
+    set numba_dev_fltr [lindex [split "$device" ";"] 1]
+    set py_script ${srcfile}
+    set path ${srcdir}/${subdir}
+    # Use gdb_test_multiple to not include this as a pass.
+    set set_args_cmd "set args '${path}/${py_script}' '${numba_dev_fltr}'"
+    gdb_test_multiple $set_args_cmd $set_args_cmd {
+	-re "$gdb_prompt $" {}
+    }
+
+    # Disable optimization.
+    # Use gdb_test_multiple to not include this as a pass.
+    gdb_test_multiple "set env NUMBA_OPT=0" "" {
+	-re "$gdb_prompt $" {}
+    }
+    gdb_test_multiple "set env NUMBA_DPEX_OPT=0" "" {
+	-re "$gdb_prompt $" {}
+    }
+
+    # We cannot set breakpoint at main, but we can use a uniform marker.
+    set line [numba_get_line_number \
+	      "${path}/${py_script}" \
+	      ${numba_uniform_marker}]
+    if {$line < 0} {
+	untested "'${numba_uniform_marker}' not found"
+	gdb_exit
+	return ""
+    }
+    set script_main "${py_script}:${line}"
+
+    if {![runto $script_main allow-pending no-message \
+		incr-timeout incr-timeout incr-timeout]} {
+	untested "$device failed to run to uniform marker at $script_main"
+	gdb_exit
+	return ""
+    }
+
+    # Delete the breakpoint at the uniform marker.
+    delete_breakpoints
+
+    return $numba_dev_fltr
+}
+
+
+# Get and return a list of supported devices for Vanilla NUMBA.
+#
+# Returns a list of zero or more device strings.  For the format of
+# a device string, see is_device_filtered.
+
+gdb_caching_proc get_njit_devices_list {} {
+    global numba_binfile
+
+    set numba_device_list {}
+
+    if {"${numba_binfile}" eq ""} {
+	return {}
+    }
+
+    # NJIT supports only CPU.
+    lappend numba_device_list {cpu;:cpu:0}
+    set njit_device_list [test_numba_support_for_devices $numba_device_list]
+
+    if {[llength $njit_device_list]} {
+	verbose -log "NUMBA: NJIT-devices found: $njit_device_list" 0
+    } else {
+	verbose -log "NUMBA: No NJIT-device found" 0
+    }
+
+    gdb_exit
+
+    return $njit_device_list
+}
+
+
+# Get and return a list of supported devices for NUMBA-DPEX.
+#
+# Returns a list of zero or more device strings.  For the format of
+# a device string, see is_device_filtered.
+
+gdb_caching_proc get_dpex_devices_list {} {
+    global numba_binfile
+    global srcdir
+    global gdb_prompt inferior_exited_re
+
+    set numba_device_list {}
+
+    if {"${numba_binfile}" eq ""} {
+	return {}
+    }
+
+    # DPEX can support multiple devices.  Set up and execute a simple
+    # program to detect all supported devices in the current host.
+    if {[numba_clean_restart $numba_binfile] < 0} {
+	verbose -log "NUMBA: failed to start $numba_binfile" 0
+	gdb_exit
+	return {}
+    }
+
+    set py_script "numba-dpex-devices.py"
+    set path ${srcdir}/lib
+    # Use gdb_test_multiple to not include this as a pass.
+    set set_args_cmd "set args '${path}/${py_script}'"
+    gdb_test_multiple $set_args_cmd $set_args_cmd {
+	-re "$gdb_prompt $" {}
+    }
+
+    # Remove any breakpoints, and run the Python script.
+    delete_breakpoints
+    gdb_run_cmd
+    gdb_expect 60 {
+	-re "DPCTL: List of Target devices: \\\[(\[^\r\n\]*)\\\]\r\n" {
+	    set numba_device_list [split $expect_out(1,string) ","]
+	    exp_continue
+	}
+	-re "$gdb_prompt $" {}
+    }
+    set dpex_device_list [test_numba_support_for_devices $numba_device_list]
+
+    if {[llength $dpex_device_list]} {
+	verbose -log "NUMBA: DPEX-devices found: $dpex_device_list" 0
+    } else {
+	verbose -log "NUMBA: No DPEX-device found" 0
+    }
+
+    gdb_exit
+
+    return $dpex_device_list
+}
+
+
+# Run a test on the target to check if it supports Numba.
+# Remove device from the available devices list if Numba is not supported
+# and return the updated list.
+
+proc test_numba_support_for_devices {numba_device_list} {
+    global numba_binfile
+    global njit_cmplr_ver dpex_cmplr_ver
+    global numba_dev_fltr
+    global numba_dpex_test
+    global srcdir
+    global gdb_prompt
+
+    set supported_numba_device_list {}
+
+    if {"$numba_dpex_test" == "0"} {
+	set py_script "numba-njit-hello.py"
+    } else {
+	set py_script "numba-dpex-hello.py"
+    }
+
+    # For each device in $numba_device_list, run the Hello World -script.
+    foreach device $numba_device_list {
+	if ![is_device_filtered $device] {
+	    continue
+	}
+
+	set numba_dev_fltr [lindex [split "$device" ";"] 1]
+	if {[string match -nocase "*:accelerator:*" $numba_dev_fltr]} {
+	    verbose -log "NUMBA: Accelerator not supported - ${device}"
+	    continue
+	}
+
+	verbose -log "NUMBA: Trying device '$device'"
+	if {[numba_clean_restart $numba_binfile] < 0} {
+	    verbose -log "NUMBA: failed to start $numba_binfile" 0
+	    gdb_exit
+	    return {}
+	}
+
+	# Set arguments: the Python script file to run in the interpreter,
+	# and the filter string.
+	set path ${srcdir}/lib
+	# Use gdb_test_multiple to not include this as a pass.
+	set set_args_cmd "set args '${path}/${py_script}' '${numba_dev_fltr}'"
+	gdb_test_multiple $set_args_cmd $set_args_cmd {
+	    -re "$gdb_prompt $" {}
+	}
+
+	# Remove any breakpoints, and run the Python script.
+	delete_breakpoints
+	gdb_run_cmd
+
+	# Support is detected, if the output includes the expected message.
+	set result -1
+	gdb_expect 60 {
+	    -re [multi_line \
+		"njit:(\[^\r\n\]*)" \
+		".*Hello, NUMBA njit!.*" ] {
+		if {"$numba_dpex_test" == "0"} {
+		    set njit_cmplr_ver $expect_out(1,string)
+		    set dpex_cmplr_ver "n/a"
+		    set result 0
+		}
+	    }
+	    -re [multi_line \
+		"njit:(\[^\r\n\]*)" \
+		".*dpex:(\[^\r\n\]*)" \
+		".*dpctl:(\[^\r\n\]*)" \
+		".*Hello, NUMBA-DPEX!.*" ] {
+		if {"$numba_dpex_test" != "0"} {
+		    set njit_cmplr_ver $expect_out(1,string)
+		    set dpex_cmplr_ver $expect_out(2,string)
+		    set result 0
+		}
+	    }
+	    -re "(.*)$gdb_prompt $" {
+		verbose -log "NUMBA: Missing the expected output"
+	    }
+	    eof     { verbose -log "NUMBA: eof" 2 }
+	    timeout { verbose -log "NUMBA: timeout" 2 }
+	}
+
+	if {$result == 0} {
+	    verbose -log "NUMBA: Support detected for ${device}" 0
+	    lappend supported_numba_device_list "${device}"
+	} else {
+	    verbose -log "NUMBA: Support not detected for ${device}"
+	}
+
+    }
+
+    gdb_exit
+    return $supported_numba_device_list
+}
+
+
+# Returns 1 if the target device is selected via OFFLOAD_DEVICE_GROUP,
+# 0 otherwise.
+#
+# DEVICE consists of device name and device filter string, separated by
+# a semicolon.  Device filter string format is
+#    <opencl|level_zero>:<cpu|gpu|accelerator>:<0|1|...>
+# e.g.
+#    Genuine Intel(R) CPU 0000 @ 2.60GHz;opencl:cpu:0
+
+proc is_device_filtered {device} {
+    global numba_dpex_test
+    global OFFLOAD_DEVICE_GROUP
+    # Filter according to OFFLOAD_DEVICE_GROUP.
+    set device_info [split "$device" ";"]
+    set device_fltr_str [split [lindex $device_info 1] ":"]
+    set backend [lindex $device_fltr_str 0]
+    set device_type [lindex $device_fltr_str 1]
+
+    if {[lsearch [split $OFFLOAD_DEVICE_GROUP ","] $device_type] < 0} {
+	verbose -log \
+	    "NUMBA: device type $device_type is unwanted, skipping '$device'"
+	return 0
+    }
+
+    if {"$numba_dpex_test" != "0"} {
+	# Backend name can be a string longer than the specified phrase.
+	# Use string matching instead of exact match.
+	if {$device_type == "gpu"
+	    && ![string match -nocase "*level_zero*" $backend]} {
+	    verbose -log \
+		"NUMBA: unsupported combination: $device_type & $backend"
+	    return 0
+	}
+    }
+
+    return 1
+}

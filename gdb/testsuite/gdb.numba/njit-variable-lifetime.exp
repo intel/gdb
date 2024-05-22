@@ -1,0 +1,47 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for the vanilla NUMBA: variable lifetime.
+
+load_lib numba.exp
+
+standard_testfile njit-func.py
+
+set numba_device_list [init_numba_njit_devices_list]
+if {[llength $numba_device_list] == 0} {
+    return 0
+}
+
+set func_line_2 [gdb_get_line_number "func_line_2"]
+
+foreach device $numba_device_list {
+    set test_prefix [numba_init_device $device]
+    if {[string match "" $test_prefix]} {
+	verbose -log "NUMBA: Ignoring unknown device name $device" 0
+	continue
+    }
+    with_test_prefix "$test_prefix" {
+	# See how a variable keeps its value until the end of the function.
+	gdb_breakpoint "${func_line_2}"
+	gdb_continue_to_breakpoint "line ${func_line_2}" \
+	    ".*${srcfile}:${func_line_2}.*"
+	gdb_test "print a_in_func" " = 1234.5" \
+	    "At the middle of the function"
+
+	gdb_test "next"
+	gdb_test "print a_in_func" " = 1234.5" \
+	    "At the end of the function"
+    }
+}

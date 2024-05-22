@@ -747,12 +747,14 @@ proc gdb_breakpoint { linespec args } {
 # single quoted C++ function specifier.
 #
 # If there are additional arguments, pass them to gdb_breakpoint.
-# We recognize no-message/message ourselves.
+# We recognize no-message/message/incr-timeout ourselves.
 #
 # no-message is messed up here, like gdb_breakpoint: to preserve
 # historical usage fails are always printed by default.
 # no-message: turns off printing of fails (and passes, but they're already off)
 # message: turns on printing of passes (and fails, but they're already on)
+# incr-timeout; each occurrance of this parameter increases timeout by 10
+# seconds.  Default timeout is 30 seconds.
 
 proc runto { linespec args } {
     global gdb_prompt
@@ -771,6 +773,12 @@ proc runto { linespec args } {
     } elseif { $message_loc > $no_message_loc } {
 	set print_pass 1
     }
+    set timeout 30
+    foreach member $args {
+	if {$member eq "incr-timeout"} {
+	    incr timeout 10
+	}
+    }
 
     set test_name "runto: run to $linespec"
 
@@ -782,7 +790,7 @@ proc runto { linespec args } {
     
     # the "at foo.c:36" output we get with -g.
     # the "in func" output we get without -g.
-    gdb_expect {
+    gdb_expect $timeout {
 	-re "(?:Break|Temporary break).* at .*:$decimal.*$gdb_prompt $" {
 	    if { $print_pass } {
 		pass $test_name

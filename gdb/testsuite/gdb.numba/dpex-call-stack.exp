@@ -1,0 +1,69 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for the NUMBA-DPEX: backtrace in kernel and
+# in called function(s).
+
+load_lib numba.exp
+
+standard_testfile dpex-func.py
+
+set numba_device_list [init_numba_dpex_devices_list]
+if {[llength $numba_device_list] == 0} {
+    return 0
+}
+
+proc test_call_stack {} {
+    global srcfile
+
+    set kernel_line [gdb_get_line_number "numba-kernel-breakpoint"]
+    set func_call [gdb_get_line_number "kernel_line_2"]
+    set func_line [gdb_get_line_number "func_line_1"]
+
+    set fill "\[^\r\n\]*"
+
+    set kernel_sum "kernel_sum${fill} \\\(${fill}\\\)"
+    set func_sum "func_sum${fill} \\\(${fill}\\\)"
+
+    # Ignore all but the first frame.
+    gdb_test "backtrace 1" \
+	"\#0 ${fill}${kernel_sum} at ${srcfile}:${kernel_line}.*" \
+	"backtrace at kernel entry"
+
+    # Set and hit a breakpoint at the entry of the function 'func_sum'.
+    gdb_breakpoint "func_sum"
+    gdb_test "continue" \
+	".*${srcfile}:${func_line}.*" \
+	"hit a function breakpoint"
+
+    # Ignore all but the first two frames.
+    gdb_test "backtrace 2" [multi_line \
+	"\#0 ${fill}${func_sum} at ${srcfile}:${func_line}.*" \
+	"\#1 ${fill}${kernel_sum} at ${srcfile}:${func_call}.*"] \
+	"backtrace at function entry"
+}
+
+foreach device $numba_device_list {
+
+    set test_prefix [numba_init_device $device]
+    if {[string match "" $test_prefix]} {
+	verbose -log "NUMBA: Ignoring unknown device name $device" 0
+	continue
+    }
+    with_test_prefix "$test_prefix" {
+	# Run the test.
+	test_call_stack
+    }
+}

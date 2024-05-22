@@ -1,0 +1,85 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDB basic commands support for the vanilla NUMBA.
+
+load_lib numba.exp
+
+standard_testfile njit-func.py
+
+set numba_device_list [init_numba_njit_devices_list]
+if {[llength $numba_device_list] == 0} {
+    return 0
+}
+
+set kernel_entry [gdb_get_line_number "numba-kernel-breakpoint"]
+set kernel_line_2 [gdb_get_line_number "kernel_line_2"]
+set func_line_1 [gdb_get_line_number "func_line_1"]
+set func_line_2 [gdb_get_line_number "func_line_2"]
+set func_line_3 [gdb_get_line_number "func_line_3"]
+
+set fill "\[^\r\n\]*"
+
+foreach device $numba_device_list {
+    set test_prefix [numba_init_device $device]
+    if {[string match "" $test_prefix]} {
+	verbose -log "NUMBA: Ignoring unknown device name $device" 0
+	continue
+    }
+    with_test_prefix "$test_prefix" {
+	# Info line at the kernel entry.
+	gdb_test "info line" "Line ${kernel_entry} of \"${srcfile}.*" \
+	    "info line kernel_entry ${kernel_entry}"
+
+	gdb_test "next" "${kernel_line_2}${fill} kernel_line_2"
+
+	gdb_breakpoint "${func_line_3}"
+	gdb_continue_to_breakpoint "line ${func_line_3}" \
+	    ".*${srcfile}:${func_line_3}.*"
+
+	# Jump backwards, execution continues until we hit a breakpoint.
+	gdb_test "jump ${func_line_2}" \
+	    "Breakpoint ${decimal}.* at ${srcfile}:${func_line_3}.*"
+
+	gdb_test "list" [multi_line \
+	    "${func_line_1}.*func_line_1" \
+	    "${func_line_2}.*func_line_2" \
+	    "${func_line_3}.*func_line_3.*"]
+
+	gdb_test "info args" [multi_line \
+	    "a_in_func = 1234.5" \
+	    "b_in_func = 9876.5"]
+
+	# 'info locals' shall show all local variables
+	# but no other variables.
+	# NUMBA ISSUE/7907: Numba messes with LLVM debug
+	# metadata, and shows compiler generated variables.
+	# Expected output is:
+	#    result = 11111
+	# Instead the output may be like:
+	#    result = 0
+	#    result$1 = 11111
+	setup_xfail "NUMBA ISSUES/7907" "*-*-*"
+	gdb_test "info locals" "result = 11111"
+
+	gdb_test "frame 1" "func_sum.*kernel_line_3"
+
+	gdb_test "ptype i" "int64"
+	gdb_test "ptype a_in_kernel" "type = struct array.*"
+
+	delete_breakpoints
+	continue_numba_to_termination
+    }
+}

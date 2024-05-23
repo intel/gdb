@@ -118,7 +118,22 @@ foreach device $sycl_device_list {
 	    # With the optimized code we hit a BP with the host inferior, avoid
 	    # it by setting the condition.
 	    gdb_breakpoint "$first_line if \$_inferior > 1" {temporary}
-	    gdb_continue_to_breakpoint "hit the BP at the first line"
+	    gdb_test_multiple "continue" "hit the BP at the first line" {
+		-re -wrap "hit Temporary breakpoint.*" {
+		    if {[is_pvc $device]} {
+			setup_kfail "JIRA GSD/8399" "*-*-*"
+		    }
+		    pass $gdb_test_name
+		}
+		-re -wrap "joint_matrix is not supported.*" {
+		    kfail "JIRA GSD/8399" $gdb_test_name
+		    continue
+		}
+		-re -wrap "" {
+		    fail $gdb_test_name
+		    continue
+		}
+	    }
 	    step_over_atomic $displaced_stepping $device
 	}
     }

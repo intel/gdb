@@ -35,6 +35,7 @@
 #include "language.h"
 #include "interps.h"
 #include "mi/mi-cmds.h"
+#include "source-cache.h"
 #include "target.h"
 #include "arch-utils.h"
 #include <ctype.h>
@@ -2204,14 +2205,52 @@ create_sals_line_offset (struct linespec_state *self,
 
   if (values.empty ())
     {
+      std::string lines;
+
+      /* Try to find source code associated with the explicitly
+	 specified line.  If the line is out of source file range
+	 error out the same way as for no compiled code but with
+	 a different message for clarity.  */
+      bool line_found = false;
+      std::string max_line_msg;
+      for (const auto &symtab : ls->file_symtabs)
+	{
+	  if (!g_source_cache.get_source_lines (symtab, val.line, val.line,
+						&lines))
+	    {
+	      const std::vector<off_t> *offsets = nullptr;
+	      g_source_cache.get_line_charpos (symtab, &offsets);
+
+	      if (offsets == nullptr)
+		continue;
+
+	      max_line_msg = "  File has "
+			     + std::to_string (offsets->size ())
+			     + " lines.";
+	    }
+	  else
+	    {
+	      line_found = true;
+	      break;
+	    }
+	}
+
+      std::string filename_qualifier;
       if (ls->explicit_loc.source_filename)
-	throw_error (NOT_FOUND_ERROR,
-		     _("No compiled code for line %d in file \"%s\"."),
-		     val.line, ls->explicit_loc.source_filename.get ());
+	filename_qualifier
+	  = std::string (" in file \"") + ls->explicit_loc.source_filename
+	    + "\"";
       else
+	filename_qualifier = " in the current file";
+
+      if (line_found)
 	throw_error (NOT_FOUND_ERROR,
-		     _("No compiled code for line %d in the current file."),
-		     val.line);
+		     _("No compiled code for line %d%s."), val.line,
+		     filename_qualifier.c_str ());
+      else
+	throw_error (NOT_FOUND_ERROR, _("No source for line %d%s.%s"),
+		     val.line, filename_qualifier.c_str (),
+		     max_line_msg.c_str ());
     }
 
   return values;

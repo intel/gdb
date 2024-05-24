@@ -187,6 +187,37 @@ struct intelgt_gdbarch_data
     return regset_ranges[intelgt::regset_grf].end - 1;
   }
 
+  /* Return a structured type of the 'framedesc' register.
+
+     The type of the 'framedesc' register is used to present the raw GRF
+     register as a nice structure, with fields names, to the user.  */
+
+  type *
+  get_framedesc_type (regcache *regcache)
+  {
+    /* Cache the type of the framedesc user register individually.  */
+    static type *framedesc_type = nullptr;
+
+    if (framedesc_type != nullptr)
+      return framedesc_type;
+
+    gdbarch *arch = regcache->arch ();
+    const struct builtin_type *bt = builtin_type (arch);
+
+    type *framedesc
+      = arch_composite_type (regcache->arch (), "framedesc", TYPE_CODE_STRUCT);
+    append_composite_type_field (framedesc, "return_ip", bt->builtin_int32);
+    append_composite_type_field (framedesc, "return_callmask",
+				 bt->builtin_int32);
+    append_composite_type_field (framedesc, "be_sp", bt->builtin_int32);
+    append_composite_type_field (framedesc, "be_fp", bt->builtin_int32);
+    append_composite_type_field (framedesc, "fe_fp", bt->builtin_int64);
+    append_composite_type_field (framedesc, "fe_sp", bt->builtin_int64);
+
+    framedesc_type = framedesc;
+    return framedesc;
+  }
+
 #if defined (HAVE_LIBIGA64)
   /* libiga context for disassembly.  */
   iga_context_t iga_ctx = nullptr;
@@ -376,38 +407,16 @@ intelgt_return_value_as_value (gdbarch *gdbarch, value *function,
   error ("intelgt target does not implement return value yet");
 }
 
-/* Callback function to unwind the $framedesc register.  */
-
-static value *
-intelgt_dwarf2_prev_framedesc (const frame_info_ptr &this_frame,
-			       void **this_cache, int regnum)
-{
-  gdbarch *gdbarch = get_frame_arch (this_frame);
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
-
-  int actual_regnum = data->framedesc_base_regnum ();
-
-  /* Unwind the actual GRF register.  */
-  return frame_unwind_register_value (this_frame, actual_regnum);
-}
-
 static void
 intelgt_init_reg (gdbarch *gdbarch, int regnum, dwarf2_frame_state_reg *reg,
 		  const frame_info_ptr &this_frame)
 {
   int ip_regnum = intelgt_pseudo_register_num (gdbarch, "ip");
-  int framedesc_regnum = intelgt_pseudo_register_num (gdbarch, "framedesc");
 
   if (regnum == ip_regnum)
     reg->how = DWARF2_FRAME_REG_RA;
   else if (regnum == gdbarch_sp_regnum (gdbarch))
     reg->how = DWARF2_FRAME_REG_CFA;
-  /* We use special functions to unwind the $framedesc register.  */
-  else if (regnum == framedesc_regnum)
-    {
-      reg->how = DWARF2_FRAME_REG_FN;
-      reg->loc.fn = intelgt_dwarf2_prev_framedesc;
-    }
 }
 
 /* A helper function that returns the value of the ISABASE register.  */
@@ -758,20 +767,7 @@ intelgt_pseudo_register_type (gdbarch *arch, int regnum)
 
   const struct builtin_type *bt = builtin_type (arch);
 
-  if (strcmp (name, "framedesc") == 0)
-    {
-      type *frame = arch_composite_type (arch, "frame_desc", TYPE_CODE_STRUCT);
-      append_composite_type_field (frame, "return_ip", bt->builtin_uint32);
-      append_composite_type_field (frame, "return_callmask",
-				   bt->builtin_uint32);
-      append_composite_type_field (frame, "be_sp", bt->builtin_uint32);
-      append_composite_type_field (frame, "be_fp", bt->builtin_uint32);
-      append_composite_type_field (frame, "fe_fp", bt->builtin_data_ptr);
-      append_composite_type_field (frame, "fe_sp", bt->builtin_data_ptr);
-      data->reg_types_ext["framedesc"] = frame;
-      return frame;
-    }
-  else if (strcmp (name, "ip") == 0)
+  if (strcmp (name, "ip") == 0)
     return bt->builtin_uint32;
 
   return nullptr;
@@ -915,6 +911,29 @@ get_device_id (gdbarch *gdbarch)
   return *device_info->target_id;
 }
 
+/* Read the 'framedesc' user register, a structured alias
+   of the actual GRF.  */
+
+static value *
+intelgt_value_of_framedesc_user_reg (const frame_info_ptr &frame,
+				     const void *baton)
+{
+  gdbarch *arch = get_frame_arch (frame);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  regcache *regcache = get_thread_regcache (inferior_thread ());
+  type *frame_type = data->get_framedesc_type (regcache);
+  int grf_num = data->framedesc_base_regnum ();
+  int grf_size = register_size (arch, grf_num);
+  int framedesc_size = frame_type->length ();
+  gdb_assert (framedesc_size <= grf_size);
+
+  value *grf
+    = value_of_register (grf_num, get_next_frame_sentinel_okay (frame));
+  value *result = value::allocate (frame_type);
+  grf->contents_copy (result, 0, 0, framedesc_size);
+  return result;
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -1004,9 +1023,12 @@ Device vendor id and target id not found in intelgt target description."));
 	error (_("Debugging requires state register to be provided by "
 		 "the target"));
 
+      /* Add the 'framedesc' register as a structured user register.  */
+      user_reg_add (gdbarch, "framedesc",
+		    intelgt_value_of_framedesc_user_reg, nullptr);
+
       /* Unconditionally enabled pseudo-registers:  */
       data->enabled_pseudo_regs.push_back ("ip");
-      data->enabled_pseudo_regs.push_back ("framedesc");
 
       set_gdbarch_num_pseudo_regs (gdbarch, data->enabled_pseudo_regs.size ());
       set_gdbarch_pseudo_register_read_value (

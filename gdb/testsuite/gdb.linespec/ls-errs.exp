@@ -71,8 +71,8 @@ proc do_test {lang} {
 	    "Undefined convenience variable or function \"%s\" not defined in \"%s\"."
 	invalid_label "No label \"%s\" defined in function \"%s\"."
 	invalid_parm "invalid linespec argument, \"%s\""
-	invalid_offset "No compiled code for line %d in the current file."
-	invalid_offset_f "No compiled code for line %d in file \"%s\"."
+	invalid_offset "No source for line %d in the current file.  File has 46 lines."
+	invalid_offset_f "No source for line %d in file \"%s\".  File has 46 lines."
 	malformed_line_offset "malformed line offset: \"%s\""
 	source_incomplete \
 	    "Source filename requires function, label, or line offset."
@@ -80,6 +80,7 @@ proc do_test {lang} {
 	unexpected_opt "malformed linespec error: unexpected %s, \"%s\""
 	unmatched_quote "unmatched quote"
 	garbage "Garbage '%s' at end of command"
+	no_compiled_code "No compiled code for line %d in the current file."
     }
 
     # We intentionally do not use gdb_breakpoint for these tests.
@@ -125,6 +126,9 @@ proc do_test {lang} {
 	test_break $x invalid_offset $offset
 	test_break "-line $x" invalid_offset $offset
     }
+
+    # Test that No compiled code is also a possible error.
+    test_break "1" no_compiled_code "1"
 
     # Test offsets with trailing tokens w/ and w/o spaces.
     foreach x $spaces {

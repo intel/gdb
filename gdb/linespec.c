@@ -47,6 +47,7 @@
 #include "gdbsupport/def-vector.h"
 #include <algorithm>
 #include "inferior.h"
+#include <map>
 
 /* An enumeration of the various things a user might attempt to
    complete for a linespec location.  */
@@ -398,11 +399,12 @@ static std::vector<symtab *>
   collect_symtabs_from_filename (const char *file,
 				 struct program_space *pspace);
 
+using symtab_best_entry_map = std::map<symtab *, const linetable_entry *>;
 static std::vector<symtab_and_line> decode_digits_ordinary
   (struct linespec_state *self,
    linespec *ls,
    int line,
-   const linetable_entry **best_entry);
+   symtab_best_entry_map &best_entries);
 
 static std::vector<symtab_and_line> decode_digits_list_mode
   (struct linespec_state *self,
@@ -2078,7 +2080,7 @@ create_sals_line_offset (struct linespec_state *self,
     values = decode_digits_list_mode (self, ls, val);
   else
     {
-      const linetable_entry *best_entry = NULL;
+      symtab_best_entry_map entry_per_symtab;
       int i, j;
 
       /* True if the provided line gave an exact match.  False if we had to
@@ -2086,13 +2088,33 @@ create_sals_line_offset (struct linespec_state *self,
       bool was_exact = true;
 
       std::vector<symtab_and_line> intermediate_results
-	= decode_digits_ordinary (self, ls, val.line, &best_entry);
-      if (intermediate_results.empty () && best_entry != NULL)
+	= decode_digits_ordinary (self, ls, val.line, entry_per_symtab);
+      if (intermediate_results.empty () && !entry_per_symtab.empty ())
 	{
 	  was_exact = false;
-	  intermediate_results = decode_digits_ordinary (self, ls,
-							 best_entry->line,
-							 &best_entry);
+
+	  /* We got best entries per symtab and therefore only lookup PCs
+	     in the associated symtab.  */
+	  for (const auto &e : entry_per_symtab)
+	    {
+	      program_space *pspace
+		= e.first->compunit ()->objfile ()->pspace;
+	      set_current_program_space (pspace);
+
+	      const linetable_entry *best_entry = nullptr;
+	      std::vector<CORE_ADDR> pcs = find_pcs_for_symtab_line
+		(e.first, e.second->line, &best_entry);
+	      for (const CORE_ADDR pc : pcs)
+		{
+		  symtab_and_line sal;
+		  sal.pspace = pspace;
+		  sal.symtab = e.first;
+		  sal.line = e.second->line;
+		  sal.explicit_line = true;
+		  sal.pc = pc;
+		  intermediate_results.push_back (std::move (sal));
+		}
+	    }
 	}
 
       /* For optimized code, the compiler can scatter one source line
@@ -4099,13 +4121,15 @@ decode_digits_list_mode (struct linespec_state *self,
 
 /* A helper for create_sals_line_offset that iterates over the symtabs
    associated with LS and returns a vector of corresponding symtab_and_line
-   structures.  */
+   structures.  It also fills in BEST_ENTRIES, a map of symtab to line
+   numbers, for best matching lines when propagating a line that is not
+   in the line tables.  */
 
 static std::vector<symtab_and_line>
 decode_digits_ordinary (struct linespec_state *self,
 			linespec *ls,
 			int line,
-			const linetable_entry **best_entry)
+			symtab_best_entry_map &best_entries)
 {
   std::vector<symtab_and_line> sals;
   for (const auto &elt : ls->file_symtabs)
@@ -4118,7 +4142,10 @@ decode_digits_ordinary (struct linespec_state *self,
       program_space *pspace = elt->compunit ()->objfile ()->pspace;
       set_current_program_space (pspace);
 
-      pcs = find_pcs_for_symtab_line (elt, line, best_entry);
+      const linetable_entry *best_entry = nullptr;
+      pcs = find_pcs_for_symtab_line (elt, line, &best_entry);
+      if (pcs.empty () && best_entry != nullptr)
+	best_entries[elt] = best_entry;
       for (CORE_ADDR pc : pcs)
 	{
 	  symtab_and_line sal;

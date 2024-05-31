@@ -1,0 +1,44 @@
+# Copyright 2024 Free Software Foundation, Inc.
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test filename qualified explicit line breakpoint propagation for the case
+# where there are multiple source files of the same name.
+
+standard_testfile .c
+
+set exefile $testfile
+
+set base "thefile.c"
+set baseone explicit/one/$base
+set basetwo explicit/two/$base
+
+if {[prepare_for_testing "failed to prepare" $exefile \
+     [list $srcfile $baseone $basetwo]]} {
+    return -1
+}
+
+if {![runto_main]} {
+    return
+}
+
+set propagate_location [gdb_get_line_number "Intentionally empty." $baseone]
+gdb_breakpoint "$base:$propagate_location"
+
+set should_break_location [gdb_get_line_number "Should break here." $baseone]
+set should_also_break_location [gdb_get_line_number "Should also break here." $basetwo]
+
+gdb_continue_to_breakpoint $should_break_location ".*$baseone:$should_break_location.*"
+gdb_continue_to_breakpoint $should_also_break_location ".*$basetwo:$should_also_break_location.*"
+
+gdb_continue_to_end

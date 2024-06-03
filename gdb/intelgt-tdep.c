@@ -2135,6 +2135,84 @@ get_scratch_area (gdbarch *gdbarch)
   return data->scratch_area;
 }
 
+/* Make the current thread execute a dummy RET instruction.  */
+
+static void
+intelgt_run_ret_inst (gdbarch *gdbarch)
+{
+  dprintf ("Running a dummy RET instruction.");
+
+  target_memory_allocator *scratch_area = get_scratch_area (gdbarch);
+  CORE_ADDR ret_inst_addr = scratch_area->alloc (intelgt::MAX_INST_LENGTH);
+  SCOPE_EXIT { scratch_area->free (ret_inst_addr); };
+
+  type *void_type
+    = type_allocator (gdbarch).new_type (TYPE_CODE_VOID,
+					 gdbarch_addr_bit (gdbarch),
+					 "dummy_ret");
+  type *func_void_type = make_function_type (void_type, nullptr);
+  value *val = value::allocate (func_void_type);
+  val->force_lval (ret_inst_addr);
+
+  constexpr gdb_byte ret_opcode = 0x2d;
+  std::array<gdb_byte, intelgt::MAX_INST_LENGTH> buff {};
+  buff[0] = ret_opcode;
+
+  intelgt_gdbarch_data *arch_data = get_intelgt_gdbarch_data (gdbarch);
+  /* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
+     sub-register 0.  */
+  buff[8] = 0x04;
+  /* Destination register number for the RET instruction.  */
+  gdb_byte dst_reg = arch_data->framedesc_base_regnum ();
+  buff[9] = dst_reg;
+
+  thread_info *tp = inferior_thread ();
+  const uint32_t simd_width = tp->get_simd_width ();
+  gdb_byte exec_size = 0;
+  while ((simd_width >> exec_size) > 1)
+    exec_size++;
+  /* Make sure that 2^EXEC_SIZE = SIMD_WIDTH.  */
+  gdb_assert (1 << exec_size == simd_width);
+
+  uint32_t device_id = get_device_id (current_inferior ());
+  xe_version device_version = get_xe_version (device_id);
+  switch (device_version)
+    {
+    case XE_HP:
+    case XE_HPG:
+      buff[2] = exec_size;
+      break;
+    case XE_HPC:
+      buff[2] = exec_size << 2;
+      break;
+    default:
+      error (_("Unsupported device id 0x%x"), device_id);
+    }
+
+  /* Inject the dummy RET instruction in the reserved space.  */
+  if (target_write_memory (ret_inst_addr, buff.data (), buff.size ()) != 0)
+    error (_("Target failed to inject a dummy RET instruction at 0x%lx"),
+	   ret_inst_addr);
+
+  /* Everything is ready to make the thread run the RET instruction.  In
+     'intelgt_push_dummy_code', we are handling the DUMMY_RET differently from
+     the regular inferior call flow, so that we don't inject an additional
+     CALLA instruction.  */
+  call_function_by_hand (val, nullptr, {});
+}
+
+struct intelgt_infcall_cleanup
+{
+  /* Current gdb architecture.  */
+  gdbarch *arch;
+
+  /* Address of the injected CALLA instruction.  */
+  CORE_ADDR calla_addr;
+
+  /* Value of CE register before starting the infcall.  */
+  uint32_t prev_ce;
+};
+
 /* Intelgt implementation of the dummy frame dtor.  This function will be
    called when a dummy frame is removed or an error is thrown during the
    infcall flow.
@@ -2148,13 +2226,42 @@ intelgt_infcall_dummy_dtor (void *data, int unused)
   /* Do not error out if any exception is thrown.  */
   try
     {
-      auto infcall_cleanup_data = (std::pair<gdbarch *, CORE_ADDR> *) data;
-      gdbarch *gdbarch = infcall_cleanup_data->first;
-      CORE_ADDR calla_addr = infcall_cleanup_data->second;
+      auto infcall_cleanup_data = (intelgt_infcall_cleanup *) data;
+      gdbarch *gdbarch = infcall_cleanup_data->arch;
+      CORE_ADDR calla_addr = infcall_cleanup_data->calla_addr;
+      uint32_t return_mask = infcall_cleanup_data->prev_ce;
       delete infcall_cleanup_data;
 
       target_memory_allocator *scratch_area = get_scratch_area (gdbarch);
-      scratch_area->free (calla_addr);
+      SCOPE_EXIT { scratch_area->free (calla_addr); };
+
+      /* Here we execute a RET instruction to fix the running flow in case
+	 of failures.  TODO Once we have a writable FC register, we no longer
+	 need to run a dummy RET.  Instead, we simply update the "Call Mask"
+	 and/or the "Channel Enables" fields.  */
+      if (stopped_by_random_signal)
+	{
+	  /* Prepare the framedesc for the RET instruction.  */
+	  thread_info *curr_thread = inferior_thread ();
+	  regcache *regcache = get_thread_regcache (curr_thread);
+	  intelgt_gdbarch_data *arch_data = get_intelgt_gdbarch_data (gdbarch);
+	  const int framedesc_regnum = arch_data->framedesc_base_regnum ();
+
+	  /* Update the RETURN_IP to reuse the same NOP breakpoint address.
+	     See 'intelgt_push_dummy_code' for mode details on the
+	     injected instructions.  */
+	  CORE_ADDR bp_addr = calla_addr + intelgt::MAX_INST_LENGTH;
+	  CORE_ADDR isabase = intelgt_get_isabase (regcache);
+	  uint32_t return_ip = (uint32_t) (bp_addr - isabase);
+	  regcache->cooked_write_part (framedesc_regnum, 0, 4,
+				       (gdb_byte *) &return_ip);
+	  /* Update the RETURN_MASK to reflect the caller CE.  */
+	  regcache->cooked_write_part (framedesc_regnum, 4, sizeof (uint32_t),
+				       (gdb_byte *) &return_mask);
+
+	  /* We are ready to let the RET instruction run.  */
+	  intelgt_run_ret_inst (gdbarch);
+	}
     }
   catch (const gdb_exception_error &e)
     {
@@ -2179,6 +2286,21 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
 {
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
   target_memory_allocator *scratch_area = get_scratch_area (gdbarch);
+  CORE_ADDR isabase = intelgt_get_isabase (regcache);
+
+  /* We are executing a dummy RET instruction to fix the running flow.
+     Hence we do not need to inject a calla.  */
+  if (value_type->name () && strcmp (value_type->name (), "dummy_ret") == 0)
+    {
+      /* Use the RETURN_IP as a breakpoint address for the dummy RET.  */
+      const int framedesc_regnum = data->framedesc_base_regnum ();
+      uint32_t return_ip = 0x0;
+      regcache->cooked_read_part (framedesc_regnum, 0, 4,
+				  (gdb_byte *) &return_ip);
+      *real_pc = funaddr;
+      *bp_addr = return_ip + isabase;
+      return sp;
+    }
 
   /* Allocate memory for two instructions in the scratch area.  The first is
      for the CALLA, and the second is the return address, where GDB inserts
@@ -2187,8 +2309,9 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
 
   /* Set the dummy frame dtor right after scratch memory allocation,
      so that it gets called for any exception.  */
+  uint32_t current_ce = intelgt_active_lanes_mask (gdbarch, inferior_thread ());
   auto *infcall_cleanup_data
-    = new std::pair<struct gdbarch *, CORE_ADDR> (gdbarch, calla_addr);
+    = new intelgt_infcall_cleanup {gdbarch, calla_addr, current_ce};
   *arch_dummy_dtor = intelgt_infcall_dummy_dtor;
   *dtor_data = infcall_cleanup_data;
 
@@ -2265,13 +2388,13 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
   /* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
      sub-register 0.  */
   calla_inst[6] = 0x04;
-  /* Destination register number for the CALLA instruction.  */
+  /* Destination register number for the CALLA instruction.  Since we enumerate
+     GRF's starting at GDB reg number 0, it is safe to use GDB numbering.  */
   uint32_t dst_reg = data->framedesc_base_regnum ();
   calla_inst[7] = dst_reg;
 
   /* Determine the jump IP from function address.
      FUNADDR = JIP + $isabase.  */
-  CORE_ADDR isabase = intelgt_get_isabase (regcache);
   CORE_ADDR jump_ip = funaddr - isabase;
 
   /* Store the JIP in the last 4 bytes of the CALLA instruction.  */

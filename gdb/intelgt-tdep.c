@@ -4319,6 +4319,19 @@ intelgt_software_single_step (regcache *regcache)
   return {bpaddr};
 }
 
+/* Intelgt implementation of 'report_signal_info'.  */
+
+static void
+intelgt_report_signal_info (gdbarch *gdbarch, ui_out *uiout, gdb_signal sig)
+{
+  if (sig != GDB_SIGNAL_SEGV)
+    return;
+
+  uiout->text (_("\n"));
+  uiout->text (_("Warning: The location reported for the signal may be "
+		 "inaccurate"));
+}
+
 /* Architecture initialization.  */
 
 static gdbarch *
@@ -4522,6 +4535,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_software_single_step (gdbarch, intelgt_software_single_step);
   set_gdbarch_displaced_step_hw_singlestep
     (gdbarch, intelgt_displaced_step_hw_singlestep);
+  set_gdbarch_report_signal_info (gdbarch, intelgt_report_signal_info);
 
   return gdbarch;
 }

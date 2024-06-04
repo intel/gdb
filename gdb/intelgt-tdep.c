@@ -4473,6 +4473,21 @@ intelgt_get_next_pcs (regcache *regcache)
   return {bpaddr};
 }
 
+/* Intelgt implementation of 'report_signal_info'.  */
+
+static void
+intelgt_report_signal_info (gdbarch *gdbarch, ui_out *uiout, gdb_signal sig)
+{
+  switch (sig)
+    {
+    case GDB_SIGNAL_SEGV:
+      uiout->text (_("\n"));
+      uiout->text (_("Warning: The location reported for the signal may be "
+		     "inaccurate"));
+      break;
+    }
+}
+
 /* Read the 'framedesc' user register, a structured alias
    of the actual GRF.  */
 
@@ -4705,6 +4720,7 @@ Device vendor id and target id not found in intelgt target description."));
   set_gdbarch_get_next_pcs (gdbarch, intelgt_get_next_pcs);
   set_gdbarch_displaced_step_hw_singlestep
     (gdbarch, intelgt_displaced_step_hw_singlestep);
+  set_gdbarch_report_signal_info (gdbarch, intelgt_report_signal_info);
 
   return gdbarch;
 }

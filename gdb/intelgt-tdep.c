@@ -360,6 +360,7 @@ enum xe_version
   XE_HP = XE_VERSION (1, 1),
   XE_HPG = XE_VERSION (1, 2),
   XE_HPC = XE_VERSION (1, 4),
+  XE2 = XE_VERSION (2, 0),
 };
 
 /* Helper functions to request and translate the device id/version.  */
@@ -2217,6 +2218,7 @@ intelgt_run_ret_inst (gdbarch *gdbarch)
       buff[2] = exec_size;
       break;
     case XE_HPC:
+    case XE2:
       buff[2] = exec_size << 2;
       break;
     default:
@@ -2391,6 +2393,7 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
       calla_inst[2] = exec_size;
       break;
     case XE_HPC:
+    case XE2:
       predication_bit = 26;
       calla_inst[2] = exec_size << 2;
       break;
@@ -3077,6 +3080,18 @@ get_xe_version (unsigned int device_id)
       case 0x0B69:
       case 0x0B6E:
 	device_xe_version = XE_HPC;
+	break;
+
+      case 0x6420:
+      case 0x64A0:
+      case 0x64B0:
+
+      case 0xE202:
+      case 0xE20B:
+      case 0xE20C:
+      case 0xE20D:
+      case 0xE212:
+	device_xe_version = XE2;
 	break;
     }
 
@@ -4056,6 +4071,7 @@ is_branch (const gdb_byte inst[], uint32_t device_id)
     case XE_HP:
     case XE_HPG:
     case XE_HPC:
+    case XE2:
       {
 	/* Check the opcode.  */
 	switch (inst[0] & 0x7f)
@@ -4084,6 +4100,7 @@ is_atomic (const gdb_byte inst[], uint32_t device_id)
     case XE_HP:
     case XE_HPG:
     case XE_HPC:
+    case XE2:
       {
 	/* For instructions with CompactCtrl clear, we can check AtomicCtrl.  */
 	if ((inst[3] & 0x20) == 0)
@@ -4095,6 +4112,10 @@ is_atomic (const gdb_byte inst[], uint32_t device_id)
 	  case 0x59: /* DPAS.  */
 	  case 0x5a: /* DPASW.  */
 	    {
+	      /* The 0x5A opcode is not used on XE2 platforms.  */
+	      if ((inst[0] & 0x7f) == 0x5a && device_version == XE2)
+		return false;
+
 	      /* For DPAS, the DPAS Control Index determines which flavors are
 		 atomic.  */
 	      switch (inst[2] & 0x3c)
@@ -4270,6 +4291,7 @@ intelgt_displaced_step_copy_insn (gdbarch *gdbarch, CORE_ADDR from,
     case XE_HP:
     case XE_HPG:
     case XE_HPC:
+    case XE2:
       {
 	if (!is_atomic (inst.data (), device_id))
 	  break;
@@ -4336,6 +4358,7 @@ intelgt_displaced_step_copy_insn (gdbarch *gdbarch, CORE_ADDR from,
 	    break;
 
 	  case XE_HPC:
+	  case XE2:
 	    if (!((inst[2] & 0x3) == 0x1) /* DualInfo.  */
 		&& !(((inst[2] & 0x3) == 0) /* SingleInfo.  */
 		     && ((inst[1] & 0xe0) == 0xc0)))

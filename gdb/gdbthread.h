@@ -672,6 +672,11 @@ private:
      [Switching to thread 1.1:31 (Thread A lane 31)]  */
   int simd_lane_num = 0;
 
+  /* Cached active lanes mask for the thread.  The caching occurs during
+     accessing the active_simd_lanes_mask method.  The value is reset once
+     the thread is marked executing again, in set_executing.  */
+  std::optional<unsigned int> m_active_lanes_mask;
+
 public:
   /* Return true if this thread has SIMD lanes.  For threads that are
      currently executing or that do not have registers (e.g. tracepoints

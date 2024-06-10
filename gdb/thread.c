@@ -160,6 +160,12 @@ thread_info::active_simd_lanes_mask ()
 {
   gdb_assert (this->inf != nullptr);
 
+  if (m_active_lanes_mask.has_value ())
+    {
+      gdb_assert (!executing ());
+      return *m_active_lanes_mask;
+    }
+
   /* While the thread is executing we don't know which lanes are active.  */
   if (executing ())
     return 0u;
@@ -169,17 +175,24 @@ thread_info::active_simd_lanes_mask ()
       /* SIMD architectures provide a means for determining active lanes.  */
       gdbarch *arch = get_thread_regcache (this)->arch ();
       if (gdbarch_active_lanes_mask_p (arch) != 0)
-	return gdbarch_active_lanes_mask (arch, this);
+	{
+	  m_active_lanes_mask = gdbarch_active_lanes_mask (arch, this);
+	  return *m_active_lanes_mask;
+	}
 
       /* If the compiler indicated SIMD for the current block, we
 	 currently assume that all lanes are active.  */
       const block * const blk = thread_get_current_block (this);
       if (blk != nullptr && blk->simd_width () > 0)
-	return ~(~0u << blk->simd_width ());
+	{
+	  m_active_lanes_mask = ~(~0u << blk->simd_width ());
+	  return *m_active_lanes_mask;
+	}
     }
 
   /* Default: only one lane is active.  */
-  return 0x1;
+  m_active_lanes_mask = 0x1;
+  return *m_active_lanes_mask;
 }
 
 /* See gdbthread.h.  */
@@ -616,7 +629,10 @@ thread_info::set_executing (bool executing)
 {
   m_executing = executing;
   if (executing)
-    this->clear_stop_pc ();
+    {
+      this->clear_stop_pc ();
+      m_active_lanes_mask.reset ();
+    }
 }
 
 /* See gdbthread.h.  */

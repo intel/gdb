@@ -978,21 +978,30 @@ print_frame_info_to_print_what (const char *print_frame_info)
 		  print_frame_info);
 }
 
-/* Print the PC from FRAME, plus any flags, to UIOUT.  */
+/* Print the PC, plus any FLAGS (if non-empty), to UIOUT.  */
 
 static void
-print_pc (struct ui_out *uiout, struct gdbarch *gdbarch, const frame_info_ptr &frame,
+print_pc (ui_out *uiout, gdbarch *gdbarch, const std::string &flags,
 	  CORE_ADDR pc)
 {
   uiout->field_core_addr ("addr", gdbarch, pc);
 
-  std::string flags = gdbarch_get_pc_address_flags (gdbarch, frame, pc);
   if (!flags.empty ())
     {
       uiout->text (" [");
       uiout->field_string ("addr_flags", flags);
       uiout->text ("]");
     }
+}
+
+/* Print the PC from FRAME, plus any flags, to UIOUT.  */
+
+static void
+print_pc (ui_out *uiout, gdbarch *gdbarch, const frame_info_ptr &frame,
+	  CORE_ADDR pc)
+{
+  std::string flags = gdbarch_get_pc_address_flags (gdbarch, frame, pc);
+  print_pc (uiout, gdbarch, flags, pc);
 }
 
 /* See stack.h.  */

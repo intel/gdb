@@ -1870,6 +1870,15 @@ typedef std::array<uint32_t, 3> (gdbarch_current_workitem_local_id_ftype) (struc
 extern std::array<uint32_t, 3> gdbarch_current_workitem_local_id (struct gdbarch *gdbarch, thread_info *tp);
 extern void set_gdbarch_current_workitem_local_id (struct gdbarch *gdbarch, gdbarch_current_workitem_local_id_ftype *current_workitem_local_id);
 
+/* Return a vector of local coordinates of all workitems that are
+   processed by the thread TP within its thread group. */
+
+extern bool gdbarch_all_workitem_local_ids_p (struct gdbarch *gdbarch);
+
+typedef std::vector<std::array<uint32_t, 3>> (gdbarch_all_workitem_local_ids_ftype) (struct gdbarch *gdbarch, thread_info *tp);
+extern std::vector<std::array<uint32_t, 3>> gdbarch_all_workitem_local_ids (struct gdbarch *gdbarch, thread_info *tp);
+extern void set_gdbarch_all_workitem_local_ids (struct gdbarch *gdbarch, gdbarch_all_workitem_local_ids_ftype *all_workitem_local_ids);
+
 /* Return an array containing the global coordinates of the workitem that is
    processed by the thread TP.  If the thread processes several work-items,
    return the one processed by the current SIMD lane. */

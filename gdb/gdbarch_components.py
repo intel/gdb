@@ -2964,6 +2964,17 @@ several work-items, return the one processed by the current SIMD lane.
 
 Method(
     comment="""
+Return a vector of local coordinates of all workitems that are
+processed by the thread TP within its thread group.
+""",
+    type="std::vector<std::array<uint32_t, 3>>",
+    name="all_workitem_local_ids",
+    params=[("thread_info *", "tp")],
+    predicate=True,
+)
+
+Method(
+    comment="""
 Return an array containing the global coordinates of the workitem that is
 processed by the thread TP.  If the thread processes several work-items,
 return the one processed by the current SIMD lane.

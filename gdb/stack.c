@@ -1299,6 +1299,33 @@ get_last_displayed_sal ()
   return sal;
 }
 
+/* Find the function name for the symbol SYM.  */
+
+static gdb::unique_xmalloc_ptr<char>
+find_symbol_funname (const symbol *sym)
+{
+  gdb::unique_xmalloc_ptr<char> funname;
+  const char *print_name = sym->print_name ();
+
+  if (sym->language () == language_cplus)
+    {
+      /* It seems appropriate to use print_name () here,
+	 to display the demangled name that we already have
+	 stored in the symbol table, but we stored a version
+	 with DMGL_PARAMS turned on, and here we don't want to
+	 display parameters.  So remove the parameters.  */
+      funname = cp_remove_params (print_name);
+    }
+
+  if (funname == nullptr)
+    {
+      /* If we didn't hit the C++ case above, set *funname here.  */
+      funname.reset (xstrdup (print_name));
+    }
+
+  return funname;
+}
+
 
 /* Attempt to obtain the name, FUNLANG and optionally FUNCP of the function
    corresponding to FRAME.  */
@@ -1317,25 +1344,10 @@ find_frame_funname (const frame_info_ptr &frame, enum language *funlang,
   func = get_frame_function (frame);
   if (func)
     {
-      const char *print_name = func->print_name ();
-
       *funlang = func->language ();
       if (funcp)
 	*funcp = func;
-      if (*funlang == language_cplus)
-	{
-	  /* It seems appropriate to use print_name() here,
-	     to display the demangled name that we already have
-	     stored in the symbol table, but we stored a version
-	     with DMGL_PARAMS turned on, and here we don't want to
-	     display parameters.  So remove the parameters.  */
-	  funname = cp_remove_params (print_name);
-	}
-
-      /* If we didn't hit the C++ case above, set *funname
-	 here.  */
-      if (funname == NULL)
-	funname.reset (xstrdup (print_name));
+      funname = find_symbol_funname (func);
     }
   else
     {
@@ -1543,8 +1555,7 @@ info_frame_command_core (const frame_info_ptr &fi, bool selected_frame_p)
   struct symtab *s;
   frame_info_ptr calling_frame_info;
   int numregs;
-  const char *funname = 0;
-  enum language funlang = language_unknown;
+  gdb::unique_xmalloc_ptr<char> funname;
   const char *pc_regname;
   struct gdbarch *gdbarch;
   CORE_ADDR frame_pc;
@@ -1573,34 +1584,15 @@ info_frame_command_core (const frame_info_ptr &fi, bool selected_frame_p)
   func = get_frame_function (fi);
   symtab_and_line sal = find_frame_sal (fi);
   s = sal.symtab;
-  gdb::unique_xmalloc_ptr<char> func_only;
   if (func)
-    {
-      funname = func->print_name ();
-      funlang = func->language ();
-      if (funlang == language_cplus)
-	{
-	  /* It seems appropriate to use print_name() here,
-	     to display the demangled name that we already have
-	     stored in the symbol table, but we stored a version
-	     with DMGL_PARAMS turned on, and here we don't want to
-	     display parameters.  So remove the parameters.  */
-	  func_only = cp_remove_params (funname);
-
-	  if (func_only)
-	    funname = func_only.get ();
-	}
-    }
+    funname = find_symbol_funname (func);
   else if (frame_pc_p)
     {
       struct bound_minimal_symbol msymbol;
 
       msymbol = lookup_minimal_symbol_by_pc (frame_pc);
       if (msymbol.minsym != NULL)
-	{
-	  funname = msymbol.minsym->print_name ();
-	  funlang = msymbol.minsym->language ();
-	}
+	funname.reset (xstrdup (msymbol.minsym->print_name ()));
     }
   calling_frame_info = get_prev_frame (fi);
 
@@ -1625,7 +1617,7 @@ info_frame_command_core (const frame_info_ptr &fi, bool selected_frame_p)
   if (funname)
     {
       gdb_printf (" in ");
-      gdb_puts (funname);
+      gdb_puts (funname.get ());
     }
   gdb_stdout->wrap_here (3);
   if (sal.symtab)

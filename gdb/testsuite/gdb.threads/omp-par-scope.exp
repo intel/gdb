@@ -27,6 +27,12 @@ if [support_nested_function_tests] {
     set have_nested_function_support 1
 }
 
+# ICX compiler emits unused static variables only if the option
+# "-femit-all-decls" is used.
+if {[test_compiler_info {icx-*} c]} {
+    lappend opts {additional_flags=-femit-all-decls}
+}
+
 if {[prepare_for_testing "failed to prepare" $testfile $srcfile $opts]} {
     return -1
 }
@@ -126,6 +132,7 @@ with_test_prefix "single_scope" {
 	    gdb_test "print i1" "= 11"
 	    gdb_test "print i2" "= \[12]12"
 	    maybe_setup_kfail {$thread_num != 0}
+	    if {[test_compiler_info {icx-*} c]} { setup_xfail "*-*-*" }
 	    gdb_test "print i3" "= 13"
 	}
     }
@@ -156,12 +163,15 @@ with_test_prefix "multi_scope" {
 
 	    gdb_test "print i01" "= 1"
 	    maybe_setup_kfail {$thread_num != 0}
+	    if {[test_compiler_info {icx-*} c]} { setup_xfail "*-*-*" }
 	    gdb_test "print i02" "= 2"
 	    gdb_test "print i11" "= 11"
 	    maybe_setup_kfail {$thread_num != 0}
+	    if {[test_compiler_info {icx-*} c]} { setup_xfail "*-*-*" }
 	    gdb_test "print i12" "= 12"
 	    gdb_test "print i21" "= \[12\]21"
 	    maybe_setup_kfail {$thread_num != 0}
+	    if {[test_compiler_info {icx-*} c]} { setup_xfail "*-*-*" }
 	    gdb_test "print i22" "= 22"
 	    gdb_test "print file_scope_var" "= 9876"
 	}
@@ -254,12 +264,16 @@ with_test_prefix "nested_parallel" {
 		gdb_test "print file_scope_var" "= 9876"
 		gdb_test "print num" "= \[01\]"
 		maybe_setup_kfail {$thread_num != 0 || $inner_thread_num != 0}
+		if {[test_compiler_info {icx-*} c]} { setup_xfail "*-*-*" }
 		gdb_test "print i" "= 1"
 		maybe_setup_kfail {$thread_num != 0 || $inner_thread_num != 0}
+		if {[test_compiler_info {icx-*} c]} { setup_xfail "*-*-*" }
 		gdb_test "print j" "= 2"
 		if {$have_older_gcc || ($inner_thread_num != 0 && $allow_kfail)} { setup_xfail *-*-* }
+		if {[test_compiler_info {icx-*} c]} { setup_xfail "*-*-*" }
 		gdb_test "print l" "= 10\[24\]"
 		if {$have_older_gcc ||( $inner_thread_num != 0 && $allow_kfail)} { setup_xfail *-*-* }
+		if {[test_compiler_info {icx-*} c]} { setup_xfail "*-*-*" }
 		gdb_test "print k" "= 10\[13\]"
 	    }
 	}

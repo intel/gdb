@@ -18,18 +18,25 @@
 require allow_ssp_tests
 
 standard_testfile amd64-shadow-stack.c
-if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
-     additional_flags="-fcf-protection=return"] } {
-    return -1
+
+save_vars { ::env(GLIBC_TUNABLES) } {
+
+    append_environment GLIBC_TUNABLES "glibc.cpu.hwcaps" "SHSTK"
+
+    if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
+	  additional_flags="-fcf-protection=return"] } {
+	return -1
+    }
+
+    if {![runto_main]} {
+	return -1
+    }
+
+    # Read PL3_SSP register.
+    gdb_test "print /x \$pl3_ssp" "= $hex" "read pl3_ssp value"
+
+    # Restore/write PL3_SSP register.
+    gdb_test "print /x \$pl3_ssp = 0x12345678" "= 0x12345678" "set pl3_ssp value"
+    gdb_test "print /x \$pl3_ssp" "= 0x12345678" "read pl3_ssp value after setting"
 }
 
-if {![runto_main]} {
-    return -1
-}
-
-# Read PL3_SSP register.
-gdb_test "print /x \$pl3_ssp" "= $hex" "read pl3_ssp value"
-
-# Restore/write PL3_SSP register.
-gdb_test "print /x \$pl3_ssp = 0x12345678" "= 0x12345678" "set pl3_ssp value"
-gdb_test "print /x \$pl3_ssp" "= 0x12345678" "read pl3_ssp value after setting"

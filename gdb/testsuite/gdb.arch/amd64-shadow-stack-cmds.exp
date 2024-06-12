@@ -36,94 +36,101 @@ proc restart_and_run_infcall_call2 {} {
 	"Breakpoint \[0-9\]*, call2.*$inside_infcall_str.*"
 }
 
-if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
-      {debug additional_flags="-fcf-protection=return"}] } {
-    return -1
-}
+save_vars { ::env(GLIBC_TUNABLES) } {
 
-if { ![runto_main] } {
-    return -1
-}
+    append_environment GLIBC_TUNABLES "glibc.cpu.hwcaps" "SHSTK"
 
-with_test_prefix "test inferior call and continue" {
-    gdb_breakpoint [ gdb_get_line_number "break call1" ]
-    gdb_continue_to_breakpoint "break call1" ".*break call1.*"
+    if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
+	  {debug additional_flags="-fcf-protection=return"}] } {
+	return -1
+    }
 
-    gdb_test "call (int) call2()" "= 42"
 
-    gdb_continue_to_end
-}
+    if { ![runto_main] } {
+	return -1
+    }
 
-with_test_prefix "test return inside an inferior call" {
-    restart_and_run_infcall_call2
+    with_test_prefix "test inferior call and continue" {
+	gdb_breakpoint [ gdb_get_line_number "break call1" ]
+	gdb_continue_to_breakpoint "break call1" ".*break call1.*"
 
-    gdb_test "return" "\#0.*call2.*" \
-	"Test shadow stack return inside an inferior call" \
-	"Make.*return now\\? \\(y or n\\) " "y"
+	gdb_test "call (int) call2()" "= 42"
 
-    gdb_continue_to_end
-}
+	gdb_continue_to_end
+    }
 
-with_test_prefix "test return 'above' an inferior call" {
-    restart_and_run_infcall_call2
+    with_test_prefix "test return inside an inferior call" {
+	restart_and_run_infcall_call2
 
-    gdb_test "frame 2" "call2 ().*" "move to frame 'above' inferior call"
+	gdb_test "return" "\#0.*call2.*" \
+	    "Test shadow stack return inside an inferior call" \
+	    "Make.*return now\\? \\(y or n\\) " "y"
 
-    gdb_test "return" "\#0.*call1.*" \
-	"Test shadow stack return 'above' an inferior call" \
-	"Make.*return now\\? \\(y or n\\) " "y"
+	gdb_continue_to_end
+    }
 
-    gdb_continue_to_end
-}
+    with_test_prefix "test return 'above' an inferior call" {
+	restart_and_run_infcall_call2
 
-clean_restart ${binfile}
-if { ![runto_main] } {
-    return -1
-}
+	gdb_test "frame 2" "call2 ().*" "move to frame 'above' inferior call"
 
-set call1_line [ gdb_get_line_number "break call1" ]
-set call2_line [ gdb_get_line_number "break call2" ]
+	gdb_test "return" "\#0.*call1.*" \
+	    "Test shadow stack return 'above' an inferior call" \
+	    "Make.*return now\\? \\(y or n\\) " "y"
 
-# Extract shadow stack pointer inside main, call1 and call2 function.
-gdb_breakpoint $call1_line
-gdb_breakpoint $call2_line
-set ssp_main [get_valueof /x "\$pl3_ssp" 0 "get value of ssp in main"]
-gdb_continue_to_breakpoint "break call1" ".*break call1.*"
-set ssp_call1 [get_valueof /x "\$pl3_ssp" 0 "get value of ssp in call1"]
-gdb_continue_to_breakpoint "break call2" ".*break call2.*"
-set ssp_call2 [get_valueof /x "\$pl3_ssp" 0 "get value of ssp in call2"]
+	gdb_continue_to_end
+    }
 
-with_test_prefix "test frame level update" {
-    gdb_test "up" "call1.*" "move to frame 1"
-    gdb_test "print /x \$pl3_ssp" "= $ssp_call1" "check pl3_ssp of frame 1"
-    gdb_test "up" "main.*" "move to frame 2"
-    gdb_test "print /x \$pl3_ssp" "= $ssp_main" "check pl3_ssp of frame 2"
-    gdb_test "frame 0" "call2.*" "move to frame 0"
-    gdb_test "print /x \$pl3_ssp" "= $ssp_call2" "check pl3_ssp of frame 0"
-}
+    clean_restart ${binfile}
+    if { ![runto_main] } {
+	return -1
+    }
 
-with_test_prefix "test return from current frame" {
-    gdb_test "return (int) 1" "#0.*call1.*" \
-	"Test shadow stack return from current frame" \
-	"Make.*return now\\? \\(y or n\\) " "y"
+    set call1_line [ gdb_get_line_number "break call1" ]
+    set call2_line [ gdb_get_line_number "break call2" ]
 
-    gdb_continue_to_end
-}
-
-clean_restart ${binfile}
-if { ![runto_main] } {
-    return -1
-}
-
-with_test_prefix "test return from past frame" {
+    # Extract shadow stack pointer inside main, call1 and call2 function.
+    gdb_breakpoint $call1_line
     gdb_breakpoint $call2_line
+    set ssp_main [get_valueof /x "\$pl3_ssp" 0 "get value of ssp in main"]
+    gdb_continue_to_breakpoint "break call1" ".*break call1.*"
+    set ssp_call1 [get_valueof /x "\$pl3_ssp" 0 "get value of ssp in call1"]
     gdb_continue_to_breakpoint "break call2" ".*break call2.*"
+    set ssp_call2 [get_valueof /x "\$pl3_ssp" 0 "get value of ssp in call2"]
 
-    gdb_test "frame 1" ".*in call1.*"
+    with_test_prefix "test frame level update" {
+	gdb_test "up" "call1.*" "move to frame 1"
+	gdb_test "print /x \$pl3_ssp" "= $ssp_call1" "check pl3_ssp of frame 1"
+	gdb_test "up" "main.*" "move to frame 2"
+	gdb_test "print /x \$pl3_ssp" "= $ssp_main" "check pl3_ssp of frame 2"
+	gdb_test "frame 0" "call2.*" "move to frame 0"
+	gdb_test "print /x \$pl3_ssp" "= $ssp_call2" "check pl3_ssp of frame 0"
+    }
 
-    gdb_test "return (int) 1" "#0.*main.*" \
-	"Test shadow stack return from past frame" \
-	"Make.*return now\\? \\(y or n\\) " "y"
+    with_test_prefix "test return from current frame" {
+	gdb_test "return (int) 1" "#0.*call1.*" \
+	    "Test shadow stack return from current frame" \
+	    "Make.*return now\\? \\(y or n\\) " "y"
 
-    gdb_continue_to_end
+	gdb_continue_to_end
+    }
+
+    clean_restart ${binfile}
+    if { ![runto_main] } {
+	return -1
+    }
+
+    with_test_prefix "test return from past frame" {
+	gdb_breakpoint $call2_line
+	gdb_continue_to_breakpoint "break call2" ".*break call2.*"
+
+	gdb_test "frame 1" ".*in call1.*"
+
+	gdb_test "return (int) 1" "#0.*main.*" \
+	    "Test shadow stack return from past frame" \
+	    "Make.*return now\\? \\(y or n\\) " "y"
+
+	gdb_continue_to_end
+    }
 }
+

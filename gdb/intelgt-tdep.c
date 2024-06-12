@@ -3931,6 +3931,41 @@ intelgt_current_workitem_local_id (gdbarch *gdbarch, thread_info *tp)
   return local_id;
 }
 
+/* Compute the local ID coordinates within a workgroup for a given
+   thread TP.  */
+
+static std::vector<std::array<uint32_t, 3>>
+intelgt_all_workitem_local_ids (gdbarch *gdbarch, thread_info *tp)
+{
+  const local_ids_data lid_data = intelgt_get_local_ids_data (gdbarch, tp);
+  const std::vector<uint16_t> local_ids = std::get<0> (lid_data);
+  const uint8_t tid = std::get<1> (lid_data);
+  const unsigned int id_len = std::get<2> (lid_data);
+
+  const unsigned int tid_offset = tid * id_len;
+  const unsigned int coord_len = id_len / 3;
+
+  const unsigned int dispatch_mask = intelgt_dispatch_mask (gdbarch, tp);
+  std::vector<std::array<uint32_t, 3>> lids;
+
+  /* Collect ids for existing lanes.  We use the dispatch mask here so we do
+     not include IDs which do not exist, if the thread processes less
+     work-items than its SIMD width.  */
+  for_active_lanes (dispatch_mask, [&] (int lane)
+    {
+      const unsigned int tid_lane_offset = tid_offset + lane;
+      lids.emplace_back (std::array<uint32_t, 3>
+			 {
+			   local_ids[tid_lane_offset + 0 * coord_len],
+			   local_ids[tid_lane_offset + 1 * coord_len],
+			   local_ids[tid_lane_offset + 2 * coord_len]
+			 });
+      return true;
+    });
+
+  return lids;
+}
+
 /* Compute the global ID coordinates for a given thread TP.  */
 
 static std::array<uint32_t, 3>
@@ -4677,6 +4712,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 					 intelgt_current_workitem_local_id);
   set_gdbarch_current_workitem_global_id (gdbarch,
 					  intelgt_current_workitem_global_id);
+  set_gdbarch_all_workitem_local_ids (gdbarch, intelgt_all_workitem_local_ids);
   set_gdbarch_workitem_local_size (gdbarch, intelgt_workitem_local_size);
   set_gdbarch_workitem_global_size (gdbarch, intelgt_workitem_global_size);
   set_gdbarch_kernel_instance_id (gdbarch, intelgt_kernel_instance_id);

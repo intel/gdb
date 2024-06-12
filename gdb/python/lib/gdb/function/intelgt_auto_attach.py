@@ -97,6 +97,9 @@ class DebugLogger:
 class IntelgtErrorReport():
     """Class to handle and highlight intelgt GPU debugging errors."""
 
+    """Eu debug path for KMD Linux driver"""
+    eu_debug_path = ""
+
     @staticmethod
     def exit_intelgt_session(
             input_err=None, exception=None, terminate=True):
@@ -191,7 +194,7 @@ Continuing with GPU-debugging disabled.
 
     @staticmethod
     def get_kmd_debug_enabled_status():
-        """ Return True if prelim_enable_eu_debug kernel settings is set to 1
+        """Return True if EU debug kernel settings is set to 1
         for all GPU devices otherwise it returns False."""
         try:
             """Check i915 prelim_enable_eu_debug settings."""
@@ -200,12 +203,17 @@ Continuing with GPU-debugging disabled.
                 return True
             if platform.system() != "Linux":
                 return False
-            find_out = subprocess.check_output(
-                "find /sys/devices | grep enable_eu_debug",
-                shell=True).decode()
-            lines = find_out.split('\n')
+
+            cmd = "find /sys/class/drm/card*/device/ -name 'enable_eudebug' \
+                    -o -name 'prelim_enable_eu_debug'"
+            find_out = subprocess.check_output(cmd, shell=True).decode()
+            lines = find_out.split("\n")
             if len(lines) == 0:
                 return False
+
+            # Set the eu_debug_path so that we can use it in
+            # is_initialization_error to distinguish between XeKMD and i915.
+            IntelgtErrorReport.eu_debug_path = re.sub(r"card\d+", "card*", lines[0])
 
             # All GPUs should have prelim_enable_eu_debug set to 1.
             for line in lines:
@@ -236,8 +244,13 @@ Debugging of GPU offloaded code is not enabled.
 Set 'ZET_ENABLE_PROGRAM_DEBUGGING=1' in host process environment.""")
             return True
         if not IntelgtErrorReport.get_kmd_debug_enabled_status():
-            IntelgtErrorReport.exit_intelgt_session("""
-Set kernel parameter 'i915.debug_eu=1' or set /sys/class/drm/card*/prelim_enable_eu_debug system files value to 1.""")
+            if "prelim_" in IntelgtErrorReport.eu_debug_path:
+                msg = """
+Set kernel parameter 'i915.debug_eu=1' or set /sys/class/drm/card*/prelim_enable_eu_debug system files value to 1."""
+            else:
+                msg = """
+Set /sys/class/drm/card*/device/enable_eudebug system files value to 1."""
+            IntelgtErrorReport.exit_intelgt_session(msg)
             return True
 
         return False

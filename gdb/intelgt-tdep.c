@@ -783,34 +783,22 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
   return -1;
 }
 
-/* Return active lanes mask for the specified thread TP.  */
+/* Return the dispatch mask of the thread TP.  */
 
 static unsigned int
-intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
+intelgt_dispatch_mask (gdbarch *gdbarch, thread_info *tp)
 {
-  gdb_assert (!tp->executing ());
-
-  if (tp->is_unavailable ())
-    return 0x0u;
-
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
-  regcache *thread_regcache = get_thread_regcache (tp);
+  regcache *regcache = get_thread_regcache (tp);
 
-  /* Default to zero if the CE register is not available.  This may
-     happen if TP is not available.  */
-  ULONGEST ce = 0ull;
-  regcache_cooked_read_unsigned (thread_regcache, data->ce_regnum,
-				 &ce);
-
-  /* The higher bits of CE are undefined if they are outside the
-     dispatch mask range.  Clear them explicitly using the dispatch
-     mask, which is at SR0.2.  SR0 elements are 4 byte wide.  */
   uint32_t sr0_2 = 0;
-  thread_regcache->raw_read_part (data->sr0_regnum, sizeof (uint32_t) * 2,
-				  sizeof (sr0_2), (gdb_byte *) &sr0_2);
+  /* The dispatch mask is SR0.2, SR0 elements are 4 byte wide.  */
+  intelgt_read_register_part (regcache, data->sr0_regnum,
+			      sizeof (uint32_t) * 2, sizeof (sr0_2),
+			      (gdb_byte *) &sr0_2,
+			      _("Failed to read the dispatch mask."));
 
-  dprintf ("ce: %lx, dmask: %x", ce, sr0_2);
-
+  dprintf ("sr0_2: %x", sr0_2);
   xe_version device_version = get_xe_version (get_device_id (tp->inf));
   if (device_version == XE_HP || device_version == XE_HPG)
     {
@@ -838,7 +826,47 @@ intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
       sr0_2 &= width_mask;
     }
 
-  return ce & sr0_2;
+  return sr0_2;
+}
+
+/* Return active lanes mask for the specified thread TP.  */
+
+static unsigned int
+intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
+{
+  gdb_assert (!tp->executing ());
+
+  if (tp->is_unavailable ())
+    return 0x0u;
+
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+  regcache *thread_regcache = get_thread_regcache (tp);
+
+  /* Default to zero if the CE register is not available.  This may
+     happen if TP is not available.  */
+  ULONGEST ce = 0ull;
+  regcache_cooked_read_unsigned (thread_regcache, data->ce_regnum,
+				 &ce);
+
+  /* The higher bits of CE are undefined if they are outside the
+     dispatch mask range.  Clear them explicitly using the dispatch
+     mask.  */
+  uint32_t dispatch_mask = ~0u;
+  try
+    {
+      dispatch_mask = intelgt_dispatch_mask (gdbarch, tp);
+    }
+  catch (const gdb_exception_error &e)
+    {
+      /* We failed to read the dispatch mask.  Keep it as a warning, as
+	 the debugger might still be usable.  */
+      warning (_("%s.  SIMD lanes might be displayed inaccurately."),
+	       e.what ());
+    }
+
+  dprintf ("ce: %lx, dmask: %x", ce, dispatch_mask);
+
+  return ce & dispatch_mask;
 }
 
 /* Return the PC of the first real instruction.  */

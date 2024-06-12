@@ -1338,14 +1338,13 @@ static CORE_ADDR
 intelgt_read_pc (readable_regcache *regcache)
 {
   gdbarch *arch = regcache->arch ();
-  /* $ip is uint32_t, but uint64_t is used here to comply with cooked_read
-     signature.  */
-  uint64_t ip;
-  int ip_regnum = intelgt_pseudo_register_num (arch, "ip");
-  if (regcache->cooked_read (ip_regnum, &ip) != REG_VALID)
-    throw_error (NOT_AVAILABLE_ERROR,
-		 _("Register %d (ip) is not available"),
-		 ip_regnum);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+  /* Instruction pointer is stored in CR0.2.  */
+  uint32_t ip;
+  intelgt_read_register_part (regcache, data->cr0_regnum,
+			      sizeof (uint32_t) * 2, sizeof (uint32_t),
+			      (gdb_byte *) &ip, _("Cannot compute PC."));
 
   /* Program counter is $ip + $isabase.  */
   CORE_ADDR isabase = intelgt_get_isabase (regcache);
@@ -1357,16 +1356,18 @@ intelgt_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
   gdbarch *arch = regcache->arch ();
   /* Program counter is $ip + $isabase, can only modify $ip.  Need
-     to ensure that the new value fits within $ip modification rannge
+     to ensure that the new value fits within $ip modification range
      and propagate the write accordingly.  */
   CORE_ADDR isabase = intelgt_get_isabase (regcache);
   if (pc < isabase || pc > isabase + UINT32_MAX)
     error ("Can't update $pc to value 0x%lx, out of range", pc);
-  /* $ip is uint32_t, but uint64_t is used here to comply with cooked_write
-     signature.  */
-  uint64_t ip = pc - isabase;
-  int ip_regnum = intelgt_pseudo_register_num (arch, "ip");
-  regcache->cooked_write (ip_regnum, ip);
+
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+  /* Instruction pointer is stored in CR0.2.  */
+  uint32_t ip = pc - isabase;
+  regcache->cooked_write_part (data->cr0_regnum, sizeof (uint32_t) * 2,
+			       sizeof (uint32_t), (gdb_byte *) &ip);
 }
 
 /* Return the name of pseudo-register REGNUM.  */

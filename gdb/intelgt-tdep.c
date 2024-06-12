@@ -527,6 +527,39 @@ intelgt_register_type (gdbarch *gdbarch, int regno)
   return typ;
 }
 
+/* Read part of REGNUM at OFFSET into BUFFER.  The length of data to
+   read is SIZE.  Consider using this helper function when reading
+   subregisters of CR0, SR0, and R0.  */
+
+static void
+intelgt_read_register_part (readable_regcache *regcache, int regnum,
+			    size_t offset, size_t size, gdb_byte *buffer,
+			    const char *error_message)
+{
+  if (regnum == -1)
+    error (_("%s  Unexpected reg num '-1'."), error_message);
+
+  gdbarch *arch = regcache->arch ();
+  const char *regname = gdbarch_register_name (arch, regnum);
+  int regsize = register_size (arch, regnum);
+
+  if (offset + size > regsize)
+    error (_("%s[%ld:%ld] is outside the range of %s[%d:0]."),
+	   regname, (offset + size - 1), offset, regname, (regsize - 1));
+
+  register_status reg_status
+    = regcache->cooked_read_part (regnum, offset, size, buffer);
+
+  if (reg_status == REG_UNAVAILABLE)
+    throw_error (NOT_AVAILABLE_ERROR,
+		 _("%s  Register %s (%d) is not available."),
+		 error_message, regname, regnum);
+
+  if (reg_status == REG_UNKNOWN)
+    error (_("%s  Register %s (%d) is unknown."), error_message,
+	   regname, regnum);
+}
+
 static int
 intelgt_pseudo_register_num (gdbarch *arch, const char *name);
 

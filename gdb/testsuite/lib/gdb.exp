@@ -4252,42 +4252,48 @@ gdb_caching_proc allow_ssp_tests {} {
 	return 0
     }
 
-    # No error message, compilation succeeded so now run it via gdb.
-    gdb_exit
-    gdb_start
-    gdb_reinitialize_dir $srcdir/$subdir
-    gdb_load $obj
-    if {![runto_main]} {
-	return 0
-    }
-    set shadow_stack_disabled_re "(<unavailable>)"
-    if {[istarget *-*-linux*]} {
-	# Starting with v6.6., the Linux kernel supports CET shadow stack.
-	# Dependent on the target we can see a nullptr or "<unavailable>"
-	# when shadow stack is supported by HW and the linux kernel but
-	# not enabled for the current thread (for example due to a lack
-	# of compiler or glibc support for -fcf-protection).
-	set shadow_stack_disabled_re "$shadow_stack_disabled_re|(.*0x0)"
+    save_vars { ::env(GLIBC_TUNABLES) } {
+
+	append_environment GLIBC_TUNABLES "glibc.cpu.hwcaps" "SHSTK"
+
+	# No error message, compilation succeeded so now run it via gdb.
+	gdb_exit
+	gdb_start
+	gdb_reinitialize_dir $srcdir/$subdir
+	gdb_load $obj
+	if {![runto_main]} {
+	    return 0
+	}
+	set shadow_stack_disabled_re "(<unavailable>)"
+	if {[istarget *-*-linux*]} {
+	    # Starting with v6.6., the Linux kernel supports CET shadow stack.
+	    # Dependent on the target we can see a nullptr or "<unavailable>"
+	    # when shadow stack is supported by HW and the linux kernel but
+	    # not enabled for the current thread (for example due to a lack
+	    # of compiler or glibc support for -fcf-protection).
+	    set shadow_stack_disabled_re "$shadow_stack_disabled_re|(.*0x0)"
+	}
+
+	set allow_ssp_tests 0
+	gdb_test_multiple "print \$pl3_ssp" "test shadow stack support" {
+	    -re -wrap "(.*$hex)((?!(.*0x0)).)" {
+		verbose -log "$me: Shadow stack support detected."
+		set allow_ssp_tests 1
+	    }
+	    -re -wrap $shadow_stack_disabled_re {
+		# In case shadow stack is not enabled (for example due to a
+		# lack of compiler or glibc support for -fcf-protection).
+		verbose -log "$me: Shadow stack is not enabled."
+	    }
+	    -re -wrap "void" {
+		# In case we don't have hardware or kernel support.
+		verbose -log "$me: No shadow stack support."
+	    }
+	}
+
+	gdb_exit
     }
 
-    set allow_ssp_tests 0
-    gdb_test_multiple "print \$pl3_ssp" "test shadow stack support" {
-	-re -wrap "(.*$hex)((?!(.*0x0)).)" {
-	    verbose -log "$me: Shadow stack support detected."
-	    set allow_ssp_tests 1
-	}
-	-re -wrap $shadow_stack_disabled_re {
-	    # In case shadow stack is not enabled (for example due to a
-	    # lack of compiler or glibc support for -fcf-protection).
-	    verbose -log "$me: Shadow stack is not enabled."
-	}
-	-re -wrap "void" {
-	    # In case we don't have hardware or kernel support.
-	    verbose -log "$me: No shadow stack support."
-	}
-    }
-
-    gdb_exit
     remote_file build delete $obj
 
     verbose "$me: returning $allow_ssp_tests" 2

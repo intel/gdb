@@ -31,7 +31,7 @@ if {[build_executable "failed to compile $srcfile" \
     return -1
 }
 
-proc test_infcall_abort {inside_kernel} {
+proc test_infcall_abort {inside_kernel device} {
     global hex
     set pc_before [get_hexadecimal_valueof "\$pc" "invalid" "PC before infcall abort"]
     set ce_before [get_hexadecimal_valueof "\$ce" "invalid" "CE before infcall abort"]
@@ -45,6 +45,9 @@ proc test_infcall_abort {inside_kernel} {
     gdb_test_no_output "set ((char *)${func_pc})\[3\] |= 0x40"
     gdb_test_no_output "set unwindonsignal on"
 
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "call no_args ()" [multi_line \
 				"The program being debugged received signal.*" \
 				"while in a function called from GDB\\.  GDB has restored the context" \
@@ -53,6 +56,9 @@ proc test_infcall_abort {inside_kernel} {
 
     gdb_test "p/x \$pc" "$pc_before" "Unchanged PC after infcall abort"
     gdb_test "p/x \$ce" "$ce_before" "Unchanged CE after infcall abort"
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "backtrace" "#0.*make_all_calls.*#1.*main.*#2.*handler.*" \
 	"No dummy frame should appear in the backtrace"
 
@@ -63,17 +69,32 @@ proc test_infcall_abort {inside_kernel} {
     # Now run the same inferior call but with "unwindonsignal off".  We should
     # stop inside the callee.
     gdb_test_no_output "set unwindonsignal off"
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "call no_args ()" [multi_line \
 				"The program being debugged was signaled while in a function called from GDB\\." \
 				"GDB remains in the frame where the signal was received.*"] \
 	"infcall is being signaled: unwindonsignal off."
 
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "p/x \$pc" "$func_pc" "Signaled PC inside the callee"
     # Clear the breakpoint control bit.
     gdb_test_no_output "set ((char *)${func_pc})\[3\] = $saved_val"
     # GDB should silently stop when hitting continue.
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "continue" "Continuing\\."
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "p/x \$pc" "$pc_before" "Unchanged PC after infcall signal"
+    if {[is_pvc $device]} {
+	setup_kfail "JIRA GSD/6668" "*-*-*"
+    }
     gdb_test "p/x \$ce" "$ce_before" "Unchanged CE after infcall signal"
 }
 
@@ -337,7 +358,7 @@ foreach device $sycl_device_list {
 	    test_inferior_calls $lane $inside_kernel $device
 	}
 
-	test_infcall_abort $inside_kernel
+	test_infcall_abort $inside_kernel $device
 
 	set then_branch [gdb_get_line_number "then-branch"]
 	set else_branch [gdb_get_line_number "else-branch"]

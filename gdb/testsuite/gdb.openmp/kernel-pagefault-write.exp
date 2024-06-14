@@ -33,6 +33,8 @@ if {[llength ${device_list}] == 0} {
     return 0
 }
 
+set gpu_device_name [get_gpu_device_name]
+
 if {[build_executable "failed to compile ${srcfile}" \
     ${binfile} ${srcfile} {openmp f90 debug}]} {
     return -1
@@ -47,6 +49,10 @@ foreach device_info "${device_list}" {
 	    continue
 	}
 
+	if {![require_openmp_device "GPU"] || ![omp_is_pvc $gpu_device_name]} {
+	    unsupported "target does not support pagefault"
+	    continue
+	}
 	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*"
     }
 }

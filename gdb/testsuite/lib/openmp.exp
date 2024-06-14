@@ -270,3 +270,31 @@ gdb_caching_proc is_omp_offload_supported_compiler {} {
     }
     return 0
 }
+
+# Get the GPU device name using the SYCL library as this info is missing
+# in the OpenMP library API.
+
+gdb_caching_proc get_gpu_device_name {} {
+    load_lib sycl.exp
+
+    set sycl_device_list [init_sycl_devices_list]
+    foreach device "${sycl_device_list}" {
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    return "$device"
+	}
+    }
+    return ""
+}
+
+# Return non-zero if the device is PVC.
+
+proc omp_is_pvc {device} {
+
+    if {[string match "*Intel* Data Center GPU Max* 1100*" $device]
+	|| [string match "*Intel* Data Center GPU Max* 1550*" $device]
+	|| [string match "*Intel* Data Center GPU Max* 1350*" $device]} {
+	return 1;
+    }
+
+    return 0;
+}

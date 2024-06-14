@@ -23,6 +23,8 @@ if {[llength ${device_list}] == 0} {
     return 0
 }
 
+set gpu_device_name [get_gpu_device_name]
+
 standard_testfile .cpp
 
 if {[build_executable "failed to compile ${srcfile}" \
@@ -32,6 +34,11 @@ if {[build_executable "failed to compile ${srcfile}" \
 
 foreach device_info "${device_list}" {
     with_test_prefix [string cat [init_openmp_device ${device_info}] ":cpp"] {
+
+	if {[require_openmp_device "GPU"] && ![is_pvc $gpu_device_name]} {
+	    unsupported "target does not support pagefault"
+	    continue
+	}
 
 	clean_restart ${binfile}
 	if {![runto_main]} {

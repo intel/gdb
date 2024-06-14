@@ -16,6 +16,7 @@
 # Check read pagefault detection.
 
 load_lib openmp.exp
+load_lib sycl.exp
 
 standard_testfile .cpp
 
@@ -30,8 +31,25 @@ if {[build_executable "failed to compile ${srcfile}" \
     return -1
 }
 
+# Get the GPU device, if available.
+proc get_gpu_device {} {
+    set sycl_device_list [init_sycl_devices_list]
+    set index [lsearch -glob $sycl_device_list "Intel*gpu*"]
+    if {$index != -1} {
+	return [lindex $sycl_device_list $index]
+    }
+    return ""
+}
+
 foreach device_info "${device_list}" {
     openmp_with_intelgt_lock $device_info "cpp" {
+
+	set gpu_device_name [get_gpu_device]
+	if {![require_openmp_device "GPU"]
+	    || [is_xe_hpg $gpu_device_name]} {
+	    unsupported "target does not support pagefault"
+	    continue
+	}
 
 	clean_restart ${binfile}
 	if {![runto_main]} {

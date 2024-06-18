@@ -1,0 +1,54 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test shadow stack backtrace for signal handling on linux.
+
+require allow_ssp_tests {istarget "*-*-linux*"}
+
+standard_testfile amd64-shadow-stack-signal.c
+
+save_vars { ::env(GLIBC_TUNABLES) } {
+
+    append_environment GLIBC_TUNABLES "glibc.cpu.hwcaps" "SHSTK"
+
+    if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
+	  {debug additional_flags="-fcf-protection=return"}] } {
+	return -1
+    }
+
+    if { ![runto_main] } {
+	return -1
+    }
+
+    gdb_breakpoint "handler"
+    gdb_test "continue" \
+	".*Program received signal SIGUSR1, User defined signal 1.*" \
+	"continue until signal"
+    gdb_continue_to_breakpoint "continue to breakpoint in handler"
+
+    # Create shadow stack frame based on ssp in frame 2 and with bit 63 set.
+    gdb_test "frame 2" ".*" "move to frame 2"
+    set ssp_frame2 [get_hexadecimal_valueof "\$pl3_ssp" ""]
+    set ssp_frame2 [format 0x%x [expr (1 << 63) | $ssp_frame2]]
+
+    # Test shadow stack backtrace including ssp of frame 2 with bit 63 set.
+    gdb_test "bt shadow" \
+	[multi_line \
+	    "#0\[ \t\]*$hex in \[^\r\n\]+" \
+	    "#1\[ \t\]*$ssp_frame2" \
+	    "#2\[ \t\]*$hex in \[^\r\n\]+" \
+	    ".*" ] \
+	"test shadow stack backtrace for signal handling."
+}

@@ -1982,6 +1982,46 @@ amd64_linux_get_shadow_stack_pointer (gdbarch *gdbarch)
   return ssp;
 }
 
+/* Return true, if FRAME is a valid shadow stack frame while FRAME.VALUE
+   does not refer to a return address.  This can happen, for instance, in
+   case of signals.  The old shadow stack pointer is pushed in a special
+   format with bit 63 set.  */
+
+static bool
+amd64_linux_is_no_return_shadow_stack_address
+  (gdbarch *gdbarch, const shadow_stack_frame_info &frame)
+{
+  /* FRAME must be a valid shadow stack frame.  */
+  std::pair<CORE_ADDR, CORE_ADDR> range;
+  gdb_assert (gdbarch_address_in_shadow_stack_memory_range (gdbarch,
+							    frame.ssp,
+							    &range));
+
+  /* In case bit 63 is not configured, the address on the shadow stack
+     should be a return address.  */
+  constexpr CORE_ADDR mask = (CORE_ADDR) 1 << 63;
+  if ((frame.value & mask) == 0)
+    return false;
+
+  /* To compare the shadow stack pointer of the previous frame with the
+     value of FRAME, we must clear bit 63.  */
+  CORE_ADDR shadow_stack_val_cleared = (frame.value & (~mask));
+
+  /* Compute the previous/old SSP.  The shadow stack grows downwards.  To
+     compute the previous shadow stack pointer, we need to increment
+     FRAME.SSP.  */
+  CORE_ADDR prev_ssp
+    = frame.ssp + gdbarch_shadow_stack_element_size_aligned (gdbarch);
+
+  /* We incremented FRAME.SSP by one element to compute PREV_SSP before.
+     In case FRAME.SSP points to the first element of the shadow stack,
+     PREV_SSP must point to the bottom of the shadow stack (RANGE.SECOND),
+     but not beyond that address.  */
+  gdb_assert (prev_ssp > range.first && prev_ssp <= range.second);
+
+  return (shadow_stack_val_cleared == prev_ssp);
+}
+
 static void
 amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch,
 			    int num_disp_step_buffers)
@@ -2038,6 +2078,9 @@ amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch,
 					amd64_linux_remove_non_addr_bits_wpt);
   set_gdbarch_get_shadow_stack_pointer (gdbarch,
 					amd64_linux_get_shadow_stack_pointer);
+
+  set_gdbarch_is_no_return_shadow_stack_address
+    (gdbarch, amd64_linux_is_no_return_shadow_stack_address);
 }
 
 static void

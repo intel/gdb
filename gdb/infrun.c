@@ -110,7 +110,6 @@ static bool step_over_info_valid_p (void);
 
 struct schedlock_options;
 static bool schedlock_applies (thread_info *);
-static bool schedlock_applies (bool, thread_info *tp = nullptr);
 static bool schedlock_applies_to_opts (const schedlock_options &, bool,
 				       thread_info *tp = nullptr);
 
@@ -2595,19 +2594,21 @@ user_visible_resume_ptid (int step)
   if (inferior_ptid != null_ptid)
     tp = inferior_thread ();
 
+  /* With non-stop mode on, threads are always handled individually.  */
   if (non_stop)
+    return inferior_ptid;
+
+  /* User-settable 'scheduler' mode requires solo thread resume.  */
+  if (target_record_will_replay (ptid_t (inferior_ptid.pid ()),
+				 execution_direction))
     {
-      /* With non-stop mode on, threads are always handled
-	 individually.  */
-      resume_ptid = inferior_ptid;
+      if (schedlock_applies_to_opts (schedlock.replay, step, tp))
+	return inferior_ptid;
     }
-  else if (schedlock_applies (step, tp))
-    {
-      /* User-settable 'scheduler' mode requires solo thread
-	 resume.  */
-      resume_ptid = inferior_ptid;
-    }
-  else if (tp != nullptr && tp->control.in_cond_eval)
+  else if (schedlock_applies_to_opts (schedlock.normal, step, tp))
+    return inferior_ptid;
+
+  if (tp != nullptr && tp->control.in_cond_eval)
     {
       /* The inferior thread is evaluating a BP condition.  Other threads
 	 might be stopped or running and we do not want to change their
@@ -3453,16 +3454,7 @@ schedlock_applies_to_opts (const schedlock_options &opts, bool step,
 static bool
 schedlock_applies (thread_info *tp)
 {
-  bool step = (tp != nullptr) && tp->control.stepping_command;
-  return schedlock_applies (step, tp);
-}
-
-/* Returns true if scheduler locking applies to thread TP.
-   STEP indicates whether we're about to do a step/next-like command.  */
-
-static bool
-schedlock_applies (bool step, thread_info *tp)
-{
+  bool step = tp->control.stepping_command;
   bool is_replay = target_record_will_replay (minus_one_ptid,
 					      execution_direction);
   schedlock_options &opts = is_replay ? schedlock.replay : schedlock.normal;

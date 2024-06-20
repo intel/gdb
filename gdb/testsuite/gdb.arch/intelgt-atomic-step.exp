@@ -113,8 +113,6 @@ foreach device $sycl_device_list {
 		continue
 	    }
 
-	    # With the optimized code we hit a BP with the host inferior, avoid
-	    # it by setting the condition.
 	    gdb_breakpoint "get_startxy" {temporary}
 	    gdb_test_multiple "continue" "hit the BP inside the kernel" {
 		-re -wrap "hit Temporary breakpoint.*" {

@@ -68,7 +68,7 @@ proc step_over_atomic {displaced_stepping device} {
 	set next_pc [format 0x%x [expr $curr_pc + 0x08]]
     }
 
-    gdb_test "nexti" "${hex}\[\\t\\s\]+${decimal}${fill}" \
+    gdb_test "nexti" "${hex}\[\\t\\s\].*\[\r\n\]+${decimal}${fill}" \
 	"step over atomic at $curr_pc"
 
     set pc_test_name "check PC after atomic step over"
@@ -107,8 +107,6 @@ foreach device $sycl_device_list {
 	    continue
 	}
 
-	set first_line [gdb_get_line_number "kernel-line-1"]
-
 	foreach_with_prefix displaced_stepping {"on" "off"} {
 	    clean_restart "${binfile}"
 	    if {![runto_main [sycl_get_device_args $device]]} {
@@ -117,8 +115,8 @@ foreach device $sycl_device_list {
 
 	    # With the optimized code we hit a BP with the host inferior, avoid
 	    # it by setting the condition.
-	    gdb_breakpoint "$first_line if \$_inferior > 1" {temporary}
-	    gdb_test_multiple "continue" "hit the BP at the first line" {
+	    gdb_breakpoint "get_startxy" {temporary}
+	    gdb_test_multiple "continue" "hit the BP inside the kernel" {
 		-re -wrap "hit Temporary breakpoint.*" {
 		    if {[is_pvc $device]} {
 			setup_kfail "JIRA GSD/8399" "*-*-*"

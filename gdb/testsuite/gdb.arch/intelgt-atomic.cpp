@@ -33,6 +33,12 @@ static constexpr uint32_t K = k_tile * 4;
 
 using bfloat16 = sycl::ext::oneapi::bfloat16;
 
+const int
+get_startxy (sycl::id<1> gid, sycl::nd_item<2> item, int index)
+{
+  return gid - item.get_local_id (index);
+}
+
 void
 matrix_multiply (float *C, bfloat16 *A, bfloat16 *B, sycl::queue &deviceQueue)
 {
@@ -57,8 +63,8 @@ matrix_multiply (float *C, bfloat16 *A, bfloat16 *B, sycl::queue &deviceQueue)
 
 	  const auto gidx = item.get_global_id (0); /* kernel-line-1.  */
 	  const auto gidy = item.get_global_id (1);
-	  const auto sg_startx = gidx - item.get_local_id (0);
-	  const auto sg_starty = gidy - item.get_local_id (1);
+	  const auto sg_startx = get_startxy (gidx, item, 0);
+	  const auto sg_starty = get_startxy (gidy, item, 1);
 
 	  sycl::sub_group sg = item.get_sub_group ();
 	  constexpr int n_k_tile = K / k_tile;

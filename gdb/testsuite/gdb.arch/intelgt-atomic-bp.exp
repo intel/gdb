@@ -74,15 +74,13 @@ foreach device $sycl_device_list {
 	    continue
 	}
 
-	set first_line [gdb_get_line_number "kernel-line-1"]
-
 	# With the optimized code we hit a BP with the host inferior, avoid
 	# it by setting the condition.
-	gdb_breakpoint "$first_line if \$_inferior > 1" {temporary}
+	gdb_breakpoint "get_startxy" {temporary}
 	if {[is_pvc $device]} {
 	    setup_kfail "JIRA GSD/8399" "*-*-*"
 	}
-	gdb_continue_to_breakpoint "hit the BP at the first line"
+	gdb_continue_to_breakpoint "hit the BP inside the kernel"
 
 	set fill "\[^\r\n\]*"
 	scan [get_hexadecimal_valueof "\$pc" "0"] %x current_address

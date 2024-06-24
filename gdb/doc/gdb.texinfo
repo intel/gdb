@@ -42133,6 +42133,13 @@ buffer.
 Control whether @value{GDBN} will skip PAD packets when computing the
 packet history.
 
+@kindex maint set gcore xml-target-description
+@item maint set gcore xml-target-description
+@kindex maint show gcore xml-target-description
+@item maint show gcore xml-target-description
+Control whether @value{GDBN} will create the NT_GDB_TDESC note when using
+the @samp{generate-core-file} command.
+
 @kindex maint info jit
 @item maint info jit
 Print information about JIT code objects loaded in the current inferior.

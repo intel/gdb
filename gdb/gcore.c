@@ -28,6 +28,7 @@
 #include "completer.h"
 #include "gcore.h"
 #include "cli/cli-decode.h"
+#include "cli/cli-cmds.h"
 #include <fcntl.h>
 #include "regcache.h"
 #include "regset.h"
@@ -884,6 +885,24 @@ gcore_find_signalled_thread ()
   return nullptr;
 }
 
+/* When true, emit NT_GDB_TDESC.  */
+bool maint_gcore_emit_xml_tdesc = true;
+
+/* Command lists for gcore maintenance commands.  */
+struct cmd_list_element *maint_gcore_cmdlist;
+struct cmd_list_element *maint_gcore_set_cmdlist;
+struct cmd_list_element *maint_gcore_show_cmdlist;
+
+/* "Show" callback for "maint set gcore xml-target-description".  */
+static void
+show_gcore_xml_target_description (struct ui_file *file, int from_tty,
+				   struct cmd_list_element *c,
+				   const char *value)
+{
+  gdb_printf (file, _("Write NT_GDB_TDESC note into corefiles: %s.\n"),
+	      value);
+}
+
 void _initialize_gcore ();
 void
 _initialize_gcore ()
@@ -895,4 +914,26 @@ Usage: generate-core-file [FILENAME]\n\
 Argument is optional filename.  Default filename is 'core.PROCESS_ID'."));
 
   add_com_alias ("gcore", generate_core_file_cmd, class_files, 1);
+
+  add_basic_prefix_cmd ("gcore", class_maintenance,
+			_("gcore maintenance commands."),
+			&maint_gcore_cmdlist, 0, &maintenancelist);
+
+  add_setshow_prefix_cmd ("gcore", class_maintenance,
+			  _("Set gcore specific variables."),
+			  _("Show gcore specific variables."),
+			  &maint_gcore_set_cmdlist, &maint_gcore_show_cmdlist,
+			  &maintenance_set_cmdlist, &maintenance_show_cmdlist);
+
+  add_setshow_boolean_cmd ("xml-target-description", class_obscure,
+			    &maint_gcore_emit_xml_tdesc, _("\
+Set whether gcore emits a xml-target-description."), _("\
+Show whether gore emits a xml-target-description."), _("\
+By default, gcore emits the note NT_GDB_TDESC containing an \
+xml-target-description.  Disabling this setting will cause gcore \
+to no longer emit this note."),
+			    nullptr,
+			    show_gcore_xml_target_description,
+			    &maint_gcore_set_cmdlist,
+			    &maint_gcore_show_cmdlist);
 }

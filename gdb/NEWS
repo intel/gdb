@@ -50,6 +50,12 @@ $_kernel_instance_id
 
 * New commands
 
+maintenance set/show gcore xml-target-description
+  With this command you can control whether or not the generate-core-file
+  command emits the NT_GDB_TDESC note.  This is mainly useful for testing
+  how GDB handles corefiles without this note, as not all software that
+  creates corefiles generates it.
+
 maint jit dump
   Dump an in-memory JIT object into a file.
 

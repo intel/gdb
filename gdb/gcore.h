@@ -37,4 +37,7 @@ extern int objfile_find_memory_regions (struct target_ops *self,
 
 extern thread_info *gcore_find_signalled_thread ();
 
+/* When true, emit NT_GDB_TDESC.  */
+extern bool maint_gcore_emit_xml_tdesc;
+
 #endif /* GCORE_H */

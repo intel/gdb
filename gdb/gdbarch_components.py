@@ -3112,3 +3112,20 @@ element.
     predefault="8",
     invalid=False
 )
+
+Method(
+    comment="""
+There can be elements on the shadow stack which are not return addresses.
+This happens for example on x86 with CET in case of signals.
+If an architecture implements the command 'backtrace shadow' and the
+shadow stack can contain elements which are not return addresses, this
+function has to be provided.
+
+Return true, if FRAME does not contain a return address in FRAME->VALUE
+but another valid value for the architecture's shadow stack.
+""",
+    type="bool",
+    name="is_no_return_shadow_stack_address",
+    params=[("const shadow_stack_frame_info &", "frame")],
+    predicate=True,
+)

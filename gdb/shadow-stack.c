@@ -212,43 +212,6 @@ pc_in_middle_of_statement (CORE_ADDR pc, symtab_and_line sal)
   return pc > sal.pc && pc <= sal.end;
 }
 
-enum class ssp_unwind_stop_reason
-{
-  /* No particular reason; either we haven't tried unwinding yet, or we
-     didn't fail.  */
-  no_error = 0,
-
-  /* We could not read the memory of the shadow stack element.  */
-  memory_read_error
-};
-
-/* Information of a shadow stack frame belonging to a shadow stack element
-   at shadow stack pointer SSP.  */
-
-class shadow_stack_frame_info
-{
-public:
-  /* If possible, unwind the previous shadow stack frame info.  RANGE is
-     the shadow stack memory range [start_address, end_address) belonging
-     to this frame's shadow stack pointer.  If we cannot unwind the
-     previous frame info, set the unwind_stop_reason attribute.  If we
-     reached the bottom of the shadow stack just don't return a value.  */
-  std::optional<shadow_stack_frame_info> unwind_prev_shadow_stack_frame_info
-    (gdbarch *gdbarch, std::pair<CORE_ADDR, CORE_ADDR> range);
-
-  /* The shadow stack pointer.  */
-  CORE_ADDR ssp;
-  /* The value of the shadow stack at SSP.  */
-  CORE_ADDR value;
-  /* The level of the element on the shadow stack.  */
-  unsigned long level;
-  /* If unwinding of the previous frame info fails assign this value to a
-     matching condition ssp_unwind_stop_reason
-     > ssp_unwind_stop_reason::no_error.  */
-  ssp_unwind_stop_reason unwind_stop_reason
-    = ssp_unwind_stop_reason::no_error;
-};
-
 static
 gdb::unique_xmalloc_ptr<char> find_pc_funname (CORE_ADDR pc)
 {
@@ -275,6 +238,33 @@ do_print_shadow_stack_frame_info
    const shadow_stack_print_options &print_options,
    const shadow_stack_frame_info &frame, print_what print_what)
 {
+  if (gdbarch_is_no_return_shadow_stack_address_p (gdbarch)
+      && gdbarch_is_no_return_shadow_stack_address (gdbarch, frame))
+    {
+      /* It is possible, for the x86 architecture for instance, that an
+	 element on the shadow stack is not a return address.  We still
+	 want to print the address in that case but no further
+	 information.  */
+      ui_out_emit_tuple tuple_emitter (uiout, "shadow-stack-frame");
+      uiout->text ("#");
+      uiout->field_fmt_signed (2, ui_left, "level", frame.level);
+
+      /* On x86 there can be a shadow stack token at bit 63.  For x32, the
+	 address size is only 32 bit.  Thus, we still must use
+	 gdbarch_shadow_stack_element_size_aligned (and not
+	 gdbarch_addr_bit) to determine the width of the address to be
+	 printed.  */
+      const int element_size
+	 = gdbarch_shadow_stack_element_size_aligned (gdbarch);
+
+      uiout->field_string
+	("addr", hex_string_custom (frame.value, element_size * 2),
+	 address_style.style ());
+      uiout->text ("\n");
+      gdb_flush (gdb_stdout);
+      return;
+    }
+
   if (print_options.print_frame_info != print_frame_info_auto)
     {
       /* Use the specific frame information desired by the user.  */

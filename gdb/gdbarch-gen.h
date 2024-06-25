@@ -1978,3 +1978,18 @@ extern void set_gdbarch_address_in_shadow_stack_memory_range (struct gdbarch *gd
 
 extern int gdbarch_shadow_stack_element_size_aligned (struct gdbarch *gdbarch);
 extern void set_gdbarch_shadow_stack_element_size_aligned (struct gdbarch *gdbarch, int shadow_stack_element_size_aligned);
+
+/* There can be elements on the shadow stack which are not return addresses.
+   This happens for example on x86 with CET in case of signals.
+   If an architecture implements the command 'backtrace shadow' and the
+   shadow stack can contain elements which are not return addresses, this
+   function has to be provided.
+
+   Return true, if FRAME does not contain a return address in FRAME->VALUE
+   but another valid value for the architecture's shadow stack. */
+
+extern bool gdbarch_is_no_return_shadow_stack_address_p (struct gdbarch *gdbarch);
+
+typedef bool (gdbarch_is_no_return_shadow_stack_address_ftype) (struct gdbarch *gdbarch, const shadow_stack_frame_info &frame);
+extern bool gdbarch_is_no_return_shadow_stack_address (struct gdbarch *gdbarch, const shadow_stack_frame_info &frame);
+extern void set_gdbarch_is_no_return_shadow_stack_address (struct gdbarch *gdbarch, gdbarch_is_no_return_shadow_stack_address_ftype *is_no_return_shadow_stack_address);

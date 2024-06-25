@@ -31,6 +31,7 @@
 #include "displaced-stepping.h"
 #include "gdbsupport/gdb-checked-static-cast.h"
 #include "registry.h"
+#include "shadow-stack.h"
 
 struct floatformat;
 struct ui_file;

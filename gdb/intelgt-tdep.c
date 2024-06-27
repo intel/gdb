@@ -21,6 +21,8 @@
 #include "arch/intelgt.h"
 #include "cli/cli-cmds.h"
 #include "dwarf2/frame.h"
+#include "exceptions.h"
+#include "extract-store-integer.h"
 #include "frame-unwind.h"
 #include "gdbsupport/gdb_obstack.h"
 #include "gdbtypes.h"
@@ -30,12 +32,28 @@
 #include "gdbthread.h"
 #include "inferior.h"
 #include "user-regs.h"
+#include "block.h"
+#include "infcall.h"
 #include <algorithm>
+#include <array>
 #include "disasm.h"
 #if defined (HAVE_LIBIGA64)
 #include "iga/iga.h"
 #endif /* defined (HAVE_LIBIGA64)  */
 #include "gdbthread.h"
+
+/* The maximum number of GRF registers to be used when passing function
+   arguments.  */
+constexpr int INTELGT_MAX_GRF_REGS_FOR_ARGS = 12;
+
+/* The maximum number of GRF registers to be used for the return value.  */
+constexpr int INTELGT_MAX_GRF_REGS_FOR_RET = 8;
+
+/* The maximum size in bytes of a promotable struct.  */
+constexpr int PROMOTABLE_STRUCT_MAX_SIZE = 16;
+
+/* Intelgt FE stack alignment size in bytes.  */
+constexpr int OWORD_SIZE = 16;
 
 /* Global debug flag.  */
 static bool intelgt_debug = false;
@@ -52,6 +70,190 @@ struct regnum_range
 {
   int start;
   int end;
+};
+
+/* Read and write vectors on the stack while considering the SIMD
+   vectorization.
+
+   ADDR is the stack memory address.
+   VALTYPE is the type of the vector.
+   BUFF_READ is a non-NULL pointer to read data from when performing
+   stack write.  It is NULL if we are performing a stack read.
+   BUFF_WRITE is a non-NULL writable pointer that will contain the data
+   read from the stack.  It is NULL if we are performing a stack write.
+
+   The returned value is the stack address right after the vector
+   reserved memory.  */
+
+static CORE_ADDR fe_stack_handle_vector (CORE_ADDR addr, type *valtype,
+					 const gdb_byte *buff_read,
+					 gdb_byte *buff_write,
+					 const unsigned int simd_width);
+
+/* Read vector from the stack into BUFF.  */
+
+static CORE_ADDR
+fe_stack_read_vector (CORE_ADDR addr, type *valtype, gdb_byte *buff,
+		      const unsigned int simd_width)
+{
+  return fe_stack_handle_vector (addr, valtype, nullptr, buff, simd_width);
+}
+
+/* Write vector from BUFF into the stack.  */
+
+static CORE_ADDR
+fe_stack_write_vector (CORE_ADDR addr, type *valtype, const gdb_byte *buff,
+		       const unsigned int simd_width)
+{
+  return fe_stack_handle_vector (addr, valtype, buff, nullptr, simd_width);
+}
+
+/* Read and write small structures on the stack while considering
+   the SIMD vectorization.
+
+   ADDR is the stack memory address.
+   VALTYPE is the type of the structure.
+   BUFF_READ is a non-NULL pointer to read data from when performing
+   stack write.  It is NULL if we are performing a stack read.
+   BUFF_WRITE is a non-NULL writable pointer that will contain the data
+   read from the stack.  It is NULL if we are performing a stack write.
+
+   The returned value is the stack address right after the structure
+   reserved memory.  */
+
+static CORE_ADDR fe_stack_handle_small_struct (CORE_ADDR addr, type *valtype,
+					       const gdb_byte *buff_read,
+					       gdb_byte *buff_write,
+					       const unsigned int simd_width);
+
+/* Read small structure from the stack into BUFF.  */
+
+static CORE_ADDR
+fe_stack_read_small_struct (CORE_ADDR addr, type *valtype, gdb_byte *buff,
+			    const unsigned int simd_width)
+{
+  return fe_stack_handle_small_struct (addr, valtype, nullptr, buff,
+				       simd_width);
+}
+
+/* Write small structure from BUFF into the stack.  */
+
+static CORE_ADDR
+fe_stack_write_small_struct (CORE_ADDR addr, type *valtype,
+			     const gdb_byte *buff,
+			     const unsigned int simd_width)
+{
+  return fe_stack_handle_small_struct (addr, valtype, buff, nullptr,
+				       simd_width);
+}
+
+/* Read and write up to 8 bytes on the stack while considering the SIMD
+   vectorization.
+
+   ADDR is the stack memory address.
+   LEN is the length in bytes to read or write on the stack.
+   BUFF_READ is a non-NULL pointer to read data from when performing
+   stack write.  It is NULL if we are performing a stack read.
+   BUFF_WRITE is a non-NULL writable pointer that will contain the data
+   read from the stack.  It is NULL if we are performing a stack write.
+
+   The returned value is the stack address right after the data
+   reserved memory.  */
+
+static CORE_ADDR fe_stack_handle_primitive (CORE_ADDR addr, int len,
+					    const gdb_byte *buff_read,
+					    gdb_byte *buff_write,
+					    const unsigned int simd_width);
+
+/* Read up to 8 bytes from the stack into BUFF.  */
+
+static CORE_ADDR
+fe_stack_read_primitive (CORE_ADDR addr, int len, gdb_byte *buff,
+			 const unsigned int simd_width)
+{
+  return fe_stack_handle_primitive (addr, len, nullptr, buff, simd_width);
+}
+
+/* Write up to 8 bytes from BUFF into the stack.  */
+
+static CORE_ADDR
+fe_stack_write_primitive (CORE_ADDR addr, int len, const gdb_byte *buff,
+			  const unsigned int simd_width)
+{
+  return fe_stack_handle_primitive (addr, len, buff, nullptr, simd_width);
+}
+
+/* Structure for GRF read / write handling.  */
+
+struct grf_handler
+{
+public:
+  grf_handler (uint32_t reg_size, regcache * regcache, unsigned int simd_width)
+      : m_reg_size (reg_size), m_regcache (regcache), m_simd_width (simd_width)
+  {
+  }
+
+  /* Read small structures from GRFs into BUFF.  */
+  void read_small_struct (int regnum, type *valtype, gdb_byte *buff);
+
+  /* Write small structures from BUFF into GRFs.  */
+  void write_small_struct (int regnum, type *valtype, const gdb_byte *buff);
+
+  /* Read vectors from GRFs into BUFF.  */
+  void read_vector (int regnum, type *valtype, gdb_byte *buff);
+
+  /* Write vectors from BUFF into GRFs.  */
+  void write_vector (int regnum, type *valtype, const gdb_byte *buff);
+
+  /* Read primitives from GRFs into BUFF.  */
+  void read_primitive (int regnum, int len, gdb_byte *buff);
+
+  /* Write primitives from BUFF into GRFs.  */
+  void write_primitive (int regnum, int len, const gdb_byte *buff);
+
+private:
+  uint32_t m_reg_size;
+  regcache *m_regcache;
+  const unsigned int m_simd_width;
+
+  /* Read and write small structures to GRF registers while considering
+     the SIMD vectorization.
+
+     REGNUM is the index of the first register for data storage.
+     BUFF_READ is a non-NULL pointer to read data from when performing
+     registers write.  It is NULL when performing registers read.
+     BUFF_WRITE is a non-NULL writable pointer that will contain the data
+     read from GRFs.  It is a NULL if we are performing registers write.
+     VALTYPE is the type of the structure.  */
+
+  void handle_small_struct (int regnum, const gdb_byte *buff_read,
+			    gdb_byte *buff_write, type *valtype);
+
+  /* Read and write vector values to GRF registers while considering the SIMD
+     vectorization.
+
+     REGNUM is the index of the first register for data storage.
+     BUFF_READ is a non-NULL pointer to read data from when performing
+     registers write.  It is NULL when performing registers read.
+     BUFF_WRITE is a non-NULL writable pointer that will contain the data
+     read from GRFs.  It is a NULL if we are performing registers write.
+     VALTYPE is the type of the vector.  */
+
+  void handle_vector (int regnum, const gdb_byte *buff_read,
+		      gdb_byte *buff_write, type *valtype);
+
+  /* Read and write up to 8 bytes to GRF registers while considering the SIMD
+     vectorization.
+
+     REGNUM is the index of the first register for data storage.
+     BUFF_READ is a non-NULL pointer to read data from when performing
+     registers write.  It is NULL when performing registers read.
+     BUFF_WRITE is a non-NULL writable pointer that will contain the data
+     read from GRFs.  It is a NULL if we are performing registers write.
+     LEN is the length in bytes to read or write on the GRFs.  */
+
+  void handle_primitive (int regnum, const gdb_byte *buff_read,
+		       gdb_byte *buff_write, int len);
 };
 
 /* The encoding for XE version enumerates follows this pattern, which is
@@ -73,6 +275,155 @@ enum xe_version
 /* Helper functions to request and translate the device id/version.  */
 
 [[maybe_unused]] static xe_version get_xe_version (unsigned int device_id);
+[[maybe_unused]] static uint32_t get_device_id (inferior *inferior);
+static uint32_t get_device_id (gdbarch *gdbarch);
+
+/* Intelgt memory handler to manage memory allocation and releasing of
+   a target memory region.  We are using a linked list to keep track of
+   memory blocks and serve the ALLOC request with the first-fit approach.
+
+   This class is currently used to manage memory allocations of the scratch
+   debug area.  */
+
+class target_memory_allocator
+{
+  struct data_block
+  {
+    data_block (CORE_ADDR addr, size_t size, bool reserved, data_block *next)
+      : addr (addr), size (size), reserved (reserved), next (next)
+    {}
+    /* Disable copying.  */
+    data_block &operator= (const data_block &) = delete;
+    data_block (const data_block &) = delete;
+
+    /* Merge the NEXT block into this block and delete NEXT.  */
+    void merge_with_next ()
+    {
+      if (next != nullptr)
+	{
+	  gdb_assert (!reserved && !next->reserved);
+
+	  data_block *next_blk = next;
+	  size += next_blk->size;
+	  next = next_blk->next;
+	  delete next_blk;
+	}
+      else
+	intelgt_debug_printf ("Cannot apply merge to the last block.");
+    }
+
+    CORE_ADDR addr;
+    size_t size;
+    bool reserved;
+    data_block *next;
+  };
+
+public:
+  target_memory_allocator (CORE_ADDR start, size_t size)
+  {
+    blocks_list = new data_block (start, size, false, nullptr);
+  }
+
+  ~target_memory_allocator ()
+  {
+    /* Free up the list.  */
+    data_block *head = blocks_list;
+    while (head != nullptr)
+      {
+	data_block *current_blk = head;
+	head = head->next;
+	delete current_blk;
+      }
+  }
+
+  /* Disable copying and delete default constructor.  */
+  target_memory_allocator &operator= (const target_memory_allocator &)
+    = delete;
+  target_memory_allocator (const target_memory_allocator &) = delete;
+  target_memory_allocator () = delete;
+
+  /* Return the first fitting free block.  */
+  CORE_ADDR alloc (size_t size) const
+  {
+    data_block *head = blocks_list;
+    while (head != nullptr)
+      {
+	/* We found a larger fit block, split it.  */
+	if (!head->reserved && (head->size > size))
+	  {
+	    data_block *new_free_block
+	      = new data_block (head->addr + size,
+				head->size - size, false, head->next);
+	    head->size = size;
+	    head->reserved = true;
+	    head->next = new_free_block;
+	    break;
+	  }
+	else if (!head->reserved && head->size == size)
+	  {
+	    /* No need to create a new block, just re-use this one.  */
+	    head->reserved = true;
+	    break;
+	  }
+
+	head = head->next;
+      }
+
+    if (head == nullptr)
+      error (_("Failed to allocate %" PRIu64
+	       " bytes in the debug scratch area."), (uint64_t) size);
+
+    return head->addr;
+  }
+
+  void free (CORE_ADDR addr) const
+  {
+    data_block *head = blocks_list;
+    data_block *prev_head = nullptr;
+    while (head != nullptr)
+      {
+	/* The memory address does not belong to any block.  */
+	if (addr < head->addr)
+	  {
+	    intelgt_debug_printf ("Cannot find the corresponding allocated"
+				  " memory in scratch area: Addr %s",
+				  paddress (current_inferior ()->arch (),
+					    addr));
+	    head = nullptr;
+	    break;
+	  }
+
+	if (head->addr == addr)
+	  {
+	    /* No need to do anything, the block is already free.  */
+	    if (!head->reserved)
+	      internal_error (_("Double free from the debug scratch area "
+				"detected: Addr %s"),
+			      paddress (current_inferior ()->arch (), addr));
+
+	    head->reserved = false;
+	    /* Merge adjacent free blocks.  */
+	    if ((head->next != nullptr) && !head->next->reserved)
+	      head->merge_with_next ();
+	    if ((prev_head != nullptr) && !prev_head->reserved)
+	      prev_head->merge_with_next ();
+	    break;
+	  }
+
+	prev_head = head;
+	head = head->next;
+      }
+
+    if (head == nullptr)
+      internal_error (_("Failed to free memory from the debug scratch area: "
+			"Addr %s"),
+		      paddress (current_inferior ()->arch (), addr));
+  }
+
+private:
+  /* Linked list of blocks ordered by increasing address.  */
+  data_block *blocks_list;
+};
 
 /* Data specific for this architecture.  */
 
@@ -111,6 +462,9 @@ struct intelgt_gdbarch_tdep : gdbarch_tdep_base
   /* Cached $framedesc pseudo-register type.  */
   type *framedesc_type = nullptr;
 
+  /* Debug area memory manager.  */
+  target_memory_allocator *scratch_area = nullptr;
+
   /* Initialize ranges to -1 as "not-yet-set" indicator.  */
   intelgt_gdbarch_tdep ()
   {
@@ -130,6 +484,29 @@ struct intelgt_gdbarch_tdep : gdbarch_tdep_base
   iga_context_t iga_ctx = nullptr;
 #endif
 };
+
+/* Per-inferior cached data for the Intelgt target.  */
+
+struct intelgt_inferior_data
+{
+  /* Device target id.  */
+  uint32_t device_id = 0u;
+};
+
+static const registry<inferior>::key<intelgt_inferior_data>
+  intelgt_inferior_data_handle;
+
+/* Fetch the per-inferior data.  */
+
+static intelgt_inferior_data *
+get_intelgt_inferior_data (inferior *inf)
+{
+  intelgt_inferior_data *inf_data = intelgt_inferior_data_handle.get (inf);
+  if (inf_data == nullptr)
+    inf_data = intelgt_inferior_data_handle.emplace (inf);
+
+  return inf_data;
+}
 
 /* The 'register_type' gdbarch method.  */
 
@@ -303,6 +680,8 @@ intelgt_skip_prologue (gdbarch *gdbarch, CORE_ADDR start_pc)
   return start_pc;
 }
 
+static bool is_a_promotable_small_struct (type *arg_type, int max_size);
+
 /* Implementation of gdbarch's return_value method.  */
 
 static enum return_value_convention
@@ -310,8 +689,107 @@ intelgt_return_value_as_value (gdbarch *gdbarch, value *function,
 			       type *valtype, regcache *regcache,
 			       value **read_value, const gdb_byte *writebuf)
 {
-  gdb_assert_not_reached ("intelgt_return_value_as_value is to be "
-			  "implemented later.");
+  intelgt_debug_printf ("return type length %s",
+			pulongest (valtype->length ()));
+  gdb_assert (inferior_ptid != null_ptid);
+
+  if (writebuf != nullptr)
+    error (_("intelgt target does not support the return command"));
+
+  gdb_byte *readbuf = nullptr;
+  if (read_value != nullptr)
+    {
+      *read_value = value::allocate (valtype);
+      readbuf = (*read_value)->contents_raw ().data ();
+    }
+
+  int address_size_byte = gdbarch_addr_bit (gdbarch) / 8;
+  CORE_ADDR function_pc = function->address ();
+  const unsigned int simd_width = get_simd_width_for_pc (function_pc);
+  constexpr int max_primitive_size = 8;
+
+  /* The vectorized return value is stored at this register and onwards.  */
+  int retval_regnum
+    = gdbarch_tdep<intelgt_gdbarch_tdep> (gdbarch)->retval_regnum;
+  unsigned int retval_size = register_size (gdbarch, retval_regnum);
+  int type_length = valtype->length ();
+  auto grf = grf_handler (retval_size, regcache, simd_width);
+  bool is_promotable_struct
+    = is_a_promotable_small_struct (valtype, PROMOTABLE_STRUCT_MAX_SIZE);
+
+  /* Non-promotable structs are stored by reference.  The return value
+     register contains a vectorized sequence of memory addresses.  */
+  if (class_or_union_p (valtype) && !is_promotable_struct)
+    {
+      if (readbuf != nullptr)
+	{
+	  /* Read the address to a temporary buffer.  */
+	  CORE_ADDR addr = 0;
+	  grf.read_primitive (retval_regnum, address_size_byte,
+			      (gdb_byte *) &addr);
+	  /* Read the value to the resulting buffer.  */
+	  int err = target_read_memory (addr, readbuf, type_length);
+	  if (err != 0)
+	    error ("Failed to read the returned struct of type %s of "
+		   "length %d at address %s.",
+		   TYPE_SAFE_NAME (valtype), type_length,
+		   paddress (gdbarch, addr));
+	}
+
+      return RETURN_VALUE_ABI_RETURNS_ADDRESS;
+    }
+
+  /* Promotable structures and vectors are returned by values on registers.
+     In case the GRFs space is not sufficient, the return by value takes place
+     on the stack, at the end of the caller frame.  */
+  if (type_length * simd_width
+      <= INTELGT_MAX_GRF_REGS_FOR_RET * retval_size)
+    {
+      /* Return value can fit in the GRF registers.  */
+      if (readbuf == nullptr)
+	return RETURN_VALUE_REGISTER_CONVENTION;
+
+      /* Read the return values from GRFs.  */
+      if (is_promotable_struct)
+	grf.read_small_struct (retval_regnum, valtype, readbuf);
+      else if (valtype->is_vector ())
+	grf.read_vector (retval_regnum, valtype, readbuf);
+      else if (type_length <= max_primitive_size)
+	grf.read_primitive (retval_regnum, type_length, readbuf);
+
+      return RETURN_VALUE_REGISTER_CONVENTION;
+    }
+  else
+    {
+      /* Return value is returned on the stack.  */
+      if (readbuf == nullptr)
+	return RETURN_VALUE_ABI_RETURNS_ADDRESS;
+
+      /* The return address of the returned value is deduced from the caller
+	 FE_SP.  Return address = FE_SP - (vectorized and aligned return
+	 type length).  */
+      const int framedesc_regnum
+	= intelgt_pseudo_register_num (gdbarch, "framedesc");
+      CORE_ADDR addr = 0;
+      regcache->cooked_read_part (framedesc_regnum, 24, 8,
+				  (gdb_byte *) &addr);
+
+      CORE_ADDR reserved_struct_memory = align_up (type_length * simd_width,
+						   OWORD_SIZE);
+      if (addr < reserved_struct_memory)
+	error ("Invalid stack address of return value: 0x%lx", addr);
+      addr -= reserved_struct_memory;
+
+      /* Read the returned value from the stack.  */
+      if (is_promotable_struct)
+	fe_stack_read_small_struct (addr, valtype, readbuf, simd_width);
+      else if (valtype->is_vector ())
+	fe_stack_read_vector (addr, valtype, readbuf, simd_width);
+      else if (type_length <= max_primitive_size)
+	fe_stack_read_primitive (addr, type_length, readbuf, simd_width);
+
+      return RETURN_VALUE_ABI_RETURNS_ADDRESS;
+    }
 }
 
 /* Callback function to unwind the $framedesc register.  */
@@ -844,6 +1322,1055 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
   return possible_regnum;
 }
 
+/* Check if a small struct can be promoted.  Struct arguments less than or
+   equal to 128-bits and only containing primitive element types are passed by
+   value as a vector of bytes, and are stored in the SoA (structure of arrays)
+   format on GRFs.  Similarly for struct return values less than or equal
+   to 64-bits and containing only primitive element types.  */
+
+static bool
+is_a_promotable_small_struct (type *arg_type, int max_size)
+{
+  if (!class_or_union_p (arg_type))
+    return false;
+
+  /* The struct is not promoted if it is larger than MAX_SIZE.  */
+  if (arg_type->length () > max_size)
+    return false;
+
+  int n_fields = arg_type->num_fields ();
+  for (int field_idx = 0; field_idx < n_fields; ++field_idx)
+    {
+      type *field_type = check_typedef (arg_type->field (field_idx).type ());
+
+      if (field_type->code () != TYPE_CODE_INT
+	  && field_type->code () != TYPE_CODE_BOOL
+	  && field_type->code () != TYPE_CODE_ENUM
+	  && field_type->code () != TYPE_CODE_FLT
+	  && field_type->code () != TYPE_CODE_PTR)
+	return false;
+    }
+
+  return true;
+}
+
+/* Return the total memory, in bytes, used to store a field within a struct,
+   which is the sum of the actual size of the field and the added padding.
+   The padding could be between fields (intra-padding) or at the end of the
+   struct (inter-padding).  */
+
+static unsigned int
+get_field_total_memory (type *struct_type, int field_index)
+{
+  field *fields = struct_type->fields ();
+  type *field_type = check_typedef (struct_type->field (field_index).type ());
+  int field_len = field_type->length ();
+  int current_pos = fields[field_index].loc_bitpos () / 8;
+
+  /* Determine the memory occupation of the field (field size + padding).  */
+  unsigned int total_memory = field_len;
+  if (field_index < struct_type->num_fields () - 1)
+    {
+      int next_pos = fields[field_index + 1].loc_bitpos () / 8;
+      total_memory = next_pos - current_pos;
+    }
+  else
+    total_memory = (struct_type->length () - current_pos);
+
+  return total_memory;
+}
+
+/* Return the number of registers required to store an argument.  ARG_TYPE is
+   the type of the argument.  */
+
+static unsigned int
+get_argument_required_registers (gdbarch *gdbarch, type *arg_type)
+{
+  const int len = arg_type->length ();
+  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
+  const int address_size_byte = gdbarch_addr_bit (gdbarch) / 8;
+  /* We need to know the size of a GRF register.  The retval register is a GRF,
+     so just use its size.  */
+  const int intelgt_register_size = register_size (
+    gdbarch,
+    gdbarch_tdep<intelgt_gdbarch_tdep> (gdbarch)->retval_regnum);
+  unsigned int required_registers = 1;
+
+  /* Compute the total required memory.  */
+  unsigned int required_memory = 0;
+  if (class_or_union_p (arg_type)
+      && !(is_a_promotable_small_struct (arg_type,
+					 PROMOTABLE_STRUCT_MAX_SIZE)))
+    required_memory = simd_width * address_size_byte;
+  else
+    required_memory = simd_width * len;
+
+  /* Compute the number of the required registers to store the variable.  */
+  required_registers = required_memory / intelgt_register_size;
+  if (required_memory % intelgt_register_size != 0)
+    required_registers++;
+
+  return required_registers;
+}
+
+/* Intelgt implementation of the "value_arg_coerce" method.  */
+
+static value *
+intelgt_value_arg_coerce (gdbarch *gdbarch, value *arg,
+			  type *param_type, int is_prototyped)
+{
+  /* Intelgt target accepts arguments less than the width of an
+     integer (32-bits).  No need to do anything.  */
+
+  type *arg_type = check_typedef (arg->type ());
+  type *type = param_type ? check_typedef (param_type) : arg_type;
+
+  return value_cast (type, arg);
+}
+
+/* Intelgt implementation of the "dummy_id" method.  */
+
+static struct frame_id
+intelgt_dummy_id (struct gdbarch *gdbarch, const frame_info_ptr &this_frame)
+{
+  /* Extract the front-end frame pointer from the "framedesc" register.
+     The size of the framedesc.fe_fp is 8 bytes with an offset of 16.  */
+  int framedesc_regnum = intelgt_pseudo_register_num (gdbarch, "framedesc");
+  bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+
+  gdb_assert (register_size (gdbarch, framedesc_regnum) <= 64);
+  gdb_byte buf[64];
+  get_frame_register (this_frame, framedesc_regnum, buf);
+  CORE_ADDR fe_fp = extract_unsigned_integer (buf + 16, 8, byte_order);
+
+  return frame_id_build (fe_fp, get_frame_pc (this_frame));
+}
+
+/* Intelgt implementation of the "return_in_first_hidden_param_p" method.  */
+
+static int
+intelgt_return_in_first_hidden_param_p (gdbarch *gdbarch, type *type)
+{
+  /* Non-promotable structure return values are converted
+     to be passed by reference as the first argument in the arguments
+     list of the function.  */
+  return (
+    class_or_union_p (type)
+    && !is_a_promotable_small_struct (type, PROMOTABLE_STRUCT_MAX_SIZE));
+}
+
+/* Adjust the address upwards (direction of stack growth) so that the stack is
+   always aligned.  According to the spec, the FE stack should be
+   OWORD aligned.  */
+
+static CORE_ADDR
+intelgt_frame_align (struct gdbarch *gdbarch, CORE_ADDR addr)
+{
+  return align_up (addr, OWORD_SIZE);
+}
+
+/* Intelgt implementation of the "unwind_sp" method.  The FE_SP
+   is being considered.  */
+
+static CORE_ADDR
+intelgt_unwind_sp (gdbarch *gdbarch, const frame_info_ptr &next_frame)
+{
+  /* Extract the front-end stack pointer from the "framedesc" register.
+     The size of the framedesc.fe_sp is 8 bytes with an offset of 24.  */
+  int framedesc_regnum = intelgt_pseudo_register_num (gdbarch, "framedesc");
+  value *unwound_framedesc
+    = frame_unwind_register_value (next_frame, framedesc_regnum);
+  gdb_byte *raw_bytes = unwound_framedesc->contents_raw ().data ();
+  bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  CORE_ADDR fe_sp = extract_unsigned_integer (raw_bytes + 24, 8, byte_order);
+
+  return fe_sp;
+}
+
+/* Read the debug area info and initialize SCRATCH_AREA in intelgt data.  */
+
+static void
+intelgt_init_scratch_area (gdbarch *gdbarch)
+{
+  /* Layout of the debug area header.  */
+  struct debug_area_header
+  {
+    char magic[8] = "";
+    uint64_t reserved_1 = 0;
+    uint8_t version = 0;
+    uint8_t pgsize = 0;
+    uint8_t size = 0;
+    uint8_t reserved_2 = 0;
+    uint16_t scratch_begin = 0;
+    uint16_t scratch_end = 0;
+  } dbg_header;
+
+  regcache *regcache = get_thread_regcache (inferior_thread ());
+  CORE_ADDR isabase = intelgt_get_isabase (regcache);
+  int err = target_read_memory (isabase, (gdb_byte *)&dbg_header,
+				sizeof dbg_header);
+  if (err != 0)
+    error (_("Target failed to read the debug area header at %s"),
+	   paddress (gdbarch, isabase));
+
+  if (strcmp (dbg_header.magic, "dbgarea") != 0)
+    error (_("Failed to find scratch debug area at %s"),
+	   paddress (gdbarch, isabase));
+
+  if (dbg_header.version != 0)
+    error (_("Unknown version of debug area header."));
+
+  /* Initialize SCRATCH_AREA.  */
+  intelgt_gdbarch_tdep *data
+    = gdbarch_tdep<intelgt_gdbarch_tdep> (gdbarch);
+  data->scratch_area = new target_memory_allocator (
+    isabase + dbg_header.scratch_begin,
+    dbg_header.scratch_end - dbg_header.scratch_begin);
+}
+
+/* Return a pointer to the scratch area object.  */
+
+static target_memory_allocator *
+get_scratch_area (gdbarch *gdbarch)
+{
+  intelgt_gdbarch_tdep *data
+    = gdbarch_tdep<intelgt_gdbarch_tdep> (gdbarch);
+  if (data->scratch_area == nullptr)
+    {
+      intelgt_init_scratch_area (gdbarch);
+      if (data->scratch_area == nullptr)
+	error (_("Device scratch area is needed for this operation but could "
+		 "not be found."));
+    }
+
+  return data->scratch_area;
+}
+
+/* Make the current thread execute a dummy RET instruction.  */
+
+static void
+intelgt_run_ret_inst (gdbarch *gdbarch)
+{
+  intelgt_debug_printf ("Running a dummy RET instruction.");
+
+  target_memory_allocator *scratch_area = get_scratch_area (gdbarch);
+  CORE_ADDR ret_inst_addr = scratch_area->alloc (intelgt::MAX_INST_LENGTH);
+  SCOPE_EXIT { scratch_area->free (ret_inst_addr); };
+
+  type *void_type
+    = type_allocator (gdbarch).new_type (TYPE_CODE_VOID,
+					 gdbarch_addr_bit (gdbarch),
+					 "dummy_ret");
+  type *func_void_type = make_function_type (void_type, nullptr);
+  value *val = value::allocate (func_void_type);
+  val->force_lval (ret_inst_addr);
+
+  constexpr gdb_byte ret_opcode = 0x2d;
+  std::array<gdb_byte, intelgt::MAX_INST_LENGTH> buff {};
+  buff[0] = ret_opcode;
+
+  intelgt_gdbarch_tdep *arch_data
+    = gdbarch_tdep<intelgt_gdbarch_tdep> (gdbarch);
+  /* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
+     sub-register 0.  */
+  buff[8] = 0x04;
+  /* Destination register number for the RET instruction.  */
+  gdb_byte dst_reg = arch_data->framedesc_base_regnum ();
+  buff[9] = dst_reg;
+
+  thread_info *tp = inferior_thread ();
+  const uint32_t simd_width = tp->get_simd_width ();
+  gdb_byte exec_size = 0;
+  while ((simd_width >> exec_size) > 1)
+    exec_size++;
+  /* Make sure that 2^EXEC_SIZE = SIMD_WIDTH.  */
+  gdb_assert (1 << exec_size == simd_width);
+
+  uint32_t device_id = get_device_id (current_inferior ());
+  xe_version device_version = get_xe_version (device_id);
+  switch (device_version)
+    {
+    case XE_HP:
+    case XE_HPG:
+      buff[2] = exec_size;
+      break;
+    case XE_HPC:
+    case XE2:
+      buff[2] = exec_size << 2;
+      break;
+    default:
+      error (_("Unsupported device id 0x%x"), device_id);
+    }
+
+  /* Inject the dummy RET instruction in the reserved space.  */
+  if (target_write_memory (ret_inst_addr, buff.data (), buff.size ()) != 0)
+    error (_("Target failed to inject a dummy RET instruction at 0x%lx"),
+	   ret_inst_addr);
+
+  /* Everything is ready to make the thread run the RET instruction.  In
+     'intelgt_push_dummy_code', we are handling the DUMMY_RET differently from
+     the regular inferior call flow, so that we don't inject an additional
+     CALLA instruction.  */
+  call_function_by_hand (val, nullptr, {});
+}
+
+struct intelgt_infcall_cleanup
+{
+  /* Current gdb architecture.  */
+  gdbarch *arch;
+
+  /* Address of the injected CALLA instruction.  */
+  CORE_ADDR calla_addr;
+
+  /* Value of CE register before starting the infcall.  */
+  uint32_t prev_ce;
+};
+
+/* Intelgt implementation of the dummy frame dtor.  This function will be
+   called when a dummy frame is removed or an error is thrown during the
+   infcall flow.
+
+   In this dtor, we free up the scratch memory that we used to inject the
+   CALLA instruction in "intelgt_push_dummy_code".  */
+
+static void
+intelgt_infcall_dummy_dtor (void *data, int unused)
+{
+  /* Do not error out if any exception is thrown.  */
+  try
+    {
+      auto infcall_cleanup_data = (intelgt_infcall_cleanup *) data;
+      gdbarch *gdbarch = infcall_cleanup_data->arch;
+      CORE_ADDR calla_addr = infcall_cleanup_data->calla_addr;
+      uint32_t return_mask = infcall_cleanup_data->prev_ce;
+      delete infcall_cleanup_data;
+
+      target_memory_allocator *scratch_area = get_scratch_area (gdbarch);
+      SCOPE_EXIT { scratch_area->free (calla_addr); };
+
+      /* Here we execute a RET instruction to fix the running flow in case
+	 of failures.  TODO Once we have a writable FC register, we no longer
+	 need to run a dummy RET.  Instead, we simply update the "Call Mask"
+	 and/or the "Channel Enables" fields.  */
+      if (stopped_by_random_signal)
+	{
+	  /* Prepare the framedesc for the RET instruction.  */
+	  thread_info *curr_thread = inferior_thread ();
+	  regcache *regcache = get_thread_regcache (curr_thread);
+	  intelgt_gdbarch_tdep *arch_data
+	    = gdbarch_tdep<intelgt_gdbarch_tdep> (gdbarch);
+	  const int framedesc_regnum = arch_data->framedesc_base_regnum ();
+
+	  /* Update the RETURN_IP to reuse the same NOP breakpoint address.
+	     See 'intelgt_push_dummy_code' for mode details on the
+	     injected instructions.  */
+	  CORE_ADDR bp_addr = calla_addr + intelgt::MAX_INST_LENGTH;
+	  CORE_ADDR isabase = intelgt_get_isabase (regcache);
+	  uint32_t return_ip = (uint32_t) (bp_addr - isabase);
+	  regcache->cooked_write_part (framedesc_regnum, 0, 4,
+				       (gdb_byte *) &return_ip);
+	  /* Update the RETURN_MASK to reflect the caller CE.  */
+	  regcache->cooked_write_part (framedesc_regnum, 4, sizeof (uint32_t),
+				       (gdb_byte *) &return_mask);
+
+	  /* We are ready to let the RET instruction run.  */
+	  intelgt_run_ret_inst (gdbarch);
+	}
+    }
+  catch (const gdb_exception_error &e)
+    {
+      exception_print (gdb_stderr, e);
+    }
+}
+
+/* Intelgt implementation of the "push_dummy_code" method.
+
+   In this function, we are injecting a CALLA instruction in the debug area.
+   We set the REAL_PC to start executing from the injected instruction,
+   which will then force the function to return to the next address, and that
+   would be the BP_ADDR.  */
+
+static CORE_ADDR
+intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
+			 value **args, int nargs, type *value_type,
+			 CORE_ADDR *real_pc, CORE_ADDR *bp_addr,
+			 regcache *regcache,
+			 dummy_frame_dtor_ftype **arch_dummy_dtor,
+			 void **dtor_data)
+{
+  intelgt_gdbarch_tdep *data
+    = gdbarch_tdep<intelgt_gdbarch_tdep> (gdbarch);
+  target_memory_allocator *scratch_area = get_scratch_area (gdbarch);
+  CORE_ADDR isabase = intelgt_get_isabase (regcache);
+
+  /* We are executing a dummy RET instruction to fix the running flow.
+     Hence we do not need to inject a calla.  */
+  if (value_type->name () && strcmp (value_type->name (), "dummy_ret") == 0)
+    {
+      /* Use the RETURN_IP as a breakpoint address for the dummy RET.  */
+      const int framedesc_regnum = data->framedesc_base_regnum ();
+      uint32_t return_ip = 0x0;
+      regcache->cooked_read_part (framedesc_regnum, 0, 4,
+				  (gdb_byte *) &return_ip);
+      *real_pc = funaddr;
+      *bp_addr = return_ip + isabase;
+      return sp;
+    }
+
+  /* Allocate memory for two instructions in the scratch area.  The first is
+     for the CALLA, and the second is the return address, where GDB inserts
+     a breakpoint.  */
+  CORE_ADDR calla_addr = scratch_area->alloc (2 * intelgt::MAX_INST_LENGTH);
+
+  /* Set the dummy frame dtor right after scratch memory allocation,
+     so that it gets called for any exception.  */
+  uint32_t current_ce = intelgt_active_lanes_mask (gdbarch, inferior_thread ());
+  auto *infcall_cleanup_data
+    = new intelgt_infcall_cleanup {gdbarch, calla_addr, current_ce};
+  *arch_dummy_dtor = intelgt_infcall_dummy_dtor;
+  *dtor_data = infcall_cleanup_data;
+
+  /* Compute the execution size from SIMD_WIDTH, below is the EXEC_SIZE
+     encoding according to the spec.
+     000b = 1 Channels
+     001b = 2 Channels
+     010b = 4 Channels
+     011b = 8 Channels
+     100b = 16 Channels
+     101b = 32 Channels.  */
+  const uint32_t simd_width = get_simd_width_for_pc (funaddr);
+  uint32_t exec_size = 0;
+  while ((simd_width >> exec_size) > 1)
+    exec_size++;
+
+  /* Make sure that 2^EXEC_SIZE = SIMD_WIDTH.  */
+  gdb_assert (1 << exec_size == simd_width);
+
+  /* Make sure to have a cleared buffer for the CALLA instruction
+     and the return breakpoint.  */
+  gdb_byte buff[2 * intelgt::MAX_INST_LENGTH];
+  memset (buff, 0, sizeof (buff));
+
+  /* Construct the dummy CALLA instruction.  */
+  gdb::array_view <gdb_byte> calla_inst
+    = gdb::make_array_view (buff, intelgt::MAX_INST_LENGTH);
+
+  constexpr uint32_t calla_opcode = 0x2b;
+  calla_inst[0] = calla_opcode;
+
+  thread_info *current_thread = inferior_thread ();
+
+  /* Compute the DEVICE_GEN from the DEVICE_ID, so that we can determine
+     the correct encoding for some fields of the instruction.  */
+  int predication_bit = 0;
+  uint32_t device_id = get_device_id (current_thread->inf);
+  xe_version device_version = get_xe_version (device_id);
+  switch (device_version)
+    {
+    case XE_HP:
+    case XE_HPG:
+      predication_bit = 24;
+      calla_inst[2] = exec_size;
+      break;
+    case XE_HPC:
+    case XE2:
+      predication_bit = 26;
+      calla_inst[2] = exec_size << 2;
+      break;
+    default:
+      error (_("Unsupported device id 0x%x"), device_id);
+    }
+
+  /* Enable predication to run the inferior call with a single lane.  */
+  if (current_thread->has_simd_lanes ())
+    {
+      /* Enable $F0 predication.  */
+      intelgt::set_inst_bit (calla_inst, predication_bit);
+
+      /* Update the predication flag register $F0 using the current lane.  */
+      const int current_lane = current_thread->current_simd_lane ();
+      if (!current_thread->is_simd_lane_active (current_lane))
+	error (_("Cannot run inferior calls for inactive lanes: lane %d"),
+	       current_lane);
+
+      const int f0_regnum = data->regset_ranges[intelgt::REGSET_FLAG].start;
+      if (f0_regnum == -1)
+	error (_("F0 register is needed for this operation but could "
+		 "not be found."));
+
+      uint32_t f0 = 1u << current_lane;
+      regcache->cooked_write (f0_regnum, (gdb_byte *)&f0);
+    }
+
+  /* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
+     sub-register 0.  */
+  calla_inst[6] = 0x04;
+  /* Destination register number for the CALLA instruction.  Since we enumerate
+     GRF's starting at GDB reg number 0, it is safe to use GDB numbering.  */
+  uint32_t dst_reg = data->framedesc_base_regnum ();
+  calla_inst[7] = dst_reg;
+
+  /* Determine the jump IP from function address.
+     FUNADDR = JIP + $isabase.  */
+  CORE_ADDR jump_ip = funaddr - isabase;
+
+  /* Store the JIP in the last 4 bytes of the CALLA instruction.  */
+  bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  store_unsigned_integer (calla_inst.begin () + intelgt::MAX_INST_LENGTH - 4,
+			  4, byte_order, (uint32_t) jump_ip);
+
+  /* Use the NOP instruction for the return breakpoint.  */
+  constexpr uint32_t nop_opcode = 0x60;
+  gdb_byte *nop_inst = buff + intelgt::MAX_INST_LENGTH;
+  nop_inst[0] = nop_opcode;
+
+  /* Inject the dummy CALLA instruction and the breakpoint in the
+     reserved space.  */
+  int err = target_write_memory (calla_addr, buff, sizeof (buff));
+  if (err != 0)
+    error ("Target failed to inject a dummy calla instruction at 0x%lx",
+	   calla_addr);
+
+  /* Update the REAL_PC to execute the CALLA, which would make the function
+     return to the next address.  Use that address as the BP_ADDR.  */
+  *real_pc = calla_addr;
+  *bp_addr = calla_addr + intelgt::MAX_INST_LENGTH;
+
+  return sp;
+}
+
+/* Intelgt implementation of the "push_dummy_call" method.  */
+
+static CORE_ADDR
+intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
+			 CORE_ADDR bp_addr, int nargs, value **args,
+			 CORE_ADDR sp,
+			 function_call_return_method return_method,
+			 CORE_ADDR struct_addr)
+{
+  CORE_ADDR function_pc = function->address ();
+  const unsigned int simd_width = get_simd_width_for_pc (function_pc);
+  const int current_lane = inferior_thread ()->current_simd_lane ();
+  /* The retval register (r26) is the first GRF register to be used
+     for passing arguments.  */
+  const int retval_regnum
+    = gdbarch_tdep<intelgt_gdbarch_tdep> (gdbarch)->retval_regnum;
+  const unsigned int retval_regsize = register_size (gdbarch, retval_regnum);
+  const int framedesc_regnum = intelgt_pseudo_register_num (gdbarch,
+							    "framedesc");
+  /* ADDRESS_SIZE is the size of an address in bytes.  */
+  const int address_size = gdbarch_addr_bit (gdbarch) / 8;
+  CORE_ADDR fe_sp = sp;
+
+  /* Determine the reserved space for the returned struct.  This includes
+     large vectors that do not fit into available return GRFs.  */
+  CORE_ADDR reserved_struct_memory = 0;
+  if (return_method == return_method_struct)
+    reserved_struct_memory = fe_sp - struct_addr;
+
+  /* Structures returned by values need to be allocated after arguments.
+     Use the reserved space for pushing arguments, and then reallocate
+     it again at the end of the frame for the return value.  */
+  fe_sp = align_up (fe_sp - reserved_struct_memory, OWORD_SIZE);
+
+  /* Push all struct objects (except for promoted structs) to the stack
+     and save the corresponding addresses.  */
+  std::vector<CORE_ADDR> obj_addrs;
+  for (int index = 0; index < nargs; ++index)
+    {
+      type *arg_type = check_typedef (args[index]->type ());
+      /* Type's length is the size of the argument in bytes.  */
+      int len = arg_type->length ();
+
+      /* For argument structs, a maximum size of 128-bits (16-bytes)
+	 is used for the promotion check.  */
+      if (class_or_union_p (arg_type)
+	  && !is_a_promotable_small_struct (arg_type,
+					    PROMOTABLE_STRUCT_MAX_SIZE))
+	{
+	  const gdb_byte *val = args[index]->contents ().data ();
+
+	  obj_addrs.push_back (fe_sp + current_lane * len);
+	  int err = target_write_memory (fe_sp + current_lane * len,
+					 val, len);
+	  if (err != 0)
+	    error ("Target failed to write on the stack: "
+		   "arg %d of type %s", index, arg_type->name ());
+
+	  fe_sp += align_up (len * simd_width, OWORD_SIZE);
+	}
+    }
+
+  /* Copying arguments into registers.  The current IGC implementation
+     uses a maximum of 12 GRF registers to pass arguments, which are r26 and
+     onwards.  The rest of the arguments are pushed to the FE stack.  */
+  int obj_index = 0;
+  int regnum = retval_regnum;
+  auto grf = grf_handler (retval_regsize, regcache, simd_width);
+
+  for (int argnum = 0; argnum < nargs; ++argnum)
+    {
+      type *arg_type = check_typedef (args[argnum]->type ());
+      /* Compute the required number of registers to store the argument.  */
+      int required_registers
+	= get_argument_required_registers (gdbarch, arg_type);
+      /* LEN is the size of the argument in bytes.  */
+      int len = arg_type->length ();
+      const gdb_byte *val = args[argnum]->contents ().data ();
+
+      /* If the argument can fit into the remaining GRFs then it needs to be
+	 copied there.  */
+      if (required_registers + regnum
+	  <= retval_regnum + INTELGT_MAX_GRF_REGS_FOR_ARGS)
+	{
+	  /* First available GRF register to write data into.  */
+	  int target_regnum = regnum;
+
+	  if (is_a_promotable_small_struct (arg_type,
+					    PROMOTABLE_STRUCT_MAX_SIZE))
+	    grf.write_small_struct (target_regnum, arg_type, val);
+
+	  /* The argument has been pushed to the FE stack, and its
+	     reference needs to be passed to the register.  */
+	  else if (class_or_union_p (arg_type))
+	    grf.write_primitive (target_regnum, address_size,
+			       (const gdb_byte *) &obj_addrs[obj_index++]);
+
+	  /* Write vector elements to GRFs.  */
+	  else if (arg_type->is_vector ())
+	    grf.write_vector (target_regnum, arg_type, val);
+
+	  /* Write primitive values to GRFs.  */
+	  else if (len <= 8)
+	    grf.write_primitive (target_regnum, len, val);
+
+	  else
+	    error ("unexpected type %s of arg %d", arg_type->name (), argnum);
+
+	  /* Move to the next available register.  */
+	  regnum += required_registers;
+	}
+      else
+	{
+	  /* Push the argument to the FE stack when it does not fit
+	     in the space left within GRFs.  */
+
+	  if (is_a_promotable_small_struct (arg_type,
+					    PROMOTABLE_STRUCT_MAX_SIZE))
+	    fe_sp = fe_stack_write_small_struct (fe_sp, arg_type, val,
+						 simd_width);
+	  else if (class_or_union_p (arg_type))
+	    {
+	      /* The object has been previously pushed to the stack, now push
+		 its saved address to be aligned with the rest of the
+		 arguments in the stack.  */
+	      gdb_byte *obj_addr = (gdb_byte *) &obj_addrs[obj_index++];
+	      fe_sp = fe_stack_write_primitive (fe_sp, address_size, obj_addr,
+						simd_width);
+	    }
+	  else if (arg_type->is_vector ())
+	    fe_sp = fe_stack_write_vector (fe_sp, arg_type, val, simd_width);
+
+	  else if (len <= 8)
+	    fe_sp = fe_stack_write_primitive (fe_sp, len, val, simd_width);
+
+	  else
+	    error ("unexpected type %s of arg %d", arg_type->name (), argnum);
+	}
+    }
+
+  /* Reallocate space for structures returned by values.  */
+  fe_sp = align_up (fe_sp + reserved_struct_memory, OWORD_SIZE);
+
+  /* Update the FE frame pointer (framedesc.fe_fp).  */
+  regcache->cooked_write_part (framedesc_regnum, 16, 8, (gdb_byte *) &fe_sp);
+  /* Update the FE stack pointer (framedesc.fe_sp).  */
+  regcache->cooked_write_part (framedesc_regnum, 24, 8, (gdb_byte *) &fe_sp);
+  return fe_sp;
+}
+
+/* Intelgt implementation of the "reserve_stack_space" method.  The SIMD
+   width needs to be considered when reserving memory for VALUE_TYPE.  */
+
+static CORE_ADDR
+intelgt_reserve_stack_space (gdbarch *gdbarch, const type *value_type,
+			     CORE_ADDR &sp)
+{
+  const unsigned int simd_width = inferior_thread ()->get_simd_width ();
+
+  /* Make sure the stack is aligned.  */
+  sp = align_up (sp, OWORD_SIZE);
+  CORE_ADDR struct_addr = sp;
+  sp = align_up (sp + value_type->length () * simd_width, OWORD_SIZE);
+
+  return struct_addr;
+}
+
+/* Intelgt implementation of the "get_inferior_call_return_value" method.  */
+
+static value *
+intelgt_get_inferior_call_return_value (gdbarch *gdbarch,
+					call_return_meta_info *ri)
+{
+  regcache *regcache = get_thread_regcache (inferior_thread ());
+  value *retval;
+
+  intelgt_return_value_as_value (ri->gdbarch, ri->function,
+				 ri->value_type, regcache,
+				 &retval, nullptr);
+
+  gdb_assert (retval != nullptr);
+  return retval;
+}
+
+/* See GRF_HANDLER declaration.  */
+
+void
+grf_handler::read_small_struct (int regnum, type *valtype, gdb_byte *buff)
+{
+  handle_small_struct (regnum, nullptr, buff, valtype);
+}
+
+/* See GRF_HANDLER declaration.  */
+
+void
+grf_handler::write_small_struct (int regnum, type *valtype,
+				 const gdb_byte *buff)
+{
+  handle_small_struct (regnum, buff, nullptr, valtype);
+}
+
+/* See GRF_HANDLER declaration.  */
+
+void
+grf_handler::read_vector (int regnum, type *valtype, gdb_byte *buff)
+{
+  handle_vector (regnum, nullptr, buff, valtype);
+}
+
+/* See GRF_HANDLER declaration.  */
+
+void
+grf_handler::write_vector (int regnum, type *valtype, const gdb_byte *buff)
+{
+  handle_vector (regnum, buff, nullptr, valtype);
+}
+
+/* See GRF_HANDLER declaration.  */
+
+void
+grf_handler::read_primitive (int regnum, int len, gdb_byte *buff)
+{
+  handle_primitive (regnum, nullptr, buff, len);
+}
+
+/* See GRF_HANDLER declaration.  */
+
+void
+grf_handler::write_primitive (int regnum, int len, const gdb_byte *buff)
+{
+  handle_primitive (regnum, buff, nullptr, len);
+}
+
+/* See GRF_HANDLER declaration.  */
+
+void
+grf_handler::handle_small_struct (int regnum, const gdb_byte *buff_read,
+				  gdb_byte *buff_write, type *valtype)
+{
+  /* The vectorized return value is stored at this register and onwards.  */
+  const int simd_lane = inferior_thread ()->current_simd_lane ();
+
+  /* Small structures are stored in the GRF registers with SoA
+     layout.  Example:
+     s.a s.a... s.a  s.b s.b... s.b  s.c s.c... s.c.  */
+
+  int reg_offset = 0;
+  int target_regnum = regnum;
+  int n_fields = valtype->num_fields ();
+  field *fields = valtype->fields ();
+
+  /* Loop over all structure fields.  */
+  for (int field_idx = 0; field_idx < n_fields; ++field_idx)
+    {
+      /* FIELD_REG_OFFSET and FIELD_REGNUM are the local register
+	 offset and the register number for writing the current
+	 field.  */
+      int field_reg_offset = reg_offset;
+      int field_regnum = target_regnum;
+
+      type *field_type = check_typedef (valtype->field (field_idx).type ());
+      int field_len = field_type->length ();
+
+      /* Total field size after SIMD vectorization.  */
+      int mem_occupation = m_simd_width * get_field_total_memory (
+	valtype, field_idx);
+
+      int lane_offset = simd_lane * field_len;
+
+      field_regnum += (reg_offset + lane_offset) / m_reg_size;
+      field_reg_offset = (reg_offset + lane_offset) % m_reg_size;
+
+      /* Prepare the TARGET_REGNUM and the REG_OFFSET for
+	 the next field.  */
+      target_regnum += (reg_offset + mem_occupation) / m_reg_size;
+      reg_offset = (reg_offset + mem_occupation) % m_reg_size;
+
+      /* Determine the offset of the field within the struct
+	 in bytes.  */
+      int current_pos = fields[field_idx].loc_bitpos () / 8;
+
+      /* Read from the corresponding part of register.  */
+      if (buff_write != nullptr)
+	m_regcache->cooked_read_part (field_regnum, field_reg_offset,
+				      field_len, buff_write + current_pos);
+
+      /* Write to the corresponding part of register.  */
+      else if (buff_read != nullptr)
+	m_regcache->cooked_write_part (field_regnum, field_reg_offset,
+				       field_len, buff_read + current_pos);
+    }
+}
+
+/* See GRF_HANDLER declaration.  */
+
+void
+grf_handler::handle_vector (int regnum, const gdb_byte *buff_read,
+			    gdb_byte *buff_write, type *valtype)
+{
+  const int current_lane = inferior_thread ()->current_simd_lane ();
+  int target_regnum = regnum;
+
+  /* Vectors are stored in GRFs with the Structure of Arrays (SoA) layout.  */
+
+  int len = valtype->length ();
+  /* Length in bytes of an element in the vector.  */
+  int element_len = valtype->target_type ()->length ();
+  /* Number of elements in the vector.  */
+  int n_elements = len / element_len;
+
+  for (int element_idx = 0; element_idx < n_elements; ++element_idx)
+    {
+      int lane_offset = current_lane * element_len;
+      int total_offset
+	  = lane_offset + element_idx * element_len * m_simd_width;
+      int reg_offset = total_offset % m_reg_size;
+
+      /* Move to read / write on the right register.  */
+      target_regnum = regnum + total_offset / m_reg_size;
+
+      /* Read from the corresponding part of register.  */
+      if (buff_write != nullptr)
+	m_regcache->cooked_read_part (target_regnum, reg_offset, element_len,
+				      buff_write + element_idx * element_len);
+
+      /* Write to the corresponding part of register.  */
+      else if (buff_read != nullptr)
+	m_regcache->cooked_write_part (target_regnum, reg_offset, element_len,
+				       buff_read + element_idx * element_len);
+    }
+}
+
+/* See GRF_HANDLER declaration.  */
+
+void
+grf_handler::handle_primitive (int regnum, const gdb_byte *buff_read,
+			     gdb_byte *buff_write, int len)
+{
+  const int current_lane = inferior_thread ()->current_simd_lane ();
+  int lane_offset = current_lane * len;
+  int reg_offset = lane_offset % m_reg_size;
+
+  /* Move to read / write on the right register.  */
+  int target_regnum = regnum + lane_offset / m_reg_size;
+
+  /* Read from from the corresponding part of the register.  */
+  if (buff_write != nullptr)
+    m_regcache->cooked_read_part (target_regnum, reg_offset, len, buff_write);
+
+  /* Write to the corresponding part of the register.  */
+  else if (buff_read != nullptr)
+    m_regcache->cooked_write_part (target_regnum, reg_offset, len, buff_read);
+}
+
+static CORE_ADDR
+fe_stack_handle_vector (CORE_ADDR addr, type *valtype,
+			const gdb_byte *buff_read, gdb_byte *buff_write,
+			const unsigned int simd_width)
+{
+  gdb_assert (valtype->is_vector ());
+  gdb_assert ((buff_read == nullptr) != (buff_write == nullptr));
+
+  /* Vectors are copied to stack with the SoA layout.  */
+
+  const int current_lane = inferior_thread ()->current_simd_lane ();
+  int len = valtype->length ();
+  CORE_ADDR fe_addr = addr;
+
+  /* Length in bytes of an element in the vector.  */
+  int target_type_len = valtype->target_type ()->length ();
+  /* Number of elements in the vector.  */
+  int n_elements = len / target_type_len;
+
+  for (int element_idx = 0; element_idx < n_elements; ++element_idx)
+    {
+      int lane_offset = current_lane * target_type_len;
+
+      int total_offset
+	  = lane_offset + element_idx * target_type_len * simd_width;
+
+      if (buff_read != nullptr)
+	{
+	  /* Location of the element in the vector.  */
+	  const gdb_byte *element_addr
+	      = buff_read + element_idx * target_type_len;
+	  int err = target_write_memory (fe_addr + total_offset, element_addr,
+					 target_type_len);
+	  if (err != 0)
+	    error ("Target failed to write vector on the stack: "
+		   "type %s of length %d",
+		   valtype->name (), len);
+	}
+      else if (buff_write != nullptr)
+	{
+	  /* Location of the element in the vector.  */
+	  gdb_byte *element_addr = buff_write
+				   + element_idx * target_type_len;
+	  int err = target_read_memory (fe_addr + total_offset, element_addr,
+					 target_type_len);
+	  if (err != 0)
+	    error ("Target failed to read vector from the stack: "
+		   "type %s of length %d",
+		   valtype->name (), len);
+	}
+    }
+
+  /* Align the stack.  */
+  fe_addr = align_up (fe_addr + len * simd_width, OWORD_SIZE);
+  return fe_addr;
+}
+
+static CORE_ADDR
+fe_stack_handle_primitive (CORE_ADDR addr, int len, const gdb_byte *buff_read,
+			   gdb_byte *buff_write,
+			   const unsigned int simd_width)
+{
+  gdb_assert (len <= 8);
+  gdb_assert ((buff_read == nullptr) != (buff_write == nullptr));
+
+  const int current_lane = inferior_thread ()->current_simd_lane ();
+  CORE_ADDR fe_addr = addr;
+
+  if (buff_read != nullptr)
+    {
+      int err
+	  = target_write_memory (fe_addr + current_lane * len, buff_read, len);
+      if (err != 0)
+	error ("Target failed to write bytes on the stack: "
+	       "length %d to address 0x%lx", len, addr);
+    }
+  else if (buff_write != nullptr)
+    {
+      int err
+	= target_read_memory (fe_addr + current_lane * len, buff_write, len);
+      if (err != 0)
+	error ("Target failed to read bytes from the stack: "
+	       "length %d from address 0x%lx", len, addr);
+    }
+
+  /* Align the stack.  */
+  fe_addr += align_up (len * simd_width, OWORD_SIZE);
+  return fe_addr;
+}
+
+static CORE_ADDR
+fe_stack_handle_small_struct (CORE_ADDR addr, type *valtype,
+			      const gdb_byte *buff_read, gdb_byte *buff_write,
+			      const unsigned int simd_width)
+{
+  gdb_assert (is_a_promotable_small_struct (valtype,
+					    PROMOTABLE_STRUCT_MAX_SIZE));
+  gdb_assert ((buff_read == nullptr) != (buff_write == nullptr));
+
+  /* Promotable structures are stored in the stack with SoA layout.
+     Example:
+     s.a s.a... s.a  s.b s.b... s.b  s.c s.c... s.c.  */
+
+  const int current_lane = inferior_thread ()->current_simd_lane ();
+
+  int n_fields = valtype->num_fields ();
+  field *fields = valtype->fields ();
+  CORE_ADDR fe_addr = addr;
+
+  /* Loop over all structure fields.  */
+  for (int field_idx = 0; field_idx < n_fields; ++field_idx)
+    {
+      type *field_type = check_typedef (valtype->field (field_idx).type ());
+      int field_len = field_type->length ();
+
+      /* Determine the offset of the field within the struct
+	 in bytes.  */
+      int current_pos = fields[field_idx].loc_bitpos () / 8;
+
+      if (buff_read != nullptr)
+	{
+	  /* Write the current field on the stack.  */
+	  int err = target_write_memory (fe_addr + current_lane * field_len,
+					 buff_read + current_pos, field_len);
+	  if (err != 0)
+	    error ("Target failed to write struct on the stack: "
+		   "type %s of length %lu",
+		   valtype->name (), valtype->length ());
+	}
+      else if (buff_write != nullptr)
+	{
+	  /* Write the current field on the stack.  */
+	  int err = target_read_memory (fe_addr + current_lane * field_len,
+					 buff_write + current_pos, field_len);
+	  if (err != 0)
+	    error ("Target failed to read struct from the stack: "
+		   "type %s of length %lu",
+		   valtype->name (), valtype->length ());
+	}
+
+      /* Update the stack pointer for the next field while
+	 considering the structure intra/inter-padding.  */
+      int mem_occupation
+	= simd_width * get_field_total_memory (valtype, field_idx);
+      fe_addr += mem_occupation;
+    }
+
+  /* Align the stack.  */
+  fe_addr = align_up (fe_addr, OWORD_SIZE);
+
+  return fe_addr;
+}
+
+/* Helper function to return the device id using the inferior.  */
+
+static uint32_t
+get_device_id (inferior *inferior)
+{
+  intelgt_inferior_data *inf_data = get_intelgt_inferior_data (inferior);
+  if (inf_data->device_id == 0u)
+    inf_data->device_id = get_device_id (inferior->arch ());
+
+  return inf_data->device_id;
+}
+
+/* Helper function to return the device id using GDBARCH.  */
+
+static uint32_t
+get_device_id (gdbarch *gdbarch)
+{
+  const target_desc *tdesc = gdbarch_target_desc (gdbarch);
+  const tdesc_device *device_info = tdesc_device_info (tdesc);
+  if (!device_info->target_id.has_value ())
+    error (_("A target id for the device is required."));
+
+  return *device_info->target_id;
+}
+
 /* Helper function to translate the device id to a device version.  */
 
 static xe_version
@@ -1067,6 +2594,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   frame_unwind_append_unwinder (gdbarch, &intelgt_unwinder);
 
   set_gdbarch_return_value_as_value (gdbarch, intelgt_return_value_as_value);
+  set_gdbarch_supports_return_cmd (gdbarch, false);
 
   set_gdbarch_memory_insert_breakpoint (gdbarch,
 					intelgt_memory_insert_breakpoint);
@@ -1084,6 +2612,20 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_print_insn (gdbarch, intelgt_print_insn);
 
   set_gdbarch_active_lanes_mask (gdbarch, &intelgt_active_lanes_mask);
+
+  /* Enable inferior call support.  */
+  set_gdbarch_push_dummy_call (gdbarch, intelgt_push_dummy_call);
+  set_gdbarch_unwind_sp (gdbarch, intelgt_unwind_sp);
+  set_gdbarch_frame_align (gdbarch, intelgt_frame_align);
+  set_gdbarch_return_in_first_hidden_param_p (
+    gdbarch, intelgt_return_in_first_hidden_param_p);
+  set_gdbarch_value_arg_coerce (gdbarch, intelgt_value_arg_coerce);
+  set_gdbarch_dummy_id (gdbarch, intelgt_dummy_id);
+  set_gdbarch_call_dummy_location (gdbarch, AT_CUSTOM_POINT);
+  set_gdbarch_reserve_stack_space (gdbarch, intelgt_reserve_stack_space);
+  set_gdbarch_push_dummy_code (gdbarch, intelgt_push_dummy_code);
+  set_gdbarch_get_inferior_call_return_value (
+    gdbarch, intelgt_get_inferior_call_return_value);
 
   return gdbarch;
 }

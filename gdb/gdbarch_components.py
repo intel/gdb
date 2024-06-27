@@ -635,6 +635,22 @@ frame.
 
 Method(
     comment="""
+Perform the standard coercions that are specified for arguments to
+be passed to C, Ada or Fortran functions.
+""",
+    type="value *",
+    name="value_arg_coerce",
+    params=[
+        ("value *", "arg"),
+        ("type *", "param_type"),
+        ("int", "is_prototyped")
+    ],
+    predefault="default_value_arg_coerce",
+    invalid=False,
+)
+
+Method(
+    comment="""
 Return the active SIMD lanes mask for a thread TP.
 """,
     type="unsigned int",
@@ -679,6 +695,11 @@ Value(
 )
 
 Method(
+    comment="""
+This method is used as an arch preparation for an inferior call.  It also
+allows the arch to set a dummy destructor to be called when the dummy
+frame is removed.
+""",
     type="CORE_ADDR",
     name="push_dummy_code",
     params=[
@@ -690,8 +711,11 @@ Method(
         ("CORE_ADDR *", "real_pc"),
         ("CORE_ADDR *", "bp_addr"),
         ("struct regcache *", "regcache"),
+        ("dummy_frame_dtor_ftype **", "arch_dummy_dtor"),
+        ("void **", "arch_dtor_data"),
     ],
     predicate=True,
+    invalid=True,
 )
 
 Method(
@@ -861,6 +885,17 @@ Method(
     name="integer_to_address",
     params=[("struct type *", "type"), ("const gdb_byte *", "buf")],
     predicate=True,
+)
+
+Value(
+    comment="""
+Some targets do not support the return command.  In such case the return
+command should be aborted and the call stack should remain intact.
+""",
+    type="bool",
+    name="supports_return_cmd",
+    predefault="true",
+    invalid=False,
 )
 
 Method(
@@ -2860,4 +2895,24 @@ return the one processed by the current SIMD lane.
     name="current_workitem_global_id",
     params=[("thread_info *", "tp")],
     predicate=True,
+)
+
+Method(
+    comment="Reserve space on the stack for a value of the given type.",
+    type="CORE_ADDR",
+    name="reserve_stack_space",
+    params=[("const type *", "valtype"), ("CORE_ADDR &", "sp")],
+    predefault="default_reserve_stack_space",
+    predicate=False,
+    invalid=False,
+)
+
+Method(
+    comment="Extract the called function's return value.",
+    type="value *",
+    name="get_inferior_call_return_value",
+    params=[("call_return_meta_info *", "return_info")],
+    predefault="default_get_inferior_call_return_value",
+    predicate=False,
+    invalid=False,
 )

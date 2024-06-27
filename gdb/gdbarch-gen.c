@@ -92,6 +92,7 @@ struct gdbarch
   gdbarch_register_name_ftype *register_name = nullptr;
   gdbarch_register_type_ftype *register_type = nullptr;
   gdbarch_dummy_id_ftype *dummy_id = default_dummy_id;
+  gdbarch_value_arg_coerce_ftype *value_arg_coerce = default_value_arg_coerce;
   gdbarch_active_lanes_mask_ftype *active_lanes_mask = nullptr;
   int deprecated_fp_regnum = -1;
   gdbarch_push_dummy_call_ftype *push_dummy_call = nullptr;
@@ -113,6 +114,7 @@ struct gdbarch
   gdbarch_pointer_to_address_ftype *pointer_to_address = unsigned_pointer_to_address;
   gdbarch_address_to_pointer_ftype *address_to_pointer = unsigned_address_to_pointer;
   gdbarch_integer_to_address_ftype *integer_to_address = nullptr;
+  bool supports_return_cmd = true;
   gdbarch_return_value_ftype *return_value = nullptr;
   gdbarch_return_value_as_value_ftype *return_value_as_value = default_gdbarch_return_value;
   gdbarch_get_return_buf_addr_ftype *get_return_buf_addr = default_get_return_buf_addr;
@@ -264,6 +266,8 @@ struct gdbarch
   gdbarch_thread_workgroup_ftype *thread_workgroup = nullptr;
   gdbarch_current_workitem_local_id_ftype *current_workitem_local_id = nullptr;
   gdbarch_current_workitem_global_id_ftype *current_workitem_global_id = nullptr;
+  gdbarch_reserve_stack_space_ftype *reserve_stack_space = default_reserve_stack_space;
+  gdbarch_get_inferior_call_return_value_ftype *get_inferior_call_return_value = default_get_inferior_call_return_value;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -358,6 +362,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   if (gdbarch->register_type == 0)
     log.puts ("\n\tregister_type");
   /* Skip verify of dummy_id, invalid_p == 0.  */
+  /* Skip verify of value_arg_coerce, invalid_p == 0.  */
   /* Skip verify of active_lanes_mask, has predicate.  */
   /* Skip verify of deprecated_fp_regnum, invalid_p == 0.  */
   /* Skip verify of push_dummy_call, has predicate.  */
@@ -379,6 +384,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of pointer_to_address, invalid_p == 0.  */
   /* Skip verify of address_to_pointer, invalid_p == 0.  */
   /* Skip verify of integer_to_address, has predicate.  */
+  /* Skip verify of supports_return_cmd, invalid_p == 0. */
   /* Skip verify of return_value, invalid_p == 0.  */
   if ((gdbarch->return_value_as_value == default_gdbarch_return_value) == (gdbarch->return_value == nullptr))
     log.puts ("\n\treturn_value_as_value");
@@ -539,6 +545,8 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of thread_workgroup, has predicate.  */
   /* Skip verify of current_workitem_local_id, has predicate.  */
   /* Skip verify of current_workitem_global_id, has predicate.  */
+  /* Skip verify of reserve_stack_space, invalid_p == 0.  */
+  /* Skip verify of get_inferior_call_return_value, invalid_p == 0. */
   if (!log.empty ())
     internal_error (_("verify_gdbarch: the following are invalid ...%s"),
 		    log.c_str ());
@@ -733,6 +741,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
 	      "gdbarch_dump: dummy_id = <%s>\n",
 	      host_address_to_string (gdbarch->dummy_id));
   gdb_printf (file,
+	      "gdbarch_dump: value_arg_coerce = <%s>\n",
+	      host_address_to_string (gdbarch->value_arg_coerce));
+  gdb_printf (file,
 	      "gdbarch_dump: gdbarch_active_lanes_mask_p() = %d\n",
 	      gdbarch_active_lanes_mask_p (gdbarch));
   gdb_printf (file,
@@ -813,6 +824,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: integer_to_address = <%s>\n",
 	      host_address_to_string (gdbarch->integer_to_address));
+  gdb_printf (file,
+	      "gdbarch_dump: supports_return_cmd = %s\n",
+	      plongest (gdbarch->supports_return_cmd));
   gdb_printf (file,
 	      "gdbarch_dump: return_value = <%s>\n",
 	      host_address_to_string (gdbarch->return_value));
@@ -1428,6 +1442,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: current_workitem_global_id = <%s>\n",
 	      host_address_to_string (gdbarch->current_workitem_global_id));
+  gdb_printf (file,
+	      "gdbarch_dump: reserve_stack_space = <%s>\n",
+	      host_address_to_string (gdbarch->reserve_stack_space));
+  gdb_printf (file,
+	      "gdbarch_dump: get_inferior_call_return_value = <%s>\n",
+	      host_address_to_string (gdbarch->get_inferior_call_return_value));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -2298,6 +2318,23 @@ set_gdbarch_dummy_id (struct gdbarch *gdbarch,
   gdbarch->dummy_id = dummy_id;
 }
 
+value *
+gdbarch_value_arg_coerce (struct gdbarch *gdbarch, value *arg, type *param_type, int is_prototyped)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->value_arg_coerce != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_value_arg_coerce called\n");
+  return gdbarch->value_arg_coerce (gdbarch, arg, param_type, is_prototyped);
+}
+
+void
+set_gdbarch_value_arg_coerce (struct gdbarch *gdbarch,
+			      gdbarch_value_arg_coerce_ftype value_arg_coerce)
+{
+  gdbarch->value_arg_coerce = value_arg_coerce;
+}
+
 bool
 gdbarch_active_lanes_mask_p (struct gdbarch *gdbarch)
 {
@@ -2388,13 +2425,13 @@ gdbarch_push_dummy_code_p (struct gdbarch *gdbarch)
 }
 
 CORE_ADDR
-gdbarch_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr, struct value **args, int nargs, struct type *value_type, CORE_ADDR *real_pc, CORE_ADDR *bp_addr, struct regcache *regcache)
+gdbarch_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr, struct value **args, int nargs, struct type *value_type, CORE_ADDR *real_pc, CORE_ADDR *bp_addr, struct regcache *regcache, dummy_frame_dtor_ftype **arch_dummy_dtor, void **arch_dtor_data)
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->push_dummy_code != NULL);
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_push_dummy_code called\n");
-  return gdbarch->push_dummy_code (gdbarch, sp, funaddr, args, nargs, value_type, real_pc, bp_addr, regcache);
+  return gdbarch->push_dummy_code (gdbarch, sp, funaddr, args, nargs, value_type, real_pc, bp_addr, regcache, arch_dummy_dtor, arch_dtor_data);
 }
 
 void
@@ -2695,6 +2732,23 @@ set_gdbarch_integer_to_address (struct gdbarch *gdbarch,
 				gdbarch_integer_to_address_ftype integer_to_address)
 {
   gdbarch->integer_to_address = integer_to_address;
+}
+
+bool
+gdbarch_supports_return_cmd (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of supports_return_cmd, invalid_p == 0 */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_supports_return_cmd called\n");
+  return gdbarch->supports_return_cmd;
+}
+
+void
+set_gdbarch_supports_return_cmd (struct gdbarch *gdbarch,
+				 bool supports_return_cmd)
+{
+  gdbarch->supports_return_cmd = supports_return_cmd;
 }
 
 void
@@ -5634,4 +5688,38 @@ set_gdbarch_current_workitem_global_id (struct gdbarch *gdbarch,
 					gdbarch_current_workitem_global_id_ftype current_workitem_global_id)
 {
   gdbarch->current_workitem_global_id = current_workitem_global_id;
+}
+
+CORE_ADDR
+gdbarch_reserve_stack_space (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->reserve_stack_space != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_reserve_stack_space called\n");
+  return gdbarch->reserve_stack_space (gdbarch, valtype, sp);
+}
+
+void
+set_gdbarch_reserve_stack_space (struct gdbarch *gdbarch,
+				 gdbarch_reserve_stack_space_ftype reserve_stack_space)
+{
+  gdbarch->reserve_stack_space = reserve_stack_space;
+}
+
+value *
+gdbarch_get_inferior_call_return_value (struct gdbarch *gdbarch, call_return_meta_info *return_info)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->get_inferior_call_return_value != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_get_inferior_call_return_value called\n");
+  return gdbarch->get_inferior_call_return_value (gdbarch, return_info);
+}
+
+void
+set_gdbarch_get_inferior_call_return_value (struct gdbarch *gdbarch,
+					    gdbarch_get_inferior_call_return_value_ftype get_inferior_call_return_value)
+{
+  gdbarch->get_inferior_call_return_value = get_inferior_call_return_value;
 }

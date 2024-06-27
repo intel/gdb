@@ -40,6 +40,7 @@
 #include "ui.h"
 #include "interps.h"
 #include "thread-fsm.h"
+#include "bfd-in2.h"
 #include <algorithm>
 #include "gdbsupport/scope-exit.h"
 #include <list>
@@ -238,15 +239,11 @@ show_unwind_on_timeout_p (struct ui_file *file, int from_tty,
 	      value);
 }
 
-/* Perform the standard coercions that are specified
-   for arguments to be passed to C, Ada or Fortran functions.
+/* See infcall.h.  */
 
-   If PARAM_TYPE is non-NULL, it is the expected parameter type.
-   IS_PROTOTYPED is non-zero if the function declaration is prototyped.  */
-
-static struct value *
-value_arg_coerce (struct gdbarch *gdbarch, struct value *arg,
-		  struct type *param_type, int is_prototyped)
+value *
+default_value_arg_coerce (gdbarch *gdbarch, value *arg,
+			  type *param_type, int is_prototyped)
 {
   const struct builtin_type *builtin = builtin_type (gdbarch);
   struct type *arg_type = check_typedef (arg->type ());
@@ -293,9 +290,8 @@ value_arg_coerce (struct gdbarch *gdbarch, struct value *arg,
 	  if (type->length () < builtin->builtin_int->length ())
 	    type = builtin->builtin_int;
 	}
-      /* Currently all target ABIs require at least the width of an integer
-	 type for an argument.  We may have to conditionalize the following
-	 type coercion for future targets.  */
+      /* Most of target ABIs require at least the width of an integer
+	 type for an argument.  */
       if (type->length () < builtin->builtin_int->length ())
 	type = builtin->builtin_int;
       break;
@@ -437,25 +433,6 @@ find_function_addr (struct value *function,
   return funaddr + gdbarch_deprecated_function_start_offset (gdbarch);
 }
 
-/* For CALL_DUMMY_ON_STACK, push a breakpoint sequence that the called
-   function returns to.  */
-
-static CORE_ADDR
-push_dummy_code (struct gdbarch *gdbarch,
-		 CORE_ADDR sp, CORE_ADDR funaddr,
-		 gdb::array_view<value *> args,
-		 struct type *value_type,
-		 CORE_ADDR *real_pc, CORE_ADDR *bp_addr,
-		 struct regcache *regcache)
-{
-  gdb_assert (gdbarch_push_dummy_code_p (gdbarch));
-
-  return gdbarch_push_dummy_code (gdbarch, sp, funaddr,
-				  args.data (), args.size (),
-				  value_type, real_pc, bp_addr,
-				  regcache);
-}
-
 /* See infcall.h.  */
 
 void
@@ -503,31 +480,11 @@ get_function_name (CORE_ADDR funaddr, char *buf, int buf_size)
   }
 }
 
-/* All the meta data necessary to extract the call's return value.  */
+/* See infcall.h.  */
 
-struct call_return_meta_info
-{
-  /* The caller frame's architecture.  */
-  struct gdbarch *gdbarch;
-
-  /* The called function.  */
-  struct value *function;
-
-  /* The return value's type.  */
-  struct type *value_type;
-
-  /* Are we returning a value using a structure return or a normal
-     value return?  */
-  int struct_return_p;
-
-  /* If using a structure return, this is the structure's address.  */
-  CORE_ADDR struct_addr;
-};
-
-/* Extract the called function's return value.  */
-
-static struct value *
-get_call_return_value (struct call_return_meta_info *ri)
+value *
+default_get_inferior_call_return_value (gdbarch *gdbarch,
+					call_return_meta_info *ri)
 {
   struct value *retval = NULL;
   thread_info *thr = inferior_thread ();
@@ -639,7 +596,9 @@ call_thread_fsm::should_stop (struct thread_info *thread)
       /* Stash the return value before the dummy frame is popped and
 	 registers are restored to what they were before the
 	 call..  */
-      return_value = get_call_return_value (&return_meta_info);
+      gdbarch *gdbarch = thread->inf->arch ();
+      return_value
+	= gdbarch_get_inferior_call_return_value (gdbarch, &return_meta_info);
     }
 
   /* We are always going to stop this thread, but we might not be planning
@@ -935,16 +894,12 @@ run_inferior_call (std::unique_ptr<call_thread_fsm> sm,
   return caught_error;
 }
 
-/* Reserve space on the stack for a value of the given type.
-   Return the address of the allocated space.
-   Make certain that the value is correctly aligned.
-   The SP argument is modified.  */
+/* See infcall.h.  */
 
-static CORE_ADDR
-reserve_stack_space (const type *values_type, CORE_ADDR &sp)
+CORE_ADDR
+default_reserve_stack_space (gdbarch *gdbarch, const type *values_type,
+			     CORE_ADDR &sp)
 {
-  frame_info_ptr frame = get_current_frame ();
-  struct gdbarch *gdbarch = get_frame_arch (frame);
   CORE_ADDR addr = 0;
 
   if (gdbarch_stack_grows_down (gdbarch))
@@ -1227,6 +1182,18 @@ call_function_by_hand_dummy (struct value *function,
 
   gdb::observers::inferior_call_pre.notify (inferior_ptid, funaddr);
 
+  /* ARCH_DUMMY_DTOR is an arch-defined destructor that's set by
+     'gdbarch_push_dummy_code' and called when the dummy frame is removed.
+     This allows architectures to do inferior calls post-cleanup.  */
+  dummy_frame_dtor_ftype *arch_dummy_dtor = nullptr;
+  void *arch_dtor_data = nullptr;
+  auto scoped_post_infcall_cleaner
+    = make_scope_exit ([&arch_dummy_dtor, &arch_dtor_data] ()
+      {
+	if (arch_dummy_dtor != nullptr)
+	  arch_dummy_dtor (arch_dtor_data, 0);
+      });
+
   /* Determine the location of the breakpoint (and possibly other
      stuff) that the called function will return to.  The SPARC, for a
      function returning a structure or union, needs to make space for
@@ -1244,9 +1211,14 @@ call_function_by_hand_dummy (struct value *function,
 	/* Be careful BP_ADDR is in inferior PC encoding while
 	   BP_ADDR_AS_ADDRESS is a plain memory address.  */
 
-	sp = push_dummy_code (gdbarch, sp, funaddr, args,
-			      target_values_type, &real_pc, &bp_addr,
-			      get_thread_regcache (inferior_thread ()));
+	if (!gdbarch_push_dummy_code_p (gdbarch))
+	  error (_("This target does not support function calls."));
+
+	sp = gdbarch_push_dummy_code (gdbarch, sp, funaddr, args.data (),
+				      args.size (), target_values_type,
+				      &real_pc, &bp_addr,
+				      get_thread_regcache (inferior_thread ()),
+				      &arch_dummy_dtor, &arch_dtor_data);
 
 	/* Write a legitimate instruction at the point where the infcall
 	   breakpoint is going to be inserted.  While this instruction
@@ -1279,6 +1251,20 @@ call_function_by_hand_dummy (struct value *function,
 	   The actual breakpoint is inserted separatly so there is no need to
 	   write that out.  */
 	bp_addr = dummy_addr;
+	break;
+      }
+    case AT_CUSTOM_POINT:
+      {
+	if (!gdbarch_push_dummy_code_p (gdbarch))
+	  error (_("This target does not support function calls."));
+
+	/* In this call, the arch must set the BP_ADDR and the REAL_PC.
+	   Optionally, it can push to the stack prior to arguments push.  */
+	sp = gdbarch_push_dummy_code (gdbarch, sp, funaddr, args.data (),
+				      args.size (), target_values_type,
+				      &real_pc, &bp_addr,
+				      get_thread_regcache (inferior_thread ()),
+				      &arch_dummy_dtor, &arch_dtor_data);
 	break;
       }
     default:
@@ -1326,8 +1312,8 @@ call_function_by_hand_dummy (struct value *function,
 	param_type = NULL;
 
       value *original_arg = args[i];
-      args[i] = value_arg_coerce (gdbarch, args[i],
-				  param_type, prototyped);
+      args[i] = gdbarch_value_arg_coerce (gdbarch, args[i],
+					  param_type, prototyped);
 
       if (param_type == NULL)
 	continue;
@@ -1347,7 +1333,7 @@ call_function_by_hand_dummy (struct value *function,
       /* Make a copy of the argument on the stack.  If the argument is
 	 trivially copy ctor'able, copy bit by bit.  Otherwise, call
 	 the copy ctor to initialize the clone.  */
-      CORE_ADDR addr = reserve_stack_space (param_type, sp);
+      CORE_ADDR addr = gdbarch_reserve_stack_space (gdbarch, param_type, sp);
       value *clone
 	= value_from_contents_and_address (param_type, nullptr, addr);
       push_thread_stack_temporary (call_thread.get (), clone);
@@ -1432,7 +1418,7 @@ call_function_by_hand_dummy (struct value *function,
 
   if (return_method != return_method_normal
       || (stack_temporaries && class_or_union_p (values_type)))
-    struct_addr = reserve_stack_space (values_type, sp);
+    struct_addr = gdbarch_reserve_stack_space (gdbarch, values_type, sp);
 
   std::vector<struct value *> new_args;
   if (return_method == return_method_hidden_param)
@@ -1514,6 +1500,13 @@ call_function_by_hand_dummy (struct value *function,
   if (dummy_dtor != NULL)
     register_dummy_frame_dtor (dummy_id, call_thread.get (),
 			       dummy_dtor, dummy_dtor_data);
+  if (arch_dummy_dtor != nullptr)
+    register_dummy_frame_dtor (dummy_id, call_thread.get (),
+			       arch_dummy_dtor, arch_dtor_data);
+
+  /* From now on, the dummy frame dtor is responsible for the post
+     infcall cleanup.  */
+  scoped_post_infcall_cleaner.release ();
 
   /* Register a clean-up for unwind_on_terminating_exception_breakpoint.  */
   SCOPE_EXIT { delete_std_terminate_breakpoint (); };

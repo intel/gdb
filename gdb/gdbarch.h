@@ -25,6 +25,7 @@
 #include "frame.h"
 #include "dis-asm.h"
 #include "gdbsupport/gdb_obstack.h"
+#include "infcall.h"
 #include "infrun.h"
 #include "osabi.h"
 #include "displaced-stepping.h"
@@ -143,6 +144,7 @@ enum call_dummy_location_type
 {
   ON_STACK,
   AT_ENTRY_POINT,
+  AT_CUSTOM_POINT,
 };
 
 #include "gdbarch-gen.h"

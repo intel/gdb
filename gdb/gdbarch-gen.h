@@ -324,6 +324,13 @@ using gdbarch_dummy_id_ftype = struct frame_id (struct gdbarch *gdbarch, const f
 struct frame_id gdbarch_dummy_id (struct gdbarch *gdbarch, const frame_info_ptr &this_frame);
 void set_gdbarch_dummy_id (struct gdbarch *gdbarch, gdbarch_dummy_id_ftype *dummy_id);
 
+/* Perform the standard coercions that are specified for arguments to
+   be passed to C, Ada or Fortran functions. */
+
+typedef value * (gdbarch_value_arg_coerce_ftype) (struct gdbarch *gdbarch, value *arg, type *param_type, int is_prototyped);
+extern value * gdbarch_value_arg_coerce (struct gdbarch *gdbarch, value *arg, type *param_type, int is_prototyped);
+extern void set_gdbarch_value_arg_coerce (struct gdbarch *gdbarch, gdbarch_value_arg_coerce_ftype *value_arg_coerce);
+
 /* Return the active SIMD lanes mask for a thread TP. */
 
 extern bool gdbarch_active_lanes_mask_p (struct gdbarch *gdbarch);
@@ -349,8 +356,8 @@ void set_gdbarch_call_dummy_location (struct gdbarch *gdbarch, enum call_dummy_l
 
 bool gdbarch_push_dummy_code_p (struct gdbarch *gdbarch);
 
-using gdbarch_push_dummy_code_ftype = CORE_ADDR (struct gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr, struct value **args, int nargs, struct type *value_type, CORE_ADDR *real_pc, CORE_ADDR *bp_addr, struct regcache *regcache);
-CORE_ADDR gdbarch_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr, struct value **args, int nargs, struct type *value_type, CORE_ADDR *real_pc, CORE_ADDR *bp_addr, struct regcache *regcache);
+using gdbarch_push_dummy_code_ftype = CORE_ADDR (struct gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr, struct value **args, int nargs, struct type *value_type, CORE_ADDR *real_pc, CORE_ADDR *bp_addr, struct regcache *regcache, dummy_frame_dtor_ftype **arch_dummy_dtor, void **arch_dtor_data);
+CORE_ADDR gdbarch_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr, struct value **args, int nargs, struct type *value_type, CORE_ADDR *real_pc, CORE_ADDR *bp_addr, struct regcache *regcache, dummy_frame_dtor_ftype **arch_dummy_dtor, void **arch_dtor_data);
 void set_gdbarch_push_dummy_code (struct gdbarch *gdbarch, gdbarch_push_dummy_code_ftype *push_dummy_code);
 
 /* Return true if the code of FRAME is writable. */
@@ -435,6 +442,12 @@ bool gdbarch_integer_to_address_p (struct gdbarch *gdbarch);
 using gdbarch_integer_to_address_ftype = CORE_ADDR (struct gdbarch *gdbarch, struct type *type, const gdb_byte *buf);
 CORE_ADDR gdbarch_integer_to_address (struct gdbarch *gdbarch, struct type *type, const gdb_byte *buf);
 void set_gdbarch_integer_to_address (struct gdbarch *gdbarch, gdbarch_integer_to_address_ftype *integer_to_address);
+
+/* Some targets do not support the return command.  In such case the return
+   command should be aborted and the call stack should remain intact. */
+
+extern bool gdbarch_supports_return_cmd (struct gdbarch *gdbarch);
+extern void set_gdbarch_supports_return_cmd (struct gdbarch *gdbarch, bool supports_return_cmd);
 
 /* Return the return-value convention that will be used by FUNCTION
    to return a value of type VALTYPE.  FUNCTION may be NULL in which
@@ -1795,3 +1808,15 @@ extern bool gdbarch_current_workitem_global_id_p (struct gdbarch *gdbarch);
 typedef std::array<uint32_t, 3> (gdbarch_current_workitem_global_id_ftype) (struct gdbarch *gdbarch, thread_info *tp);
 extern std::array<uint32_t, 3> gdbarch_current_workitem_global_id (struct gdbarch *gdbarch, thread_info *tp);
 extern void set_gdbarch_current_workitem_global_id (struct gdbarch *gdbarch, gdbarch_current_workitem_global_id_ftype *current_workitem_global_id);
+
+/* Reserve space on the stack for a value of the given type. */
+
+typedef CORE_ADDR (gdbarch_reserve_stack_space_ftype) (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp);
+extern CORE_ADDR gdbarch_reserve_stack_space (struct gdbarch *gdbarch, const type *valtype, CORE_ADDR &sp);
+extern void set_gdbarch_reserve_stack_space (struct gdbarch *gdbarch, gdbarch_reserve_stack_space_ftype *reserve_stack_space);
+
+/* Extract the called function's return value. */
+
+typedef value * (gdbarch_get_inferior_call_return_value_ftype) (struct gdbarch *gdbarch, call_return_meta_info *return_info);
+extern value * gdbarch_get_inferior_call_return_value (struct gdbarch *gdbarch, call_return_meta_info *return_info);
+extern void set_gdbarch_get_inferior_call_return_value (struct gdbarch *gdbarch, gdbarch_get_inferior_call_return_value_ftype *get_inferior_call_return_value);

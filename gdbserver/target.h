@@ -519,6 +519,13 @@ public:
      Returns true if successful and false otherwise.  */
   virtual bool store_memtags (CORE_ADDR address, size_t len,
 			      const gdb::byte_vector &tags, int type);
+
+  /* Acknowledge a library reported by name.  */
+  virtual void ack_library (process_info *process, const char *name);
+
+  /* Acknowledge an in-memory library reported by address.  */
+  virtual void ack_in_memory_library (process_info *process, CORE_ADDR begin,
+				      CORE_ADDR end);
 };
 
 extern process_stratum_target *the_target;
@@ -714,6 +721,19 @@ static inline thread_info *
 target_thread_pending_child (thread_info *thread, target_waitkind *kind)
 {
   return the_target->thread_pending_child (thread, kind);
+}
+
+static inline void
+target_ack_library (process_info *process, const char *name)
+{
+  the_target->ack_library (process, name);
+}
+
+static inline void
+target_ack_in_memory_library (process_info *process,  CORE_ADDR begin,
+			      CORE_ADDR end)
+{
+  the_target->ack_in_memory_library (process, begin, end);
 }
 
 /* Read LEN bytes from MEMADDR in ADDR_SPACE into the buffer MYADDR.

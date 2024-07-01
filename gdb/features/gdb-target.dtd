@@ -9,7 +9,9 @@
 <!-- The osabi and compatible elements were added post GDB 6.8.  The version
      wasn't bumped, since older GDBs silently ignore unknown elements.  -->
 
-<!ELEMENT target	(architecture?, osabi?, compatible*, feature*)>
+<!ELEMENT target
+	(architecture?, osabi?, compatible*, device?, feature*)>
+
 <!ATTLIST target
 	version		CDATA	#FIXED "1.0">
 
@@ -18,6 +20,21 @@
 <!ELEMENT osabi	(#PCDATA)>
 
 <!ELEMENT compatible	(#PCDATA)>
+
+<!ELEMENT device	EMPTY>
+<!ATTLIST device
+	vendor-id	CDATA	#IMPLIED
+	target-id	CDATA	#IMPLIED
+	family		CDATA	#IMPLIED
+	model		CDATA	#IMPLIED
+	stepping	CDATA	#IMPLIED
+	name		CDATA	#IMPLIED
+	pci-slot	CDATA	#IMPLIED
+	uuid		CDATA	#IMPLIED
+	total-cores	CDATA	#IMPLIED
+	total-threads	CDATA	#IMPLIED
+	subdevice-id	CDATA	#IMPLIED
+	>
 
 <!ELEMENT feature
 	((vector | flags | struct | union )*, reg*)>

@@ -48342,6 +48342,7 @@ are explained further below.
   @r{[}@var{architecture}@r{]}
   @r{[}@var{osabi}@r{]}
   @r{[}@var{compatible}@r{]}
+  @r{[}@var{device}@r{]}
   @r{[}@var{feature}@dots{}@r{]}
 </target>
 @end smallexample
@@ -48437,6 +48438,30 @@ capability with @samp{<compatible>} is as follows:
 @smallexample
   <architecture>powerpc:common</architecture>
   <compatible>spu</compatible>
+@end smallexample
+
+@subsection Device Information
+@cindex <device>
+
+A @samp{<device>} element can be used for passing device information
+for when, e.g.@: the remote target represents a device, such as a GPU.
+@value{GDBN} can then use this information to display it to the user
+for informative purposes or to execute device-specific functions
+appropriately.  The element contains a number of attributes, best
+shown with the example below.  All attributes are optional.
+
+@smallexample
+  <device vendor-id="0x8086"
+          target-id="0x56a1"
+          family="abc"
+          model="xyz"
+          stepping="3"
+          name="Intel(R) Arc(TM) A750 Graphics"
+          pci-slot="03:00.0"
+          uuid="0003000856a18086"
+          total-cores="448"
+          total-threads="3584"
+          subdevice-id="1"/>
 @end smallexample
 
 @subsection Features

@@ -8,6 +8,14 @@
 maint jit dump
   Dump an in-memory JIT object into a file.
 
+* Changed remote packets
+
+qXfer:features:read:target.xml
+
+  The XML that is sent as a response can now include a "device" element
+  that can be used for passing information when the remote inferior
+  represents a device, e.g.  a GPU.
+
 *** Changes in GDB 15
 
 * The MPX commands "show/set mpx bound" have been deprecated, as Intel

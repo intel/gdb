@@ -17,12 +17,15 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "filestuff.h"
+#include "pathstuff.h"
 #include "gdb_vecs.h"
+#include "scoped_fd.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <algorithm>
+#include <list>
 
 #ifdef USE_WIN32API
 #include <winsock2.h>
@@ -544,4 +547,40 @@ read_text_file_to_string (const char *path)
     return {};
 
   return read_remainder_of_file (file.get ());
+}
+
+/* A class to keep temporary files until GDB exits (normally).  */
+
+struct tmpfilekeeper_s
+{
+  std::list<std::string> files;
+
+  ~tmpfilekeeper_s ()
+  {
+    for (const std::string& file : files)
+      unlink (file.c_str ());
+  }
+};
+static tmpfilekeeper_s tmpfilekeeper;
+
+/* See gdbsupport/filestuff.h.  */
+
+gdb_file_up
+gdb_create_tmpfile (std::string &base, int flags)
+{
+  std::string absbase { get_standard_temp_dir () + "/" + base };
+  gdb::char_vector name { make_temp_filename (absbase) };
+
+  scoped_fd fd { gdb_mkostemp_cloexec (name.data (), O_BINARY) };
+  if (fd.get () == -1)
+    error (_("failed to create temporary file %s"), name.data ());
+
+  gdb_file_up file { fd.to_file ("wb") };
+  if (file.get () == nullptr)
+    error (_("failed to open %s"), name.data ());
+
+  base = name.data ();
+  tmpfilekeeper.files.emplace_back (base);
+
+  return file;
 }

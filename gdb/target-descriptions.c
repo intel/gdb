@@ -358,6 +358,9 @@ struct target_desc : tdesc_element
   /* The list of compatible architectures reported by the target.  */
   std::vector<tdesc_compatible_info_up> compatible;
 
+  /* The device reported by the target, if any.  */
+  tdesc_device_up device;
+
   /* Any architecture-specific properties specified by the target.  */
   std::vector<property> properties;
 
@@ -643,6 +646,22 @@ tdesc_osabi_name (const struct target_desc *target_desc)
   if (osabi > GDB_OSABI_UNKNOWN && osabi < GDB_OSABI_INVALID)
     return gdbarch_osabi_name (osabi);
   return nullptr;
+}
+
+/* See gdbsupport/tdesc.h.  */
+
+void
+set_tdesc_device_info (target_desc *target_desc, tdesc_device *device)
+{
+  target_desc->device.reset (device);
+}
+
+/* See gdbsupport/tdesc.h.  */
+
+const tdesc_device *
+tdesc_device_info (const target_desc *target_desc)
+{
+  return target_desc->device.get ();
 }
 
 /* Return 1 if this target description includes any registers.  */

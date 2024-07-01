@@ -59,6 +59,9 @@ struct target_desc final : tdesc_element
   /* The value of <osabi> element in the XML, replying GDB.  */
   const char *osabi = NULL;
 
+  /* The value of the <device> element in the XML, replying GDB.  */
+  tdesc_device_up device;
+
 public:
   target_desc ()
     : registers_size (0)

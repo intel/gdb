@@ -171,6 +171,7 @@ struct gdbarch
   gdbarch_adjust_dwarf2_line_ftype *adjust_dwarf2_line = default_adjust_dwarf2_line;
   int cannot_step_breakpoint = 0;
   int have_nonsteppable_watchpoint = 0;
+  bool have_continuable_breakpoint = false;
   gdbarch_address_class_type_flags_ftype *address_class_type_flags = nullptr;
   gdbarch_address_class_type_flags_to_name_ftype *address_class_type_flags_to_name = nullptr;
   gdbarch_address_space_from_type_flags_ftype *address_space_from_type_flags = nullptr;
@@ -458,6 +459,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of adjust_dwarf2_line, invalid_p == 0.  */
   /* Skip verify of cannot_step_breakpoint, invalid_p == 0.  */
   /* Skip verify of have_nonsteppable_watchpoint, invalid_p == 0.  */
+  /* Skip verify of have_continuable_breakpoint, invalid_p == 0.  */
   /* Skip verify of address_class_type_flags, has predicate.  */
   /* Skip verify of address_class_type_flags_to_name, has predicate.  */
   /* Skip verify of address_space_from_type_flags, has predicate.  */
@@ -1051,6 +1053,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: have_nonsteppable_watchpoint = %s\n",
 	      plongest (gdbarch->have_nonsteppable_watchpoint));
+  gdb_printf (file,
+	      "gdbarch_dump: have_continuable_breakpoint = %s\n",
+	      plongest (gdbarch->have_continuable_breakpoint));
   gdb_printf (file,
 	      "gdbarch_dump: gdbarch_address_class_type_flags_p() = %d\n",
 	      gdbarch_address_class_type_flags_p (gdbarch));
@@ -3850,6 +3855,23 @@ set_gdbarch_have_nonsteppable_watchpoint (struct gdbarch *gdbarch,
 					  int have_nonsteppable_watchpoint)
 {
   gdbarch->have_nonsteppable_watchpoint = have_nonsteppable_watchpoint;
+}
+
+bool
+gdbarch_have_continuable_breakpoint (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of have_continuable_breakpoint, invalid_p == 0.  */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_have_continuable_breakpoint called\n");
+  return gdbarch->have_continuable_breakpoint;
+}
+
+void
+set_gdbarch_have_continuable_breakpoint (struct gdbarch *gdbarch,
+					 bool have_continuable_breakpoint)
+{
+  gdbarch->have_continuable_breakpoint = have_continuable_breakpoint;
 }
 
 bool

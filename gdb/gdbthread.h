@@ -532,6 +532,19 @@ public:
     return m_thread_options;
   }
 
+  /* Should we step over breakpoint next time keep_going is called?  */
+  void start_stepping_over_breakpoint ();
+
+  void stop_stepping_over_breakpoint ()
+  {
+    m_stepping_over_breakpoint = false;
+  }
+
+  bool is_stepping_over_breakpoint ()
+  {
+    return m_stepping_over_breakpoint;
+  }
+
   /* Return a string which contains a qualified ID of the thread.
      The result contains either a decimal number in case there is just one
      inferior with number 1 or <inferior num>.<thread num> otherwise.  */
@@ -555,9 +568,6 @@ public:
      used in conjunction with PREV_PC to decide whether to adjust the
      PC.  */
   int stepped_breakpoint = 0;
-
-  /* Should we step over breakpoint next time keep_going is called?  */
-  int stepping_over_breakpoint = 0;
 
   /* Should we step over a watchpoint next time keep_going is called?
      This is needed on targets with non-continuable, non-steppable
@@ -631,6 +641,10 @@ private:
      a breakpoint, for instance.  This is a real indicator whether the
      thread is off and running.  */
   bool m_executing = false;
+
+  /* Whether the thread should step over a breakpoint the next time
+     keep_going is called.  */
+  bool m_stepping_over_breakpoint = false;
 
   /* State of inferior thread to restore after GDB is done with an inferior
      call.  See `struct thread_suspend_state'.  */

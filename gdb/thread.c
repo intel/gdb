@@ -708,6 +708,9 @@ thread_info::set_thread_options (gdb_thread_options thread_options)
 void
 thread_info::start_stepping_over_breakpoint ()
 {
+  if (gdbarch_have_continuable_breakpoint (inf->arch ()))
+    return;
+
   m_stepping_over_breakpoint = true;
 }
 

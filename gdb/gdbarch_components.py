@@ -1624,6 +1624,17 @@ non-steppable watchpoints.
     invalid=False,
 )
 
+Value(
+    comment="""
+The architecture supports ignoring breakpoints, which allows resuming from
+breakpoints without having to remove them.
+""",
+    type="bool",
+    name="have_continuable_breakpoint",
+    predefault="false",
+    invalid=False,
+)
+
 Function(
     type="type_instance_flags",
     name="address_class_type_flags",

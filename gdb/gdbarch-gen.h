@@ -941,6 +941,12 @@ extern void set_gdbarch_cannot_step_breakpoint (struct gdbarch *gdbarch, int can
 extern int gdbarch_have_nonsteppable_watchpoint (struct gdbarch *gdbarch);
 extern void set_gdbarch_have_nonsteppable_watchpoint (struct gdbarch *gdbarch, int have_nonsteppable_watchpoint);
 
+/* The architecture supports ignoring breakpoints, which allows resuming from
+   breakpoints without having to remove them. */
+
+extern bool gdbarch_have_continuable_breakpoint (struct gdbarch *gdbarch);
+extern void set_gdbarch_have_continuable_breakpoint (struct gdbarch *gdbarch, bool have_continuable_breakpoint);
+
 extern bool gdbarch_address_class_type_flags_p (struct gdbarch *gdbarch);
 
 typedef type_instance_flags (gdbarch_address_class_type_flags_ftype) (int byte_size, int dwarf2_addr_class);

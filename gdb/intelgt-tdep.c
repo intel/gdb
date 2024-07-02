@@ -4681,6 +4681,7 @@ Device vendor id and target id not found in intelgt target description."));
   set_gdbarch_sw_breakpoint_from_kind (gdbarch,
 				       intelgt_sw_breakpoint_from_kind);
   set_gdbarch_can_leave_breakpoints (gdbarch, true);
+  set_gdbarch_have_continuable_breakpoint (gdbarch, true);
   dwarf2_frame_set_init_reg (gdbarch, intelgt_init_reg);
 
   /* Disassembly.  */

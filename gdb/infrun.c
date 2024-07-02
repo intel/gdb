@@ -3432,7 +3432,7 @@ clear_proceed_status (int step)
 static bool
 thread_still_needs_step_over_bp (struct thread_info *tp)
 {
-  if (tp->stepping_over_breakpoint)
+  if (tp->is_stepping_over_breakpoint ())
     {
       struct regcache *regcache = get_thread_regcache (tp);
 
@@ -3441,7 +3441,7 @@ thread_still_needs_step_over_bp (struct thread_info *tp)
 	  == ordinary_breakpoint_here)
 	return true;
 
-      tp->stepping_over_breakpoint = 0;
+      tp->stop_stepping_over_breakpoint ();
     }
 
   return false;
@@ -3877,13 +3877,13 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 	   Note, we don't do this in reverse, because we won't
 	   actually be executing the breakpoint insn anyway.
 	   We'll be (un-)executing the previous instruction.  */
-	cur_thr->stepping_over_breakpoint = 1;
+	cur_thr->start_stepping_over_breakpoint ();
       else if (gdbarch_single_step_through_delay_p (gdbarch)
 	       && gdbarch_single_step_through_delay (gdbarch,
 						     get_current_frame ()))
 	/* We stepped onto an instruction that needs to be stepped
 	   again before re-inserting the breakpoint, do so.  */
-	cur_thr->stepping_over_breakpoint = 1;
+	cur_thr->start_stepping_over_breakpoint ();
     }
   else
     {
@@ -3965,7 +3965,7 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 
   /* Enqueue the current thread last, so that we move all other
      threads over their breakpoints first.  */
-  if (cur_thr->stepping_over_breakpoint)
+  if (cur_thr->is_stepping_over_breakpoint ())
     global_thread_step_over_chain_enqueue (cur_thr);
 
   /* If the thread isn't started, we'll still need to set its prev_pc,
@@ -5176,7 +5176,7 @@ void
 init_thread_stepping_state (struct thread_info *tss)
 {
   tss->stepped_breakpoint = 0;
-  tss->stepping_over_breakpoint = 0;
+  tss->stop_stepping_over_breakpoint ();
   tss->stepping_over_watchpoint = 0;
   tss->step_after_step_resume_breakpoint = 0;
 }
@@ -6339,7 +6339,7 @@ handle_thread_exited (execution_control_state *ecs)
 
   /* Clear these so we don't re-start the thread stepping over a
      breakpoint/watchpoint.  */
-  ecs->event_thread->stepping_over_breakpoint = 0;
+  ecs->event_thread->stop_stepping_over_breakpoint ();
   ecs->event_thread->stepping_over_watchpoint = 0;
 
   /* If the thread had an FSM, then abort the command.  But only after
@@ -6480,8 +6480,8 @@ handle_thread_exited (execution_control_state *ecs)
    1) stop_waiting and return; to really stop and return to the
    debugger.
 
-   2) keep_going and return; to wait for the next event (set
-   ecs->event_thread->stepping_over_breakpoint to 1 to single step
+   2) keep_going and return; to wait for the next event (call
+   evs->event_thread->start_stepping_over_breakpoint () to single step
    once).  */
 
 static void
@@ -7252,7 +7252,7 @@ finish_step_over (struct execution_control_state *ecs)
 	  /* This in-line step-over finished; clear this so we won't
 	     start a new one.  This is what handle_signal_stop would
 	     do, if we returned false.  */
-	  tp->stepping_over_breakpoint = 0;
+	  tp->stop_stepping_over_breakpoint ();
 
 	  /* Wake up the event loop again.  */
 	  mark_async_event_handler (infrun_async_inferior_event_token);
@@ -7473,7 +7473,7 @@ handle_signal_stop (struct execution_control_state *ecs)
       return;
     }
 
-  ecs->event_thread->stepping_over_breakpoint = 0;
+  ecs->event_thread->stop_stepping_over_breakpoint ();
   ecs->event_thread->stepping_over_watchpoint = 0;
   bpstat_clear (&ecs->event_thread->control.stop_bpstat);
   ecs->event_thread->control.stop_step = 0;
@@ -7540,7 +7540,7 @@ handle_signal_stop (struct execution_control_state *ecs)
 	{
 	  /* The user issued a continue when stopped at a breakpoint.
 	     Set up for another trap and get out of here.  */
-	 ecs->event_thread->stepping_over_breakpoint = 1;
+	  ecs->event_thread->start_stepping_over_breakpoint ();
 	 keep_going (ecs);
 	 return;
 	}
@@ -7549,10 +7549,10 @@ handle_signal_stop (struct execution_control_state *ecs)
 	  /* The user issued a step when stopped at a breakpoint.
 	     Maybe we should stop, maybe we should not - the delay
 	     slot *might* correspond to a line of source.  In any
-	     case, don't decide that here, just set 
-	     ecs->stepping_over_breakpoint, making sure we 
+	     case, don't decide that here, just call
+	     ecs->start_stepping_over_breakpoint (), making sure we
 	     single-step again before breakpoints are re-inserted.  */
-	  ecs->event_thread->stepping_over_breakpoint = 1;
+	  ecs->event_thread->start_stepping_over_breakpoint ();
 	}
     }
 
@@ -7909,7 +7909,7 @@ process_event_stop_test (struct execution_control_state *ecs)
 
       infrun_debug_printf ("BPSTAT_WHAT_SET_LONGJMP_RESUME");
 
-      ecs->event_thread->stepping_over_breakpoint = 1;
+      ecs->event_thread->start_stepping_over_breakpoint ();
 
       if (what.is_longjmp)
 	{
@@ -8008,7 +8008,7 @@ process_event_stop_test (struct execution_control_state *ecs)
 
     case BPSTAT_WHAT_SINGLE:
       infrun_debug_printf ("BPSTAT_WHAT_SINGLE");
-      ecs->event_thread->stepping_over_breakpoint = 1;
+      ecs->event_thread->start_stepping_over_breakpoint ();
       /* Still need to check other stuff, at least the case where we
 	 are stepping and step out of the right range.  */
       break;
@@ -8039,7 +8039,7 @@ process_event_stop_test (struct execution_control_state *ecs)
 	     hit the step-resume breakpoint at the start address of
 	     the function.  Go back to single-stepping, which should
 	     take us back to the function call.  */
-	  ecs->event_thread->stepping_over_breakpoint = 1;
+	  ecs->event_thread->start_stepping_over_breakpoint ();
 	  keep_going (ecs);
 	  return;
 	}
@@ -8052,7 +8052,7 @@ process_event_stop_test (struct execution_control_state *ecs)
       /* Assume the thread stopped for a breakpoint.  We'll still check
 	 whether a/the breakpoint is there when the thread is next
 	 resumed.  */
-      ecs->event_thread->stepping_over_breakpoint = 1;
+      ecs->event_thread->start_stepping_over_breakpoint ();
 
       stop_waiting (ecs);
       return;
@@ -8064,7 +8064,7 @@ process_event_stop_test (struct execution_control_state *ecs)
       /* Assume the thread stopped for a breakpoint.  We'll still check
 	 whether a/the breakpoint is there when the thread is next
 	 resumed.  */
-      ecs->event_thread->stepping_over_breakpoint = 1;
+      ecs->event_thread->start_stepping_over_breakpoint ();
       stop_waiting (ecs);
       return;
 
@@ -8078,7 +8078,7 @@ process_event_stop_test (struct execution_control_state *ecs)
 	     were trying to single-step off a breakpoint.  Go back to
 	     doing that.  */
 	  ecs->event_thread->step_after_step_resume_breakpoint = 0;
-	  ecs->event_thread->stepping_over_breakpoint = 1;
+	  ecs->event_thread->start_stepping_over_breakpoint ();
 	  keep_going (ecs);
 	  return;
 	}

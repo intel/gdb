@@ -705,6 +705,14 @@ thread_info::set_thread_options (gdb_thread_options thread_options)
 
 /* See gdbthread.h.  */
 
+void
+thread_info::start_stepping_over_breakpoint ()
+{
+  m_stepping_over_breakpoint = true;
+}
+
+/* See gdbthread.h.  */
+
 int
 thread_is_in_step_over_chain (struct thread_info *tp)
 {

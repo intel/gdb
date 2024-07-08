@@ -42,6 +42,9 @@ set stringlen ($integer8|$integer4)
 if { [test_compiler_info {flang-*} f90] } {
     set some_module_class_type "Type number"
     set some_module_aux_info ", $integer8 \\(10\\)"
+} elseif { [test_compiler_info {ifx-*} f90] } {
+    set some_module_class_type "Type number"
+    set some_module_aux_info ""
 } else {
     set some_module_class_type "Type __class_some_module_Number(_t)?"
     set some_module_aux_info ""

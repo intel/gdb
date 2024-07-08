@@ -67,9 +67,9 @@ intelgt_uint_reg_type (tdesc_feature *feature, uint32_t bitsize,
 /* Add a (uniform) register set to FEATURE.  */
 
 static void
-intelgt_add_regset (tdesc_feature *feature, long &regnum,
-		    const char *prefix, uint32_t count, const char *group,
-		    uint32_t bitsize, const char *type, expedite_t &expedite)
+intelgt_add_regset (tdesc_feature *feature, long &regnum, const char *prefix,
+		    uint32_t count, const char *group, uint32_t bitsize,
+		    bool is_writable, const char *type, expedite_t &expedite)
 {
   for (uint32_t reg = 0; reg < count; ++reg)
     {
@@ -80,7 +80,7 @@ intelgt_add_regset (tdesc_feature *feature, long &regnum,
 	if (name == exp_reg)
 	  is_expedited = true;
 
-      tdesc_create_reg (feature, name.c_str (), regnum++, 1, group,
+      tdesc_create_reg (feature, name.c_str (), regnum++, is_writable, group,
 			bitsize, type, is_expedited);
     }
 }
@@ -911,7 +911,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 	  .c_str ());
 
       intelgt_add_regset (feature, regnum, "r", regprop.count, "grf",
-			  regprop.bitSize,
+			  regprop.bitSize, regset.is_writeable,
 			  intelgt_uint_reg_type (feature, regprop.bitSize,
 						 32u),
 			  expedite);
@@ -921,7 +921,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
       feature = tdesc_create_feature (tdesc, intelgt::feature_addr);
 
       intelgt_add_regset (feature, regnum, "a", regprop.count, "arf",
-			  regprop.bitSize,
+			  regprop.bitSize, regset.is_writeable,
 			  intelgt_uint_reg_type (feature, regprop.bitSize,
 						 16u),
 			  expedite);
@@ -931,7 +931,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
       feature = tdesc_create_feature (tdesc, intelgt::feature_flag);
 
       intelgt_add_regset (feature, regnum, "f", regprop.count, "arf",
-			  regprop.bitSize,
+			  regprop.bitSize, regset.is_writeable,
 			  intelgt_uint_reg_type (feature, regprop.bitSize,
 						 16u),
 			  expedite);
@@ -947,12 +947,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       expedite.push_back ("ce");
 
-      /* The CE regset is not writable, so it does not make sense to save and
-	 restore it in during inferior calls.  Otherwise, if the inferior call
-	 was unsuccessful, then GDB will try to restore the original value of
-	 CE, which will cause a register write.  Prevent this behavior by
-	 setting SAVE_RESTORE to 0 when creating the CE register.  */
-      tdesc_create_reg (feature, "ce", regnum++, 0, "arf",
+      tdesc_create_reg (feature, "ce", regnum++, regset.is_writeable, "arf",
 			regprop.bitSize,
 			intelgt_uint_reg_type (feature, regprop.bitSize,
 					       32u),
@@ -964,7 +959,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       expedite.push_back ("sr0");
       intelgt_add_regset (feature, regnum, "sr", regprop.count, "arf",
-			  regprop.bitSize,
+			  regprop.bitSize, regset.is_writeable,
 			  intelgt_uint_reg_type (feature, regprop.bitSize,
 						 32u),
 			  expedite);
@@ -975,7 +970,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       expedite.push_back ("cr0");
       intelgt_add_regset (feature, regnum, "cr", regprop.count, "arf",
-			  regprop.bitSize,
+			  regprop.bitSize, regset.is_writeable,
 			  intelgt_uint_reg_type (feature, regprop.bitSize,
 						 32u),
 			  expedite);
@@ -985,7 +980,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
       feature = tdesc_create_feature (tdesc, intelgt::feature_tdr);
 
       intelgt_add_regset (feature, regnum, "tdr", regprop.count, "arf",
-			  regprop.bitSize,
+			  regprop.bitSize, regset.is_writeable,
 			  intelgt_uint_reg_type (feature, regprop.bitSize,
 						 16u),
 			  expedite);
@@ -995,7 +990,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
       feature = tdesc_create_feature (tdesc, intelgt::feature_acc);
 
       intelgt_add_regset (feature, regnum, "acc", regprop.count, "arf",
-			  regprop.bitSize,
+			  regprop.bitSize, regset.is_writeable,
 			  intelgt_uint_reg_type (feature, regprop.bitSize,
 						 32u),
 			  expedite);
@@ -1005,7 +1000,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
       feature = tdesc_create_feature (tdesc, intelgt::feature_mme);
 
       intelgt_add_regset (feature, regnum, "mme", regprop.count, "arf",
-			  regprop.bitSize,
+			  regprop.bitSize, regset.is_writeable,
 			  intelgt_uint_reg_type (feature, regprop.bitSize,
 						 32u),
 			  expedite);
@@ -1019,7 +1014,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 
       feature = tdesc_create_feature (tdesc, intelgt::feature_sp);
 
-      tdesc_create_reg (feature, "sp", regnum++, 1, "arf",
+      tdesc_create_reg (feature, "sp", regnum++, regset.is_writeable, "arf",
 			regprop.bitSize,
 			intelgt_uint_reg_type (feature, regprop.bitSize,
 					       regprop.bitSize));
@@ -1059,9 +1054,9 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
 		    expedite.push_back (sbaregs[reg]);
 		  }
 
-		tdesc_create_reg (feature, sbaregs[reg], regnum++, 1,
-				  "virtual", regprop.bitSize, regtype,
-				  is_expedited);
+		tdesc_create_reg (feature, sbaregs[reg], regnum++,
+				  regset.is_writeable, "virtual",
+				  regprop.bitSize, regtype, is_expedited);
 	      }
 	  }
 	  break;
@@ -1077,7 +1072,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
       feature = tdesc_create_feature (tdesc, intelgt::feature_dbg);
 
       intelgt_add_regset (feature, regnum, "dbg", regprop.count, "arf",
-			  regprop.bitSize,
+			  regprop.bitSize, regset.is_writeable,
 			  intelgt_uint_reg_type (feature, regprop.bitSize,
 						 32u),
 			  expedite);
@@ -1087,7 +1082,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc,
       feature = tdesc_create_feature (tdesc, intelgt::feature_fc);
 
       intelgt_add_regset (feature, regnum, "fc", regprop.count, "arf",
-			  regprop.bitSize,
+			  regprop.bitSize, regset.is_writeable,
 			  intelgt_uint_reg_type (feature, regprop.bitSize,
 						 32u),
 			  expedite);

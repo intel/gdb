@@ -1555,18 +1555,14 @@ static char *
 intelgt_make_prpsinfo (bfd *obfd, char *obuf, int *obufsize,
 		       const char *fname, const char *xml)
 {
-  int fname_len = strlen (fname) + 1;
-  int xml_len = strlen (xml) + 1;
-  int note_len = fname_len + xml_len;
-  char *data = (char *) calloc (note_len, 1);
-  if (data == nullptr)
-    error ("Could not allocate space for the PRPSINFO note");
-
-  strcpy (data, fname);
-  strcpy (data + fname_len, xml);
-  gdb_assert (data[note_len - 1] == 0);
-  return elfcore_write_note (obfd, obuf, obufsize, "CORE", NT_PRPSINFO, data,
-			     note_len);
+  /* The note data should be in the following format <FNAME 0x0 XML 0x0>.  */
+  int fname_len = strlen (fname);
+  int xml_len = strlen (xml);
+  gdb::byte_vector data (fname_len + xml_len + 2, 0);
+  memcpy (data.data (), fname, fname_len);
+  memcpy (data.data () + fname_len + 1, xml, xml_len);
+  return elfcore_write_note (obfd, obuf, obufsize, "CORE", NT_PRPSINFO,
+			     data.data (), data.size ());
 }
 
 /* Build the NT_PRSTATUO for IntelGT.  */

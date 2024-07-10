@@ -26,6 +26,7 @@
 #include "cli/cli-cmds.h"
 #include "gdbsupport/gdb_obstack.h"
 #include "gdbtypes.h"
+#include "reggroups.h"
 #include "target.h"
 #include "target-descriptions.h"
 #include "value.h"
@@ -1587,6 +1588,23 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
     data->dbg0_regnum = possible_regnum;
 
   return possible_regnum;
+}
+
+/* Implement the 'register_reggroup_p' gdbarch method.  */
+
+static int
+intelgt_register_reggroup_p (gdbarch *gdbarch, int regnum,
+			     const reggroup *group)
+{
+  /* Enable saving of all registers during inferior calls.  */
+  if (group == save_reggroup)
+    return 1;
+
+  int ret = tdesc_register_in_reggroup_p (gdbarch, regnum, group);
+  if (ret != -1)
+    return ret;
+
+  return default_register_reggroup_p (gdbarch, regnum, group);
 }
 
 /* Build the NT_PRPSINFO for IntelGT.  */
@@ -4642,6 +4660,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
       set_tdesc_pseudo_register_name (gdbarch, intelgt_pseudo_register_name);
       set_gdbarch_read_pc (gdbarch, intelgt_read_pc);
       set_gdbarch_write_pc (gdbarch, intelgt_write_pc);
+      set_gdbarch_register_reggroup_p (gdbarch, intelgt_register_reggroup_p);
     }
 
   /* Populate gdbarch fields.  */

@@ -2645,8 +2645,8 @@ linux_address_in_shadow_stack_mem_range
   if (data == nullptr)
     return false;
 
-  const std::vector<smaps_data> smaps = parse_smaps_data (data.get (),
-							  smaps_file);
+  const std::vector<smaps_data> smaps
+    = parse_smaps_data (data.get (), std::move (smaps_file));
 
   auto find_addr_mem_range = [&addr] (const smaps_data &map)
     {

@@ -467,6 +467,10 @@ proc get_stopped_threads {srcfile line {msg "get stopped threads"}} {
 	    lappend stopped_threads $expect_out(1,string)
 	    exp_continue
 	}
+	-re "\r\n. ($decimal\(\.$decimal\)?)\[^\r\n\]* Selected thread is running" {
+	    fail "$gdb_test_name: unexpected thread"
+	    exp_continue
+	}
 	-re "$gdb_prompt" {
 	    pass $gdb_test_name
 	}

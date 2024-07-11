@@ -77,8 +77,14 @@ proc test_attach {testpid non_stop} {
     # Get the spinning kernel line and find the thread ids.
     set spinning_line [gdb_get_line_number "spinning-line"]
 
+    if {$non_stop} {
+	setup_kfail "JIRA IGDB/5046" "*-*-*"
+    }
     set spinning_threads [get_stopped_threads $srcfile $spinning_line]
     verbose -log "spinning threads: $spinning_threads"
+    if {$non_stop} {
+	setup_kfail "JIRA IGDB/5046" "*-*-*"
+    }
     gdb_assert { [llength $spinning_threads] == $num_spinning_threads } \
 	"expecting $num_spinning_threads spinning threads"
 

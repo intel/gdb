@@ -3041,6 +3041,8 @@ get_xe_version (unsigned int device_id)
       case 0x7D41:
       case 0x7D55:
       case 0x7DD5:
+      case 0x7D51:
+      case 0x7DD1:
 	device_xe_version = XE_HPG;
 	break;
 

@@ -2945,12 +2945,12 @@ i386_extract_return_value (struct gdbarch *gdbarch, struct type *type,
 {
   i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
   int len = type->length ();
-  gdb_byte buf[I386_MAX_REGISTER_SIZE];
 
   /* _Float16 and _Float16 _Complex values are returned via xmm0.  */
   if (((type->code () == TYPE_CODE_FLT) && len == 2)
       || ((type->code () == TYPE_CODE_COMPLEX) && len == 4))
     {
+	gdb::byte_vector buf (register_size (gdbarch, I387_XMM0_REGNUM (tdep)));
 	regcache->raw_read (I387_XMM0_REGNUM (tdep), valbuf);
 	return;
     }
@@ -2967,8 +2967,10 @@ i386_extract_return_value (struct gdbarch *gdbarch, struct type *type,
 	 its contents to the desired type.  This is probably not
 	 exactly how it would happen on the target itself, but it is
 	 the best we can do.  */
-      regcache->raw_read (I386_ST0_REGNUM, buf);
-      target_float_convert (buf, i387_ext_type (gdbarch), valbuf, type);
+      gdb::byte_vector buf (register_size (gdbarch, I386_ST0_REGNUM));
+      regcache->raw_read (I386_ST0_REGNUM, buf.data ());
+      target_float_convert (buf.data (), i387_ext_type (gdbarch),
+			    valbuf, type);
     }
   else
     {
@@ -2977,15 +2979,19 @@ i386_extract_return_value (struct gdbarch *gdbarch, struct type *type,
 
       if (len <= low_size)
 	{
+	  gdb::byte_vector buf (low_size);
 	  regcache->raw_read (LOW_RETURN_REGNUM, buf);
-	  memcpy (valbuf, buf, len);
+	  memcpy (valbuf, buf.data (), len);
 	}
       else if (len <= (low_size + high_size))
 	{
-	  regcache->raw_read (LOW_RETURN_REGNUM, buf);
-	  memcpy (valbuf, buf, low_size);
-	  regcache->raw_read (HIGH_RETURN_REGNUM, buf);
-	  memcpy (valbuf + low_size, buf, len - low_size);
+	  gdb::byte_vector buf_low (low_size);
+	  regcache->raw_read (LOW_RETURN_REGNUM, buf_low.data ());
+	  memcpy (valbuf, buf_low.data (), low_size);
+
+	  gdb::byte_vector buf_high (high_size);
+	  regcache->raw_read (HIGH_RETURN_REGNUM, buf_high.data ());
+	  memcpy (valbuf + low_size, buf_high.data (), len - low_size);
 	}
       else
 	internal_error (_("Cannot extract return value of %d bytes long."),
@@ -3006,7 +3012,7 @@ i386_store_return_value (struct gdbarch *gdbarch, struct type *type,
   if (type->code () == TYPE_CODE_FLT)
     {
       ULONGEST fstat;
-      gdb_byte buf[I386_MAX_REGISTER_SIZE];
+      gdb::byte_vector buf (register_size (gdbarch, I386_ST0_REGNUM));
 
       if (tdep->st0_regnum < 0)
 	{
@@ -3022,8 +3028,9 @@ i386_store_return_value (struct gdbarch *gdbarch, struct type *type,
 	 floating-point format used by the FPU.  This is probably
 	 not exactly how it would happen on the target itself, but
 	 it is the best we can do.  */
-      target_float_convert (valbuf, type, buf, i387_ext_type (gdbarch));
-      regcache->raw_write (I386_ST0_REGNUM, buf);
+      target_float_convert (valbuf, type, buf.data (),
+			    i387_ext_type (gdbarch));
+      regcache->raw_write (I386_ST0_REGNUM, buf.data ());
 
       /* Set the top of the floating-point register stack to 7.  The
 	 actual value doesn't really matter, but 7 is what a normal

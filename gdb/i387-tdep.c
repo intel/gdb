@@ -350,7 +350,7 @@ i387_register_to_value (const frame_info_ptr &frame, int regnum,
 			int *optimizedp, int *unavailablep)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
-  gdb_byte from[I386_MAX_REGISTER_SIZE];
+  gdb::byte_vector from (register_size (gdbarch, regnum));
 
   gdb_assert (i386_fp_regnum_p (gdbarch, regnum));
 
@@ -365,13 +365,13 @@ i387_register_to_value (const frame_info_ptr &frame, int regnum,
 
   /* Convert to TYPE.  */
   auto from_view
-    = gdb::make_array_view (from, register_size (gdbarch, regnum));
+    = gdb::make_array_view (from.data (), register_size (gdbarch, regnum));
   frame_info_ptr next_frame = get_next_frame_sentinel_okay (frame);
   if (!get_frame_register_bytes (next_frame, regnum, 0, from_view, optimizedp,
 				 unavailablep))
     return 0;
 
-  target_float_convert (from, i387_ext_type (gdbarch), to, type);
+  target_float_convert (from.data (), i387_ext_type (gdbarch), to, type);
   *optimizedp = *unavailablep = 0;
   return 1;
 }
@@ -384,7 +384,7 @@ i387_value_to_register (const frame_info_ptr &frame, int regnum,
 			struct type *type, const gdb_byte *from)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
-  gdb_byte to[I386_MAX_REGISTER_SIZE];
+  gdb::byte_vector to (register_size (gdbarch, regnum));
 
   gdb_assert (i386_fp_regnum_p (gdbarch, regnum));
 
@@ -398,8 +398,8 @@ i387_value_to_register (const frame_info_ptr &frame, int regnum,
 
   /* Convert from TYPE.  */
   struct type *to_type = i387_ext_type (gdbarch);
-  target_float_convert (from, type, to, to_type);
-  auto to_view = gdb::make_array_view (to, to_type->length ());
+  target_float_convert (from, type, to.data (), to_type);
+  auto to_view = gdb::make_array_view (to.data (), to_type->length ());
   put_frame_register (get_next_frame_sentinel_okay (frame), regnum, to_view);
 }
 

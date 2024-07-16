@@ -3740,6 +3740,9 @@ and if available, among SIMD lanes within a thread
 @item @samp{info threads}, a command to inquire about existing threads
 @item @samp{thread apply [@var{thread-id-list} | all | all-lanes] @var{args}},
 a command to apply a command to a list of threads
+@item @samp{thread filter [@var{thread-id-list} | all] @var{args}},
+a command to get a list of thread ids from the selected range of threads,
+or optionally filter from the selection using the location option.
 @item thread-specific breakpoints
 @item @samp{set print thread-events}, which controls printing of 
 messages on thread start and exit.
@@ -4148,6 +4151,51 @@ are not printed.
 @item -q
 The flag @code{-q} (@samp{quiet}) disables printing the thread
 information.
+@end table
+
+Flags @code{-c} and @code{-s} cannot be used together.
+
+@kindex thread filter
+@cindex command to filter threads
+The @code{thread filter} command allows you to get a list of thread ids.  The
+first argument is mandatory to specify the thread range for filtering using the
+thread ID list syntax (@pxref{thread ID lists}) or specify @code{all} to
+filter from all threads.  For the @code{all}, this command by default prints
+the list of filtered thread ids in descending order.  To print in ascending
+order, type @kbd{thread filter all -ascending}
+
+The command provides the optional argument @code{-location} to filter from
+the selected range of threads using the location.  To filter using this
+option, type
+@kbd{thread filter all -location @var{filename}:@var{linenum}}
+
+@item @var{filename}:@var{linenum}
+Specifies the line @var{linenum} in the source file @var{filename} for the
+stopped thread.
+
+The @var{flag} arguments control what output to produce and how to handle
+errors raised when filtering.  They must start with a @code{-} directly
+followed by one letter in @code{qcs}.  If several flags are provided,
+they must be given individually, such as @code{-c -q}.
+
+By default, if an error is raised during filtering while evaluating the
+options of this command, @value{GDBN} will abort the command.
+The following flags can be used to fine-tune this behavior:
+
+@table @code
+@item -c
+The flag @code{-c}, which stands for @samp{continue}, causes any
+errors in filtering to be displayed, and the execution of
+@code{thread filter} then continues.
+@item -s
+The flag @code{-s}, which stands for @samp{silent}, causes any errors
+or empty output produced in filtering to be silently ignored.  That is,
+only the filtered thread ids list is printed, but the extra output for the
+command other than the filtered threads ids list or errors are not printed.
+@item -q
+The flag @code{-q} (@samp{quiet}) disables printing of errors during the
+evaluation of filter conditions.  The @code{thread filter} ends in case of
+an error.
 @end table
 
 Flags @code{-c} and @code{-s} cannot be used together.

@@ -50,10 +50,12 @@
 #include <algorithm>
 #include <optional>
 #include "inline-frame.h"
+#include "source.h"
 #include "stack.h"
 #include "interps.h"
 #include <array>
 #include "valprint.h"
+#include "linespec.h"
 
 /* See gdbthread.h.  */
 
@@ -83,6 +85,25 @@ struct tp_emask
 {
   thread_info_ref tp;
   unsigned int emask;
+};
+
+/* A structure to store the filter options and the list of thread ids
+   for the output of the "thread filter" command.  */
+
+struct thread_filter_parameters
+{
+  /* Filter threads where location is matching this line number.  */
+  unsigned int lineno = -1;
+
+  /* Filter threads where location is matching this file name.  */
+  std::string filename;
+
+  /* The list of thread ids for the output, which may be filtered if one of the
+     optional filtering options are used.  */
+  std::string tid_list;
+
+  /* These flags are used to control the output.  */
+  qcs_flags flags;
 };
 
 static std::string print_thread_id_string (thread_info *, unsigned long,
@@ -2214,6 +2235,12 @@ Call COMMAND also for all unavailable threads.\n\
 The default is to not enumerate unavailable threads."),
 };
 
+/* The location command line option for the "thread filter" command.  */
+struct thr_filter_options
+{
+  std::string location;
+};
+
 /* The qcs command line flags for the "thread apply" commands.  Keep
    this in sync with the "frame apply" commands.  */
 
@@ -2235,6 +2262,17 @@ static const gdb::option::option_def thr_qcs_flags_option_defs[] = {
     "s", [] (qcs_flags *opt) { return &opt->silent; },
     N_("Silently ignore any errors or empty output produced by COMMAND."),
   },
+};
+
+/* The options used by the 'thread filter' command.  */
+
+static const gdb::option::option_def thr_filter_options_defs[] = {
+  gdb::option::string_option_def<thr_filter_options> {
+    "location",
+    [] (thr_filter_options *opt) { return &opt->location; },
+    nullptr, /* show_cmd_cb */
+    N_("Filter threads using location in filename:linenum format.")
+  }
 };
 
 /* Create an option_def_group for the "thread apply all" options, with
@@ -2264,9 +2302,161 @@ make_thread_apply_options_def_group (bool *unavailable, qcs_flags *flags)
   }};
 }
 
-/* Apply a GDB command to a list of threads and SIMD lanes.  List syntax
-   is a whitespace separated list of numbers, or ranges, or the keyword
-   `all', or the keyword `all-lanes'.  Ranges consist of two numbers
+/* Create an option_def_group for the "thread filter all" options, with
+   ASCENDING, FLAGS and the LOCATION filter option as context.  */
+
+static inline std::array<gdb::option::option_def_group, 3>
+make_thread_filter_all_options_def_group (bool *ascending,
+					  thr_filter_options *location,
+					  qcs_flags *flags)
+{
+  return {{
+    { {ascending_option_def.def ()}, ascending},
+    { {thr_filter_options_defs}, location},
+    { {thr_qcs_flags_option_defs}, flags},
+  }};
+}
+
+/* Create an option_def_group for the "thread filter [thread-id-list]" options,
+   with FLAGS and the LOCATION filter option as context.  */
+
+static inline std::array<gdb::option::option_def_group, 2>
+make_thread_filter_options_def_group (thr_filter_options *location,
+				      qcs_flags *flags)
+{
+  return {{
+    { {thr_filter_options_defs}, location},
+    { {thr_qcs_flags_option_defs}, flags},
+  }};
+}
+
+/* Return true if the line number LINENUM contains a non digit character,
+   otherwise return false.  */
+
+static bool
+is_all_digits (const char *linenum)
+{
+  const char *p = linenum;
+
+  while (*p != '\0')
+    {
+      if (!isdigit (*p))
+	return false;
+
+      p++;
+    }
+
+  return true;
+}
+
+/* Parse the LOCATION option of the "thread filter" command to set the filename
+   and the line number elements of the FILTER_PARAMS.  */
+
+static const void
+parse_thread_filter_command_options (const std::string location,
+				     thread_filter_parameters *filter_params)
+{
+  filter_params->lineno = -1;
+  if (!location.empty ())
+    {
+      auto delim_index = location.find (":");
+      if (delim_index == std::string::npos)
+	{
+	  if (is_all_digits (location.c_str ()))
+	    {
+	      line_offset offset_loc
+		= linespec_parse_line_offset (location.c_str ());
+	      filter_params->lineno = offset_loc.offset;
+	    }
+	  else
+	    filter_params->filename = std::move (location);
+	}
+      else
+	{
+	  filter_params->filename = std::string (location, 0, delim_index);
+	  std::string line_str
+	    = std::string (location, delim_index + 1,
+			   location.length () - delim_index);
+	  if (line_str.empty ())
+	    filter_params->lineno = -1;
+	  else if (!is_all_digits (line_str.c_str ()))
+	    error (_("\
+Line number for thread filter command should be an integer value"));
+	  else
+	    {
+	      line_offset offset_loc
+		= linespec_parse_line_offset (line_str.c_str ());
+	      filter_params->lineno = offset_loc.offset;
+	    }
+	}
+    }
+}
+
+/* Return the string version of the currently selected TP if FILTER_PARAMS
+   does not contain any filter option or the filter option "location" specified
+   in FILTER_PARAMS matches the current location of TP.  Return nullptr
+   otherwise.  */
+
+static const char*
+get_filtered_thread_id (thread_info *tp,
+			thread_filter_parameters *filter_params)
+{
+  if (filter_params->filename.empty () && filter_params->lineno == -1)
+    return print_thread_id (tp);
+
+  frame_info_ptr frame = get_selected_frame (nullptr);
+  symtab_and_line sal = find_frame_sal (frame);
+
+  if (!filter_params->filename.empty ())
+    {
+      if (sal.symtab == nullptr)
+	return nullptr;
+
+      std::string filename = symtab_to_filename_for_display (sal.symtab);
+
+      if (filename.empty ()
+	  || (filename.find (filter_params->filename, 0)
+	      == std::string::npos))
+	return nullptr;
+    }
+
+  if (filter_params->lineno != -1)
+    {
+      if (sal.line != filter_params->lineno)
+	return nullptr;
+    }
+
+  return print_thread_id (tp);
+}
+
+/* Assuming that TP is the current thread, apppend the string version to
+   the TID_LIST in FILTER_PARAMS, if filter options specified in the
+   FILTER_PARAMS are successfully evaluated to true.  */
+
+static void
+thread_filter_append_thread_info (thread_info *tp,
+				  thread_filter_parameters *filter_params)
+{
+  gdb_assert (is_current_thread (tp));
+
+  const char *tid = get_filtered_thread_id (tp, filter_params);
+  if (tid != nullptr)
+    {
+      if (!filter_params->tid_list.empty ())
+	filter_params->tid_list.append (" ");
+
+      filter_params->tid_list.append (tid);
+    }
+}
+
+/* Common function for the "thread apply all" and the "thread filter all"
+   commands.
+   "thread apply": Apply a GDB command to a list of threads and SIMD lanes.
+   "thread filter": Prints the list of filtered thread ids using the
+   location option of the command.
+
+   List syntax is a whitespace separated list of numbers, or ranges, or the
+   keyword `all', or the keyword `all-lanes'.  Ranges consist of two numbers
    separated by a hyphen.  Examples:
 
    thread apply 1 2 7 4 backtrace       Apply backtrace cmd to threads 1,2,7,4
@@ -2275,6 +2465,15 @@ make_thread_apply_options_def_group (bool *unavailable, qcs_flags *flags)
    SIMD lane.
    thread apply all-lanes p foo(1)    Apply p foo(1) cmd to all active SIMD
    lanes of all threads
+
+   thread filter 1 2 7 -location file.c:10	Print the list of thread ids
+   from threads 1->7 having file name file.c, line number equals to 10.  The
+   input list in the form of range is similar to the thread apply example
+   above.
+
+   If IS_FILTER is "true", this function processes the "thread filter"
+   command, otherwise it handles the "thread apply" command.  For
+   "thread filter" command input and output parameters, pass FILTER_PARAMS.
 
    With SIMD syntax ranges are parsed as follows:
    Item     Expanded items
@@ -2291,33 +2490,53 @@ make_thread_apply_options_def_group (bool *unavailable, qcs_flags *flags)
    the SIMD thread if it is active, or the first active lane.  */
 
 static void
-thread_apply_all_command_1 (const char *cmd, int from_tty,
-			    simd_lane_kind lane_kind)
+thread_apply_and_filter_all_cmd_1 (const char *cmd, int from_tty,
+				   simd_lane_kind lane_kind, bool is_filter,
+				   thread_filter_parameters *filter_params)
 {
   bool ascending = false;
   bool unavailable = false;
   qcs_flags flags;
+  thr_filter_options expr_opts;
 
-  auto group = make_thread_apply_all_options_def_group (&ascending,
-							&unavailable,
-							&flags);
-  gdb::option::process_options
-    (&cmd, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group);
+  if (is_filter)
+    {
+      gdb_assert (filter_params != nullptr);
 
-  validate_flags_qcs ("thread apply all", &flags);
+      auto group
+	= make_thread_filter_all_options_def_group (&ascending, &expr_opts,
+						    &flags);
+      gdb::option::process_options
+	(&cmd, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group);
+      validate_flags_qcs ("thread filter all", &flags);
+      filter_params->flags = flags;
+    }
+  else
+    {
+      auto group
+	= make_thread_apply_all_options_def_group (&ascending, &unavailable,
+						   &flags);
+      gdb::option::process_options
+	(&cmd, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group);
+      validate_flags_qcs ("thread apply all", &flags);
+    }
 
   bool for_all_lanes = lane_kind == simd_lane_kind::SIMD_LANE_ALL_ACTIVE;
-
-  const char *cmd_name = for_all_lanes
-    ? "thread apply all-lanes"
-    : "thread apply all";
 
   simd_lane_order lane_order = ascending
     ? simd_lane_order::SIMD_LANE_ORDER_ASCENDING
     : simd_lane_order::SIMD_LANE_ORDER_DESCENDING;
 
-  if (cmd == NULL || *cmd == '\000')
-    error (_("Please specify a command at the end of '%s'"), cmd_name);
+  if (is_filter)
+    parse_thread_filter_command_options (expr_opts.location, filter_params);
+
+  else if (cmd == nullptr || *cmd == '\000')
+    {
+      const char *cmd_name = for_all_lanes
+	? "thread apply all-lanes"
+	: "thread apply all";
+      error (_("Please specify a command at the end of '%s'"), cmd_name);
+    }
 
   update_thread_list ();
 
@@ -2391,23 +2610,24 @@ thread_apply_all_command_1 (const char *cmd, int from_tty,
 		 will be scope-restored.  */
 	      tp->set_default_simd_lane ();
 
-	      thread_try_catch_cmd (tp, {}, cmd, from_tty, flags);
+	      if (is_filter)
+		thread_filter_append_thread_info (tp, filter_params);
+	      else
+		thread_try_catch_cmd (tp, {}, cmd, from_tty, flags);
 	    }
 	}
     }
 }
 
-/* Completer for "thread apply [ID list]".  */
+/* Common function to parse thread ids for the completer functions of
+   "thread apply" and "thread filter" commands.  The input TEXT is the
+   list of thread ids followed by the command options.  After extracting
+   the thread ids list from TEXT, it returns nullptr if there is nothing
+   left in TEXT, otherwise returns the remaining string.  */
 
-static void
-thread_apply_command_completer (cmd_list_element *ignore,
-				completion_tracker &tracker,
-				const char *text, const char * /*word*/)
+static const char *
+thread_apply_and_filter_parser_completer (const char *text)
 {
-  /* Don't leave this to complete_options because there's an early
-     return below.  */
-  tracker.set_use_custom_word_point (true);
-
   tid_range_parser parser {text, current_inferior ()->num, -1};
 
   try
@@ -2435,12 +2655,32 @@ thread_apply_command_completer (cmd_list_element *ignore,
   if (cmd == text)
     {
       /* No thread ID list yet.  */
-      return;
+      return nullptr;
     }
 
   /* Check if we're past a valid thread ID list already.  */
   if (parser.finished ()
       && cmd > text && !isspace (cmd[-1]))
+    return nullptr;
+
+  return cmd;
+
+}
+
+/* Completer for "thread apply [ID list]".  */
+
+static void
+thread_apply_command_completer (cmd_list_element *ignore,
+				completion_tracker &tracker,
+				const char *text, const char * /*word*/)
+{
+  /* Don't leave this to complete_options because there's an early
+     return below.  */
+  tracker.set_use_custom_word_point (true);
+
+  const char *cmd = thread_apply_and_filter_parser_completer (text);
+
+  if (cmd == nullptr)
     return;
 
   /* We're past the thread ID list, advance word point.  */
@@ -2471,13 +2711,63 @@ thread_apply_all_command_completer (cmd_list_element *ignore,
 
   complete_nested_command_line (tracker, text);
 }
+
+/* Completer for "thread filter[ID list]".
+   See command.h for details about arguments in completer routines.  */
+
+static void
+thread_filter_command_completer (cmd_list_element *ignore,
+				 completion_tracker &tracker,
+				 const char *text, const char * /*word*/)
+{
+  /* Don't leave this to complete_options because there's an early
+     return below.  */
+  tracker.set_use_custom_word_point (true);
+
+  const char *cmd = thread_apply_and_filter_parser_completer (text);
+
+  if (cmd == nullptr)
+    return;
+
+  /* We're past the thread ID list, advance word point.  */
+  tracker.advance_custom_word_point_by (cmd - text);
+  text = cmd;
+
+  const auto group
+    = make_thread_filter_options_def_group (nullptr, nullptr);
+  if (gdb::option::complete_options
+      (tracker, &text, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group))
+    return;
+
+  complete_nested_command_line (tracker, text);
+}
+
+/* Completer for "thread filter all".
+   See command.h for details about arguments in command completer routines.  */
+
+static void
+thread_filter_all_command_completer (cmd_list_element *ignore,
+				     completion_tracker &tracker,
+				     const char *text, const char *word)
+{
+  const auto group = make_thread_filter_all_options_def_group (nullptr,
+							       nullptr,
+							       nullptr);
+  if (gdb::option::complete_options
+      (tracker, &text, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group))
+    return;
+
+  complete_nested_command_line (tracker, text);
+}
+
 /* The implementation of "thread apply all-lanes" command.  */
 
 static void
 thread_apply_all_lanes_command (const char *cmd, int from_tty)
 {
-  thread_apply_all_command_1 (cmd, from_tty,
-			      simd_lane_kind::SIMD_LANE_ALL_ACTIVE);
+  thread_apply_and_filter_all_cmd_1 (cmd, from_tty,
+				     simd_lane_kind::SIMD_LANE_ALL_ACTIVE,
+				     false, nullptr);
 }
 
 /* The implementation of "thread apply all" command.  */
@@ -2485,18 +2775,28 @@ thread_apply_all_lanes_command (const char *cmd, int from_tty)
 static void
 thread_apply_all_command (const char *cmd, int from_tty)
 {
-  thread_apply_all_command_1 (cmd, from_tty,
-			      simd_lane_kind::SIMD_LANE_DEFAULT);
+  thread_apply_and_filter_all_cmd_1 (cmd, from_tty,
+				     simd_lane_kind::SIMD_LANE_DEFAULT, false,
+				     nullptr);
 }
 
-/* Implementation of the "thread apply" command.  */
+/* The implementation of the "thread apply [ID list]" and the "thread filter
+   [ID list] command.  If the IS_FILTER flag is true then this function
+   handles the "thread filter" command, otherwise it handles the
+   "thread apply" command.  The FILTER_PARAMS is used to store the input
+   arguments of the "thread filter" command and also the filtered list of
+   thread ids for the output.  */
 
 static void
-thread_apply_command (const char *tidlist, int from_tty)
+thread_apply_and_filter_cmd (const char *tidlist,
+			     int from_tty,
+			     bool is_filter,
+			     thread_filter_parameters *filter_params)
 {
   qcs_flags flags;
   const char *cmd = NULL;
   bool unavailable = false;
+  thr_filter_options expr_opts;
 
   if (inferior_ptid == null_ptid)
     error (_("The program is not being run."));
@@ -2516,17 +2816,31 @@ thread_apply_command (const char *tidlist, int from_tty)
 
   cmd = parser.cur_tok ();
 
-  auto group = make_thread_apply_options_def_group (&unavailable, &flags);
-  gdb::option::process_options
-    (&cmd, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group);
+  if (is_filter)
+    {
+      gdb_assert (filter_params != nullptr);
 
-  validate_flags_qcs ("thread apply", &flags);
+      auto group
+	= make_thread_filter_options_def_group (&expr_opts, &flags);
+      gdb::option::process_options
+	(&cmd, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group);
+      validate_flags_qcs ("thread filter", &flags);
+      filter_params->flags = flags;
+      parse_thread_filter_command_options (expr_opts.location, filter_params);
+    }
+  else
+    {
+      auto group = make_thread_apply_options_def_group (&unavailable, &flags);
+      gdb::option::process_options
+	(&cmd, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group);
+      validate_flags_qcs ("thread apply", &flags);
 
-  if (*cmd == '\0')
-    error (_("Please specify a command following the thread ID list"));
+      if (*cmd == '\0')
+	error (_("Please specify a command following the thread ID list"));
 
-  if (tidlist == cmd || isdigit (cmd[0]))
-    invalid_thread_id_error (cmd);
+      if (tidlist == cmd || isdigit (*cmd))
+	invalid_thread_id_error (cmd);
+    }
 
   scoped_restore_current_thread restore_thread;
 
@@ -2716,10 +3030,75 @@ thread_apply_command (const char *tidlist, int from_tty)
 	     the command.  */
 	}
 
-      thread_try_catch_cmd (tp, {}, cmd, from_tty, flags);
+      if (is_filter)
+	thread_filter_append_thread_info (tp, filter_params);
+      else
+	thread_try_catch_cmd (tp, {}, cmd, from_tty, flags);
     }
 }
 
+/* Implementation of the "thread apply [thread-id-list]" command.  */
+
+static void
+thread_apply_command (const char *tidlist, int from_tty)
+{
+  thread_apply_and_filter_cmd (tidlist, from_tty, false, nullptr);
+
+}
+
+/* Prints the list of filtered thread ids for the "thread filter" command based
+   on FILTER_PARAMS, which contains the list of filtered thread ids TID_LIST
+   and FLAGS used to control the printing.  */
+
+static void
+print_filtered_thread_ids (thread_filter_parameters *filter_params)
+{
+  if (!filter_params->flags.silent && !filter_params->flags.quiet)
+    gdb_printf ("Filtered Threads:\n");
+
+  value_print_options print_opts;
+  get_user_print_options (&print_opts);
+  filter_params->tid_list = "\"" + filter_params->tid_list + "\"";
+  expression_up expr = parse_expression (filter_params->tid_list.c_str (),
+					 nullptr, 0);
+  value *val = expr->evaluate ();
+  get_formatted_print_options (&print_opts, 's');
+  print_opts.print_max = PRINT_MAX_CHARS_UNLIMITED;
+  print_value (val, print_opts);
+  gdb_printf ("\n");
+}
+
+/* The implementation of "thread filter all" command.
+   CMD - Contains all optional arguments of the command.
+   FROM_TTY - Specifies whether the command is originated from the user.  */
+
+static void
+thread_filter_all_command (const char *cmd, int from_tty)
+{
+  thread_filter_parameters filter_params;
+
+  thread_apply_and_filter_all_cmd_1 (cmd, from_tty,
+				     simd_lane_kind::SIMD_LANE_DEFAULT, true,
+				     &filter_params);
+
+  if (!filter_params.tid_list.empty ())
+    print_filtered_thread_ids (&filter_params);
+}
+
+/* Implementation of the "thread filter [ID list]" command.
+   The TIDLIST contains a space separated list of thread ids, followed by all
+   the other arguments of the command and the FROM_TTY specifies whether
+   the command is originated from the user.  */
+
+static void
+thread_filter_command (const char *tidlist, int from_tty)
+{
+  thread_filter_parameters filter_params;
+
+  thread_apply_and_filter_cmd (tidlist, from_tty, true, &filter_params);
+  if (!filter_params.tid_list.empty ())
+    print_filtered_thread_ids (&filter_params);
+}
 
 /* Implementation of the "taas" command.  */
 
@@ -3393,6 +3772,7 @@ void
 _initialize_thread ()
 {
   static struct cmd_list_element *thread_apply_list = NULL;
+  static struct cmd_list_element *thread_filter_list = nullptr;
   cmd_list_element *c;
 
   const auto info_threads_opts = make_info_threads_options_def_group (nullptr);
@@ -3478,6 +3858,45 @@ THREAD_APPLY_OPTION_HELP),
 	       thread_apply_all_lanes_help.c_str (),
 	       &thread_apply_list);
   set_cmd_completer_handle_brkchars (c, thread_apply_all_command_completer);
+
+#define THREAD_FILTER_OPTION_HELP "\
+Prints a list of thread ids from the selected range of threads,\n\
+which can be filtered using a location\".\n\
+\n\
+Options:\n\
+%OPTIONS%"
+
+  const auto thread_filter_opts
+    = make_thread_filter_options_def_group (nullptr, nullptr);
+
+  static std::string thread_filter_help = gdb::option::build_help (_("\
+Filter from a list of threads.\n\
+Usage: thread filter ID... [OPTION]\n\
+ID is a space-separated list of IDs, which can be filtered using a location\n\
+specified in OPTION.\n"
+THREAD_FILTER_OPTION_HELP),
+			       thread_filter_opts);
+
+  c = add_prefix_cmd ("filter", class_run, thread_filter_command,
+		      thread_filter_help.c_str (),
+		      &thread_filter_list, 1,
+		      &thread_cmd_list);
+  set_cmd_completer_handle_brkchars (c, thread_filter_command_completer);
+
+  const auto thread_filter_all_opts
+    = make_thread_filter_all_options_def_group (nullptr, nullptr, nullptr);
+
+  static std::string thread_filter_all_help = gdb::option::build_help (_("\
+Filter from all threads.\n\
+\n\
+Usage: thread filter all [OPTION]\n"
+THREAD_FILTER_OPTION_HELP),
+			       thread_filter_all_opts);
+
+  c = add_cmd ("all", class_run, thread_filter_all_command,
+	       thread_filter_all_help.c_str (),
+	       &thread_filter_list);
+  set_cmd_completer_handle_brkchars (c, thread_filter_all_command_completer);
 
   c = add_com ("taas", class_run, taas_command, _("\
 Apply a command to all threads (ignoring errors and empty output).\n\

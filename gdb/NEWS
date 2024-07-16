@@ -82,6 +82,16 @@ show print shadowed
   the option is 'off' shadowed variables will be omitted in output.  The
   default is to print shadowed variables.
 
+thread filter thread-list|all [-ascending]
+			      [-q/-s/-c]
+			      [-location loc]
+  Print a list of thread ids from the selected range of threads.  To optionally
+  filter from the selected list of threads the option "location" can be used.
+  For the "all" range selection option, by default the list of filtered thread
+  ids is printed in descending order.  To print in ascending order the
+  "-ascending" option can be used.  The "-q/-s/-c" optional flags are used to
+  control the output.
+
 * Changed commands
 
 info threads [-gid] [-stopped] [ID]...

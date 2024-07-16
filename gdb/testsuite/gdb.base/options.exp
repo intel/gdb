@@ -30,6 +30,7 @@
 #  - tfaas
 #  - thread apply
 #  - taas
+#  - thread filter
 
 load_lib compile-support.exp
 load_lib completion-support.exp
@@ -537,6 +538,38 @@ proc_with_prefix test-info-threads {} {
 
     # "ID" isn't really something the user can type.
     test_gdb_complete_none "info threads I"
+}
+
+# Basic option-machinery + "thread filter" command integration tests.
+proc_with_prefix test-thread-filter {} {
+    gdb_test "thread filter 1-2147483648" "Out of bounds value: 1-2147483648"
+
+    foreach cmd {
+	"thread filter all"
+	"thread filter 1"
+    } {
+	test_gdb_completion_offers_commands "$cmd "
+
+	gdb_test "$cmd -" "Ambiguous option at: -"
+
+	if {$cmd != "thread filter 1"} {
+	    test_gdb_complete_multiple "$cmd " "-" "" {
+		"-ascending"
+		"-c"
+		"-location"
+		"-q"
+		"-s"
+	    }
+	} else {
+	    # "-ascending" only works with "all".
+	    test_gdb_complete_multiple "$cmd " "-" "" {
+		"-c"
+		"-location"
+		"-q"
+		"-s"
+	    }
+	}
+    }
 }
 
 # Miscellaneous tests.
@@ -1182,6 +1215,9 @@ test-thread-apply
 
 # Basic "info threads" integration tests.
 test-info-threads
+
+# Basic "thread filter" integration tests.
+test-thread-filter
 
 # There was a bug where the "metasyntactic variable" was glued to the
 # option.

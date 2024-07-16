@@ -28,7 +28,7 @@ thread_function (void *arg)
 {
   int x = * (int *) arg;
 
-  printf ("Thread <%d> executing\n", x);
+  printf ("Thread <%d> executing\n", x); /* thread-filter-bp */
 
   return NULL;
 }

@@ -1,0 +1,105 @@
+# Copyright (C) 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests the "thread filter" command.
+
+standard_testfile "multi-create.c"
+
+if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
+    executable {debug}] != "" } {
+    return -1
+}
+
+proc get_stopped_threads {match_text} {
+    set stopped_threads {}
+    set fill "\[^\r\n\]+"
+
+    gdb_test_multiple "info threads -stopped" "stopped threads: $match_text" {
+	-re "\r\n. ($::decimal)${fill} $match_text" {
+	    lappend stopped_threads $expect_out(1,string)
+	    exp_continue
+	}
+	-re -wrap "" {
+	    pass $gdb_test_name
+	}
+    }
+
+    return $stopped_threads
+}
+
+proc test_thread_filter {thr_range {location ""} {m_list ""} \
+			 {expected_len ""}} {
+    set filtered_tid_list {}
+    set fill "\[^\r\n\]+"
+
+    if {$location ne ""} { set location "-location $location" }
+
+    set cmd "thread filter $thr_range $location"
+    gdb_test_multiple $cmd $cmd {
+	-re "^warning: Unknown thread $::decimal\r\n" {
+	    exp_continue
+	}
+	-re "Filtered Threads.*\\\"(${fill})\\\"\r\n" {
+	    set filtered_tid_list [split $expect_out(1,string) ","]
+	    exp_continue
+	}
+	-re "^No symbol.*in current context." {
+	    if {[lsearch -exact $thr_range "-c"] == -1} {
+		return
+	    }
+	    exp_continue
+	}
+	-re -wrap "" {
+	}
+    }
+
+    if {$expected_len != ""} {
+	set filtered_len [llength [split $filtered_tid_list " "]]
+	gdb_assert {$filtered_len == $expected_len} \
+	    "Filtered list length matches the expected length: $expected_len"
+    } else {
+	gdb_assert {[lsearch -exact $filtered_tid_list $m_list] == 0} \
+	    "Filtered list matches to $cmd"
+    }
+}
+
+clean_restart $::binfile
+runto_main
+
+set linenum [gdb_get_line_number "thread-filter-bp"]
+set bp_location $srcfile:$linenum
+gdb_breakpoint $bp_location
+gdb_continue_to_breakpoint "$srcfile:$linenum"
+
+set all_stopped_threads [get_stopped_threads ""]
+set stopped_threads [get_stopped_threads "thread_function"]
+set total_stopped [llength $stopped_threads]
+
+set test_list_a [lsort -increasing [split $stopped_threads " "]]
+set test_list_d [lsort -decreasing [split $stopped_threads " "]]
+
+test_thread_filter "all" "" "" [llength [split $all_stopped_threads " "]]
+test_thread_filter "all -ascending" $bp_location $test_list_a
+test_thread_filter "all" $bp_location $test_list_d
+test_thread_filter "1 2 3 4 5 6" $bp_location $test_list_a
+test_thread_filter "1-6" $bp_location $test_list_a
+test_thread_filter "all" "$srcfile" $test_list_d
+test_thread_filter "all" "$linenum" $test_list_d
+test_thread_filter "all" "${srcfile}:" $test_list_d
+test_thread_filter "all" ":$linenum" $test_list_d
+gdb_test "thread filter all -location ${srcfile}:$linenum:$linenum" \
+    "Line number for thread filter command should be an integer value"
+gdb_test "thread filter all -location ${srcfile}:${linenum}999999999999999999" \
+    "out of integer range.*"

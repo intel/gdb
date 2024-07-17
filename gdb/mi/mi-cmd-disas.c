@@ -249,7 +249,7 @@ mi_cmd_disassemble (const char *command, const char *const *argv, int argc)
       s = lookup_symtab (current_program_space, file_string);
       if (s == NULL)
 	error (_("-data-disassemble: Invalid filename."));
-      if (!find_line_pc (s, line_num, &start))
+      if (!find_line_first_pc (s, line_num, &start))
 	error (_("-data-disassemble: Invalid line number"));
       if (find_pc_partial_function (start, NULL, &low, &high) == 0)
 	error (_("-data-disassemble: "

@@ -9764,7 +9764,7 @@ resolve_sal_pc (struct symtab_and_line *sal)
 
   if (sal->pc == 0 && sal->symtab != NULL)
     {
-      if (!find_line_pc (sal->symtab, sal->line, &pc))
+      if (!find_line_first_pc (sal->symtab, sal->line, &pc))
 	error (_("No line %d in file \"%s\"."),
 	       sal->line, symtab_to_filename_for_display (sal->symtab));
       sal->pc = pc;
@@ -13177,7 +13177,7 @@ update_static_tracepoint (tracepoint *tp, struct symtab_and_line sal)
 
   pc = sal.pc;
   if (sal.line)
-    find_line_pc (sal.symtab, sal.line, &pc);
+    find_line_first_pc (sal.symtab, sal.line, &pc);
 
   if (target_static_tracepoint_marker_at (pc, &marker))
     {

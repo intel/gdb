@@ -401,7 +401,7 @@ tui_get_begin_asm_address (struct gdbarch **gdbarch_p, CORE_ADDR *addr_p)
 	  struct symtab_and_line sal = get_current_source_symtab_and_line ();
 
 	  if (sal.symtab != nullptr)
-	    find_line_pc (sal.symtab, sal.line, &addr);
+	    find_line_first_pc (sal.symtab, sal.line, &addr);
 	}
 
       if (addr == 0)

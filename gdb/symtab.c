@@ -3544,12 +3544,10 @@ find_pcs_for_symtab_line (struct symtab *symtab, int line,
 }
 
 
-/* Set the PC value for a given source file and line number and return true.
-   Returns false for invalid line number (and sets the PC to 0).
-   The source file is specified with a struct symtab.  */
+/* See symtab.h.  */
 
 bool
-find_line_pc (struct symtab *symtab, int line, CORE_ADDR *pc)
+find_line_first_pc (symtab *symtab, int line, CORE_ADDR *pc)
 {
   const struct linetable *l;
   int ind;
@@ -3583,7 +3581,7 @@ find_line_pc_range (struct symtab_and_line sal, CORE_ADDR *startptr,
   struct symtab_and_line found_sal;
 
   startaddr = sal.pc;
-  if (startaddr == 0 && !find_line_pc (sal.symtab, sal.line, &startaddr))
+  if (startaddr == 0 && !find_line_first_pc (sal.symtab, sal.line, &startaddr))
     return false;
 
   /* This whole function is based on address.  For example, if line 10 has

@@ -210,7 +210,7 @@ tui_update_source_windows_with_line (struct symtab_and_line sal)
   struct gdbarch *gdbarch = nullptr;
   if (sal.symtab != nullptr)
     {
-      find_line_pc (sal.symtab, sal.line, &sal.pc);
+      find_line_first_pc (sal.symtab, sal.line, &sal.pc);
       gdbarch = sal.symtab->compunit ()->objfile ()->arch ();
     }
 
@@ -466,7 +466,7 @@ tui_source_window_base::rerender ()
 
       struct symtab *s = find_pc_line_symtab (get_frame_pc (frame));
       if (this != TUI_SRC_WIN)
-	find_line_pc (s, cursal.line, &cursal.pc);
+	find_line_first_pc (s, cursal.line, &cursal.pc);
 
       /* This centering code is copied from tui_source_window::maybe_update.
 	 It would be nice to do centering more often, and do it in just one

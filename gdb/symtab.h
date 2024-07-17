@@ -2439,9 +2439,13 @@ extern std::optional<CORE_ADDR> find_line_range_start (CORE_ADDR pc);
 
 extern struct symtab *find_pc_line_symtab (CORE_ADDR);
 
-/* Given a symtab and line number, return the pc there.  */
+/* Find the first PC value for a given source file and line number and
+   return true.  The LINE number might be associated with more than one
+   PC but this function only returns the first one it can identify.
+   Returns false for invalid LINE number (and sets the PC to 0).
+   The source file is specified with a struct symtab.  */
 
-extern bool find_line_pc (struct symtab *, int, CORE_ADDR *);
+bool find_line_first_pc (symtab *symtab, int line, CORE_ADDR *pc);
 
 extern bool find_line_pc_range (struct symtab_and_line, CORE_ADDR *,
 				CORE_ADDR *);

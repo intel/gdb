@@ -254,6 +254,7 @@ foreach device $sycl_device_list {
 	if {[catch {exec $binfile gpu Intel level_zero}]} {
 	    set error_status [lindex $errorCode 2]
 	}
+	setup_kfail "JIRA GSD/9524" "*-*-*"
 	gdb_assert {"$error_status" == "SIGABRT"} "trigger a pagefault"
 
 	# Copy error captures to local folder.

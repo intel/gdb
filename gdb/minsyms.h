@@ -236,6 +236,18 @@ extern struct bound_minimal_symbol lookup_minimal_symbol_linkage
   (const char *name, struct objfile *objf)
   ATTRIBUTE_NONNULL (1) ATTRIBUTE_NONNULL (2);
 
+/* Look through the minimal symbols in OBJF (and its separate debug
+   objfiles) for a global (not file-local) minsym whose linkage name
+   is NAME.  This is somewhat similar to lookup_minimal_symbol_linkage,
+   only static version of mst_data and mst_bss are also considered, and
+   a non-NULL objfile is not accepted.  Returns a bound minimal symbol
+   that matches, or an "empty" bound minimal symbol otherwise.  */
+
+extern bound_minimal_symbol
+lookup_minimal_symbol_linkage_data
+  (const char *name, struct objfile *objf)
+  ATTRIBUTE_NONNULL (1) ATTRIBUTE_NONNULL (2);
+
 /* A variant of lookup_minimal_symbol_linkage that iterates over all
    objfiles.  If ONLY_MAIN is true, then only an objfile with
    OBJF_MAINLINE will be considered.  */

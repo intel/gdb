@@ -915,7 +915,8 @@ jit_breakpoint_re_set_internal (struct gdbarch *gdbarch, program_space *pspace)
 	}
 
       bound_minimal_symbol desc_symbol
-	= lookup_minimal_symbol_linkage (jit_descriptor_name, the_objfile);
+	= lookup_minimal_symbol_linkage_data (jit_descriptor_name,
+					      the_objfile);
       if (desc_symbol.minsym == NULL
 	  || desc_symbol.value_address () == 0)
 	{

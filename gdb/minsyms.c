@@ -569,7 +569,8 @@ iterate_over_minimal_symbols
 /* See minsyms.h.  */
 
 bound_minimal_symbol
-lookup_minimal_symbol_linkage (const char *name, struct objfile *objf)
+lookup_minimal_symbol_linkage (const char *name, struct objfile *objf,
+			       bool match_static_type)
 {
   unsigned int hash = msymbol_hash (name) % MINIMAL_SYMBOL_HASH_SIZE;
 
@@ -581,7 +582,10 @@ lookup_minimal_symbol_linkage (const char *name, struct objfile *objf)
 	{
 	  if (strcmp (msymbol->linkage_name (), name) == 0
 	      && (msymbol->type () == mst_data
-		  || msymbol->type () == mst_bss))
+		  || msymbol->type () == mst_bss
+		  || (match_static_type
+		      && (msymbol->type () == mst_file_data
+			  || msymbol->type () == mst_file_bss))))
 	    return {msymbol, objfile};
 	}
     }
@@ -603,7 +607,8 @@ lookup_minimal_symbol_linkage (const char *name, bool only_main)
 	continue;
 
       bound_minimal_symbol minsym = lookup_minimal_symbol_linkage (name,
-								   objfile);
+								   objfile,
+								   false);
       if (minsym.minsym != nullptr)
 	return minsym;
     }

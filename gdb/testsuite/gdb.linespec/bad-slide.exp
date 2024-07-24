@@ -1,0 +1,54 @@
+# Copyright (C) 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test the breakpoint rejection for breakpoints between functions.
+
+standard_testfile
+
+if { [prepare_for_testing "failed to prepare" $testfile $srcfile \
+	  { debug }] } {
+    return -1
+}
+
+if {![runto_main]} {
+    return -1
+}
+
+gdb_test_no_output "set breakpoint pending off"
+
+set bp_line [gdb_get_line_number "break here one"]
+gdb_test "break $bp_line" \
+    ".*No compiled code for line $bp_line in the current file."
+
+set bp_line [gdb_get_line_number "break here two"]
+gdb_test "break $bp_line" \
+    ".*No compiled code for line $bp_line in the current file."
+
+set bp_line [gdb_get_line_number "func line two"]
+gdb_test "break $bp_line" \
+    ".*Breakpoint $decimal at .*$srcfile,.*line $bp_line.*"
+
+set bp_line [gdb_get_line_number "break here three"]
+gdb_test "break $bp_line" \
+    ".*No compiled code for line $bp_line in the current file."
+
+set bp_line [gdb_get_line_number "func line three"]
+set bp_line_prop [expr $bp_line + 1]
+gdb_test "break $bp_line" \
+    ".*Breakpoint $decimal at .*$srcfile,.*line $bp_line_prop.*"
+
+set bp_line [gdb_get_line_number "func body three"]
+gdb_test "break $bp_line" \
+    ".*Breakpoint $decimal at .*$srcfile,.*line $bp_line.*"

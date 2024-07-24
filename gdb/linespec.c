@@ -2192,13 +2192,48 @@ create_sals_line_offset (struct linespec_state *self,
 	       on line 11 and 12 will not result on a breakpoint on main,
 	       but a breakpoint on line 13 will.  A breakpoint requested
 	       on the empty line 16 will also result in a breakpoint in
-	       main, at line 17.  */
+	       main, at line 17.
+
+	       Also consider that there may be a separate line table entry
+	       for the same line at the prologue end.  Treat this the
+	       same as the entry PC.
+
+	       01
+	       02 int
+	       03 main () { { int i = 1; }
+	       04   return 0;
+	       05 }
+
+	       will generate linetable entries like this where line 3 has two
+	       entries because of the extra code block.  The first one is
+	       the entry pc, the second one is the end of the prologue.
+
+	       INDEX  LINE   REL-ADDRESS        UNREL-ADDRESS      IS-STMT P-END
+	       0      3      0x0000555555555130 0x0000000000001130 Y
+	       1      3      0x000055555555513b 0x000000000000113b Y       Y
+	       2      4      0x0000555555555142 0x0000000000001142 Y
+	       3      END    0x0000555555555146 0x0000000000001146 Y
+
+	       The second entry would still be considered a valid location,
+	       therefore this should also be skipped in the same way as
+	       the entry pc.  */
+
 	    if (!was_exact
 		&& sym != nullptr
 		&& sym->aclass () == LOC_BLOCK
-		&& sal->pc == sym->value_block ()->entry_pc ()
 		&& val.line < sym->line ())
-	      continue;
+	      {
+		std::optional<CORE_ADDR> prologue_end;
+
+		if (self->funfirstline)
+		  prologue_end = skip_prologue_using_sal (
+		    sym->arch (), sym->value_block ()->entry_pc ());
+
+		if (sal->pc == sym->value_block ()->entry_pc ()
+		    || (self->funfirstline && prologue_end.has_value ()
+			&& sal->pc == *prologue_end))
+		  continue;
+	      }
 
 	    if (self->funfirstline)
 	      skip_prologue_sal (sal);

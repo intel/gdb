@@ -157,6 +157,27 @@ private:
 		       gdb_byte *buff_write, int len);
 };
 
+/* The encoding for XE version enumerates follows this pattern, which is
+   aligned with the IGA encoding.  */
+
+#define XE_VERSION(MAJ, MIN) (((MAJ) << 24) | (MIN))
+
+/* Supported GDB GEN platforms.  */
+
+enum xe_version
+{
+  XE_INVALID = 0,
+  XE_HP = XE_VERSION (1, 1),
+  XE_HPG = XE_VERSION (1, 2),
+  XE_HPC = XE_VERSION (1, 4),
+};
+
+/* Helper functions to request and translate the device id/version.  */
+
+static xe_version get_xe_version (unsigned int device_id);
+static uint32_t get_device_id (inferior *inferior);
+static uint32_t get_device_id (gdbarch *gdbarch);
+
 /* The 'gdbarch_data' stuff specific for this architecture.  */
 
 struct intelgt_gdbarch_data

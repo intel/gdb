@@ -544,6 +544,14 @@ Value(
     invalid=False,
 )
 
+Value(
+    type="int",
+    name="ssp_regnum",
+    predefault="-1",
+    invalid=False,
+)
+
+
 Method(
     comment="""
 Convert stab register number (from `r' declaration) to a gdb REGNUM.
@@ -3060,23 +3068,47 @@ Method(
 Some targets support special hardware-assisted control-flow protection
 technologies.  For example, Intel's Control-flow Enforcement Technology (CET)
 provides a shadow stack and indirect branch tracking.
-To enable inferior calls the function shadow_stack_push has to be provided.
-The method get_shadow_stack_pointer has to be provided to enable displaced
-stepping.
 
-Push the address NEW_ADDR on the shadow stack and updates the shadow stack
-pointer.
+For GDB shadow stack support the following methods or values have to be
+provided:
+- get_shadow_stack_pointer for displaced stepping 
+- address_in_shadow_stack_memory_range and the value
+  shadow_stack_element_size_aligned for inferior calls.
+For inferior calls, the gdbarch value ssp_regnum has to be provided, too.
+To implement the subcommand 'bt shadow' all gdbarch methods and values
+listed above have to be provided.
+
+Return current shadow stack pointer, if possible.
 """,
-    type="void",
-    name="shadow_stack_push",
-    params=[("CORE_ADDR", "new_addr")],
-    predicate=True,
-)
-
-Method(
     type="std::optional<CORE_ADDR>",
     name="get_shadow_stack_pointer",
     params=[],
     predefault="default_get_shadow_stack_pointer",
     invalid=False,
+)
+
+Function(
+    comment="""
+Returns true if ADDR belongs to a shadow stack memory range.  If this is
+the case, assign the shadow stack memory range to RANGE
+[start_address, end_address).
+""",
+    type="bool",
+    name="address_in_shadow_stack_memory_range",
+    params=[
+	("CORE_ADDR", "ssp"),
+	("std::pair<CORE_ADDR, CORE_ADDR> *", "range")
+    ],
+    predicate=True
+)
+
+Value(
+    comment="""
+The number of bytes required to update the shadow stack pointer by one
+element.
+""",
+    type="int",
+    name="shadow_stack_element_size_aligned",
+    predefault="8",
+    invalid=False
 )

@@ -43,6 +43,7 @@
 #include "bfd-in2.h"
 #include <algorithm>
 #include "gdbsupport/scope-exit.h"
+#include "shadow-stack.h"
 #include <list>
 
 /* True if we are debugging inferior calls.  */
@@ -1437,8 +1438,7 @@ call_function_by_hand_dummy (struct value *function,
   /* Pushes the return address of the inferior (bp_addr) on the shadow stack
      and updates the shadow stack pointer.  As we don't execute a call
      instruction to start the inferior we need to handle this manually.  */
-  if (gdbarch_shadow_stack_push_p (gdbarch))
-    gdbarch_shadow_stack_push (gdbarch, bp_addr);
+  shadow_stack_push (gdbarch, bp_addr);
 
   /* Set up a frame ID for the dummy frame so we can pass it to
      set_momentary_breakpoint.  We need to give the breakpoint a frame

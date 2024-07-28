@@ -283,6 +283,9 @@ extern void set_gdbarch_ps_regnum (struct gdbarch *gdbarch, int ps_regnum);
 extern int gdbarch_fp0_regnum (struct gdbarch *gdbarch);
 extern void set_gdbarch_fp0_regnum (struct gdbarch *gdbarch, int fp0_regnum);
 
+extern int gdbarch_ssp_regnum (struct gdbarch *gdbarch);
+extern void set_gdbarch_ssp_regnum (struct gdbarch *gdbarch, int ssp_regnum);
+
 /* Convert stab register number (from `r' declaration) to a gdb REGNUM. */
 
 typedef int (gdbarch_stab_reg_to_regnum_ftype) (struct gdbarch *gdbarch, int stab_regnr);
@@ -1944,19 +1947,34 @@ extern void set_gdbarch_update_architecture (struct gdbarch *gdbarch, gdbarch_up
 /* Some targets support special hardware-assisted control-flow protection
    technologies.  For example, the Control-flow Enforcement Technology (CET)
    on x86 provides a shadow stack and indirect branch tracking.
-   To enable inferior calls the function shadow_stack_push has to be provided.
-   The method get_shadow_stack_pointer has to be provided to enable displaced
-   stepping.
 
-   Push the address NEW_ADDR on the shadow stack and updates the shadow stack
-   pointer. */
+   For GDB shadow stack support the following methods or values have to be
+   provided:
+   - get_shadow_stack_pointer for displaced stepping 
+   - address_in_shadow_stack_memory_range and the value
+     shadow_stack_element_size_aligned for inferior calls.
+   For inferior calls, the gdbarch value ssp_regnum has to be provided, too.
+   To implement the subcommand 'bt shadow' all gdbarch methods and values
+   listed above have to be provided.
 
-extern bool gdbarch_shadow_stack_push_p (struct gdbarch *gdbarch);
-
-typedef void (gdbarch_shadow_stack_push_ftype) (struct gdbarch *gdbarch, CORE_ADDR new_addr);
-extern void gdbarch_shadow_stack_push (struct gdbarch *gdbarch, CORE_ADDR new_addr);
-extern void set_gdbarch_shadow_stack_push (struct gdbarch *gdbarch, gdbarch_shadow_stack_push_ftype *shadow_stack_push);
+   Return current shadow stack pointer, if possible. */
 
 typedef std::optional<CORE_ADDR> (gdbarch_get_shadow_stack_pointer_ftype) (struct gdbarch *gdbarch);
 extern std::optional<CORE_ADDR> gdbarch_get_shadow_stack_pointer (struct gdbarch *gdbarch);
 extern void set_gdbarch_get_shadow_stack_pointer (struct gdbarch *gdbarch, gdbarch_get_shadow_stack_pointer_ftype *get_shadow_stack_pointer);
+
+/* Returns true if ADDR belongs to a shadow stack memory range.  If this is
+   the case, assign the shadow stack memory range to RANGE
+   [start_address, end_address). */
+
+extern bool gdbarch_address_in_shadow_stack_memory_range_p (struct gdbarch *gdbarch);
+
+typedef bool (gdbarch_address_in_shadow_stack_memory_range_ftype) (CORE_ADDR ssp, std::pair<CORE_ADDR, CORE_ADDR> *range);
+extern bool gdbarch_address_in_shadow_stack_memory_range (struct gdbarch *gdbarch, CORE_ADDR ssp, std::pair<CORE_ADDR, CORE_ADDR> *range);
+extern void set_gdbarch_address_in_shadow_stack_memory_range (struct gdbarch *gdbarch, gdbarch_address_in_shadow_stack_memory_range_ftype *address_in_shadow_stack_memory_range);
+
+/* The number of bytes required to update the shadow stack pointer by one
+   element. */
+
+extern int gdbarch_shadow_stack_element_size_aligned (struct gdbarch *gdbarch);
+extern void set_gdbarch_shadow_stack_element_size_aligned (struct gdbarch *gdbarch, int shadow_stack_element_size_aligned);

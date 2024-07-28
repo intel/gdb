@@ -44,8 +44,6 @@
 #include "expop.h"
 #include "inferior.h"
 #include "x86-tdep.h"
-#include "dwarf2/frame.h"
-#include "frame-unwind.h"
 
 /* The syscall's XML filename for i386.  */
 #define XML_SYSCALL_FILENAME_AMD64 "syscalls/amd64-linux.xml"
@@ -1984,113 +1982,6 @@ amd64_linux_get_shadow_stack_pointer (gdbarch *gdbarch)
   return ssp;
 }
 
-/* Return the number of bytes required to update the shadow stack pointer
-   by one element.  For x32 the shadow stack elements are still 64-bit
-   aligned.  Thus, gdbarch_addr_bit cannot be used to compute the new
-   stack pointer.  */
-
-static inline int
-amd64_linux_shadow_stack_element_size_aligned (gdbarch *gdbarch)
-{
-  const bfd_arch_info *binfo = gdbarch_bfd_arch_info (gdbarch);
-  return (binfo->bits_per_word / binfo->bits_per_byte);
-}
-
-
-/* If shadow stack is enabled, push the address NEW_ADDR on the shadow
-   stack and increment the shadow stack pointer accordingly.  */
-
-static void
-amd64_linux_shadow_stack_push (gdbarch *gdbarch, CORE_ADDR new_addr)
-{
-  std::optional<CORE_ADDR> ssp = amd64_linux_get_shadow_stack_pointer (gdbarch);
-  if (!ssp.has_value ())
-    return;
-
-  /* The shadow stack grows downwards.  To push addresses on the stack,
-     we need to decrement SSP.  */
-  const CORE_ADDR new_ssp
-    = *ssp - amd64_linux_shadow_stack_element_size_aligned (gdbarch);
-
-  /* Starting with v6.6., the Linux kernel supports CET shadow stack.
-     Using /proc/PID/smaps we can only check if NEW_SSP points to shadow
-     stack memory.  If it doesn't, we assume the stack is full.  */
-  std::pair<CORE_ADDR, CORE_ADDR> memrange;
-  if (!linux_address_in_shadow_stack_mem_range (new_ssp, &memrange))
-    error (_("No space left on the shadow stack."));
-
-  const int addr_size_byte = gdbarch_addr_bit (gdbarch) / 8;
-  const bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-
-  write_memory_unsigned_integer (new_ssp, addr_size_byte, byte_order,
-				 (ULONGEST) new_addr);
-
-  i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
-  regcache *regcache = get_thread_regcache (inferior_thread ());
-  regcache_raw_write_unsigned (regcache, tdep->ssp_regnum, new_ssp);
-}
-
-static value *
-amd64_linux_dwarf2_prev_ssp (const frame_info_ptr &this_frame,
-			     void **this_cache, int regnum)
-{
-  value *v = frame_unwind_got_register (this_frame, regnum, regnum);
-  gdb_assert (v != nullptr);
-
-  gdbarch *gdbarch = get_frame_arch (this_frame);
-
-  if (v->entirely_available () && !v->optimized_out ())
-    {
-      int size = register_size (gdbarch, regnum);
-      bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-      CORE_ADDR ssp = extract_unsigned_integer (v->contents_all ().data (),
-						size, byte_order);
-
-      /* Starting with v6.6., the Linux kernel supports CET shadow stack.
-	 Using /proc/PID/smaps we can only check if the current shadow
-	 stack pointer SSP points to shadow stack memory.  Only if this is
-	 the case a valid previous shadow stack pointer can be
-	 calculated.  */
-      std::pair<CORE_ADDR, CORE_ADDR> range;
-      if (linux_address_in_shadow_stack_mem_range (ssp, &range))
-	{
-	  /* The shadow stack grows downwards.  To compute the previous
-	     shadow stack pointer, we need to increment SSP.  */
-	  CORE_ADDR new_ssp
-	    = ssp + amd64_linux_shadow_stack_element_size_aligned (gdbarch);
-
-	  /* If NEW_SSP points to the end of or before (<=) the current
-	     shadow stack memory range we consider NEW_SSP as valid (but
-	     empty).  */
-	  if (new_ssp <= range.second)
-	    return frame_unwind_got_address (this_frame, regnum, new_ssp);
-	}
-    }
-
-  /* Return a value which is marked as unavailable in case we could not
-     calculate a valid previous shadow stack pointer.  */
-  value *retval
-    = value::allocate_register (get_next_frame_sentinel_okay (this_frame),
-				regnum, register_type (gdbarch, regnum));
-  retval->mark_bytes_unavailable (0, retval->type ()->length ());
-  return retval;
-}
-
-static void
-amd64_init_reg (gdbarch *gdbarch, int regnum, dwarf2_frame_state_reg *reg,
-		const frame_info_ptr &this_frame)
-{
-  if (regnum == gdbarch_pc_regnum (gdbarch))
-    reg->how = DWARF2_FRAME_REG_RA;
-  else if (regnum == gdbarch_sp_regnum (gdbarch))
-    reg->how = DWARF2_FRAME_REG_CFA;
-  else if (regnum == AMD64_PL3_SSP_REGNUM)
-    {
-      reg->how = DWARF2_FRAME_REG_FN;
-      reg->loc.fn = amd64_linux_dwarf2_prev_ssp;
-    }
-}
-
 static void
 amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch,
 			    int num_disp_step_buffers)
@@ -2145,10 +2036,8 @@ amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch,
 
   set_gdbarch_remove_non_addr_bits_wpt (gdbarch,
 					amd64_linux_remove_non_addr_bits_wpt);
-  set_gdbarch_shadow_stack_push (gdbarch, amd64_linux_shadow_stack_push);
   set_gdbarch_get_shadow_stack_pointer (gdbarch,
 					amd64_linux_get_shadow_stack_pointer);
-  dwarf2_frame_set_init_reg (gdbarch, amd64_init_reg);
 }
 
 static void

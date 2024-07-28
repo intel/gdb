@@ -2724,6 +2724,8 @@ linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
   set_gdbarch_infcall_mmap (gdbarch, linux_infcall_mmap);
   set_gdbarch_infcall_munmap (gdbarch, linux_infcall_munmap);
   set_gdbarch_get_siginfo_type (gdbarch, linux_get_siginfo_type);
+  set_gdbarch_address_in_shadow_stack_memory_range
+    (gdbarch, linux_address_in_shadow_stack_mem_range);
 }
 
 void _initialize_linux_tdep ();

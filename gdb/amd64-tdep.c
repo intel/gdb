@@ -50,6 +50,8 @@
 #include "osabi.h"
 #include "x86-tdep.h"
 #include "amd64-ravenscar-thread.h"
+#include "shadow-stack.h"
+#include "dwarf2/frame.h"
 
 /* Note that the AMD64 architecture was previously known as x86-64.
    The latter is (forever) engraved into the canonical system name as
@@ -3447,6 +3449,21 @@ amd64_in_indirect_branch_thunk (struct gdbarch *gdbarch, CORE_ADDR pc)
 				       AMD64_RIP_REGNUM);
 }
 
+static void
+amd64_init_reg (gdbarch *gdbarch, int regnum, dwarf2_frame_state_reg *reg,
+		const frame_info_ptr &this_frame)
+{
+  if (regnum == gdbarch_pc_regnum (gdbarch))
+    reg->how = DWARF2_FRAME_REG_RA;
+  else if (regnum == gdbarch_sp_regnum (gdbarch))
+    reg->how = DWARF2_FRAME_REG_CFA;
+  else if (regnum == AMD64_PL3_SSP_REGNUM)
+    {
+      reg->how = DWARF2_FRAME_REG_FN;
+      reg->loc.fn = dwarf2_prev_ssp;
+    }
+}
+
 void
 amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
 		const target_desc *default_tdesc)
@@ -3651,6 +3668,9 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
 
   set_gdbarch_in_indirect_branch_thunk (gdbarch,
 					amd64_in_indirect_branch_thunk);
+
+  set_gdbarch_ssp_regnum (gdbarch, tdep->ssp_regnum);
+  dwarf2_frame_set_init_reg (gdbarch, amd64_init_reg);
 
   register_amd64_ravenscar_ops (gdbarch);
 }

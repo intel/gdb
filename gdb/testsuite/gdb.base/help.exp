@@ -168,7 +168,11 @@ gdb_test "apropos An alias of command backtrace with arg 10" \
     "mybt10 -- An alias of command backtrace with arg 10\." \
     "apropos after documenting aliases showing mybt10 doc"
 
-gdb_test "help mybt" " alias mybt = backtrace \[\r\n\]+An alias of command backtrace without any args\." \
+set bt_alias_doc "alias mybt = backtrace \[\r\n\]+An alias of command backtrace without any args\."
+set bt_shadow_doc "\[\r\n\]+List of backtrace subcommands:\[\r\n\]+backtrace shadow -- Print backtrace of all shadow stack frames, or innermost COUNT frames."
+set bt_shadow_help_doc "\[\r\n\]+Type \"help backtrace\" followed by backtrace subcommand name for full documentation."
+
+gdb_test "help mybt" "$bt_alias_doc$bt_shadow_doc$bt_shadow_help_doc.*" \
     "help mybt after documenting aliases showing mybt doc"
 
 # Check pre-defined aliases cannot be documented.

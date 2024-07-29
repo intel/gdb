@@ -87,8 +87,14 @@ foreach device $sycl_device_list {
 	# Read and write to START_PC address.
 
 	# First we read and save the value.
+	if {[is_pvc $device]} {
+	    setup_kfail "JIRA GSD/6668" "*-*-*"
+	}
 	set old_value [get_integer_valueof "*(unsigned char*)$start_pc" -1]
 	verbose -log "Old value: $old_value"
+	if {[is_pvc $device]} {
+	    setup_kfail "JIRA GSD/6668" "*-*-*"
+	}
 	gdb_assert {$old_value != -1}
 	# Compute a new value which we will write.
 	if {$old_value == 255} {
@@ -99,12 +105,21 @@ foreach device $sycl_device_list {
 	verbose -log "New value: $new_value"
 
 	# Write the new value.
+	if {[is_pvc $device]} {
+	    setup_kfail "JIRA GSD/6668" "*-*-*"
+	}
 	gdb_test "p *(unsigned char*)$start_pc=$new_value" \
 	    "= $new_value$fill" "set new value"
 	# Check the value was written.
+	if {[is_pvc $device]} {
+	    setup_kfail "JIRA GSD/6668" "*-*-*"
+	}
 	gdb_test "p *(unsigned char*)$start_pc" "= $new_value$fill" \
 	    "new value is set"
 	# Reset to the old value.
+	if {[is_pvc $device]} {
+	    setup_kfail "JIRA GSD/6668" "*-*-*"
+	}
 	gdb_test_no_output "set *(unsigned char*)$start_pc=$old_value" \
 	    "reset to old value"
     }

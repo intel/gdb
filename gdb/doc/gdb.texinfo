@@ -9010,6 +9010,54 @@ Display an absolute filename.
 Show the current way to display filenames.
 @end table
 
+@node Shadow stack backtrace
+@subsection Shadow stack backtrace
+@value{GDBN} provides a subcommand of the backtrace command to print the
+shadow stack backtrace.
+
+@anchor{shadowstack-backtrace-command}
+@kindex backtrace shadow
+@kindex bt shadow @r{(@code{backtrace shadow})}
+To print a backtrace of the entire shadow stack, use the
+@code{backtrace shadow} command, or its alias @code{bt shadow}.  This
+command will print one line per element (so-called shadow stack frames) on
+the shadow stack.
+
+A shadow stack is supported, for instance, on x86 by Intel's Control-flow
+Enforcement Technology (@xref{CET}).
+
+@table @code
+@item backtrace shadow [@var{option}]@dots{} @dots{} [@var{count}]
+@itemx bt shadow [@var{option}]@dots{} @dots{} [@var{count}]
+Print the backtrace of all shadow stack frames
+@end table
+
+In contrast to the backtrace command,
+
+@itemize @bullet
+@item The options @samp{-past-main} or @samp{-past-entry} are not supported
+and all available shadow stack frames are printed by default
+@item Python frame filters are not supported
+@item frame local variables are not printed
+@item frame arguments are not printed and therefore the options
+@samp{-frame-arguments} and @samp{-raw-frame-arguments} are not supported.
+@item configuring the option @samp{-frame-info} or its corresponding
+global setting @ref{set print frame-info} to @code{location} is treated
+same as configuring it to @code{location-and-address}, as @value{GDBN}
+always prints the address for shadow stack frames.
+@end itemize
+
+This is how a shadow stack backtrace looks like on amd64:
+@smallexample
+@group
+#0  0x000000000040111f in call1 at amd64-shadow-stack.c:14
+#1  0x000000000040112f in main at amd64-shadow-stack.c:21
+#2  0x00007ffff7c3fe70 in __libc_start_call_main at ../sysdeps/nptl/libc_start_call_main.h:58
+#3  0x00007ffff7c3ff20 in __libc_start_main_impl at ../csu/libc-start.c:128
+#4  0x0000000000401045 in _start
+@end group
+@end smallexample
+
 @node Selection
 @section Selecting a Frame
 
@@ -27172,6 +27220,7 @@ registers
 
 @end itemize
 
+@node CET
 @subsubsection Intel @dfn{Control-flow Enforcement Technology} (CET).
 @cindex Intel Control-flow Enforcement Technology (CET).
 

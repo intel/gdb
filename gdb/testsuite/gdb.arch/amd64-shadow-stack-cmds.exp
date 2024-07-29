@@ -107,6 +107,94 @@ save_vars { ::env(GLIBC_TUNABLES) } {
 	gdb_test "print /x \$pl3_ssp" "= $ssp_call2" "check pl3_ssp of frame 0"
     }
 
+    set fill "\[^\r\n\]+"
+    # Build shadow stack frames to test the 'backtrace shadow' command.
+    set sspval_main [get_valueof "/z" "*(uint64_t*)$ssp_main" ""]
+    set sspval_call1 [get_valueof "/z" "*(uint64_t*)$ssp_call1" ""]
+    set sspval_call2 [get_valueof "/z" "*(uint64_t*)$ssp_call2" ""]
+    set frame0 "#0\[ \t\]*$sspval_call2 in call1$fill"
+    set frame1 "#1\[ \t\]*$sspval_call1 in main$fill"
+    set frame2 "#2\[ \t\]*$sspval_main$fill"
+
+    # We can only test that we print the first 3 frames correctly, as the
+    # shadow stack enablement might depend on the underlying OS.
+    gdb_test "bt shadow" \
+	[multi_line \
+	    "$frame0" \
+	    "$frame1" \
+	    "$frame2" \
+	    ".*" ] \
+	"test shadow stack backtrace until the bottom of the stack."
+
+    gdb_test "bt shadow 2" \
+	[multi_line \
+	    "$frame0" \
+	    "$frame1" \
+	    "\\(More shadow stack frames follow...\\)" ] \
+	"test shadow stack backtrace with a positive value for count"
+
+    # We can only test that we print a single frame, as the shadow stack
+    # enablement might depend on the underlying OS.
+    gdb_test "bt shadow -1" "#$decimal\[ \t\]*$hex$fill" \
+	"test shadow stack backtrace with a negative value for count"
+
+    # Test backtrace limit
+    gdb_test_no_output "set backtrace limit 2"
+    gdb_test "bt shadow" \
+	[multi_line \
+	    "$frame0" \
+	    "$frame1" ] \
+	"test shadow stack backtrace with limit"
+    gdb_test_no_output "set backtrace limit unlimited" "restore backtrace limit default"
+
+    # Test annotations for bt shadow.
+    save_vars { ::gdb_prompt } {
+
+	# Just like for other gdb tests testing annotations, note:
+	# When this prompt is in use the gdb_test procedure cannot be used
+	# because it assumes that the last char of the gdb_prompt is a
+	# white space.  This is not true with this annotated prompt.
+	# One alternative is to use gdb_test_multiple.
+	set ::gdb_prompt "\r\n\032\032pre-prompt\r\n$::gdb_prompt \r\n\032\032prompt\r\n"
+
+	gdb_test_multiple "set annotate 2" "set annotate 2" {
+	    -re "set annotate 2\r\n$gdb_prompt$" {
+		pass "annotation set at level 2"
+	    }
+	    -re ".*$gdb_prompt$" {
+		fail "annotation set at level 2"
+	    }
+	    timeout {
+		fail "annotation set at level 2 (timeout)"
+	    }
+	}
+
+	set inner_frame_re [multi_line \
+	    "shadow-stack-frame-address" \
+	    "$hex\r\n\032\032shadow-stack-frame-address-end" \
+	    "\ in \r\n\032\032shadow-stack-frame-function-name" \
+	    "$fill\r\n\032\032shadow-stack-frame-source-begin" \
+	    " at \r\n\032\032shadow-stack-frame-source-file\r\n$fill" \
+	    "\032\032shadow-stack-frame-source-file-end" \
+	    ":\r\n\032\032shadow-stack-frame-source-line\r\n$decimal" \
+	    "\032\032shadow-stack-frame-source-end\r\n\r\n\r\n"]
+
+	set re [multi_line \
+	    "shadow-stack-frame-begin 0 $hex" \
+	    "#0  \r\n\032\032$inner_frame_re\032\032shadow-stack-frame-end" \
+	    "\r\n\032\032shadow-stack-frame-begin 1 $hex" \
+	    "#1  \r\n\032\032$inner_frame_re\032\032shadow-stack-frame-end" \
+	    "\\(More shadow stack frames follow...\\)" \
+	    "$gdb_prompt$" ]
+
+	gdb_test_multiple "backtrace shadow 2" "backtrace shadow with annotations" {
+	    -re $re {
+		pass $gdb_test_name
+	    }
+	}
+    }
+    gdb_test "set annotate 0" ".*post-prompt.*" "set annotate 0"
+
     with_test_prefix "test return from current frame" {
 	gdb_test "return (int) 1" "#0.*call1.*" \
 	    "Test shadow stack return from current frame" \

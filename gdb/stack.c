@@ -50,6 +50,7 @@
 #include "cli/cli-utils.h"
 #include "objfiles.h"
 #include "annotate.h"
+#include "shadow-stack.h"
 
 #include "symfile.h"
 #include "extension.h"
@@ -87,7 +88,7 @@ const char print_frame_info_source_and_location[] = "source-and-location";
 const char print_frame_info_location_and_address[] = "location-and-address";
 const char print_frame_info_short_location[] = "short-location";
 
-static const char *const print_frame_info_choices[] =
+const char *const print_frame_info_choices[] =
 {
   print_frame_info_auto,
   print_frame_info_source_line,
@@ -963,11 +964,9 @@ do_gdb_disassembly (struct gdbarch *gdbarch,
     }
 }
 
-/* Converts the PRINT_FRAME_INFO choice to an optional enum print_what.
-   Value not present indicates to the caller to use default values
-   specific to the command being executed.  */
+/* See stack.h.  */
 
-static std::optional<enum print_what>
+std::optional<enum print_what>
 print_frame_info_to_print_what (const char *print_frame_info)
 {
   for (int i = 0; print_frame_info_choices[i] != NULL; i++)
@@ -1017,7 +1016,7 @@ get_user_print_what_frame_info (std::optional<enum print_what> *what)
 /* Return true if PRINT_WHAT is configured to print the location of a
    frame.  */
 
-static bool
+bool
 should_print_location (print_what print_what)
 {
   return (print_what == LOCATION
@@ -1026,14 +1025,9 @@ should_print_location (print_what print_what)
 	  || print_what == SHORT_LOCATION);
 }
 
-/* Print the source information for PC and SAL to UIOUT.  Based on the
-   user-defined configuration disassemble-next-line, display disassembly
-   of the next source line, in addition to displaying the source line
-   itself.  Print annotations describing source file and and line number
-   based on MID_STATEMENT information.  If SHOW_ADDRESS is true, print the
-   program counter PC including, if non-empty, PC_ADDRESS_FLAGS.  */
+/* See stack.h.  */
 
-static void
+void
 print_source (ui_out *uiout, gdbarch *gdbarch, CORE_ADDR pc,
 	      symtab_and_line sal, bool show_address, int mid_statement,
 	      const std::string &pc_address_flags)
@@ -1110,7 +1104,6 @@ do_print_frame_info (struct ui_out *uiout, const frame_print_options &fp_opts,
 		     int set_current_sal)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
-  ui_out *uiout = current_uiout;
 
   if (!current_uiout->is_mi_like_p ()
       && fp_opts.print_frame_info != print_frame_info_auto)
@@ -1213,7 +1206,8 @@ do_print_frame_info (struct ui_out *uiout, const frame_print_options &fp_opts,
     }
 
   if (should_print_location (print_what) || sal.symtab == nullptr)
-    print_frame (fp_opts, frame, print_level, print_what, print_args, sal);
+    print_frame (uiout, fp_opts, frame, print_level, print_what,
+		 print_args, sal);
 
   if (print_what == SRC_LINE || print_what == SRC_AND_LOC)
     {
@@ -1330,7 +1324,7 @@ get_last_displayed_sal ()
 
 /* Find the function name for the symbol SYM.  */
 
-static gdb::unique_xmalloc_ptr<char>
+gdb::unique_xmalloc_ptr<char>
 find_symbol_funname (const symbol *sym)
 {
   gdb::unique_xmalloc_ptr<char> funname;
@@ -1354,7 +1348,6 @@ find_symbol_funname (const symbol *sym)
 
   return funname;
 }
-
 
 /* Attempt to obtain the name, FUNLANG and optionally FUNCP of the function
    corresponding to FRAME.  */
@@ -1397,31 +1390,28 @@ find_frame_funname (const frame_info_ptr &frame, enum language *funlang,
   return funname;
 }
 
-/*  Print the library LIB to UIOUT for the printing of frame
-    information.  */
+/*  See stack.h.  */
 
-static void
-print_lib (ui_out *uiout, const char *lib)
+void
+print_lib (ui_out *uiout, const char *lib, bool shadowstack_frame)
 {
-  annotate_frame_where ();
+  annotate_frame_where (shadowstack_frame);
   uiout->wrap_hint (2);
   uiout->text (" from ");
   uiout->field_string ("from", lib, file_name_style.style ());
 }
 
-/*  Print the filenname of SAL to UIOUT for the printing of frame
-    information.  */
-
-static void
-print_filename (ui_out *uiout, symtab_and_line sal)
+void
+print_filename (ui_out *uiout, symtab_and_line sal, bool shadowstack_frame)
 {
-  annotate_frame_source_begin ();
+  annotate_frame_source_begin (shadowstack_frame);
   const char *filename_display;
 
   filename_display = symtab_to_filename_for_display (sal.symtab);
   uiout->wrap_hint (3);
   uiout->text (" at ");
-  annotate_frame_source_file ();
+  annotate_frame_source_file (shadowstack_frame);
+
   uiout->field_string ("file", filename_display, file_name_style.style ());
 
   if (uiout->is_mi_like_p ())
@@ -1430,21 +1420,21 @@ print_filename (ui_out *uiout, symtab_and_line sal)
       uiout->field_string ("fullname", fullname);
     }
 
-  annotate_frame_source_file_end ();
+  annotate_frame_source_file_end (shadowstack_frame);
   uiout->text (":");
-  annotate_frame_source_line ();
+  annotate_frame_source_line (shadowstack_frame);
   uiout->field_signed ("line", sal.line);
-  annotate_frame_source_end ();
+  annotate_frame_source_end (shadowstack_frame);
 }
 
-/*  If available, print FUNNAME to UIOUT for the printing of frame
-    information.  */
+/*  See stack.h.  */
 
-static void
+void
 print_funname (ui_out *uiout,
-	       gdb::unique_xmalloc_ptr<char> const &funname)
+	       gdb::unique_xmalloc_ptr<char> const &funname,
+	       bool shadowstack_frame)
 {
-  annotate_frame_function_name ();
+  annotate_frame_function_name (shadowstack_frame);
   string_file stb;
   gdb_puts (funname ? funname.get () : "??", &stb);
   uiout->field_stream ("func", stb, function_name_style.style ());
@@ -2266,6 +2256,23 @@ backtrace_command (const char *arg, int from_tty)
     = make_scoped_restore (&user_set_backtrace_options, set_bt_opts);
 
   backtrace_command_1 (fp_opts, bt_cmd_opts, arg, from_tty);
+}
+
+/* Completer for the "backtrace shadow" sub-command.  */
+
+static void
+backtrace_shadow_command_completer (struct cmd_list_element *ignore,
+				    completion_tracker &tracker,
+				    const char *text, const char */*word*/)
+{
+  const auto group
+    = make_backtrace_shadow_options_def_group (nullptr);
+  if (gdb::option::complete_options
+      (tracker, &text, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group))
+    return;
+
+  const char *word = advance_to_expression_complete_word_point (tracker, text);
+  expression_completer (ignore, tracker, text, word);
 }
 
 /* Completer for the "backtrace" command.  */
@@ -3427,6 +3434,9 @@ static struct cmd_list_element *select_frame_cmd_list = NULL;
 /* Commands with a prefix of `info frame'.  */
 static struct cmd_list_element *info_frame_cmd_list = NULL;
 
+/* Commands with a prefix of `backtrace' of `bt'.  */
+static cmd_list_element *bt_list = nullptr;
+
 void _initialize_stack ();
 void
 _initialize_stack ()
@@ -3618,9 +3628,30 @@ With a negative COUNT, print outermost -COUNT frames."),
 			       backtrace_opts);
 
   cmd_list_element *backtrace_cmd
-    = add_com ("backtrace", class_stack, backtrace_command,
-	       backtrace_help.c_str ());
+    = add_prefix_cmd ("backtrace", class_stack, backtrace_command,
+		      backtrace_help.c_str (), &bt_list, 1, &cmdlist);
   set_cmd_completer_handle_brkchars (backtrace_cmd, backtrace_command_completer);
+
+  const auto backtrace_shadow_opts
+    = make_backtrace_shadow_options_def_group (nullptr);
+
+  static std::string backtrace_shadow_help
+    = gdb::option::build_help (_("\
+Print backtrace of all shadow stack frames, or innermost COUNT frames.\n\
+Usage: backtrace shadow [OPTION]... [COUNT | -COUNT]\n\
+\n\
+Options:\n\
+%OPTIONS%\n\
+\n\
+With a negative COUNT, print outermost -COUNT elements."),
+			       backtrace_shadow_opts);
+
+  cmd_list_element *bt_shadow_cmd = add_cmd ("shadow", class_stack,
+					     backtrace_shadow_command,
+					     backtrace_shadow_help.c_str (),
+					     &bt_list);
+  set_cmd_completer_handle_brkchars
+    (bt_shadow_cmd, backtrace_shadow_command_completer);
 
   add_com_alias ("bt", backtrace_cmd, class_stack, 0);
 

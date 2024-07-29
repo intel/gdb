@@ -272,11 +272,16 @@ proc_with_prefix test-backtrace {} {
     clean_restart
 
     test_gdb_complete_unique "backtrace" "backtrace"
-    test_gdb_complete_none "backtrace "
+    test_gdb_complete_unique "backtrace shadow" "backtrace shadow"
+    test_gdb_complete_none "backtrace shadow "
 
     gdb_test "backtrace -" "Ambiguous option at: -"
     gdb_test "backtrace --" "No stack\\."
     gdb_test "backtrace -- -" "No stack\\."
+    gdb_test "backtrace shadow -" \
+	"Requires an argument. Valid arguments are auto, source-line.*\\."
+    gdb_test "backtrace shadow --" "No shadow stack\\."
+    gdb_test "backtrace shadow -- -" "No shadow stack\\."
 
     test_gdb_complete_multiple "backtrace " "-" "" {
 	"-entry-values"

@@ -85,4 +85,59 @@ void frame_apply_all_cmd_completer (struct cmd_list_element *ignore,
 				    completion_tracker &tracker,
 				    const char *text, const char */*word*/);
 
+/*  Print the filenname of SAL to UIOUT for the printing of frame
+    information.  In case SHADOWSTACK_FRAME is true, we annotate for a
+    shadow stack frame.  If it is false (default), we annotate for a
+    normal frame.  */
+
+void print_filename (ui_out *uiout, symtab_and_line sal,
+		     bool shadowstack_frame = false);
+
+/*  Print the library LIB to UIOUT for the printing of frame
+    information.  In case SHADOWSTACK_FRAME is true, we annotate for a
+    shadow stack frame.  If it is false (default), we annotate for a
+    normal frame.  */
+
+void print_lib (ui_out *uiout, const char *lib,
+		bool shadowstack_frame = false);
+
+/*  If available, print FUNNAME to UIOUT for the printing of frame
+    information.  In case SHADOWSTACK_FRAME is true, we annotate for a
+    shadow stack frame.  If it is false (default), we annotate for a
+    normal frame.  */
+
+void print_funname (ui_out *uiout,
+		    gdb::unique_xmalloc_ptr<char> const &funname,
+		    bool shadowstack_frame = false);
+
+/* Converts the PRINT_FRAME_INFO choice to an optional enum print_what.
+   Value not present indicates to the caller to use default values
+   specific to the command being executed.  */
+
+std::optional<print_what> print_frame_info_to_print_what
+  (const char *print_frame_info);
+
+/* Return true if PRINT_WHAT is configured to print the location of a
+   frame.  */
+
+bool should_print_location (print_what print_what);
+
+/* Print the source information for PC and SAL to UIOUT.  Based on the
+   user-defined configuration disassemble-next-line, display disassembly
+   of the next source line, in addition to displaying the source line
+   itself.  Print annotations describing source file and and line number
+   based on MID_STATEMENT information.  If SHOW_ADDRESS is true, print the
+   program counter PC including, if non-empty, PC_ADDRESS_FLAGS.  */
+
+void print_source (ui_out *uiout, gdbarch *gdbarch, CORE_ADDR pc,
+		   symtab_and_line sal, bool show_address,
+		   int mid_statement, const std::string &pc_address_flags);
+
+/* Find the function name for the symbol SYM.  */
+
+gdb::unique_xmalloc_ptr<char> find_symbol_funname (const symbol *sym);
+
+/* The possible choices of "set print frame-info".  */
+extern const char *const print_frame_info_choices[7];
+
 #endif /* #ifndef STACK_H */

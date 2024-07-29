@@ -35,4 +35,23 @@ void shadow_stack_push (gdbarch *gdbarch, const CORE_ADDR new_addr);
 value * dwarf2_prev_ssp (const frame_info_ptr &this_frame,
 			 void **this_cache, int regnum);
 
+/* Data for the printing of shadow stack frame information, exposed as
+   command options.  */
+
+struct shadow_stack_print_options
+{
+  const char *print_frame_info = print_frame_info_auto;
+};
+
+/* Implementation of "backtrace shadow" comand.  */
+
+void backtrace_shadow_command (const char *arg, int from_tty);
+
+/* Create an option_def_group array grouping all the "backtrace shadow"
+   options, with SSP_OPTS as contexts.  */
+
+std::array<gdb::option::option_def_group, 1>
+  make_backtrace_shadow_options_def_group
+    (shadow_stack_print_options *print_options);
+
 #endif /* #ifndef SHADOW_STACK_H */

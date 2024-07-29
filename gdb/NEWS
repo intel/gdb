@@ -54,6 +54,11 @@ $_kernel_instance_id
 
 * New commands
 
+backtrace shadow [option]... [count | -count]
+bt shadow [option]... [count | -count]
+  Print backtrace of all shadow stack frames, or innermost 'count' frames.
+  The command is a subcommand of the ordinary backtrace command.
+
 maintenance set/show gcore xml-target-description
   With this command you can control whether or not the generate-core-file
   command emits the NT_GDB_TDESC note.  This is mainly useful for testing

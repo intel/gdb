@@ -1444,7 +1444,7 @@ put_frame_register (const frame_info_ptr &next_frame, int regnum,
   CORE_ADDR addr;
   int size = register_size (gdbarch, regnum);
 
-  gdb_assert (buf.size () == size);
+  gdb_assert (buf.size () <= size);
 
   frame_register_unwind (next_frame, regnum, &optim, &unavail, &lval, &addr,
 			 &realnum, nullptr);

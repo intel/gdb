@@ -160,7 +160,14 @@ register_type (struct gdbarch *gdbarch, int regnum)
   struct regcache_descr *descr = regcache_descr (gdbarch);
 
   gdb_assert (regnum >= 0 && regnum < descr->nr_cooked_registers);
-  return descr->register_type[regnum];
+
+  /* Some architectures have variable length pseudo registers, whose type
+     needs to be re-evaluated at runtime.  */
+  type *t = descr->register_type[regnum];
+  if (gdbarch_num_regs (gdbarch) < regnum && t->is_dyn_register ())
+    t = gdbarch_register_type (gdbarch, regnum);
+
+  return t;
 }
 
 /* Utility functions returning useful register attributes stored in

@@ -517,10 +517,11 @@ run_command (const char *args, int from_tty)
 static void
 start_command (const char *args, int from_tty)
 {
-  /* Some languages such as Ada need to search inside the program
-     minimal symbols for the location where to put the temporary
-     breakpoint before starting.  */
-  if (!have_minimal_symbols ())
+  /* Abort the start command if `main` cannot be resolved, e.g., the
+     minimal / partial symbols are not available.  Some languages such
+     as Ada need to search inside the program minimal symbols for the
+     location where to put the temporary breakpoint before starting.  */
+  if (main_name () == nullptr)
     error (_("No symbol table loaded.  Use the \"file\" command."));
 
   /* Run the program until reaching the main procedure...  */

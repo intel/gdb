@@ -54,6 +54,10 @@ proc test {displaced-stepping target-non-stop} {
 
     for { set i 0 } { $i < 30 } { incr i } {
 	with_test_prefix "iter $i" {
+	    if {"${displaced-stepping}" == "off" && "${target-non-stop}" == "on"} {
+		kfail "JIRA IGDB/5099" "a GDB assertion is violoated"
+		break
+	    }
 	    if { [gdb_test "continue" "hit Breakpoint $::decimal, break_here .*"] != 0 } {
 		# Exit if there's a failure to avoid lengthy timeouts.
 		break

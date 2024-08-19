@@ -669,3 +669,9 @@ proc spawn_sycl_proc {executable device} {
     set spawn_id [remote_spawn target $command]
     return $spawn_id
 }
+
+proc send_continue_with_kfail {srcfile line} {
+    setup_kfail "JIRA IGDB/4986" "*-*-*"
+    gdb_continue_to_breakpoint "extra continue to $srcfile:$line" \
+	"*$srcfile:$line.*"
+}

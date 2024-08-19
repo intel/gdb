@@ -41,6 +41,7 @@ foreach device $sycl_device_list {
 	set fill "\[^\r\n\]*"
 	set inner_loc [gdb_get_line_number "work-item-location"]
 	gdb_breakpoint "$srcfile:$inner_loc"
+	send_continue_with_kfail "$srcfile" "$inner_loc"
 	gdb_continue_to_breakpoint "work-item-location" ".*$srcfile:$inner_loc.*"
 	gdb_test "backtrace 4" [multi_line \
 				"#0${fill}main${fill}operator\\(\\)${fill} at ${fill}" \

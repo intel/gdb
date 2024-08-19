@@ -398,6 +398,18 @@ proc test_list_invalid_args {} {
 	"first use of \"list +INVALID\""
     gdb_test "list +INVALID" "Function \"\\+INVALID\" not defined." \
 	"second use of \"list +INVALID\""
+
+    clean_restart ${binfile}
+    # Intentionally create huge number that likely covers integer size
+    # variations for all compilers.
+    set huge_pos_num [expr "(1 << (128 - 1)) - 1"]
+    gdb_test "list $huge_pos_num" \
+	"Line $huge_pos_num out of integer range\[^\r\n\]*." \
+	"first use of \"list INT_MAX\""
+    set huge_neg_num [expr "-(1 << (128 - 1)) - 1"]
+    gdb_test "list $huge_neg_num" \
+	"Line $huge_neg_num out of integer range\[^\r\n\]*." \
+	"first use of \"list INT_MIN\""
 }
 
 proc test_list_current_location {} {

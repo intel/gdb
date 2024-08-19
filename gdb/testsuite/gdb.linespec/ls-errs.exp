@@ -269,6 +269,18 @@ proc do_test {lang} {
     # Explicit linespec-specific tests
     test_break "-source $srcfile" source_incomplete
     test_break "-source $srcfile main" source_incomplete
+
+    # Integer overflow: Intentionally create huge number that likely covers
+    # integer size variations for all compilers.
+    # NOTE: the test_break procedure does not allow dynamic numbers but
+    # the integer output of the command in the overflow case is
+    # depending on the compiler with which GDB was built.
+    set huge_pos_num [expr "(1 << (128 - 1)) - 1"]
+    gdb_test "break $huge_pos_num" \
+	"Line $huge_pos_num out of integer range\[^\r\n\]*."
+    set huge_neg_num [expr "-(1 << (128 - 1)) - 1"]
+    gdb_test "break $huge_neg_num" \
+	"Line $huge_neg_num out of integer range\[^\r\n\]*."
 }
 
 foreach_with_prefix lang {"C" "C++"} {

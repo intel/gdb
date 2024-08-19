@@ -114,10 +114,17 @@ proc test_listsize {} {
 	gdb_test "list 10" "1\[ \t\]+#include \"list0.h\".*\r\n${last_line_re}" "list line 10 with listsize 100"
     }
 
-    # Try listsize of 0 which is special, and means unlimited.
+    # Try listsize of 0 which is special, and means unlimited.  GDB tries to
+    # center the listing around the given line.  When linesize is unlimited
+    # we always end up at the beginning of the file for any linenumber.
 
     set_listsize 0
-    gdb_test "list 1" "1\[ \t\]+#include .*\r\n${last_line_re}" "list line 1 with unlimited listsize"
+    foreach line {1 5 15 5000} {
+	set line_msg "$line with unlimited listsize"
+	gdb_test "list $line" "1\[ \t\]+#include .*\r\n${last_line_re}" "list $line_msg"
+	gdb_test "list -" "Already at the start of\[^\r\n\]*" "list line - after list $line_msg"
+	gdb_test "list +" "End of the file was already reached\[^\r\n\]*" "list line + after list $line_msg"
+    }
 }
 
 #

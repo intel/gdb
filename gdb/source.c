@@ -124,7 +124,7 @@ static const registry<program_space>::key<current_source_location>
    and friends should be rewritten to count characters and see where
    things are wrapping, but that would be a fair amount of work.  */
 
-static int lines_to_list = 10;
+static unsigned int lines_to_list = 10;
 static void
 show_lines_to_list (struct ui_file *file, int from_tty,
 		    struct cmd_list_element *c, const char *value)
@@ -215,7 +215,7 @@ clear_lines_listed_range (void)
 int
 get_lines_to_list (void)
 {
-  return lines_to_list;
+  return (lines_to_list == UINT_MAX) ? INT_MAX : lines_to_list;
 }
 
 /* A helper to return the current source location object for PSPACE,
@@ -1669,7 +1669,8 @@ search_command_helper (const char *regex, int from_tty, bool forward)
 	  /* Match!  */
 	  print_source_lines (loc->symtab (), line, line + 1, 0);
 	  set_internalvar_integer (lookup_internalvar ("_"), line);
-	  loc->set (loc->symtab (), std::max (line - lines_to_list / 2, 1));
+	  loc->set (loc->symtab (),
+		    std::max (line - get_lines_to_list () / 2, 1));
 	  return;
 	}
 
@@ -1963,7 +1964,7 @@ Search backward for regular expression (see regex(3)) from last line listed.\n\
 The matching line number is also stored as the value of \"$_\"."));
   add_com_alias ("rev", reverse_search_cmd, class_files, 1);
 
-  add_setshow_integer_cmd ("listsize", class_support, &lines_to_list, _("\
+  add_setshow_uinteger_cmd ("listsize", class_support, &lines_to_list, _("\
 Set number of source lines gdb will list by default."), _("\
 Show number of source lines gdb will list by default."), _("\
 Use this to choose how many source lines the \"list\" displays (unless\n\

@@ -46,6 +46,7 @@ foreach device $sycl_device_list {
 
 	# Access the data element through work item index.
 	# It does not matter which thread reported the breakpoint hit.
+	setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
 	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
 	    setup_kfail "JIRA XDEPS/3982" "*-*-*"
 	}

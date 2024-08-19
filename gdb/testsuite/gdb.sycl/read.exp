@@ -52,8 +52,11 @@ foreach device $sycl_device_list {
 	gdb_test "ptype four" "type = int"
 	gdb_test "ptype fourteen" "type = int"
 
+	setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
 	gdb_test "print numbers\[0\]" "= 7"
+	setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
 	gdb_test "print numbers\[1\]" "= 8"
+	setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
 	gdb_test "print numbers\[2\]" "= 9"
     }
 }

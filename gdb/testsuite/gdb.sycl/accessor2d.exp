@@ -42,8 +42,11 @@ foreach device $sycl_device_list {
 	gdb_breakpoint $line {temporary}
 	gdb_continue_to_breakpoint "2d" ".*$srcfile:$line.*"
 
+	setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
 	gdb_test "ptype input\[id\]" "type = float" "2D element type"
+	setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
 	gdb_test "print value == input\[id\]" "true" "2D access via id<2>"
+	setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
 	gdb_test_exact "print input\[0\]" \
 	    "Cannot resolve function operator\[\] to any overloaded instance" \
 	    "reject 2D access via size_t"

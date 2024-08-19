@@ -9196,7 +9196,7 @@ proc get_local_valueof { exp default {test ""} } {
 # TEST is the test message to use.  It can be omitted, in which case
 # a test message is built from EXP.
 
-proc get_integer_valueof { exp default {test ""} } {
+proc get_integer_valueof { exp default {test ""} {known_fail ""}} {
     global gdb_prompt
 
     if {$test == ""} {
@@ -9204,6 +9204,7 @@ proc get_integer_valueof { exp default {test ""} } {
     }
 
     set val ${default}
+    if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
     gdb_test_multiple "print /d ${exp}" "$test" {
 	-re -wrap "^\\$\[0-9\]* = (\[-\]*\[0-9\]*).*" {
 	    set val $expect_out(1,string)
@@ -9221,7 +9222,7 @@ proc get_integer_valueof { exp default {test ""} } {
 # TEST is the test message to use.  It can be omitted, in which case
 # a test message is built from EXP.
 
-proc get_hexadecimal_valueof { exp default {test ""} } {
+proc get_hexadecimal_valueof { exp default {test ""} {known_fail ""}} {
     global gdb_prompt
 
     if {$test == ""} {
@@ -9229,6 +9230,7 @@ proc get_hexadecimal_valueof { exp default {test ""} } {
     }
 
     set val ${default}
+    if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
     gdb_test_multiple "print /x ${exp}" $test {
 	-re "\\$\[0-9\]* = (0x\[0-9a-zA-Z\]+).*$gdb_prompt $" {
 	    set val $expect_out(1,string)

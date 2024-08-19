@@ -39,9 +39,12 @@ proc test_bp_1 {device} {
     # Call operator() explicitly to work around known limitations.
     set v1 [get_valueof "" "pgid.operator() (wi)" "NONE"]
     set v2 [get_valueof "" "gid" "NONE"]
+    setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
     gdb_assert {$v1 eq $v2} "pgid.operator() (wi) == gid"
 
+    setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
     gdb_test_expr_eq "ain\[gid\]" "in"
+    setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
     gdb_test_expr_eq "acs\[lid\].c" "cs"
 
     # LCS should be a reference here, as the lambda capture is by reference.
@@ -57,18 +60,22 @@ proc test_bp_2 {device {lane 0} } {
     # Call operator() explicitly to work around known limitations.
     set v1 [get_valueof "" "pgid.operator() (wi)" "NONE"]
     set v2 [get_valueof "" "gid" "NONE"]
+    setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
     gdb_assert {$v1 eq $v2} "pgid.operator() (wi) == gid"
 
+    setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
     if {[require_sycl_device $device "gpu" "Intel*"]} {
 	setup_kfail "JIRA IGDB/4643" "*-*-*"
     }
     set v1 [get_valueof "" "atmp\[gid\].a" "NONE"]
     set v2 [get_valueof "" "in" "NONE"]
+    setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
     if {[require_sycl_device $device "gpu" "Intel*"]} {
 	setup_kfail "JIRA IGDB/4643" "*-*-*"
     }
     gdb_assert {$v1 eq $v2} "atmp\[gid\].a == in"
 
+    setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
     gdb_test_expr_eq "aout\[gid\]" "out"
 
     # LCS should be a reference here, as the lambda capture is by reference.

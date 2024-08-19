@@ -1688,8 +1688,15 @@ linespec_parse_line_offset (const char *string)
   if (*string != '\0' && !isdigit (*string))
     error (_("malformed line offset: \"%s\""), start);
 
-  /* Right now, we only allow base 10 for offsets.  */
-  line_offset.offset = atoi (string);
+  /* Right now, we only allow base 10 for offsets.  We also
+     don't allow anything outside of integer range because
+     that could have a sign mismatch.  */
+  long l = atol (string);
+  if (l > long (INT_MAX) || l < long (INT_MIN))
+    error (_("Line %s out of integer range %d - %d."), start,
+	   INT_MIN, INT_MAX);
+
+  line_offset.offset = int (l);
   return line_offset;
 }
 

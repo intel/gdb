@@ -383,6 +383,25 @@ proc_with_prefix test_setshow_listsize {} {
 
     #test show listsize 100
     gdb_test "show listsize" "Number of source lines gdb will list by default is 100..*" "show listsize (100)"
+
+    #test set listsize with negative number
+    gdb_test "set listsize -1 " "integer -1 out of range" "set listsize -1"
+
+    #test set listsize to unlimited
+    gdb_test_no_output "set listsize unlimited" "set listsize unlimited"
+
+    #test show listsize unlimited
+    gdb_test "show listsize" \
+	"Number of source lines gdb will list by default is unlimited." \
+	"show listsize unlimited"
+
+    #test set listsize to 0 (should be same as unlimited)
+    gdb_test_no_output "set listsize 0" "set listsize 0"
+
+    #test show listsize 0
+    gdb_test "show listsize" \
+	"Number of source lines gdb will list by default is unlimited." \
+	"show listsize 0"
 }
 
 proc_with_prefix test_setshow_print_characters {} {

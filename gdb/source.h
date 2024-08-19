@@ -99,10 +99,13 @@ extern const char *symtab_to_filename_for_display (struct symtab *symtab);
    the current source line was changed.  */
 extern int get_first_line_listed (void);
 
-/* Return the default number of lines to print with commands like the
-   cli "list".  The caller of print_source_lines must use this to
-   calculate the end line and use it in the call to print_source_lines
-   as it does not automatically use this value.  */
+/* Return the number of lines to print with commands like the
+   cli "list".  This can be set by the "set listsize" command.  If
+   listsize is set to unlimited, get_lines_to_list () will return INT_MAX.
+   The caller of print_source_lines must use the returned value to
+   calculate the end line.  The caller uses the return value in a call to
+   print_source_lines as this function does not internally use this
+   value.  */
 extern int get_lines_to_list (void);
 
 /* Return the current source file for listing and next line to list.

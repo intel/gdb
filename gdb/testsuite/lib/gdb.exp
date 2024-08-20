@@ -6141,7 +6141,8 @@ proc gdb_compile {source dest type options} {
 	    if {[test_compiler_info {gcc-*}]} {
 		lappend new_options "additional_flags=-gcolumn-info"
 
-	    } elseif {[test_compiler_info {clang-*}]} {
+	    } elseif {[test_compiler_info {clang-*}]
+		      || [test_compiler_info "icx-*"]} {
 		lappend new_options "additional_flags=-gcolumn-info"
 
 	    } else {
@@ -6159,7 +6160,8 @@ proc gdb_compile {source dest type options} {
 		    lappend new_options "additional_flags=-gno-column-info"
 		}
 
-	    } elseif {[test_compiler_info {clang-*}]} {
+	    } elseif {[test_compiler_info {clang-*}]
+		      || [test_compiler_info "icx-*"]} {
 		lappend new_options "additional_flags=-gno-column-info"
 
 	    } else {

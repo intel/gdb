@@ -53,9 +53,11 @@ proc step_over_atomic {displaced_stepping device} {
 	    pass $gdb_test_name
 	}
     }
+    setup_kfail "JIRA IGDB/5117" "*-*-*"
     gdb_assert {$atomic_address} "found atomic address"
 
     gdb_breakpoint "*$atomic_address" {temporary}
+    setup_kfail "JIRA IGDB/5117" "*-*-*"
     gdb_continue_to_breakpoint "continue to bp at atomic instruction"
 
     gdb_test_no_output "set scheduler-locking step"
@@ -68,6 +70,7 @@ proc step_over_atomic {displaced_stepping device} {
 	set next_pc [format 0x%x [expr $curr_pc + 0x08]]
     }
 
+    setup_kfail "JIRA IGDB/5117" "*-*-*"
     gdb_test "nexti" "${hex}\[\\t\\s\].*\[\r\n\]+${decimal}${fill}" \
 	"step over atomic at $curr_pc"
 
@@ -83,6 +86,7 @@ proc step_over_atomic {displaced_stepping device} {
 	fail $pc_test_name
     }
 
+    setup_kfail "JIRA IGDB/5117" "*-*-*"
     # Make sure that the application computes correct results.
     gdb_test "continue" "Correct.*" "correct matrix multiplication"
 }

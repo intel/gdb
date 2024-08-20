@@ -73,9 +73,15 @@ proc run_tests {lang exe} {
 	gdb_test_no_output "set backtrace limit unlimited"
 
 	if { ${lang} == "c" || ${lang} == "c++" } {
+	    if {${lang} == "c++" && [require_openmp_device "GPU"]} {
+		setup_kfail "JIRA GSD/9774" "*-*-*"
+	    }
 	    gdb_test "set language ${lang}" \
 		"Warning: the current language does not match this frame."
 	} else {
+	    if {[require_openmp_device "GPU"]} {
+		setup_kfail "JIRA GSD/9774" "*-*-*"
+	    }
 	    gdb_test_no_output "set language ${lang}"
 	}
 
@@ -134,6 +140,9 @@ proc run_tests {lang exe} {
 		set obj_pattern " = \\( base_one = \\( num1 = 1, num2 = 2, num3 = 3 \\), base_two = \\( string = $hex 'Something in C\\+\\+\\\\000', val = 3.5 \\), xxx = 9, yyy = 10.5 \\)"
 	    } else {
 		set obj_pattern " = \\{<base_one> = \\{num1 = 1, num2 = 2, num3 = 3\\}, <base_two> = \\{string = $hex \"Something in C\\+\\+\", val = 3.5\\}, xxx = 9, yyy = 10.5\\}"
+	    }
+	    if {[require_openmp_device "GPU"]} {
+		setup_kfail "JIRA GSD/9775" "*-*-*"
 	    }
 	    gdb_test "print obj" "${obj_pattern}"
 	}

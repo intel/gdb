@@ -54,6 +54,28 @@ if {${OFFLOAD_IGNORE_PREPARE_FOR_TESTING} == "1"} {
     }
 }
 
+proc continue_with_segmentation_faults {breakpt_loc} {
+    gdb_test_multiple "continue" "breakpt" {
+	-re -wrap "Breakpoint .*$::srcfile2:$breakpt_loc.*" {
+	    pass $gdb_test_name
+	}
+	-re -wrap "signal SIGSEGV, Segmentation fault.*" {
+	    # The GPU runtime uses SIGSEGV to migrate data between the
+	    # device and host on some platforms.  Just pass the signal
+	    # back to the host.  Account no more than 10 instances of SIGSEGV.
+	    incr sigsegv_count
+	    kfail "JIRA IGDB/5120" \
+		"Segmention fault $sigsegv_count seen in GPU from Fortran to CPP BP hit."
+	    if {$sigsegv_count > 10} {
+		fail $gdb_test_name
+	    } else {
+		send_gdb "signal SIGSEGV\n"
+		exp_continue
+	    }
+	}
+    }
+}
+
 # Runs the test program and examins the stack.  LANG is a string, the
 # value to pass to GDB's 'set language ...' command.
 proc run_tests {lang exe} {
@@ -67,6 +89,7 @@ proc run_tests {lang exe} {
 	    return -1
 	}
 
+	set breakpt_loc [gdb_get_line_number "breakpt-line" "$::srcfile2"]
 	gdb_breakpoint "breakpt"
 	gdb_continue_to_breakpoint "breakpt"
 
@@ -122,7 +145,7 @@ proc run_tests {lang exe} {
 	}
 
 	with_test_prefix "cpp(host/target)->fortran(target)" {
-	    gdb_continue_to_breakpoint "breakpt"
+	    continue_with_segmentation_faults "$breakpt_loc"
 	    set 1i_args "obj=\[^\r\n\]+"
 	    gdb_test "bt -frame-arguments all" [multi_line \
 		    "#0\\s+breakpt \\(\\) at $to_end" \

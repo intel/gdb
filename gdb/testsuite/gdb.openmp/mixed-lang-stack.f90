@@ -96,7 +96,7 @@ end subroutine mixed_func_1f
 subroutine breakpt ()
   !$omp declare target(breakpt)
   INTEGER :: sum = 10, dummy = 0
-  dummy = dummy + (sum * 10)
+  dummy = dummy + (sum * 10) ! breakpt-line
 end subroutine breakpt
 
 ! This subroutine is called from the C++ code.

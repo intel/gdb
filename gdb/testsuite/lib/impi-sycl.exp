@@ -168,6 +168,9 @@ gdb_caching_proc impi_init_sycl_devices_list {} {
 
     set result 1
     gdb_test_multiple "continue" "continue" -prompt $::impi_gdb_prompt {
+	-re "hangup detected.*" {
+	    kfail "JIRA IGDB/5122" $gdb_test_name
+	}
 	-re "IMPI/SYCL: List of Target devices: \\\[(\[^\r\n\]*)\\\]\r\n" {
 	    set ::sycl_device_list [split $expect_out(1,string) ","]
 	    exp_continue
@@ -319,6 +322,10 @@ proc impi_get_gdb_output { cmd name } {
 
     set kfail_pattern "Process record does not support instruction 0xfae64 at.*"
     gdb_test_multiple $cmd $full_name -prompt $::impi_gdb_prompt {
+	-re "hangup detected.*" {
+	    kfail "JIRA IGDB/5122" $gdb_test_name
+	    return -1
+	}
 	-re "\($::impi_rank_id\($fill\)\)" {
 
 	    set prompt $expect_out(2,string)
@@ -659,6 +666,11 @@ proc impi_gdb_start { exe device ranks {ranks2attach "all"} {args ""} {impi_enab
     # tests on different hosts all using the same server, things can
     # get really slow.  Give gdb at least 3 minutes to start up.
     gdb_expect 360 {
+	-re "hangup detected.*" {
+	    kfail "JIRA IGDB/5122" "spawning the processes"
+	    unset ::gdb_spawn_id
+	    return -1
+	}
 	-re "(\[\r\n\]$::impi_gdb_prompt)" {
 	    verbose "MPIGDB initialized."
 	}

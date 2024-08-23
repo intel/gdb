@@ -36,8 +36,13 @@ proc test_bp_1 {device} {
     gdb_test "print wi" " = .*"
     gdb_test "print lid" " = .*"
 
+    set kfail ""
+    if {[is_pvc $device]} {
+	set kfail "JIRA IGDB/5126"
+    }
+
     # Call operator() explicitly to work around known limitations.
-    set v1 [get_valueof "" "pgid.operator() (wi)" "NONE"]
+    set v1 [get_valueof "" "pgid.operator() (wi)" "NONE" "" "$kfail"]
     set v2 [get_valueof "" "gid" "NONE"]
     setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
     gdb_assert {$v1 eq $v2} "pgid.operator() (wi) == gid"
@@ -57,8 +62,12 @@ proc test_bp_2 {device {lane 0} } {
     gdb_test "print wi" " = .*"
     gdb_test "print lid" " = .*"
 
+    set kfail ""
+    if {[is_pvc $device]} {
+	set kfail "JIRA IGDB/5126"
+    }
     # Call operator() explicitly to work around known limitations.
-    set v1 [get_valueof "" "pgid.operator() (wi)" "NONE"]
+    set v1 [get_valueof "" "pgid.operator() (wi)" "NONE" "" "$kfail"]
     set v2 [get_valueof "" "gid" "NONE"]
     setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
     gdb_assert {$v1 eq $v2} "pgid.operator() (wi) == gid"

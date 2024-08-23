@@ -9147,7 +9147,7 @@ proc prepare_for_testing { testname executable {sources ""} {options {debug}}} {
 # print fails.  TEST is the test message to use.  It can be omitted,
 # in which case a test message is built from EXP.
 
-proc get_valueof { fmt exp default {test ""} } {
+proc get_valueof { fmt exp default {test ""} {known_fail ""}} {
     global gdb_prompt
 
     if {$test == "" } {
@@ -9155,6 +9155,7 @@ proc get_valueof { fmt exp default {test ""} } {
     }
 
     set val ${default}
+    if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
     gdb_test_multiple "print${fmt} ${exp}" "$test" {
 	-re -wrap "^\\$\[0-9\]* = (\[^\r\n\]*)" {
 	    set val $expect_out(1,string)

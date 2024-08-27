@@ -55,8 +55,6 @@ proc run_test { cond_eval access_type lineno nloc } {
 	gdb_test_no_output "set breakpoint condition-evaluation ${cond_eval}"
     }
 
-    gdb_interact
-
     # Setup the conditional breakpoint and record its number.
     gdb_breakpoint "${::srcfile}:${lineno} if (*(${access_type} *) 0) == 0"
     set bp_num [get_integer_valueof "\$bpnum" "*UNKNOWN*"]

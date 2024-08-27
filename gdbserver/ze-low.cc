@@ -40,17 +40,8 @@
 
 /* Convenience macros.  */
 
-#define dprintf(...)						\
-  do								\
-    {								\
-      if (debug_threads)					\
-	{							\
-	  debug_printf ("%s: ", __FUNCTION__);			\
-	  debug_printf (__VA_ARGS__);				\
-	  debug_printf ("\n");					\
-	}							\
-    }								\
-  while (0)
+#define dprintf(fmt, ...) \
+  debug_prefixed_printf_cond (debug_threads, "ze-low", fmt, ##__VA_ARGS__)
 
 #ifndef USE_WIN32API
 /* Async interaction stuff.

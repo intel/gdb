@@ -1291,7 +1291,11 @@ proc gdb_test_multiple { command message args } {
 
     if {$verbose > 2} {
 	send_user "Sending \"$command\" to gdb\n"
-	send_user "Looking to match \"$patterns\"\n"
+	set pattern_list [split $patterns ";"]
+	for { set i 0 } { $i < [llength $pattern_list] } { incr i } {
+	    set pattern [lindex $pattern_list $i]
+	    send_user "Looking to match\[$i\] [string trim $pattern]\n"
+	}
 	send_user "Message is \"$message\"\n"
     }
 

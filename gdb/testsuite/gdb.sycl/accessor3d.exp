@@ -46,9 +46,9 @@ foreach device $sycl_device_list {
 	    "type = struct user_type {\n    int x;\n}" "3D element type"
 	gdb_test "print output\[id\].x == input\[id\].x" "true" \
 	    "3D access via id<3>"
-	gdb_test_exact "print input\[0\]" \
-	    "Cannot resolve function operator\[\] to any overloaded instance" \
-	    "reject 3D access via size_t"
+	gdb_test "print input\[0\]" \
+	    " = \\{\\{\\{x = 1\\}, \\{x = 2\\}\\}, \\{\\{x = 3\\}, \\{x = 4\\}\\}\\}" \
+	    "3D access via size_t"
 
 	continue_sycl_program_to_termination
     }

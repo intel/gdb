@@ -44,9 +44,7 @@ foreach device $sycl_device_list {
 
 	gdb_test "ptype input\[id\]" "type = float" "2D element type"
 	gdb_test "print value == input\[id\]" "true" "2D access via id<2>"
-	gdb_test_exact "print input\[0\]" \
-	    "Cannot resolve function operator\[\] to any overloaded instance" \
-	    "reject 2D access via size_t"
+	gdb_test "print input\[0\]" "= \\{1, 2\\}" "2D access via size_t"
 
 	continue_sycl_program_to_termination
     }

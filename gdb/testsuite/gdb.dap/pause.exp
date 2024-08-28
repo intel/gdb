@@ -17,10 +17,6 @@
 
 require allow_dap_tests
 
-# FIXME: This test is flaky, causing a tcl error once every couple of runs.
-kfail "JIRA IGDB/5119" "Disabled because of tcl error flakiness"
-return
-
 load_lib dap-support.exp
 
 standard_testfile

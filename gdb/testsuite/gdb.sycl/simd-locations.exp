@@ -42,8 +42,21 @@ proc test_bp_1 {device} {
     }
 
     # Call operator() explicitly to work around known limitations.
-    set v1 [get_valueof "" "pgid.operator() (wi)" "NONE" "" "$kfail"]
-    set v2 [get_valueof "" "gid" "NONE"]
+    set v1 ""
+    set v2 "!"
+    gdb_test_multiple "p pgid.operator() (wi)" "p pgid.operator() (wi)" {
+	-re -wrap " = sycl::id& = ($decimal)" {
+	    set v1 $expect_out(1,string)
+	    pass $gdb_test_name
+	}
+    }
+
+    gdb_test_multiple "p gid" "p gid" {
+	-re -wrap " = sycl::id = ($decimal)" {
+	    set v2 $expect_out(1,string)
+	    pass $gdb_test_name
+	}
+    }
     gdb_assert {$v1 eq $v2} "pgid.operator() (wi) == gid"
 
     gdb_test_expr_eq "ain\[gid\]" "in"
@@ -64,8 +77,22 @@ proc test_bp_2 {device {lane 0} } {
 	set kfail "JIRA IGDB/5126"
     }
     # Call operator() explicitly to work around known limitations.
-    set v1 [get_valueof "" "pgid.operator() (wi)" "NONE" "" "$kfail"]
-    set v2 [get_valueof "" "gid" "NONE"]
+    set v1 ""
+    set v2 "!"
+    gdb_test_multiple "p pgid.operator() (wi)" "p pgid.operator() (wi)" {
+	-re -wrap " = sycl::id& = ($decimal)" {
+	    set v1 $expect_out(1,string)
+	    pass $gdb_test_name
+	}
+    }
+
+    gdb_test_multiple "p gid" "p gid" {
+	-re -wrap " = sycl::id = ($decimal)" {
+	    set v2 $expect_out(1,string)
+	    pass $gdb_test_name
+	}
+    }
+
     gdb_assert {$v1 eq $v2} "pgid.operator() (wi) == gid"
 
     if {[require_sycl_device $device "gpu" "Intel*"]} {

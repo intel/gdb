@@ -49,6 +49,7 @@ foreach device $sycl_device_list {
 	# long) which is a special case.  As size_t is returned by e.g. get_linear_id,
 	# passing size_t as the argument of [] is natural and we test that our
 	# xmethods script treats these typdefs appropriately.
+	setup_kfail "JIRA CMPLRLLVM/61557" "*-*-*"
 	gdb_test "print two == input\[(size_t) id\]" "true" \
 	    "1D access via id<1> cast to typedef"
 

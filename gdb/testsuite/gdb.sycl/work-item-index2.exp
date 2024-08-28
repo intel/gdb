@@ -71,7 +71,7 @@ foreach device $sycl_device_list {
 	}
 
 	gdb_test_multiple "print wi" "print wi pretty" {
-	    -re -wrap " = sycl::_V${namespace_version}::id<1> = \\{($decimal)\\}" {
+	    -re -wrap " = sycl::id = ($decimal)" {
 		set wi_pretty $expect_out(1,string)
 		pass $gdb_test_name
 	    }
@@ -97,7 +97,7 @@ foreach device $sycl_device_list {
 
 	set wiID_pretty "wiID_pretty"
 	gdb_test_multiple "print wiID" "print wiID pretty" {
-	    -re -wrap " = sycl::_V${namespace_version}::id<1> = \\{($decimal)\\}" {
+	    -re -wrap " = sycl::id = ($decimal)" {
 		set wiID_pretty $expect_out(1,string)
 		pass $gdb_test_name
 	    }

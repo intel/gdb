@@ -35,6 +35,10 @@ save_vars { ::env(GLIBC_TUNABLES) } {
     gdb_test_no_output "set displaced-stepping on"
     gdb_test "show displaced-stepping" ".* displaced stepping .* is on.*"
 
+    if { ![runto_main] } {
+	return -1
+    }
+
     # Get the address of the call1 instruction.
     set call1_addr -1
     gdb_test_multiple "disassemble main" "" {
@@ -46,7 +50,7 @@ save_vars { ::env(GLIBC_TUNABLES) } {
 
     if { $call1_addr == -1 } {
 	return -1
-   }
+    }
 
     # Get the address of the call2 instruction.
     set call2_addr -1
@@ -58,10 +62,6 @@ save_vars { ::env(GLIBC_TUNABLES) } {
     }
 
     if { $call2_addr == -1 } {
-	return -1
-    }
-
-    if { ![runto_main] } {
 	return -1
     }
 

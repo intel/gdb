@@ -103,6 +103,14 @@ thread apply thread-list|all|all-lanes -unavailable
 
 * MI changes
 
+  ** '-shadow-stack-list-frames'
+
+     Added new MI command '-shadow-stack-list-frames' which is equivalent
+     to the CLI subcommand 'backtrace shadow' but supports 'low-frame' and
+     'high-frame' as command line parameters.  The parameters are used to
+     print shadow stack frames between certain levels on the shadow stack
+     only.
+
   ** New option in '-thread-info': '--lid'; and new field: 'local-ids'
 
      If the option is present, then the new field 'local-ids' is included

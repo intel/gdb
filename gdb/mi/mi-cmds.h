@@ -100,6 +100,7 @@ extern mi_cmd_argv_ftype mi_cmd_stack_list_frames;
 extern mi_cmd_argv_ftype mi_cmd_stack_list_locals;
 extern mi_cmd_argv_ftype mi_cmd_stack_list_variables;
 extern mi_cmd_argv_ftype mi_cmd_stack_select_frame;
+extern mi_cmd_argv_ftype mi_cmd_shadow_stack_list_frames;
 extern mi_cmd_argv_ftype mi_cmd_symbol_list_lines;
 extern mi_cmd_argv_ftype mi_cmd_symbol_info_functions;
 extern mi_cmd_argv_ftype mi_cmd_symbol_info_module_functions;

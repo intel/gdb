@@ -305,6 +305,8 @@ add_builtin_mi_commands ()
   add_mi_cmd_mi ("stack-info-frame", mi_cmd_stack_info_frame);
   add_mi_cmd_mi ("stack-list-arguments", mi_cmd_stack_list_args);
   add_mi_cmd_mi ("stack-list-frames", mi_cmd_stack_list_frames);
+  add_mi_cmd_mi ("shadow-stack-list-frames",
+		 mi_cmd_shadow_stack_list_frames);
   add_mi_cmd_mi ("stack-list-locals", mi_cmd_stack_list_locals);
   add_mi_cmd_mi ("stack-list-variables", mi_cmd_stack_list_variables);
   add_mi_cmd_mi ("stack-select-frame", mi_cmd_stack_select_frame,

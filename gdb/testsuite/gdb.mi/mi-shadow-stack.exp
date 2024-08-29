@@ -1,0 +1,66 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test the mi command -shadow-stack-list-frames.
+
+load_lib mi-support.exp
+set MIFLAGS "-i=mi"
+
+require allow_ssp_tests
+
+save_vars { ::env(GLIBC_TUNABLES) } {
+    append_environment GLIBC_TUNABLES "glibc.cpu.hwcaps" "SHSTK"
+
+    set srcfile "${srcdir}/gdb.arch/amd64-shadow-stack.c"
+    set testfile mi-shadow-stack
+    set binfile [standard_output_file $testfile]
+
+    if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
+	  {debug additional_flags="-fcf-protection=return"}] } {
+	return -1
+    }
+
+    if { [mi_clean_restart $binfile] } {
+	return -1
+    }
+
+    mi_runto_main
+
+    mi_gdb_test "break call2" \
+	{(&.*)*.*~"Breakpoint 2 at.*\\n".*=breakpoint-created,bkpt=\{number="2",type="breakpoint".*\}.*\n\^done}
+
+    mi_execute_to "exec-continue" "breakpoint-hit" "call2" ".*" ".*" ".*" \
+	{"" "disp=\"keep\""} "continue to call2"
+
+    set any "\[^\"\]+"
+    set any_remaining_frame_attr "\[^\r\n]+"
+
+    # It's enough to test the first 3 frames.  For frame 3 we just test that it
+    # exists as other attributes might depend on the environment.
+    set frame_start "shadow-stack-frame=\{level="
+    set frame1 "$frame_start\"0\",addr=\"$hex\",func=\"call1\",file=\"$any\",fullname=\"$any\",line=\"$decimal\",arch=\"$any\"\}"
+    set frame2 "$frame_start\"1\",addr=\"$hex\",func=\"main\",file=\"$any\",fullname=\"$any\",line=\"$decimal\",arch=\"$any\"\}"
+    set frame3 "$frame_start\"2\",addr=\"$hex\"$any_remaining_frame_attr\}"
+    mi_gdb_test "231-shadow-stack-list-frames" \
+	"231\\^done,shadow-stack=\\\[$frame1.*$frame2.*$frame3.*" \
+	"test shadow-stack-list-frames"
+
+    # Test low-frame/high-frame
+    mi_gdb_test "231-shadow-stack-list-frames 1 2" \
+	"231\\^done,shadow-stack=\\\[$frame2.*$frame3\\\]" \
+	"test shadow-stack-list-frames low/high-frames"
+
+    mi_gdb_exit
+}

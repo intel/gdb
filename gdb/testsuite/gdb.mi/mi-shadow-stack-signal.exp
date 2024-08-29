@@ -1,0 +1,70 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test the mi command -shadow-stack-list-frames for signal handling on linux.
+
+load_lib mi-support.exp
+set MIFLAGS "-i=mi"
+
+require allow_ssp_tests {istarget "*-*-linux*"}
+
+save_vars { ::env(GLIBC_TUNABLES) } {
+    append_environment GLIBC_TUNABLES "glibc.cpu.hwcaps" "SHSTK"
+
+    set srcfile "${srcdir}/gdb.arch/amd64-shadow-stack-signal.c"
+    set testfile mi-shadow-stack
+    set binfile [standard_output_file $testfile]
+
+    # Test shadow-stack-list-frames for shadow stack element which is no
+    # return address.
+    if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
+	{debug additional_flags="-fcf-protection=return"}] } {
+	return -1
+    }
+
+    if { [mi_clean_restart $binfile] } {
+	return -1
+    }
+
+    mi_runto_main
+    mi_send_resuming_command "exec-continue" "continue till signal"
+
+    set r_signal "reason=\"signal-received\",signal-name=\"SIGUSR1\",signal-meaning=\"User defined signal 1\""
+    gdb_expect {
+	-re ".*stopped,${r_signal}.*$mi_gdb_prompt" {
+	    pass "Wait for user interrupt"
+	}
+	timeout {
+	    fail "Wait for user interrupt (timeout)"
+	    return -1
+	}
+    }
+
+    mi_gdb_test "break handler" \
+	{(&.*)*.*~"Breakpoint 2 at.*\\n".*=breakpoint-created,bkpt=\{number="2",type="breakpoint".*\}.*\n\^done}
+
+    mi_execute_to "exec-continue" "breakpoint-hit" "handler" ".*" ".*" ".*" \
+	{"" "disp=\"keep\""} "continue to handler"
+
+    # We only test the frame belonging to the shadow stack element which
+    # is not a return address.  This frame is trigged by the signal
+    # exception.
+    set any "\[^\"\]+"
+    mi_gdb_test "231-shadow-stack-list-frames 1 1" \
+	"231\\^done,shadow-stack=\\\[shadow-stack-frame=\{level=\"1\",addr=\"$hex\"\,arch=\"$any\"\}\\\]" \
+	"test shadow-stack-list-frames"
+
+    mi_gdb_exit
+}

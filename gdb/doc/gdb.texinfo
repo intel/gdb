@@ -35566,6 +35566,53 @@ Show a single frame:
 (gdb)
 @end smallexample
 
+@anchor{-shadow-stack-list-frames}
+@findex -shadow-stack-list-frames
+@subheading The @code{-shadow-stack-list-frames} Command
+
+@subsubheading Synopsis
+
+@smallexample
+ -shadow-stack-list-frames [ @var{low-frame} @var{high-frame} ]
+@end smallexample
+
+List the shadow stack frames currently on the shadow stack.  In case the
+element on the shadow stack is a return address, @value{GDBN} prints the
+same fields as in -stack-list-frames with the return address on the shadow
+stack as @var{addr}.
+If the element on the shadow stack is not a return address, @value{GDBN}
+only prints @var{level}, @var{addr} and @var{arch}.
+
+If invoked without arguments, this command prints a backtrace for the
+whole shadow stack.  Like the -stack-list-frames command, if given two
+integer arguments, it shows the frames whose levels are between
+the two arguments (inclusive).
+
+@subsubheading @value{GDBN} Command
+
+The corresponding @value{GDBN} command is @samp{backtrace shadow}.
+
+@subsubheading Example
+
+Show shadow stack frames between @var{low-frame} and @var{high-frame}:
+
+@smallexample
+(gdb)
+-shadow-stack-list-frames 0 2
+^done,shadow-stack=[
+shadow-stack-frame=@{level="0",addr="0x00007ffff7c54d90",
+  func="__restore_rt",from="/lib64/libc.so.6",arch="i386:x86-64"@},
+shadow-stack-frame=@{level="1",addr="0x80007ffff79fffd8",arch="i386:x86-64"@},
+shadow-stack-frame=@{level="2",addr="0x00007ffff7c54ce6",
+  func="__GI_raise",file="../sysdeps/posix/raise.c",
+  fullname="/usr/src/debug/glibc-2.34-90.bkc.el9.x86_64/sysdeps/posix/raise.c",
+  line="27",arch="i386:x86-64"@}]
+(gdb)
+@end smallexample
+
+For frame 1 we can see that we only print @var{level}, @var{addr} and
+@var{arch}.  This is due to an element on the shadow stack which is not a
+return address.
 
 @findex -stack-list-locals
 @anchor{-stack-list-locals}

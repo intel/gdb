@@ -647,7 +647,7 @@ proc impi_gdb_start { exe device ranks {ranks2attach "all"} {args ""} {impi_enab
 
     set impi_env [dict create]
     if {$impi_enable_offload} {
-	if {[lsearch -nocase "gpu" $args] != -1} {
+	if {[string match "gpu *" $device_args] == 1} {
 	    dict append impi_env "I_MPI_OFFLOAD" "1"
 	    dict append impi_env "I_MPI_OFFLOAD_TOPOLIB" "level_zero"
 	} else {

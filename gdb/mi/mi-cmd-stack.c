@@ -38,6 +38,9 @@
 #include "gdbsupport/gdb-safe-ctype.h"
 #include "inferior.h"
 #include "observable.h"
+#include "gdbarch.h"
+#include "gdbcore.h"
+#include "arch-utils.h"
 #include <unordered_set>
 
 enum what_to_list { locals, arguments, all };
@@ -822,4 +825,133 @@ mi_cmd_stack_info_frame (const char *command, const char *const *argv,
 
   print_frame_info (user_frame_print_options,
 		    get_selected_frame (NULL), 1, LOC_AND_ADDRESS, 0, 1);
+}
+
+/* Parse arguments of -shadow-stack-list-frames command and set FRAME_LOW
+   and FRAME_HIGH accordingly.  Throw an error in case the arguments are
+   invalid.  */
+static void
+mi_cmd_shadow_stack_list_frames_parse_args (const char *const *argv,
+					    int argc, int &frame_low,
+					    int &frame_high)
+{
+  /* There should either be low - high range, or no arguments.  */
+  if ((argc != 0) && (argc != 2))
+    error (_("-shadow-stack-list-frames: Usage: [FRAME_LOW FRAME_HIGH]"));
+
+  /* If there is a range, set it.  */
+  if (argc == 2)
+    {
+      frame_low = atoi (argv[0]);
+      frame_high = atoi (argv[1]);
+      std::string err_str;
+      if (frame_low < 0)
+	{
+	  err_str = "``" + std::to_string (frame_low) + "''";
+	  if (frame_high < 0)
+	    err_str += " and ``" + std::to_string (frame_high) + "''";
+	}
+      else if (frame_high < 0)
+	err_str = "``" + std::to_string (frame_high) + "''";
+
+      if (!err_str.empty ())
+	{
+	  err_str = "-shadow-stack-list-frames: Invalid option " + err_str;
+	  error (_("%s."), err_str.c_str ());
+	}
+    }
+  else
+    {
+      /* No arguments, print the whole shadow stack backtrace.  */
+      frame_low = -1;
+      frame_high = -1;
+    }
+}
+
+/* Print a list of the shadow stack frames.  Args can be none, in which
+   case we want to print the whole shadow stack backtrace, or a pair of
+   numbers specifying the frame numbers at which to start and stop the
+   display.  If the two numbers are equal, a single frame will be
+   displayed.  */
+
+void
+mi_cmd_shadow_stack_list_frames (const char *command,
+				 const char *const *argv,
+				 int argc)
+{
+  int frame_low;
+  int frame_high;
+
+  mi_cmd_shadow_stack_list_frames_parse_args (argv, argc, frame_low,
+					      frame_high);
+
+  if (!target_has_stack ())
+    error (_("-shadow-stack-list-frames: No shadow stack."));
+
+  gdbarch *gdbarch = get_current_arch ();
+  if (!gdbarch_address_in_shadow_stack_memory_range_p (gdbarch))
+    error (_("-shadow-stack-list-frames: Printing of shadow stack \
+	      backtrace is not supported for the current target."));
+
+  std::optional<CORE_ADDR> start_ssp
+    = gdbarch_get_shadow_stack_pointer (gdbarch);
+  if (!start_ssp.has_value ())
+    error (_("-shadow-stack-list-frames: Shadow stack is not enabled for \
+	      the current target."));
+
+  ui_out_emit_list list_emitter (current_uiout, "shadow-stack");
+
+  /* Check if START_SSP points to a shadow stack memory range and use
+     the returned range to determine when to stop unwinding.
+     Note that a shadow stack memory range can change, due to shadow stack
+     switches for instance on x86 for an inter-privilege far call or when
+     calling an interrupt/exception handler at a higher privilege level.
+     Shadow stack for userspace is supported for amd64 linux starting with
+     Linux kernel v6.6.  However, shadow stack switches are not supported
+     due to missing kernel space support.  We therefore implement this
+     command without support for shadow stack switches for now.  */
+  std::pair<CORE_ADDR, CORE_ADDR> range;
+  if (!gdbarch_address_in_shadow_stack_memory_range (gdbarch, *start_ssp,
+						     &range))
+    {
+      /* If the current shadow stack pointer does not point to shadow
+	 stack memory, the shadow stack is empty.  */
+      return;
+    }
+
+  std::optional<shadow_stack_frame_info> curr;
+  CORE_ADDR new_value;
+  const int addr_size_byte = gdbarch_addr_bit (gdbarch) / 8;
+  const bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  if (!safe_read_memory_unsigned_integer (*start_ssp, addr_size_byte,
+					  byte_order, &new_value))
+    error (_("-shadow-stack-list-frames: Cannot read shadow stack memory."));
+
+  curr = {*start_ssp, new_value, 0, ssp_unwind_stop_reason::no_error};
+
+  /* Let's position curr on the shadow stack frame at which to start the
+     display.  This could be the innermost frame if the whole shadow stack
+     needs displaying, or if frame_low is 0.  */
+  int frame_num = 0;
+  for (; curr.has_value () && frame_num < frame_low; frame_num++)
+    curr = curr->unwind_prev_shadow_stack_frame_info (gdbarch, range);
+
+  if (!curr.has_value ())
+    error (_("-shadow-stack-list-frames: Not enough frames on the shadow \
+	      stack."));
+
+  shadow_stack_print_options print_options;
+  print_options.print_frame_info
+    = user_frame_print_options.print_frame_info;
+
+  /* Now let's print the shadow stack frames up to frame_high, or until
+     the bottom of the shadow stack.  */
+  for (; curr.has_value () && (frame_num <= frame_high || frame_high == -1);
+       frame_num++)
+    {
+      QUIT;
+      print_shadow_stack_frame_info (gdbarch, print_options, *curr,
+				     LOCATION);
+      curr = curr->unwind_prev_shadow_stack_frame_info (gdbarch, range);
+    }
 }

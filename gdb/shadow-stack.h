@@ -91,4 +91,15 @@ public:
     = ssp_unwind_stop_reason::no_error;
 };
 
+/* Print information of shadow stack frame info FRAME.  The output is
+   formatted according to PRINT_WHAT.  For the meaning of PRINT_WHAT, see
+   enum print_what comments in frame.h.  Note that PRINT_WHAT is
+   overridden, if PRINT_OPTIONS.print_frame_info != print_frame_info_auto.
+   Redirect output to a temporary buffer for the duration of
+   do_print_shadow_stack_frame_info.  */
+
+void print_shadow_stack_frame_info
+  (gdbarch *gdbarch, const shadow_stack_print_options &print_options,
+   const shadow_stack_frame_info &frame, print_what print_what);
+
 #endif /* #ifndef SHADOW_STACK_H */

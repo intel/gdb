@@ -85,12 +85,7 @@ save_vars { env(ZE_FLAT_DEVICE_HIERARCHY) } {
 	    # All ranks must return together from the MPI_Init.
 	    set line [gdb_get_line_number "kernel-line"]
 	    impi_gdb_breakpoint "$srcfile:$line" {temporary}
-	    if {[impi_gdb_continue_to_breakpoint $ranks "$srcfile:$line" \
-		    ".*$srcfile:$line.*"]} {
-		# If continue failed, there is no point to
-		# continue the test on this device.
-		continue
-	    }
+	    impi_gdb_continue_to_breakpoint $ranks "$srcfile:$line" ".*$srcfile:$line.*"
 
 	    for {set i 0} {$i < $ranks} {incr i} {
 		with_test_prefix "rank $i" {

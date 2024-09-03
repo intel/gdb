@@ -338,7 +338,7 @@ ze_remove_process (process_info *process)
 {
   gdb_assert (process != nullptr);
 
-  for_each_thread (pid_of (process), [] (thread_info *thread)
+  for_each_thread (process, [] (thread_info *thread)
     {
       delete (ze_thread_info *) thread->target_data;
       thread->target_data = nullptr;
@@ -762,7 +762,7 @@ ze_device_detached (process_info *process, zet_debug_detach_reason_t reason)
      In the second step, when one of those threads gets selected for reporting
      its event, we will remove the process as part of the reporting flow.  */
 
-  for_each_thread (pid_of (process), [reason] (thread_info *tp)
+  for_each_thread (process, [reason] (thread_info *tp)
     {
       ze_thread_info *zetp = ze_thread (tp);
       gdb_assert (zetp != nullptr);
@@ -2069,11 +2069,8 @@ ze_target::mark_eventing_threads (ptid_t resume_ptid, resume_kind rkind)
      We ignore those threads and the unavailable event they report.  */
 
   size_t num_eventing = 0;
-  for_each_thread ([=, &num_eventing] (thread_info *tp)
+  for_each_thread (resume_ptid, [=, &num_eventing] (thread_info *tp)
     {
-      if (!tp->id.matches (resume_ptid))
-	return;
-
       if (!ze_has_priority_waitstatus (tp))
 	{
 	  (void) ze_move_waitstatus (tp);
@@ -2446,41 +2443,37 @@ ze_find_eventing_thread (ptid_t ptid)
   };
 
   thread_predicate predicate = nullptr;
-  for (thread_info *tp : all_threads)
+  find_thread (ptid, [&] (thread_info *tp)
     {
-      if (!tp->id.matches (ptid))
-	continue;
-
       /* Only consider threads that were resumed.  */
       ze_thread_resume_state_t state = ze_resume_state (tp);
       if (state == ze_thread_resume_none)
-	continue;
+	return false;
 
       /* If this thread's event is being held, we do not pick it for
 	 reporting.  */
       ze_thread_exec_state_t exec_state = ze_exec_state (tp);
       if (exec_state == ze_thread_state_held)
-	continue;
+	return false;
 
       if (ze_has_priority_waitstatus (tp))
 	{
 	  predicate = ze_has_priority_waitstatus;
-	  break;
+	  return true;
 	}
 
       if (is_stopped (tp))
 	predicate = is_stopped;
       else if ((predicate == nullptr) && ze_has_waitstatus (tp))
 	predicate = ze_has_waitstatus;
-    }
+
+    return false;
+    });
 
   thread_info *thread = nullptr;
   if (predicate != nullptr)
-    thread = find_thread_in_random ([ptid, predicate] (thread_info *tp)
+    thread = find_thread_in_random (ptid, [predicate] (thread_info *tp)
       {
-	if (!tp->id.matches (ptid))
-	  return false;
-
 	/* Only consider threads that were resumed.  */
 	ze_thread_resume_state_t state = ze_resume_state (tp);
 	if (state == ze_thread_resume_none)

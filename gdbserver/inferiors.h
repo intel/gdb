@@ -73,6 +73,13 @@ struct process_info
   /* DLLs that are loaded for this proc.  */
   std::list<dll_info> all_dlls;
 
+  /* This processes' thread list, sorted by creation order.  */
+  std::list<thread_info *> m_thread_list;
+
+  /* A map of ptid_t to thread_info*, for average O(1) ptid_t lookup.
+     Exited threads do not appear in the map.  */
+  std::unordered_map<ptid_t, thread_info *> m_ptid_thread_map;
+
   /* Flag to mark that the DLL list has changed.  */
   bool dlls_changed = false;
 
@@ -90,6 +97,22 @@ static inline int
 pid_of (const process_info *proc)
 {
   return proc->pid;
+}
+
+/* Accessors for a processes' thread list and map.  */
+
+inline std::list<thread_info *> *
+get_thread_list (struct process_info *process)
+{
+  gdb_assert (process != nullptr);
+  return &(process->m_thread_list);
+}
+
+inline std::unordered_map<ptid_t, thread_info *> *
+get_thread_map (struct process_info *process)
+{
+  gdb_assert (process != nullptr);
+  return &(process->m_ptid_thread_map);
 }
 
 /* Return a pointer to the current process.  Note that the current

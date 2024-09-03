@@ -23,7 +23,6 @@
 #include "dll.h"
 
 std::list<process_info *> all_processes;
-std::list<thread_info *> all_threads;
 
 /* The current process.  */
 static process_info *current_process_;
@@ -41,8 +40,15 @@ struct thread_info *
 add_thread (ptid_t thread_id, void *target_data)
 {
   thread_info *new_thread = new thread_info (thread_id, target_data);
+  process_info *process = get_thread_process (new_thread);
 
-  all_threads.push_back (new_thread);
+  gdb_assert (process != nullptr);
+  /* A thread with this ptid should not exist in the map yet.  */
+  gdb_assert (process->m_ptid_thread_map.find (thread_id)
+	      == process->m_ptid_thread_map.end ());
+
+  process->m_thread_list.push_back (new_thread);
+  process->m_ptid_thread_map.insert ({thread_id, new_thread});
 
   if (current_thread == NULL)
     switch_to_thread (new_thread);
@@ -55,18 +61,28 @@ add_thread (ptid_t thread_id, void *target_data)
 struct thread_info *
 get_first_thread (void)
 {
-  if (!all_threads.empty ())
-    return all_threads.front ();
-  else
-    return NULL;
+  return find_thread ([] (thread_info *thread)
+    {
+      return true;
+    });
 }
 
 struct thread_info *
 find_thread_ptid (ptid_t ptid)
 {
-  return find_thread ([&] (thread_info *thread) {
-    return thread->id == ptid;
-  });
+  process_info *process = find_process_pid (ptid.pid ());
+  if (process == nullptr)
+    return nullptr;
+
+  std::unordered_map<ptid_t, thread_info *> * thread_map
+    = get_thread_map (process);
+
+  std::unordered_map<ptid_t, thread_info *>::iterator it
+    = thread_map->find (ptid);
+  if (it != thread_map->end ())
+    return it->second;
+
+  return nullptr;
 }
 
 /* Find a thread associated with the given PROCESS, or NULL if no
@@ -101,7 +117,13 @@ remove_thread (struct thread_info *thread)
     target_disable_btrace (thread->btrace);
 
   discard_queued_stop_replies (ptid_of (thread));
-  all_threads.remove (thread);
+  process_info *process = get_thread_process (thread);
+  gdb_assert (process != nullptr);
+
+  /* We should not try to remove a thread that was not added.  */
+  int num_erased = process->m_ptid_thread_map.erase (thread->id);
+  gdb_assert (num_erased > 0);
+  process->m_thread_list.remove (thread);
   if (current_thread == thread)
     switch_to_thread (nullptr);
   free_one_thread (thread);
@@ -129,7 +151,12 @@ void
 clear_inferiors (void)
 {
   for_each_thread (free_one_thread);
-  all_threads.clear ();
+
+  for_each_process ([&] (process_info *proc)
+    {
+      proc->m_thread_list.clear ();
+      proc->m_ptid_thread_map.clear ();
+    });
 
   clear_dlls ();
 

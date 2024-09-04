@@ -4343,18 +4343,26 @@ find_function_trampoline_target (CORE_ADDR pc)
 	     physname.  If we cannot find one also check for minimal
 	     symbols.  */
 	  const block *blk = block_for_pc (pc);
-	  struct block_symbol bs = \
-	    lookup_symbol (physname, blk, SEARCH_VAR_DOMAIN, 0);
+	  block_symbol bs
+	    = lookup_symbol (physname, blk, SEARCH_VAR_DOMAIN, 0);
 	  if (bs.symbol != nullptr)
 	    {
-	      const struct block *block = bs.symbol->value_block ();
+	      const block *block = bs.symbol->value_block ();
 	      gdb_assert (block != nullptr);
 	      target_address = block->start ();
 	    }
 	  else
 	    {
-	      if (find_minimal_symbol_address (physname, &target_address,
-					       nullptr) != 0)
+	      /* We normally expect the target symbol to be located in one
+		 objfile only.  However, a JIT compiler may have generated
+		 a duplicated symbol that most likely resides in the same
+		 objfile with the trampoline symbol.  Give priority to that
+		 objfile in the search.  If not found, try all objfiles.
+		 This is a heuristic.  */
+	      if ((find_minimal_symbol_address (physname, &target_address,
+						sym->objfile ()) != 0)
+		  && (find_minimal_symbol_address (physname, &target_address,
+						   nullptr) != 0))
 		target_address = 0;
 	    }
 	}
@@ -4363,8 +4371,8 @@ find_function_trampoline_target (CORE_ADDR pc)
 	  /* If the function symbol containing this trampoline target has
 	     been relocated we assume the target_address also needs relocation.
 	     If it has not been relocated the offset should be zero.  */
-	  target_address = \
-	    ( (CORE_ADDR) trampoline->target_addr ()
+	  target_address
+	    = ((CORE_ADDR) trampoline->target_addr ()
 	       + sym->objfile ()->section_offsets[sym->section_index ()]);
 	}
     }

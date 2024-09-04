@@ -3066,8 +3066,8 @@ Return a gdbarch corresponding to the given target description.
 Method(
     comment="""
 Some targets support special hardware-assisted control-flow protection
-technologies.  For example, Intel's Control-flow Enforcement Technology (CET)
-provides a shadow stack and indirect branch tracking.
+technologies.  For example, the Control-flow Enforcement Technology (CET)
+on x86 provides a shadow stack and indirect branch tracking.
 
 For GDB shadow stack support the following methods or values have to be
 provided:

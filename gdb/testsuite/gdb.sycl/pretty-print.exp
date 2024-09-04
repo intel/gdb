@@ -37,7 +37,6 @@ foreach device $sycl_device_list {
 	    continue
 	}
 
-	setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
 	if {[gdb_test "info pretty-printer global SYCL" ".*SYCL.*sycl.*"]} {
 	    return -1
 	}

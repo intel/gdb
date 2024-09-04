@@ -69,7 +69,6 @@ foreach device $sycl_device_list {
 	    gdb_test "print gid\[2\] == gid2" "true" \
 		"access element 2 of the work item index"
 
-	    setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
 	    gdb_test "print accessorIn\[gid\] == in_elem" "true" \
 		"access input element for the current work item index"
 	}}

@@ -46,13 +46,10 @@ foreach device $sycl_device_list {
 	gdb_breakpoint $line4
 
 	gdb_continue_to_breakpoint "line2" ".*$srcfile:$line2.*"
-	set saved_value [get_integer_valueof "numbers\[2\]" -1 \
-	    "" "JIRA CMPLRLLVM/61198"]
-	setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
+	set saved_value [get_integer_valueof "numbers\[2\]" -1]
 	gdb_test "print numbers\[2\] = 20" "= 20"
 
 	gdb_continue_to_breakpoint "line4" ".*$srcfile:$line4.*"
-	setup_kfail "JIRA CMPLRLLVM/61198" "*-*-*"
 	# 'fourteen' is now 10 + 15.
 	gdb_test "print fourteen" "= 25" "print forteen modified"
 	# Jump back and hit the BP at line 2.

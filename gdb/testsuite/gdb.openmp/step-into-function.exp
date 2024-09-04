@@ -58,14 +58,11 @@ foreach extension ${openmp_languages_list} {
 	    gdb_breakpoint ${inside}
 	    gdb_continue_to_breakpoint "inside" ".*${srcfile}:${inside}.*"
 
-	    if {${extension} eq "f90"} {
-		setup_kfail "JIRA IGDB/3138" "*-*-*"
+	    if {${extension} eq "f90" && [require_openmp_device "GPU"]} {
+		setup_kfail "JIRA GSD/4271" "*-*-*"
 	    }
 	    gdb_test "step" "first .* at .*" "step into function"
 
-	    if {${extension} eq "f90" && [require_openmp_device "CPU"]} {
-		setup_kfail "JIRA CMPLRLLVM/50771" "*-*-*"
-	    }
 	    gdb_test "continue" "${inferior_exited_re} normally].*" \
 		"continue to end"
 	}

@@ -17,44 +17,36 @@
 
 # Test that step n does not start recording when issued while replaying.
 
-require target_supports_btrace
+require allow_btrace_tests
 
 standard_testfile record_goto.c
-if [build_executable "failed to prepare" $testfile $srcfile] {
+if [prepare_for_testing "failed to prepare" $testfile $srcfile] {
     return -1
 }
 
 set host_binfile [gdb_remote_download host $binfile]
 
-foreach_with_prefix method {"bts" "pt"} {
-    if { ![allow_btrace_tests $method] } {
-	unsupported "target does not support record-btrace ${method}"
-	continue
-    }
-    clean_restart "${testfile}"
+if ![runto_main] {
+    return -1
+}
 
-    if ![runto_main] {
-	return continue
-    }
+# Trace the call to the test function.
+gdb_test_no_output "record btrace"
+gdb_test "next" "main\.3.*"
 
-    # Trace the call to the test function.
-    gdb_test_no_output "record btrace $method"
-    gdb_test "next" "main\.3.*"
+# Stepping should bring us to the end of the execution history, but should
+# not resume recording.
+with_test_prefix "stepi" {
+    gdb_test "reverse-stepi"
+    gdb_test "stepi 5" "No more reverse-execution history.*main\.3.*"
+}
 
-    # Stepping should bring us to the end of the execution history, but should
-    # not resume recording.
-    with_test_prefix "stepi" {
-	gdb_test "reverse-stepi"
-	gdb_test "stepi 5" "No more reverse-execution history.*main\.3.*"
-    }
+with_test_prefix "step" {
+    gdb_test "reverse-step"
+    gdb_test "step 5" "No more reverse-execution history.*main\.3.*"
+}
 
-    with_test_prefix "step" {
-	gdb_test "reverse-step"
-	gdb_test "step 5" "No more reverse-execution history.*main\.3.*"
-    }
-
-    with_test_prefix "next" {
-	gdb_test "reverse-next"
-	gdb_test "next 5" "No more reverse-execution history.*main\.3.*"
-    }
+with_test_prefix "next" {
+    gdb_test "reverse-next"
+    gdb_test "next 5" "No more reverse-execution history.*main\.3.*"
 }

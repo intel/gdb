@@ -17,7 +17,7 @@
 
 # Test UIRET and UINTR events.
 
-require target_supports_btrace allow_btrace_event_trace_tests allow_btrace_uli_tests
+require allow_btrace_tests allow_btrace_event_trace_tests allow_btrace_uli_tests
 
 set opts [list debug "additional_flags=-muintr -mgeneral-regs-only -minline-all-stringops"]
 

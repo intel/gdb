@@ -22,41 +22,32 @@
 #
 # Each inferior can be recorded separately.
 
-require target_supports_btrace
+require allow_btrace_tests
 
 require !use_gdb_stub
 
 standard_testfile
-if [build_executable "failed to prepare" $testfile {} {debug}] {
+if [prepare_for_testing "failed to prepare" $testfile {} {debug}] {
     return -1
 }
 
 set host_binfile [gdb_remote_download host $binfile]
 
-foreach_with_prefix method {"bts" "pt"} {
-    if { ![allow_btrace_tests $method] } {
-	unsupported "target does not support record-btrace ${method}"
-	continue
+with_test_prefix "inferior 1" {
+    if ![runto_main] {
+	return -1
     }
-    clean_restart "${testfile}"
+    gdb_test_no_output "record btrace"
+}
 
-    with_test_prefix "inferior 1" {
-	if ![runto_main] {
-	    continue
-	}
+with_test_prefix "inferior 2" {
+    gdb_test "add-inferior -exec $host_binfile" "Added inferior 2.*" \
+	"add second inferior"
+    gdb_test "inferior 2" "Switching to inferior 2.*"
 
-	gdb_test_no_output "record btrace ${method}"
+    if ![runto_main] {
+	return -1
     }
 
-    with_test_prefix "inferior 2" {
-	gdb_test "add-inferior -exec $host_binfile" "Added inferior 2.*" \
-	    "add second inferior"
-	gdb_test "inferior 2" "Switching to inferior 2.*"
-
-	if ![runto_main] {
-	    continue
-	}
-
-	gdb_test_no_output "record btrace ${method}"
-    }
+    gdb_test_no_output "record btrace"
 }

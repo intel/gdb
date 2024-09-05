@@ -17,7 +17,7 @@
 
 # Test event tracing with gaps.
 
-require target_supports_btrace allow_btrace_event_trace_tests
+require allow_btrace_tests allow_btrace_event_trace_tests
 
 standard_testfile
 

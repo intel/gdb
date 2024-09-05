@@ -66,13 +66,13 @@ update_shadow_stack_pointer (gdbarch *gdbarch, CORE_ADDR ssp,
 
 void shadow_stack_push (gdbarch *gdbarch, const CORE_ADDR new_addr)
 {
+  if (!gdbarch_address_in_shadow_stack_memory_range_p (gdbarch)
+      || gdbarch_ssp_regnum (gdbarch) == -1)
+    return;
+
   std::optional<CORE_ADDR> ssp
     = gdbarch_get_shadow_stack_pointer (gdbarch);
   if (!ssp.has_value ())
-    return;
-
-  if (!gdbarch_address_in_shadow_stack_memory_range_p (gdbarch)
-      || gdbarch_ssp_regnum (gdbarch) == -1)
     return;
 
   const CORE_ADDR new_ssp

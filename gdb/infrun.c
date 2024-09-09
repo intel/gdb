@@ -2880,6 +2880,9 @@ resume_1 (enum gdb_signal sig)
   gdb_assert (!tp->stop_requested);
   gdb_assert (!thread_is_in_step_over_chain (tp));
 
+  /* Acknowledge any pending solibs upon resuming.  */
+  ack_pending_solibs ();
+
   inferior *inf = tp->inf;
   process_stratum_target *target = inf->process_target ();
   if (inf->control.waitstatus_pending_p)
@@ -6612,14 +6615,6 @@ handle_inferior_event (struct execution_control_state *ecs)
 
 	    handle_solib_event ();
 
-	    /* Acknowledge newly added solibs right away if we are not
-	       stopping on solib events.  In the other case, we postpone
-	       the libraries acknowledgment until everything is stopped
-	       in order to guarantee that the host thread does not make
-	       any progress between the ACK and the stop.  */
-	    if (!stop_on_solib_events)
-	      ack_pending_solibs ();
-
 	    ecs->event_thread->set_stop_pc
 	      (regcache_read_pc_protected (regcache));
 	    address_space *aspace = ecs->event_thread->inf->aspace.get ();
@@ -6663,9 +6658,6 @@ handle_inferior_event (struct execution_control_state *ecs)
 
 		stop_waiting (ecs);
 
-		/* Now that we stopped everything, we can acknowledge
-		   the loaded libraries.  */
-		ack_pending_solibs ();
 		return;
 	      }
 	  }

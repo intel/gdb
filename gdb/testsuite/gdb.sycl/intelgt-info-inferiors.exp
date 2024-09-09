@@ -66,7 +66,7 @@ foreach device $sycl_device_list {
 	    "process ${decimal}" "1 \\(native\\)" "${any_path}"]
 	set table_device_line [wrap_regex_with_spaces_and_tabs "." "2" \
 	    "device ${any_location}(\.${decimal})?" \
-	    "2 \\(\[^\r\n\]*remote | gdbserver\[^\r\n\]*\\)"]
+	    "2 \\(\[^\r\n\]*remote | .*gdbserver\[^\r\n\]*\\)"]
 	set table_info_devices_hint_line \
 	    "Type \"info devices\" to see details of the devices\."
 

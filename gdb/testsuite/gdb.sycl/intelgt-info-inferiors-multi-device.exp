@@ -92,7 +92,7 @@ foreach device $sycl_device_list {
 	    "process ${decimal}" "1 \\(native\\)" "${any_path}"]
 	set device_line [wrap_regex_with_spaces_and_tabs \
 	    "${decimal}" "device ${any_location}(\.${decimal})?" \
-	    "2 \\(.*remote \\| gdbserver.*\\)"]
+	    "2 \\(.*remote \\| .*gdbserver.*\\)"]
 	set table_device_line [wrap_regex_with_spaces_and_tabs "." $device_line]
 	set table_active_device_line [wrap_regex_with_spaces_and_tabs "\\*" $device_line]
 	set table_info_devices_hint_line \

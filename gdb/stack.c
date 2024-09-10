@@ -49,7 +49,6 @@
 #include "linespec.h"
 #include "cli/cli-utils.h"
 #include "objfiles.h"
-#include "annotate.h"
 #include "shadow-stack.h"
 
 #include "symfile.h"

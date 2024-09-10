@@ -50,7 +50,6 @@
 #include "cli/cli-cmds.h"
 #include "cli/cli-style.h"
 #include "cli/cli-utils.h"
-#include "cli/cli-style.h"
 
 #include "extension.h"
 #include "gdbsupport/pathstuff.h"

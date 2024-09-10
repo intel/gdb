@@ -32,7 +32,6 @@
 #include "gdbarch.h"
 #include <algorithm>
 #include "observable.h"
-#include "gdbthread.h"
 
 #if HAVE_PYTHON
 #include "python/python.h"

@@ -9010,7 +9010,6 @@ Display an absolute filename.
 Show the current way to display filenames.
 @end table
 
-@node Shadow stack backtrace
 @subsection Shadow stack backtrace
 @value{GDBN} provides a subcommand of the backtrace command to print the
 shadow stack backtrace.
@@ -9023,8 +9022,8 @@ To print a backtrace of the entire shadow stack, use the
 command will print one line per element (so-called shadow stack frames) on
 the shadow stack.
 
-A shadow stack is supported, for instance, on x86 by Intel's Control-flow
-Enforcement Technology (@xref{CET}).
+A shadow stack is supported, for instance, with the Control-flow
+Enforcement Technology (@xref{CET}) on x86.
 
 @table @code
 @item backtrace shadow [@var{option}]@dots{} @dots{} [@var{count}]

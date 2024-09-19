@@ -10152,6 +10152,21 @@ normal_stop ()
 
 	  update_previous_thread ();
 	}
+      else if (non_stop
+	       && last.kind () == TARGET_WAITKIND_UNAVAILABLE
+	       && current_thread->state == THREAD_RUNNING
+	       && current_thread->executing ()
+	       && current_inferior ()->last_user_thread == current_thread)
+	{
+	  SWITCH_THRU_ALL_UIS ()
+	    {
+	      target_terminal::ours_for_output ();
+
+	      gdb_printf (_("[Thread %s (%s) could not be stopped]\n"),
+			  print_thread_id (current_thread, 0),
+			  target_pid_to_str (inferior_ptid).c_str ());
+	    }
+	}
       else if (previous_focus.thread == current_thread)
 	{
 	  /* If the thread has not changed there still could have been a notable

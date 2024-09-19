@@ -99,14 +99,21 @@ foreach device $sycl_device_list {
 	gdb_test "thread ${running_thread_id}" \
 	    ".Switching to thread ${running_thread_id}.*running."
 
-	gdb_test_no_output "interrupt"
+	gdb_test_multiple "interrupt" "" {
+	    -re ".Thread ${running_thread_id}.*could not be stopped." {
+		pass $gdb_test_name
+	    }
+	    -re "$gdb_prompt " {
+		exp_continue
+	    }
+	}
 
 	# We receive the updated thread list asynchronously in non-stop mode.
 	# Wait some time to ensure thread list is updated.
 	sleep 1
 	gdb_test "info thread $running_thread_id" \
-	    "${fill}\\\*?${running_thread_id}${fill}.unavailable."
-	gdb_test "print/x \$pc" "PC not available"
+	    "${fill}\\\*?${running_thread_id}${fill}.running."
+	gdb_test "print/x \$pc" "Selected thread is running."
 
 	# Switch to a stopped thread, resume it.
 	gdb_test  "thread $kernel_thread" \

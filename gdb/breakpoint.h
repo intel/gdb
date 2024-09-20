@@ -1485,6 +1485,11 @@ extern int hardware_watchpoint_inserted_in_range (const address_space *,
 						  CORE_ADDR addr,
 						  ULONGEST len);
 
+/* Returns true if any non-user breakpoints are present and inserted
+   at ADDR.  Internal breakpoints have a number less than or equal to zero.  */
+extern bool internal_breakpoint_inserted_here_p (const address_space *aspace,
+						 CORE_ADDR addr);
+
 /* Returns true if {ASPACE1,ADDR1} and {ASPACE2,ADDR2} represent the
    same breakpoint location.  In most targets, this can only be true
    if ASPACE1 matches ASPACE2.  On targets that have global

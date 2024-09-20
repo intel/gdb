@@ -4585,6 +4585,24 @@ hardware_watchpoint_inserted_in_range (const address_space *aspace,
 /* See breakpoint.h.  */
 
 bool
+internal_breakpoint_inserted_here_p (const address_space *aspace,
+				     CORE_ADDR pc)
+{
+  for (bp_location *bl : all_bp_locations_at_addr (pc))
+    {
+      if (bl->owner == nullptr || user_breakpoint_p (bl->owner))
+	continue;
+
+      if (bp_location_inserted_here_p (bl, aspace, pc))
+	return true;
+    }
+
+  return false;
+}
+
+/* See breakpoint.h.  */
+
+bool
 is_catchpoint (struct breakpoint *b)
 {
   return (b->type == bp_catchpoint);

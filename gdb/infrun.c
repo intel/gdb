@@ -6576,7 +6576,8 @@ handle_inferior_event (struct execution_control_state *ecs)
      when we're trying to execute a breakpoint instruction on a
      non-executable stack.  This happens for call dummy breakpoints
      for architectures like SPARC that place call dummies on the
-     stack.  */
+     stack.  Note that only internal breakpoints must be used for this
+     check.  */
   if (ecs->ws.kind () == TARGET_WAITKIND_STOPPED
       && (ecs->ws.sig () == GDB_SIGNAL_ILL
 	  || ecs->ws.sig () == GDB_SIGNAL_SEGV
@@ -6584,8 +6585,9 @@ handle_inferior_event (struct execution_control_state *ecs)
     {
       struct regcache *regcache = get_thread_regcache (ecs->event_thread);
 
-      if (breakpoint_inserted_here_p (ecs->event_thread->inf->aspace.get (),
-				      regcache_read_pc (regcache)))
+      if (internal_breakpoint_inserted_here_p (
+	    ecs->event_thread->inf->aspace.get (),
+	    regcache_read_pc (regcache)))
 	{
 	  infrun_debug_printf ("Treating signal as SIGTRAP");
 	  ecs->ws.set_stopped (GDB_SIGNAL_TRAP);

@@ -79,10 +79,9 @@ foreach device $sycl_device_list {
 	    gdb_test "print buffer_1D" \
 		"sycl::buffer range 3 = \\{11, 12, 13\\}"
 	    gdb_test "print buffer_2D" \
-		"sycl::buffer range \\{3, 2\\} = \\{\\{21, 22, 23\\}, \\{24, 25, 26\\}\\}"
+		"sycl::buffer range \\{3, 2\\} = \\{\\{21, 22\\}, \\{23, 24\\}, \\{25, 26\\}\\}"
 	    gdb_test "print buffer_3D" \
-		"sycl::buffer range \\{3, 2, 2\\} = \\{\\{\\{30, 30, 30\\}, \\{30, 30, 30\\}\\}, \\{\\{30, 30, 30\\}, \\{30, 30, 30\\}\\}\\}"
-
+		"sycl::buffer range \\{3, 2, 2\\} = \\{\\{\\{30, 30\\}, \\{30, 30\\}\\}, \\{\\{30, 30\\}, \\{30, 30\\}\\}, \\{\\{30, 30\\}, \\{30, 30\\}\\}\\}"
 	    gdb_test "print buffer_1D_ref" \
 		"sycl::buffer& range 3 = \\{11, 12, 13\\}"
 	    gdb_test "print buffer_2D_ref" \

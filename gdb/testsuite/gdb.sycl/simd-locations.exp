@@ -123,7 +123,6 @@ foreach device $sycl_device_list {
 	set l2 [gdb_get_line_number "bp\.2"]
 
 	gdb_breakpoint $l1
-	send_continue_with_kfail "$srcfile" "$l1"
 	gdb_continue_to_breakpoint "bp.1" ".*$srcfile:$l1.*"
 
 	with_test_prefix "bp.1" {

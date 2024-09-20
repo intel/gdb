@@ -44,15 +44,12 @@ foreach device $sycl_device_list {
 	set line3 [gdb_get_line_number "BP3"]
 	set line4 [gdb_get_line_number "BP4"]
 	set line5 [gdb_get_line_number "BP5"]
-	gdb_breakpoint $line1
-
-	send_continue_with_kfail "$srcfile" "$line1"
-	gdb_continue_to_breakpoint "slm BP1" ".*$srcfile:$line1.*"
-
+	gdb_breakpoint $line1 {temporary}
 	gdb_breakpoint $line2 {temporary}
 	gdb_breakpoint $line3 {temporary}
 	gdb_breakpoint $line4 {temporary}
 	gdb_breakpoint $line5 {temporary}
+	gdb_continue_to_breakpoint "slm BP1" ".*$srcfile:$line1.*"
 
 	with_test_prefix "via variable in parallel_for_work_group" {
 	    gdb_test "print local_var" "= 32"

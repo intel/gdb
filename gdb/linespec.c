@@ -4175,7 +4175,8 @@ decode_digits_list_mode (struct linespec_state *self,
       set_current_program_space (pspace);
 
       /* Simplistic search just for the list command.  */
-      symtab *matching_symtab = find_line_symtab (elt, val.line, nullptr);
+      symtab_index_vector imv = find_line_symtabs (elt, val.line);
+      symtab *matching_symtab = (!imv.empty () ? imv[0].first : nullptr);
 
       auto it = std::find_if (values.begin (), values.end (),
 			      [&] (const symtab_and_line &sal)

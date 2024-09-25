@@ -3417,89 +3417,108 @@ find_pc_line_symtab (CORE_ADDR pc)
 
 /* See symtab.h.  */
 
-symtab *
-find_line_symtab (symtab *sym_tab, int line, int *index)
+symtab_index_vector
+find_line_symtabs (symtab *sym_tab, int line)
 {
-  int exact = 0;  /* Initialized here to avoid a compiler warning.  */
-
-  /* BEST_INDEX and BEST_LINETABLE identify the smallest linenumber > LINE
-     so far seen.  */
-
-  int best_index;
-  const struct linetable *best_linetable;
-  struct symtab *best_symtab;
-
-  /* First try looking it up in the given symtab.  */
-  best_linetable = sym_tab->linetable ();
-  best_symtab = sym_tab;
-  best_index = find_line_common (best_linetable, line, &exact, 0);
-  if (best_index < 0 || !exact)
+  /* Collect all symtabs relating to the file from passed in
+     SYM_TAB.  */
+  std::vector<symtab *> all_file_symtabs;
+  const char *fullname = symtab_to_fullname (sym_tab);
+  for (objfile *objfile : current_program_space->objfiles ())
     {
-      /* Didn't find an exact match.  So we better keep looking for
-	 another symtab with the same name.  In the case of xcoff,
-	 multiple csects for one source file (produced by IBM's FORTRAN
-	 compiler) produce multiple symtabs (this is unavoidable
-	 assuming csects can be at arbitrary places in memory and that
-	 the GLOBAL_BLOCK of a symtab has a begin and end address).  */
+      objfile->expand_symtabs_with_fullname (fullname);
+      for (compunit_symtab *cu : objfile->compunits ())
+	for (symtab *s : cu->filetabs ())
+	  {
+	    if (FILENAME_CMP (sym_tab->filename, s->filename) != 0)
+	      continue;
+	    if (FILENAME_CMP (symtab_to_fullname (sym_tab),
+			      symtab_to_fullname (s))
+		!= 0)
+	      continue;
 
-      /* BEST is the smallest linenumber > LINE so far seen,
-	 or 0 if none has been seen so far.
-	 BEST_INDEX and BEST_LINETABLE identify the item for it.  */
-      int best;
+	    all_file_symtabs.push_back (s);
+	  }
+    }
 
-      if (best_index >= 0)
-	best = best_linetable->item[best_index].line;
-      else
-	best = 0;
+  symtab_index_vector imv;
+  int ind = 0;
+  for (symtab *s : all_file_symtabs)
+    {
+      int start = 0;
+      int exact = 0;
+      const linetable *linetable = s->linetable ();
 
-      for (objfile *objfile : current_program_space->objfiles ())
-	objfile->expand_symtabs_with_fullname (symtab_to_fullname (sym_tab));
-
-      for (objfile *objfile : current_program_space->objfiles ())
+      /* Find all exact entries for this line in symtab S.  */
+      do
 	{
-	  for (compunit_symtab *cu : objfile->compunits ())
-	    {
-	      for (symtab *s : cu->filetabs ())
-		{
-		  const struct linetable *l;
-		  int ind;
+	  ind = find_line_common (linetable, line, &exact, start);
+	  if (ind < 0)
+	    break;
 
-		  if (FILENAME_CMP (sym_tab->filename, s->filename) != 0)
-		    continue;
-		  if (FILENAME_CMP (symtab_to_fullname (sym_tab),
-				    symtab_to_fullname (s)) != 0)
-		    continue;	
-		  l = s->linetable ();
-		  ind = find_line_common (l, line, &exact, 0);
-		  if (ind >= 0)
+	  /* Only consider exact matches.  */
+	  if (exact)
+	    imv.push_back ({ s, ind });
+
+	  /* Continue after an END line entry.  There may be other
+	     locations for this line, update START.  */
+	  while (ind < linetable->nitems
+		 && linetable->item[ind].line != 0)
+	    ind++;
+
+	  start = ind + 1;
+	}
+      while (ind >= 0);
+    }
+
+  /* Didn't find an exact match in any symtab with the same name.  So we
+     better keep looking for another symtab with the same name.  In the
+     case of xcoff, multiple csects for one source file (produced by IBM's
+     FORTRAN compiler) produce multiple symtabs (this is unavoidable
+     assuming csects can be at arbitrary places in memory and that
+     the GLOBAL_BLOCK of a symtab has a begin and end address).  */
+  if (imv.empty ())
+    {
+      for (symtab *s : all_file_symtabs)
+	{
+	  int start = 0;
+	  int exact = 0;
+	  int best = 0;
+	  int best_index = -1;
+	  const linetable *linetable = s->linetable ();
+	  do
+	    {
+	      ind = find_line_common (linetable, line, &exact, start);
+	      if (ind >= 0)
+		{
+		  /* We determined exact matches already and there were
+		   * none.  */
+		  gdb_assert (!exact);
+
+		  if (best == 0 || linetable->item[ind].line < best)
 		    {
-		      if (exact)
-			{
-			  best_index = ind;
-			  best_linetable = l;
-			  best_symtab = s;
-			  goto done;
-			}
-		      if (best == 0 || l->item[ind].line < best)
-			{
-			  best = l->item[ind].line;
-			  best_index = ind;
-			  best_linetable = l;
-			  best_symtab = s;
-			}
+		      best = linetable->item[ind].line;
+		      best_index = ind;
 		    }
+
+		  /* Continue after an END line entry.  There may be other
+		     locations for this line, update START.  */
+		  while (ind < linetable->nitems
+			 && linetable->item[ind].line != 0)
+		    ind++;
+
+		  start = ind + 1;
 		}
+	    }
+	  while (ind >= 0);
+
+	  if (best_index >= 0)
+	    {
+	      imv.push_back ({ s, best_index });
 	    }
 	}
     }
-done:
-  if (best_index < 0)
-    return NULL;
-
-  if (index)
-    *index = best_index;
-
-  return best_symtab;
+  return imv;
 }
 
 /* Given SYMTAB, returns all the PCs function in the symtab that
@@ -3550,21 +3569,47 @@ bool
 find_line_first_pc (symtab *symtab, int line, CORE_ADDR *pc)
 {
   const struct linetable *l;
-  int ind;
 
   *pc = 0;
+  if (symtab == nullptr || symtab->linetable () == nullptr)
+    return false;
+
+  symtab_index_vector imv = find_line_symtabs (symtab, line);
+  if (imv.empty ())
+    return false;
+
+  /* Select any entry in the index match vector.  Alternatively, we could
+     use the one with the lowest PC.  */
+  symtab = imv[0].first;
+  l = symtab->linetable ();
+  if (imv[0].second < l->nitems)
+    *pc = l->item[imv[0].second].pc (symtab->compunit ()->objfile ());
+  return true;
+}
+
+/* See symtab.h.  */
+
+bool
+find_line_pcs (symtab *symtab, int line, std::vector<CORE_ADDR> &pcs)
+{
+  const struct linetable *l;
+
   if (symtab == 0)
     return false;
 
-  symtab = find_line_symtab (symtab, line, &ind);
-  if (symtab != NULL)
-    {
-      l = symtab->linetable ();
-      *pc = l->item[ind].pc (symtab->compunit ()->objfile ());
-      return true;
-    }
-  else
+  symtab_index_vector imv = find_line_symtabs (symtab, line);
+  if (imv.empty ())
     return false;
+
+  /* We possibly have multiple locations now from different symtabs.  */
+  for (const auto &si : imv)
+    {
+      symtab = si.first;
+      l = symtab->linetable ();
+      auto pc = l->item[si.second].pc (symtab->compunit ()->objfile ());
+      pcs.push_back (pc);
+    }
+  return true;
 }
 
 /* Find the range of pc values in a line.
@@ -3604,6 +3649,30 @@ find_line_pc_range (struct symtab_and_line sal, CORE_ADDR *startptr,
       *endptr = found_sal.end;
     }
   return true;
+}
+
+/* See symtab.h.  */
+
+bool
+find_line_pc_ranges (const symtab_and_line &sal,
+		     std::vector<std::pair<CORE_ADDR, CORE_ADDR>> &ranges)
+{
+  std::vector<CORE_ADDR> pcs;
+  if (sal.pc == 0 && !find_line_pcs (sal.symtab, sal.line, pcs))
+    return false;
+
+  if (sal.pc != 0)
+    pcs.push_back (sal.pc);
+
+  for (const auto &pc : pcs)
+    {
+      symtab_and_line found_sal = find_pc_sect_line (pc, sal.section, 0);
+
+      ranges.push_back ({ found_sal.pc, found_sal.line != sal.line
+					  ? found_sal.pc
+					  : found_sal.end });
+    }
+  return !ranges.empty ();
 }
 
 /* Given a line table and a line number, return the index into the line

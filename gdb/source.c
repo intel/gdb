@@ -1487,13 +1487,11 @@ last_symtab_line (struct symtab *s)
 
 
 
-/* Print info on range of pc's in a specified line.  */
+/* Print info on ranges of pcs in a specified line.  */
 
 static void
 info_line_command (const char *arg, int from_tty)
 {
-  CORE_ADDR start_pc, end_pc;
-
   std::vector<symtab_and_line> decoded_sals;
   symtab_and_line curr_sal;
   gdb::array_view<symtab_and_line> sals;
@@ -1527,6 +1525,7 @@ info_line_command (const char *arg, int from_tty)
       if (sal.pspace != current_program_space)
 	continue;
 
+      std::vector<std::pair<CORE_ADDR, CORE_ADDR>> pc_ranges;
       if (sal.symtab == 0)
 	{
 	  struct gdbarch *gdbarch = get_current_arch ();
@@ -1546,34 +1545,41 @@ info_line_command (const char *arg, int from_tty)
 	  gdb_printf ("\n");
 	}
       else if (sal.line > 0
-	       && find_line_pc_range (sal, &start_pc, &end_pc))
+	       && find_line_pc_ranges (sal, pc_ranges))
 	{
 	  gdbarch *gdbarch = sal.symtab->compunit ()->objfile ()->arch ();
 
-	  if (start_pc == end_pc)
+	  for (const auto &pc_range : pc_ranges)
 	    {
-	      gdb_printf ("Line %d of \"%s\"",
-			  sal.line,
-			  symtab_to_filename_for_display (sal.symtab));
-	      gdb_stdout->wrap_here (2);
-	      gdb_printf (" is at address ");
-	      print_address (gdbarch, start_pc, gdb_stdout);
-	      gdb_stdout->wrap_here (2);
-	      gdb_printf (" but contains no code.\n");
+	      if (pc_range.first == pc_range.second)
+		{
+		  gdb_printf (
+		    "Line %d of \"%s\"", sal.line,
+		    symtab_to_filename_for_display (sal.symtab));
+		  gdb_stdout->wrap_here (2);
+		  gdb_printf (" is at address ");
+		  print_address (gdbarch, pc_range.first, gdb_stdout);
+		  gdb_stdout->wrap_here (2);
+		  gdb_printf (" but contains no code.\n");
+		}
+	      else
+		{
+		  gdb_printf (
+		    "Line %d of \"%s\"", sal.line,
+		    symtab_to_filename_for_display (sal.symtab));
+		  gdb_stdout->wrap_here (2);
+		  gdb_printf (" starts at address ");
+		  print_address (gdbarch, pc_range.first, gdb_stdout);
+		  gdb_stdout->wrap_here (2);
+		  gdb_printf (" and ends at ");
+		  print_address (gdbarch, pc_range.second, gdb_stdout);
+		  gdb_printf (".\n");
+		}
 	    }
-	  else
-	    {
-	      gdb_printf ("Line %d of \"%s\"",
-			  sal.line,
-			  symtab_to_filename_for_display (sal.symtab));
-	      gdb_stdout->wrap_here (2);
-	      gdb_printf (" starts at address ");
-	      print_address (gdbarch, start_pc, gdb_stdout);
-	      gdb_stdout->wrap_here (2);
-	      gdb_printf (" and ends at ");
-	      print_address (gdbarch, end_pc, gdb_stdout);
-	      gdb_printf (".\n");
-	    }
+
+	  /* We can only select one line to be set as next list line,
+	     so take the first one.  */
+	  CORE_ADDR start_pc = pc_ranges[0].first;
 
 	  /* x/i should display this line's code.  */
 	  set_next_address (gdbarch, start_pc);
@@ -1584,7 +1590,8 @@ info_line_command (const char *arg, int from_tty)
 	  /* If this is the only line, show the source code.  If it could
 	     not find the file, don't do anything special.  */
 	  if (annotation_level > 0 && sals.size () == 1)
-	    annotate_source_line (sal.symtab, sal.line, 0, start_pc);
+	    for (const std::pair<CORE_ADDR, CORE_ADDR> &rng : pc_ranges)
+	      annotate_source_line (sal.symtab, sal.line, 0, rng.first);
 	}
       else
 	/* Is there any case in which we get here, and have an address

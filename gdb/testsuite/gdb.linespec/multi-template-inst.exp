@@ -1,0 +1,69 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test info line for multiple instantiations of the same function.
+
+standard_testfile .cc
+
+if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile}] } {
+    return -1
+}
+
+# Call info line with LOCSPEC and expect NUM locations returned.
+
+proc_with_prefix line_info {locspec num msg {num_anno 0}} {
+    set found_lines 0
+    set found_annot 0
+    set fill "\[^\r\n\]*"
+    set annot_tag "\032\032"
+    gdb_test_multiple "info line $locspec" "$msg" -lbl {
+	-re "Line $::decimal $fill address $::hex $fill $::hex $fill" {
+	    incr found_lines
+	    exp_continue
+	}
+	-re "\r\n$annot_tag$fill$::srcfile:$locspec$fill$::hex" {
+	    incr found_annot
+	    exp_continue
+	}
+	-re -wrap "" {
+	    gdb_assert { $found_lines == $num && $found_annot == $num_anno } \
+		$gdb_test_name
+	}
+    }
+}
+
+# Test with set print asm-demangle on and off since this will change
+# the "line info" command's output.
+
+foreach_with_prefix asm_demangle {off on} {
+    gdb_test_no_output "set print asm-demangle $asm_demangle"
+
+    # Test function name which has one specialisation not inline.
+    line_info "func" 5 "Function func"
+
+    # Test explicit line number.
+    set show_here_line [gdb_get_line_number "Show here"]
+    line_info $show_here_line 4 "Line $show_here_line"
+
+    # Test explicit line number for the specialisation.
+    set one_location_line [gdb_get_line_number "One location"]
+    line_info $one_location_line 1 "One location"
+
+    # Test function name which has one specialisation not inline
+    # but with annotations enabled.
+    gdb_test_no_output "set annotate 1"
+    line_info $show_here_line 4 "Line annot $show_here_line annotate" 4
+    gdb_test_no_output "set annotate 0"
+}

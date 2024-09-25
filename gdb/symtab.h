@@ -2447,8 +2447,21 @@ extern struct symtab *find_pc_line_symtab (CORE_ADDR);
 
 bool find_line_first_pc (symtab *symtab, int line, CORE_ADDR *pc);
 
+/* Collect all PC values into PCS for a given source file and LINE number
+   and return true.  Returns false for an invalid LINE number.  The source
+   file is specified with SYMTAB.  */
+
+bool find_line_pcs (symtab *symtab, int line, std::vector<CORE_ADDR> &pcs);
+
 extern bool find_line_pc_range (struct symtab_and_line, CORE_ADDR *,
 				CORE_ADDR *);
+
+/* Instead of returning just the first range of PCs of a line, like
+   find_line_pc_range (), return all of them.  Return false if no
+   ranges could be found, true otherwise.  */
+
+bool find_line_pc_ranges (const symtab_and_line &sal,
+			  std::vector<std::pair<CORE_ADDR, CORE_ADDR>> &imv);
 
 extern void resolve_sal_pc (struct symtab_and_line *);
 
@@ -2514,13 +2527,15 @@ bool matching_obj_sections (struct obj_section *, struct obj_section *);
 /* Find line number LINE in any symtab whose name is the same as
    SYMTAB.
 
-   If found, return the symtab that contains the linetable in which it was
-   found, set *INDEX to the index in the linetable of the best entry
-   found.  The returned index includes inexact matches.
+   If found, return a vector of tuples (of type symtab_index_vector) with the
+   symtabs and index that contains the linetable in which a line was found.
+   The matches will always be exact matches.
 
-   If not found, return NULL.  */
+   If no matches were found, return an empty vector.  */
 
-extern symtab *find_line_symtab (symtab *sym_tab, int line, int *index);
+using symtab_index_vector = std::vector<std::pair<symtab *, int>>;
+
+symtab_index_vector find_line_symtabs (symtab *sym_tab, int line);
 
 /* Given a function symbol SYM, find the symtab and line for the start
    of the function.  If FUNFIRSTLINE is true, we want the first line

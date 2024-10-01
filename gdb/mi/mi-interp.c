@@ -83,21 +83,10 @@ mi_interp::init (bool top_level)
 {
   mi_interp *mi = this;
 
-  /* Store the current output channel, so that we can create a console
-     channel that encapsulates and prefixes all gdb_output-type bits
-     coming from the rest of the debugger.  */
-  mi->raw_stdout = gdb_stdout;
+  mi->reconstruct ();
 
-  /* Create MI console channels, each with a different prefix so they
-     can be distinguished.  */
-  mi->out = new mi_console_file (mi->raw_stdout, "~", '"');
-  mi->err = new mi_console_file (mi->raw_stdout, "&", '"');
-  mi->log = mi->err;
-  mi->targ = new mi_console_file (mi->raw_stdout, "@", '"');
-  mi->event_channel = new mi_console_file (mi->raw_stdout, "=", 0);
   mi->mi_uiout = mi_out_new (name ()).release ();
   gdb_assert (mi->mi_uiout != nullptr);
-  mi->cli_uiout = new cli_ui_out (mi->out);
 
   if (top_level)
     {
@@ -135,6 +124,40 @@ mi_interp::resume ()
   gdb_stdtarg = mi->targ;
 
   deprecated_show_load_progress = mi_load_progress;
+}
+
+/* See mi-interp.h.  */
+
+void
+mi_interp::reconstruct ()
+{
+  mi_interp *mi = this;
+
+  /* Delete the old streams if we had been initialised
+     before.  */
+  if (inited)
+    {
+      /* Remove old streams.  */
+      delete mi->out;
+      delete mi->err;
+      delete mi->targ;
+      delete mi->event_channel;
+      delete mi->cli_uiout;
+    }
+
+  /* Store the current output channel, so that we can create a console
+     channel that encapsulates and prefixes all gdb_output-type bits
+     coming from the rest of the debugger.  */
+  mi->raw_stdout = gdb_stdout;
+
+  /* Create MI console channels, each with a different prefix so they
+     can be distinguished.  */
+  mi->out = new mi_console_file (mi->raw_stdout, "~", '"');
+  mi->err = new mi_console_file (mi->raw_stdout, "&", '"');
+  mi->log = mi->err;
+  mi->targ = new mi_console_file (mi->raw_stdout, "@", '"');
+  mi->event_channel = new mi_console_file (mi->raw_stdout, "=", 0);
+  mi->cli_uiout = new cli_ui_out (mi->out);
 }
 
 void

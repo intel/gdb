@@ -136,7 +136,10 @@ interp_set (struct interp *interp, bool top_level)
     {
       interp->init (top_level);
       interp->inited = true;
+      interp->top_level_at_init = top_level;
     }
+  else if (!interp->top_level_at_init)
+    interp->reconstruct ();
 
   /* Do this only after the interpreter is initialized.  */
   current_uiout = interp->interp_ui_out ();

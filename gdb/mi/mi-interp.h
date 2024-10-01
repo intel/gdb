@@ -36,6 +36,16 @@ public:
   void init (bool top_level) override;
   void resume () override;
   void suspend () override;
+
+  /* Always reconstruct the streams since we may be called
+     multiple times with a different gdb_stdout.  See
+     execute_fn_to_string in top.c where a stack ui_file is
+     used as temporary gdb_stdout.  This would lead
+     to a stale mi_console_file being used when interpreters
+     get notified of events and output messages.  */
+
+  void reconstruct () override;
+
   void exec (const char *command_str) override;
   ui_out *interp_ui_out () override;
   void set_logging (ui_file_up logfile, bool logging_redirect,

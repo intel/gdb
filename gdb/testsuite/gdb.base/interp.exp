@@ -86,4 +86,24 @@ if {![runto_main]} {
 }
 
 gdb_test "list" ".*\[0-9\].*main \\(int argc.*" "can list sources"
+
+# This is a special case test where we call the MI interpreter
+# multiple times through "thread apply".  This leads to a fatal
+# error when a ui_file on the stack, still tied to the MI interpreter,
+# goes out of scope.
+clean_restart ${testfile}
+
+if {![runto_main]} {
+    return -1
+}
+
+gdb_test "thread apply 1 interpreter mi \"p 1\""
+
+# One extra thread apply would be enough to show the original error but
+# more don't hurt either.  The number printed is valuable to see which
+# iteration caused an issue.
+foreach_with_prefix num { 0 1 2 } {
+    gdb_test "thread apply all interpreter mi \"p $num\""
+}
+
 gdb_exit

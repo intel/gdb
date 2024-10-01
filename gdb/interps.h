@@ -59,6 +59,13 @@ public:
   virtual void resume () = 0;
   virtual void suspend () = 0;
 
+  /* Interpreters may be set using different output streams.  To avoid
+     stale objects being used as output streams, this is a chance to
+     re-construct these outputs.  It is only called on interpreters that
+     are not top level.  */
+  virtual void reconstruct ()
+  {}
+
   virtual void exec (const char *command) = 0;
 
   /* Returns the ui_out currently used to collect results for this
@@ -195,6 +202,10 @@ private:
 public:
   /* Has the init method been run?  */
   bool inited = false;
+
+  /* If we were the top level interpreter at init, reconstruct must not be
+     called.  */
+  bool top_level_at_init = false;
 };
 
 /* Look up the interpreter for NAME, creating one if none exists yet.

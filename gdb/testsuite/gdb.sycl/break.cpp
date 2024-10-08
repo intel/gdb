@@ -90,17 +90,6 @@ main (int argc, char *argv[])
 {
   sycl::queue queue {get_sycl_queue (argc, argv)};
 
-  /* Submit a dummy kernel to trigger attaching.
-
-     This is a bit awkward.  To start a test, sycl_start continues to to
-     zeModuleCreate inside the user-mode driver to attach to the graphics
-     device.  To cover leaking breakpoints into and out of kernels, we
-     need to be attached before we hit the breakpoint at the SingleTask
-     ctor.
-
-     This will go away with support for automatically attaching.  */
-  queue.single_task ([] () {});
-
   SingleTask single_task;
   for (int i = 0; i < 2; i++)
     {

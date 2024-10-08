@@ -148,26 +148,10 @@ proc sycl_start {device} {
     }
 
     if {[require_sycl_device $device "gpu" "Intel*"]} {
-	# For the Intel GT target, define a "hook" BP at a
-	# Level-Zero API function at which the Level-Zero backend
-	# would have been already initialized, attaching to the
-	# device would be expected to succeed.  Once we hit the
-	# hook BP, we create the additional inferior.
-	gdb_breakpoint "zeContextCreate" {*}"allow-pending temporary"
-	set hook_bp_hit [gdb_continue_to_breakpoint "hook bp" \
-			     "zeContextCreate\[^\r\n\]*"]
-	if {$hook_bp_hit != 0} {
-	    return 0
-	}
-
 	with_test_prefix "$device" {
-	    set inf_pid [get_inferior_pid]
-	    gdb_test "add-inferior -no-connection"
-	    gdb_test "inferior 2"
-	    set cmd "gdbserver-intelgt --once --attach - $inf_pid"
-	    gdb_test "target remote | $cmd" \
-		"Remote debugging.*" "connect the remote target"
-	    gdb_test "inferior 1"
+	    gdb_test "continue" \
+		"intelgt: Started gdbserver.*" \
+		"auto-attached"
 	    gdb_test "set schedule-multi on"
 	    gdb_test "info inferior" ".*" "inferiors for logging"
 	}

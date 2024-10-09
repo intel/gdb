@@ -1,0 +1,265 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# In a multithreaded kernel, trigger a page fault in one thread, use
+# the Core File Generator for GPU (corefilegen-gpu) to translate error
+# capture to a corefile, and check the contents of the corefile.
+#
+# NOTES
+# Following command gives user read and write access to error captures
+# at CardN:
+#	$ sudo chmod +rw,o+rw /sys/class/drm/cardN/error
+#
+
+load_lib sycl.exp
+
+standard_testfile kernel-multithread-pagefault-read.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+# Set path to the corefilegen-gpu.
+if {[catch {set coregen_app [exec which coregen]}]} {
+    unsupported "coregen app not found"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "$binfile" $srcfile {sycl debug}]} {
+    return -1
+}
+
+set fill "\[^\r\n\]*"
+set ws "\\s+"
+
+set pf_ln [gdb_get_line_number "pagefault-line"]
+set spin_ln [gdb_get_line_number "spin-line"]
+set third_ln [gdb_get_line_number "func-third"]
+set second_ln [gdb_get_line_number "func-second"]
+set first_ln [gdb_get_line_number "func-first"]
+set kernel_ln [gdb_get_line_number "kernel-line"]
+
+set output_path [standard_output_file ""]
+
+# Clear any previous error captures, and return the number of cards
+# found by coregen.
+proc reset_error_captures {} {
+    set cards ""
+    set cards_line 0
+
+    if {[catch {set output [exec $::coregen_app --log-level=2 \
+			    --output-path=$::output_path]} errmsg] != 0} {
+	verbose -log "Reset error capture failed with message:\n$errmsg\n"
+	fail "reset error captures"
+	return 0
+    }
+    verbose -log "Reset error capture:\n$output\n"
+    set lines [split $output "\n"]
+    foreach line $lines {
+	if {[regexp {Error capture copied at '(.*)'} $line -> file]} {
+	    exec rm $file
+	} elseif {[regexp {Found (.*) card\(s\)} $line -> cards]} {
+	    incr cards_line
+	}
+    }
+    if {[gdb_assert {"$cards_line" == "1"} "num cards appeared once"]} {
+	# We come to this proc only if the host has at least one PVC card.
+	# If coregen failed to find any cards, it must be due missing read
+	# permissions to error captures.
+	gdb_assert {"$cards" != "0"} \
+	    "card(s) found, permissions to read error captures"
+	return $cards
+    } else {
+	return 0
+    }
+}
+
+# Copy error capture(s) to errorfile(s) in the output path.
+proc copy_error_captures {} {
+    set error_captures {}
+
+    if {[catch {set output [exec $::coregen_app --output-path=$::output_path]} errmsg]} {
+	verbose -log "Copy error capture failed with message:\n$errmsg\n"
+	fail "copy error captures"
+	return {}
+    }
+    verbose -log "Copy error capture:\n$output\n"
+    set lines [split $output "\n"]
+    set errorfiles 0
+    foreach line $lines {
+	if {[regexp {Error capture copied at '(.*)'} $line -> file]} {
+	    incr errorfiles
+	    gdb_assert {[string first "$::output_path" $file] == 0} \
+		"errorfile $errorfiles at output path"
+	    lappend error_captures $file
+	}
+    }
+    return $error_captures
+}
+
+# Translate errorfile to a corefile.
+proc translate_error_capture {errorfile} {
+    set corefile "invalid"
+    set crash_reason_line 0
+    set translated_line 0
+
+    if {[catch {set output [exec $::coregen_app --output-path=$::output_path $errorfile \
+				--all-active-threads=true]} errmsg]} {
+	verbose -log "Translate error capture failed with message:\n$errmsg\n"
+	fail "translate error captures"
+	return ""
+    }
+    verbose -log "Translate error capture:\n$output\n"
+    set lines [split $output "\n"]
+    foreach line $lines {
+	if {[regexp \
+		{Crash reason\: page fault \@ 0x0000000000000000, ccs[0-9]+ in coregen-multith \[.*\]} \
+		$line ]} {
+	    incr crash_reason_line
+	} elseif {[regexp {Translated '.*' to '(.*)'} $line -> corefile]} {
+	    incr translated_line
+	}
+    }
+    if {![gdb_assert {"$crash_reason_line" == "1"} "crash reason found"]
+	|| ![gdb_assert {"$translated_line" == "1"} "one corefile generated"]
+	|| ![gdb_assert {[string first "$::output_path" $corefile] == 0} \
+		"corefile at output path"]} {
+	return ""
+    }
+    return $corefile
+}
+
+# Run a set of tests on the given thread and SIMD lane.
+# This thread had a page fault.
+proc test_pf_thread {tid simd_lane} {
+    with_test_prefix "$tid:$simd_lane" {
+	gdb_test "thread $tid:$simd_lane" \
+	    "Switching to thread $tid:$simd_lane.*"
+
+	gdb_test "backtrace 5" \
+		[multi_line \
+		    "#0$::fill fourth $::fill at $::srcfile:$::pf_ln" \
+		    "#1$::fill third $::fill at $::srcfile:$::third_ln" \
+		    "#2$::fill second $::fill at $::srcfile:$::second_ln" \
+		    "#3$::fill first $::fill at $::srcfile:$::first_ln" \
+		    "#4$::fill main::$::fill at $::srcfile:$::kernel_ln.*"] \
+		"backtrace at pagefault-line"
+
+	# CR0.1 bit 15 should be set.
+	gdb_assert {[get_integer_valueof "\$cr0\[1\]" "0"] & [expr 1 << 15]} \
+	     "CR0.1 bit 15 is set"
+
+	set y4 [get_integer_valueof "\*y4" 0]
+	set expected_x4 [expr $y4 + 138]
+	gdb_test "print x4" "= $expected_x4"
+    }
+}
+
+# Run a set of tests on the given thread and SIMD lane.
+# This thread did not have a page fault.
+proc test_other_thread {tid simd_lane} {
+    with_test_prefix "$tid:$simd_lane" {
+	gdb_test "thread $tid:$simd_lane" \
+	    "Switching to thread $tid:$simd_lane.*"
+
+	gdb_test "backtrace 5" \
+		[multi_line \
+		    "#0$::fill fourth $::fill at $::srcfile:$::spin_ln" \
+		    "#1$::fill third $::fill at $::srcfile:$::third_ln" \
+		    "#2$::fill second $::fill at $::srcfile:$::second_ln" \
+		    "#3$::fill first $::fill at $::srcfile:$::first_ln" \
+		    "#4$::fill main::$::fill at $::srcfile:$::kernel_ln.*"] \
+		"backtrace at spin-line"
+
+	# CR0.1 bit 15 should be clear.
+	gdb_assert {[get_integer_valueof "\$cr0\[1\]" "0"] ^ [expr 1 << 15]} \
+	     "CR0.1 bit 15 is clear"
+
+	gdb_test "frame 4"
+	set in_elem2 [get_integer_valueof "in_elem2" 0]
+	set expected_in_elem [expr $in_elem2 + 123]
+	gdb_test "print in_elem" "= $expected_in_elem"
+    }
+}
+
+# Open the given corefile for testing.
+proc read_corefile {corefile} {
+    # Load the core file into debugger, and try some commands.
+    clean_restart
+    gdb_test "target core $corefile" \
+	    [multi_line \
+		"Core was generated by .GPU.." \
+		"Program terminated with signal SIGSEGV, Segmentation fault.*" \
+		"#0$::fill fourth $::fill at $::srcfile:$::pf_ln" \
+		"$::pf_ln${::ws}while \(count \> 0\) count--;.*"] \
+	"load corefile"
+
+    gdb_test "print \$_siginfo" \
+	"= \{si_signo = 11, si_errno = 0, si_code = 1, _sigfault = \{si_addr = 0x0, _addr_lsb = 16\}\}"
+
+    set threads [get_integer_valueof "\$_inferior_thread_count" 0]
+    if {[gdb_assert {$threads == 4} "threads count"]} {
+	# Only one thread triggered a faulting read request.  Coregen adds
+	# crashed threads first, so we expect thread 1 at pagefault-line.
+	# Other threads should be running in the spin.
+	# For each thread, we try to cover multiple different SIMD lanes.
+	test_pf_thread 1 0
+	test_pf_thread 1 5
+	test_pf_thread 1 12
+	for {set tid 2}  {$tid <= $threads} {incr tid} {
+	    test_other_thread $tid $tid
+	    test_other_thread $tid [expr $tid + 4]
+	    test_other_thread $tid [expr $tid + 11]
+	}
+    }
+}
+
+foreach device $sycl_device_list {
+    # This test requires a PVC and level-zero.
+    if {![require_sycl_device "$device" "gpu" "Intel*"]
+	|| ![is_pvc $device]} {
+	continue
+    }
+
+    # Reset previous error captures (if any).
+    if {[reset_error_captures] == 0} {
+	# Cannot access path or insufficient permissions.
+	return -1
+    }
+
+    sycl_with_intelgt_lock $device {
+
+	# Trigger a page fault.
+	exec $binfile gpu Intel level_zero
+
+	# Copy error captures to local folder.
+	set errorfiles [copy_error_captures]
+	if {[gdb_assert {1 == [llength $errorfiles]} "got one errorfile"]} {
+	    # Translate the error capture to a corefile.
+	    set errorfile [lindex $errorfiles 0]
+	    set corefile [translate_error_capture $errorfile]
+	    if {"$corefile" == ""} {
+		# If corefile was not translated, skip rest of the tests.
+		continue
+	    }
+
+	    # Read the corefile.
+	    read_corefile $corefile
+	}
+    }
+}

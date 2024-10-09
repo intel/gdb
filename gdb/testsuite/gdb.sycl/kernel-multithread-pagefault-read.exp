@@ -59,16 +59,48 @@ foreach device $sycl_device_list {
 
 	# Stopped thread should have local variable 'src',
 	# and it should have CR0.1 bit 15 set.
+	setup_kfail "JIRA GSD/10020" "*-*-*"
 	gdb_test "print src" "= (int *) 0x0"
 	gdb_assert {[get_integer_valueof "\$cr0\[1\]" "0"] & [expr 1 << 15]} \
 	    "CR0.1 bit 15"
-	gdb_test "backtrace 5" \
-		[multi_line \
-		    "#0$fill fourth $fill at $srcfile:$pf_ln" \
-		    "#1$fill third $fill at $srcfile:$third_ln" \
-		    "#2$fill second $fill at $srcfile:$second_ln" \
-		    "#3$fill first $fill at $srcfile:$first_ln" \
-		    "#4$fill main::$fill at $srcfile:$kernel_ln.*"]
+	set pf_line 0
+	set frames 0
+	gdb_test_multiple "backtrace 5" "backtrace 5" {
+	    -re "#0$::fill fourth $fill at $srcfile:($decimal)" {
+		if {"$expect_out(1,string)" == "$pf_line"} {
+		    set pf_line 1
+		}
+		incr frames
+		exp_continue
+	    }
+	    -re "#1$::fill third $fill at $srcfile:$third_ln" {
+		incr frames
+		exp_continue
+	    }
+	    -re "#2$::fill second $fill at $srcfile:$second_ln" {
+		incr frames
+		exp_continue
+	    }
+	    -re "#3$::fill first $fill at $srcfile:$first_ln" {
+		incr frames
+		exp_continue
+	    }
+	    -re "#4$::fill main::$fill at $srcfile:$kernel_ln" {
+		incr frames
+		exp_continue
+	    }
+	    -re -wrap "" {
+		if {"$frames" == "5"} {
+		    if {"$pf_line" == "1"} {
+			pass $gdb_test_name
+		    } else {
+			kfail "JIRA GSD/10020" $gdb_test_name
+		    }
+		} else {
+		    fail $gdb_test_name
+		}
+	    }
+	}
 
 	# We should have four threads.
 	set wpfa "with print frame-arguments none -- "
@@ -97,6 +129,7 @@ foreach device $sycl_device_list {
 		}
 	    }
 	}
+	setup_kfail "JIRA GSD/10020" "*-*-*"
 	gdb_assert {"$cr01_pf_set" == "1"} "page fault on one thread"
     }
 }

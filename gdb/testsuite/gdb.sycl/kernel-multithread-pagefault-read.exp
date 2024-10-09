@@ -1,0 +1,102 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Check read pagefault detection in a multithreaded kernel.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+set fill "\[^\r\n\]*"
+set ws "\\s+"
+
+set pf_ln [gdb_get_line_number "pagefault-line"]
+set third_ln [gdb_get_line_number "func-third"]
+set second_ln [gdb_get_line_number "func-second"]
+set first_ln [gdb_get_line_number "func-first"]
+set kernel_ln [gdb_get_line_number "kernel-line"]
+
+foreach device $sycl_device_list {
+
+    sycl_with_intelgt_lock $device {
+	if {![require_sycl_device "$device" "gpu" "Intel*"]
+	    || ![is_pvc $device]} {
+	    unsupported "target does not support pagefault"
+	    continue
+	}
+
+	clean_restart "${binfile}"
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*" \
+	    "hit the segmentation fault"
+
+	# Stopped thread should have local variable 'src',
+	# and it should have CR0.1 bit 15 set.
+	gdb_test "print src" "= (int *) 0x0"
+	gdb_assert {[get_integer_valueof "\$cr0\[1\]" "0"] & [expr 1 << 15]} \
+	    "CR0.1 bit 15"
+	gdb_test "backtrace 5" \
+		[multi_line \
+		    "#0$fill fourth $fill at $srcfile:$pf_ln" \
+		    "#1$fill third $fill at $srcfile:$third_ln" \
+		    "#2$fill second $fill at $srcfile:$second_ln" \
+		    "#3$fill first $fill at $srcfile:$first_ln" \
+		    "#4$fill main::$fill at $srcfile:$kernel_ln.*"]
+
+	# We should have four threads.
+	set wpfa "with print frame-arguments none -- "
+	set stopped_threads {}
+	gdb_test_multiple "${wpfa}info threads -stopped" "stopped threads" -lbl {
+	    -re "\r\n. (2\.$decimal)\:\[$fill" {
+		lappend stopped_threads $expect_out(1,string)
+		exp_continue
+	    }
+	    -re "$gdb_prompt" {
+		if {"[llength $stopped_threads]" == "4"} {
+		    pass $gdb_test_name
+		} else {
+		    fail $gdb_test_name
+		}
+	    }
+	}
+
+	# Only one of the threads should have CR0.1 bit 15 set.
+	set cr01_pf_set 0
+	foreach thread $stopped_threads {
+	    with_test_prefix $thread {
+		gdb_test "thread $thread"
+		if {[get_integer_valueof "\$cr0\[1\]" "-1"] & [expr 1 << 15]} {
+		    incr cr01_pf_set
+		}
+	    }
+	}
+	gdb_assert {"$cr01_pf_set" == "1"} "page fault on one thread"
+    }
+}

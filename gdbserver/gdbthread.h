@@ -21,14 +21,12 @@
 
 #include "gdbsupport/common-gdbthread.h"
 #include "gdbsupport/function-view.h"
-#include "inferiors.h"
-
-#include <list>
+#include "gdbsupport/owning_intrusive_list.h"
 
 struct btrace_target_info;
 struct regcache;
 
-struct thread_info
+struct thread_info : public intrusive_list_node<thread_info>
 {
   thread_info (ptid_t id, void *target_data)
     : id (id), target_data (target_data)
@@ -86,7 +84,7 @@ struct thread_info
   gdb_thread_options thread_options = 0;
 };
 
-extern std::list<thread_info *> all_threads;
+extern owning_intrusive_list<thread_info> all_threads;
 
 void remove_thread (struct thread_info *thread);
 struct thread_info *add_thread (ptid_t ptid, void *target_data);

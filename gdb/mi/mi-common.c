@@ -39,6 +39,7 @@ static const char * const async_reason_string_lookup[] =
   "syscall-return",
   "exec",
   "no-history",
+  "unavailable",
   NULL
 };
 

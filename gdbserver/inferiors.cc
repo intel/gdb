@@ -19,11 +19,12 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "gdbsupport/common-inferior.h"
+#include "gdbsupport/owning_intrusive_list.h"
 #include "gdbthread.h"
 #include "dll.h"
 
-std::list<process_info *> all_processes;
-std::list<thread_info *> all_threads;
+owning_intrusive_list<process_info> all_processes;
+owning_intrusive_list<thread_info> all_threads;
 
 /* The current process.  */
 static process_info *current_process_;
@@ -40,14 +41,12 @@ static std::string current_inferior_cwd;
 struct thread_info *
 add_thread (ptid_t thread_id, void *target_data)
 {
-  thread_info *new_thread = new thread_info (thread_id, target_data);
-
-  all_threads.push_back (new_thread);
+  auto &new_thread = all_threads.emplace_back (thread_id, target_data);
 
   if (current_thread == NULL)
-    switch_to_thread (new_thread);
+    switch_to_thread (&new_thread);
 
-  return new_thread;
+  return &new_thread;
 }
 
 /* See gdbthread.h.  */
@@ -56,7 +55,7 @@ struct thread_info *
 get_first_thread (void)
 {
   if (!all_threads.empty ())
-    return all_threads.front ();
+    return &all_threads.front ();
   else
     return NULL;
 }
@@ -88,12 +87,6 @@ find_any_thread_of_pid (int pid)
   });
 }
 
-static void
-free_one_thread (thread_info *thread)
-{
-  delete thread;
-}
-
 void
 remove_thread (struct thread_info *thread)
 {
@@ -101,10 +94,10 @@ remove_thread (struct thread_info *thread)
     target_disable_btrace (thread->btrace);
 
   discard_queued_stop_replies (ptid_of (thread));
-  all_threads.remove (thread);
   if (current_thread == thread)
     switch_to_thread (nullptr);
-  free_one_thread (thread);
+
+  all_threads.erase (all_threads.iterator_to (*thread));
 }
 
 void *
@@ -128,7 +121,6 @@ set_thread_regcache_data (struct thread_info *thread, struct regcache *data)
 void
 clear_inferiors (void)
 {
-  for_each_thread (free_one_thread);
   all_threads.clear ();
 
   clear_dlls ();
@@ -140,11 +132,7 @@ clear_inferiors (void)
 struct process_info *
 add_process (int pid, int attached)
 {
-  process_info *process = new process_info (pid, attached);
-
-  all_processes.push_back (process);
-
-  return process;
+  return &all_processes.emplace_back (pid, attached);
 }
 
 /* Remove a process from the common process list and free the memory
@@ -157,10 +145,10 @@ remove_process (struct process_info *process)
   clear_symbol_cache (&process->symbol_cache);
   free_all_breakpoints (process);
   gdb_assert (find_thread_process (process) == NULL);
-  all_processes.remove (process);
   if (current_process () == process)
     switch_to_process (nullptr);
-  delete process;
+
+  all_processes.erase (all_processes.iterator_to (*process));
 }
 
 process_info *
@@ -177,7 +165,7 @@ process_info *
 get_first_process (void)
 {
   if (!all_processes.empty ())
-    return all_processes.front ();
+    return &all_processes.front ();
   else
     return NULL;
 }
@@ -226,13 +214,14 @@ has_current_process ()
 void
 for_each_process (gdb::function_view<void (process_info *)> func)
 {
-  std::list<process_info *>::iterator next, cur = all_processes.begin ();
+  owning_intrusive_list<process_info>::iterator next, cur
+    = all_processes.begin ();
 
   while (cur != all_processes.end ())
     {
       next = cur;
       next++;
-      func (*cur);
+      func (&*cur);
       cur = next;
     }
 }
@@ -242,18 +231,9 @@ for_each_process (gdb::function_view<void (process_info *)> func)
 process_info *
 find_process (gdb::function_view<bool (process_info *)> func)
 {
-  std::list<process_info *>::iterator next, cur = all_processes.begin ();
-
-  while (cur != all_processes.end ())
-    {
-      next = cur;
-      next++;
-
-      if (func (*cur))
-	return *cur;
-
-      cur = next;
-    }
+  for (process_info &process : all_processes)
+    if (func (&process))
+      return &process;
 
   return NULL;
 }
@@ -263,18 +243,9 @@ find_process (gdb::function_view<bool (process_info *)> func)
 thread_info *
 find_thread (gdb::function_view<bool (thread_info *)> func)
 {
-  std::list<thread_info *>::iterator next, cur = all_threads.begin ();
-
-  while (cur != all_threads.end ())
-    {
-      next = cur;
-      next++;
-
-      if (func (*cur))
-	return *cur;
-
-      cur = next;
-    }
+  for (thread_info &thread : all_threads)
+    if (func (&thread))
+      return &thread;
 
   return NULL;
 }
@@ -305,13 +276,13 @@ find_thread (ptid_t filter, gdb::function_view<bool (thread_info *)> func)
 void
 for_each_thread (gdb::function_view<void (thread_info *)> func)
 {
-  std::list<thread_info *>::iterator next, cur = all_threads.begin ();
+  owning_intrusive_list<thread_info>::iterator next, cur = all_threads.begin ();
 
   while (cur != all_threads.end ())
     {
       next = cur;
       next++;
-      func (*cur);
+      func (&*cur);
       cur = next;
     }
 }

@@ -472,6 +472,24 @@ mi_interp::on_normal_stop (struct bpstat *bs, int print_frame)
       if (core != -1)
 	mi_uiout->field_signed ("core", core);
     }
+  else
+    {
+      /* For TARGET_WAITKIND_UNAVAILABLE we do not print the frame.  */
+      if (inferior_ptid != null_ptid)
+	{
+	  target_waitstatus last;
+	  get_last_target_status (nullptr, nullptr, &last);
+
+	  thread_info *tp = inferior_thread ();
+	  if (last.kind () == TARGET_WAITKIND_UNAVAILABLE
+	      && tp->is_unavailable ())
+	    {
+	      async_reply_reason reason = EXEC_ASYNC_UNAVAILABLE;
+	      mi_uiout->field_string ("reason", async_reason_lookup (reason));
+	      mi_uiout->field_signed ("thread-id", tp->global_num);
+	    }
+	}
+    }
 
   gdb_puts ("*stopped", this->raw_stdout);
   mi_out_put (mi_uiout, this->raw_stdout);

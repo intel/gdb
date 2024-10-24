@@ -30,7 +30,7 @@ if {[build_executable "failed to compile $srcfile" \
     return -1
 }
 
-proc get_id {name pretty} {
+proc get_id {name pretty {kfail ""}} {
     global decimal
     set expected_id "unexpected"
     if {$pretty} {
@@ -41,6 +41,7 @@ proc get_id {name pretty} {
 	set expected "\r\n($decimal, $decimal, $decimal)"
     }
 
+    if { $kfail ne "" } { setup_kfail $kfail "*-*-*" }
     gdb_test_multiple "printf \"$fmt\\n\",${name}2,${name}1,${name}0" "get expected id $name $pretty" {
 	-re -wrap $expected {
 	    set expected_id $expect_out(1,string)
@@ -50,10 +51,12 @@ proc get_id {name pretty} {
     return $expected_id
 }
 
-proc compare_id {name pretty} {
+proc compare_id {name pretty {kfail ""}} {
     with_test_prefix "check $name" {
 	global decimal
+	if { $kfail ne "" } { setup_kfail $kfail "*-*-*" }
 	set expected_val [get_id $name $pretty]
+	if { $kfail ne "" } { setup_kfail $kfail "*-*-*" }
 	gdb_test "print \$_$name" "\\$$decimal = \\{$expected_val\\}" "check $name == {$expected_val}"
     }
 }
@@ -73,25 +76,42 @@ foreach device $sycl_device_list {
 
 	set kernel_1 [gdb_get_line_number "kernel-1"]
 	set kernel_2 [gdb_get_line_number "kernel-2"]
+
+	set kfail ""
+	if {![is_pvc $device]} {
+	    set kfail "JIRA GSD/10235"
+	}
 	# Set a BP in the first kernel with the false condition, but which
 	# will trigger local ID computation.
 	gdb_breakpoint "$kernel_1 if \$_workitem_local_id == {9,9,9}"
 	# Set a BP in the second kernel.
 	gdb_breakpoint "$kernel_2 if \$_workitem_local_id == {0,1,2}" {temporary}
+	if {![is_pvc $device]} {
+	    setup_kfail "JIRA GSD/10235" "*-*-*"
+	}
 	gdb_continue_to_breakpoint "kernel" ".*$srcfile:$kernel_2.*"
-	set local_id [get_id "workitem_local_id" 0]
+	set local_id [get_id "workitem_local_id" 0 $kfail]
+	if {![is_pvc $device]} {
+	    setup_kfail "JIRA GSD/10235" "*-*-*"
+	}
 	gdb_assert {$local_id eq "0, 1, 2"} "check local id"
 
-	set local_size [get_id "workitem_local_size" 0]
+	set local_size [get_id "workitem_local_size" 0 $kfail]
+	if {![is_pvc $device]} {
+	    setup_kfail "JIRA GSD/10235" "*-*-*"
+	}
 	gdb_assert {$local_size eq "3, 3, 3"} "check local size"
-	set global_size [get_id "workitem_global_size" 0]
+	set global_size [get_id "workitem_global_size" 0 $kfail]
+	if {![is_pvc $device]} {
+	    setup_kfail "JIRA GSD/10235" "*-*-*"
+	}
 	gdb_assert {$global_size eq "6, 12, 18"} "check global size"
 
 	gdb_test "disable pretty-printer global"
-	compare_id "thread_workgroup" 0
-	compare_id "workitem_local_id" 0
-	compare_id "workitem_global_id" 0
-	compare_id "workitem_local_size" 0
-	compare_id "workitem_global_size" 0
+	compare_id "thread_workgroup" 0 $kfail
+	compare_id "workitem_local_id" 0 $kfail
+	compare_id "workitem_global_id" 0 $kfail
+	compare_id "workitem_local_size" 0 $kfail
+	compare_id "workitem_global_size" 0 $kfail
     }
 }

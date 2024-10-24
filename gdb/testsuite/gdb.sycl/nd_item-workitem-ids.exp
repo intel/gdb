@@ -30,7 +30,7 @@ if {[build_executable "failed to compile $srcfile" \
     return -1
 }
 
-proc get_id {name pretty} {
+proc get_id {name pretty {kfail ""}} {
     global decimal
     set expected_id "unexpected"
     if {$pretty} {
@@ -41,6 +41,7 @@ proc get_id {name pretty} {
 	set expected "\r\n($decimal, $decimal, $decimal)"
     }
 
+    if { $kfail ne "" } { setup_kfail $kfail "*-*-*" }
     gdb_test_multiple "printf \"$fmt\\n\",${name}2,${name}1,${name}0" "get expected id $name $pretty" {
 	-re -wrap $expected {
 	    set expected_id $expect_out(1,string)
@@ -50,16 +51,16 @@ proc get_id {name pretty} {
     return $expected_id
 }
 
-proc compare_id {name pretty} {
-    with_test_prefix "check $name" {
+proc compare_id {name pretty {kfail ""}} {
     with_test_prefix "check ${name} ${pretty}" {
 	global decimal
-	set expected_val [get_id $name $pretty]
+	set expected_val [get_id $name $pretty $kfail]
+	if { $kfail ne "" } { setup_kfail $kfail "*-*-*" }
 	gdb_test "print \$_$name" "\\$$decimal = \\{$expected_val\\}" "check $name == {$expected_val}"
     }
 }
 
-proc check_ids {wg_dim_size} {
+proc check_ids {wg_dim_size {kfail ""}} {
     global decimal
     set threads_to_test {}
     set workgroups_to_test {}
@@ -85,6 +86,7 @@ proc check_ids {wg_dim_size} {
     }
 
     set simd_width [get_integer_valueof "\$_simd_width" -1]
+    if { $kfail ne "" } { setup_kfail $kfail "*-*-*" }
     gdb_assert {$simd_width > 0} "read SIMD width"
 
     # List of lanes for which we check the IDs.
@@ -108,9 +110,9 @@ proc check_ids {wg_dim_size} {
 			break
 		    }
 		}
-		compare_id "thread_workgroup" 0
-		compare_id "workitem_local_id" 0
-		compare_id "workitem_global_id" 0
+		compare_id "thread_workgroup" 0 $kfail
+		compare_id "workitem_local_id" 0 $kfail
+		compare_id "workitem_global_id" 0 $kfail
 	    }
 	}
 	incr num_threads_checked
@@ -118,17 +120,24 @@ proc check_ids {wg_dim_size} {
 
     # Ensure that we have checked the expected number of threads.
     # Workgroup size is WG_DIM_SIZE * WG_DIM_SIZE * WG_DIM_SIZE.
-    set num_threads_in_workgroup \
-	[expr ($wg_dim_size * $wg_dim_size * $wg_dim_size + $simd_width - 1) / $simd_width]
+    if {$simd_width eq 0} {
+	kfail "JIRA GSD/10235" "simd_width==0"
+	# Set to negative value to fail comparison in later steps.
+	set num_threads_in_workgroup "-1"
+    } else {
+	set num_threads_in_workgroup \
+	    [expr ($wg_dim_size * $wg_dim_size * $wg_dim_size + $simd_width - 1) / $simd_width]
+    }
     set expected_num [expr 2 * $num_threads_in_workgroup]
+    if { $kfail ne "" } { setup_kfail $kfail "*-*-*" }
     gdb_assert {$num_threads_checked == $expected_num} \
 	"# threads checked = $num_threads_checked, # expected = $expected_num"
 
     # Now test the pretty-printer format.
     gdb_test "enable pretty-printer global"
-    compare_id "thread_workgroup" 1
-    compare_id "workitem_local_id" 1
-    compare_id "workitem_global_id" 1
+    compare_id "thread_workgroup" 1 $kfail
+    compare_id "workitem_local_id" 1 $kfail
+    compare_id "workitem_global_id" 1 $kfail
 }
 
 foreach device $sycl_device_list {
@@ -144,6 +153,10 @@ foreach device $sycl_device_list {
 	    continue
 	}
 
+	set kfail ""
+	if {![is_pvc $device]} {
+	    set kfail "JIRA GSD/10235"
+	}
 	set last_line_1 [gdb_get_line_number "kernel-1-last-line"]
 	set last_line_2 [gdb_get_line_number "kernel-2-last-line"]
 	gdb_breakpoint $last_line_1 {temporary}
@@ -152,9 +165,12 @@ foreach device $sycl_device_list {
 	with_test_prefix "kernel 1, simd16" {
 	    check_ids 4
 	}
+	if {![is_pvc $device]} {
+	    setup_kfail "JIRA GSD/10235" "*-*-*"
+	}
 	gdb_continue_to_breakpoint "kernel 2" ".*$srcfile:$last_line_2.*"
 	with_test_prefix "kernel 2, simd32" {
-	    check_ids 5
+	    check_ids 5 $kfail
 	}
     }
 }

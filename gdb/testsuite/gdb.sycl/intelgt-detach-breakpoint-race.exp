@@ -1,0 +1,69 @@
+# Copyright 2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests debugger detaching while having manually injected breakpoint.
+# Before detaching from the GPU device, the debugger resumes the target's
+# threads.  Threads may raise exceptions after they are resumed.
+# Check that such events do not cause problems for the debugger to detach.
+
+load_lib sycl.exp
+load_lib intelgt-utils.exp
+
+standard_testfile single-task.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    sycl_with_intelgt_lock $device {
+	# Skip if it's not GPU.
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![sycl_start $device]} {
+	    continue
+	}
+
+	set first_line [gdb_get_line_number "kernel-line-1"]
+	gdb_breakpoint $first_line {temporary}
+	gdb_continue_to_breakpoint "first line" ".*$srcfile:$first_line.*"
+
+	with_test_prefix "next pc" {
+	    set first_pc [get_hexadecimal_valueof "\$pc" 0 "first stop pc"]
+	    if {[is_compact_insn $first_pc]} {
+		# A compacted instruction is 8 bytes.
+		set next_pc [format 0x%x [expr $first_pc + 0x08]]
+	    } else {
+		# A full instruction is 16 bytes.
+		set next_pc [format 0x%x [expr $first_pc + 0x10]]
+	    }
+	    set_breakpoint_bit $next_pc
+	}
+
+	gdb_test "detach" "Detaching from device.* has been removed." "detach"
+	gdb_test "continue" "$inferior_exited_re.*" "inferiors exit"
+    }
+}

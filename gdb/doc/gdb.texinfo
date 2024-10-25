@@ -7461,7 +7461,7 @@ may not preempt the current thread.  This setting is @code{off} by default.
 @item eval
 When @code{on}, the scheduler is locked for function calls during normal
 execution and record modes, such that other threads may not preempt
-the current thread during the inferior call.  This setting is @code{off}
+the current thread during the inferior call.  This setting is @code{on}
 by default.
 
 @item replay continue

@@ -127,6 +127,10 @@ foreach device $sycl_device_list {
 		    kfail "JIRA GSD/8399" $gdb_test_name
 		    continue
 		}
+		-re -wrap ".*Rows=${decimal}, Cols=${decimal} is not supported on this device.*" {
+		    kfail "JIRA IGDB/5294" $gdb_test_name
+		    continue
+		}
 		-re -wrap "" {
 		    fail $gdb_test_name
 		    continue

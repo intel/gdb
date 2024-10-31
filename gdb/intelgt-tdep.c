@@ -362,6 +362,7 @@ enum xe_version
   XE_HPG = XE_VERSION (1, 2),
   XE_HPC = XE_VERSION (1, 4),
   XE2 = XE_VERSION (2, 0),
+  XE3 = XE_VERSION (3, 0),
 };
 
 /* Helper functions to request and translate the device id/version.  */
@@ -2239,6 +2240,7 @@ intelgt_run_ret_inst (gdbarch *gdbarch)
       break;
     case XE_HPC:
     case XE2:
+    case XE3:
       buff[2] = exec_size << 2;
       break;
     default:
@@ -2414,6 +2416,7 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
       break;
     case XE_HPC:
     case XE2:
+    case XE3:
       predication_bit = 26;
       calla_inst[2] = exec_size << 2;
       break;
@@ -3114,6 +3117,17 @@ get_xe_version (unsigned int device_id)
       case 0xE20D:
       case 0xE212:
 	device_xe_version = XE2;
+	break;
+
+      case 0xB080:
+      case 0xB081:
+      case 0xB082:
+      case 0xB083:
+      case 0xB08F:
+      case 0xB090:
+      case 0xB0A0:
+      case 0xB0B0:
+	device_xe_version = XE3;
 	break;
     }
 
@@ -4129,6 +4143,7 @@ is_branch (const gdb_byte inst[], uint32_t device_id)
     case XE_HPG:
     case XE_HPC:
     case XE2:
+    case XE3:
       {
 	/* Check the opcode.  */
 	switch (inst[0] & 0x7f)
@@ -4158,6 +4173,7 @@ is_atomic (const gdb_byte inst[], uint32_t device_id)
     case XE_HPG:
     case XE_HPC:
     case XE2:
+    case XE3:
       {
 	/* For instructions with CompactCtrl clear, we can check AtomicCtrl.  */
 	if ((inst[3] & 0x20) == 0)
@@ -4349,6 +4365,7 @@ intelgt_displaced_step_copy_insn (gdbarch *gdbarch, CORE_ADDR from,
     case XE_HPG:
     case XE_HPC:
     case XE2:
+    case XE3:
       {
 	if (!is_atomic (inst.data (), device_id))
 	  break;
@@ -4418,6 +4435,7 @@ intelgt_displaced_step_copy_insn (gdbarch *gdbarch, CORE_ADDR from,
 
 	  case XE_HPC:
 	  case XE2:
+	  case XE3:
 	    if (!((inst[2] & 0x3) == 0x1) /* DualInfo.  */
 		&& !(((inst[2] & 0x3) == 0) /* SingleInfo.  */
 		     && ((inst[1] & 0xe0) == 0xc0)))

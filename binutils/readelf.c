@@ -1,5 +1,6 @@
 /* readelf.c -- display contents of an ELF format file
    Copyright (C) 1998-2024 Free Software Foundation, Inc.
+   Copyright (C) 2023-2024 Intel Corporation
 
    Originally developed by Eric Youngdale <eric@andante.jic.com>
    Modifications by Nick Clifton <nickc@redhat.com>

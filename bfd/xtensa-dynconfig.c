@@ -1,5 +1,6 @@
 /* Xtensa configuration settings loader.
    Copyright (C) 2022-2024 Free Software Foundation, Inc.
+   Copyright (C) 2022 Intel Corporation
 
    This file is part of BFD, the Binary File Descriptor library.
 

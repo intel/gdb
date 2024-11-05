@@ -1,6 +1,7 @@
 /* Interface between gdb and its extension languages.
 
    Copyright (C) 2014-2024 Free Software Foundation, Inc.
+   Copyright (C) 2018 Intel Corporation
 
    This file is part of GDB.
 

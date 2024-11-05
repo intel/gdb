@@ -1,6 +1,7 @@
 /* Support for printing Fortran values for GDB, the GNU debugger.
 
    Copyright (C) 1993-2024 Free Software Foundation, Inc.
+   Copyright (C) 2016-2023 Intel Corporation
 
    Contributed by Motorola.  Adapted from the C definitions by Farooq Butt
    (fmbutt@engage.sps.mot.com), additionally worked over by Stan Shebs.

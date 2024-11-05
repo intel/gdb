@@ -1,6 +1,7 @@
 /* Tracing functionality for remote targets in custom GDB protocol
 
    Copyright (C) 1997-2024 Free Software Foundation, Inc.
+   Copyright (C) 2021 Intel Corporation
 
    This file is part of GDB.
 

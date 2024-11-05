@@ -1,6 +1,7 @@
 /* Low level child interface to ptrace.
 
    Copyright (C) 2004-2024 Free Software Foundation, Inc.
+   Copyright (C) 2021 Intel Corporation
 
    This file is part of GDB.
 

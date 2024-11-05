@@ -2,6 +2,7 @@
 # @configure_input@
 
 # Copyright (C) 1994-2024 Free Software Foundation, Inc.
+# Copyright (C) 2024 Intel Corporation
 
 # This Makefile.in is free software; the Free Software Foundation
 # gives unlimited permission to copy and/or distribute it,

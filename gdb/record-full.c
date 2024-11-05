@@ -1,6 +1,7 @@
 /* Process record and replay target for GDB, the GNU debugger.
 
    Copyright (C) 2013-2024 Free Software Foundation, Inc.
+   Copyright (C) 2014-2021 Intel Corporation
 
    This file is part of GDB.
 

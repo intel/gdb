@@ -1,4 +1,5 @@
 # Copyright (C) 2010-2024 Free Software Foundation, Inc.
+# Copyright (C) 2013-2024 Intel Corporation
 
 # Makefile for building a staged copy of the data-directory.
 # This file is part of GDB.

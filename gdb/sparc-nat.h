@@ -1,6 +1,7 @@
 /* Native-dependent code for SPARC.
 
    Copyright (C) 2003-2024 Free Software Foundation, Inc.
+   Copyright (C) 2021 Intel Corporation
 
    This file is part of GDB.
 

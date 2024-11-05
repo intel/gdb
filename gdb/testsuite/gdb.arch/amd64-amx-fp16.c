@@ -1,6 +1,7 @@
 /* Test program for FP16 of AMX registers.
 
    Copyright 2023-2024 Free Software Foundation, Inc.
+   Copyright (C) 2021-2024 Intel Corporation
 
    This file is part of GDB.
 

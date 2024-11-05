@@ -1,6 +1,7 @@
 /* Target-dependent code for GNU/Linux AMD64.
 
    Copyright (C) 2006-2024 Free Software Foundation, Inc.
+   Copyright (C) 2013-2019 Intel Corporation
 
    This file is part of GDB.
 

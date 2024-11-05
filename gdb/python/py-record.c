@@ -1,6 +1,7 @@
 /* Python interface to record targets.
 
    Copyright 2016-2024 Free Software Foundation, Inc.
+   Copyright (C) 2016-2019 Intel Corporation
 
    This file is part of GDB.
 

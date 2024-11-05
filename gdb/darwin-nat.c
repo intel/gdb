@@ -1,5 +1,6 @@
 /* Darwin support for GDB, the GNU debugger.
    Copyright (C) 2008-2024 Free Software Foundation, Inc.
+   Copyright (C) 2013-2021 Intel Corporation
 
    Contributed by AdaCore.
 

@@ -1,6 +1,7 @@
 /* Disassemble flags for GDB.
 
    Copyright (C) 2002-2024 Free Software Foundation, Inc.
+   Copyright (C) 2018 Intel Corporation
 
    This file is part of GDB.
 

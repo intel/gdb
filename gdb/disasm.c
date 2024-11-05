@@ -1,6 +1,7 @@
 /* Disassemble support for GDB.
 
    Copyright (C) 2000-2024 Free Software Foundation, Inc.
+   Copyright (C) 2015 Intel Corporation
 
    This file is part of GDB.
 

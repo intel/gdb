@@ -1,6 +1,7 @@
 /* Common code for x86 XSAVE extended state.
 
    Copyright (C) 2010-2024 Free Software Foundation, Inc.
+   Copyright (C) 2020-2024 Intel Corporation
 
    This file is part of GDB.
 

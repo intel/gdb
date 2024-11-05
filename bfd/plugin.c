@@ -1,5 +1,6 @@
 /* Plugin support for BFD.
    Copyright (C) 2009-2024 Free Software Foundation, Inc.
+   Copyright (C) 2022 Intel Corporation
 
    This file is part of BFD, the Binary File Descriptor library.
 

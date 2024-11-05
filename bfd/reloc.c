@@ -1,5 +1,6 @@
 /* BFD support for handling relocation entries.
    Copyright (C) 1990-2024 Free Software Foundation, Inc.
+   Copyright (C) 2022 Intel Corporation
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.

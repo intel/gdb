@@ -1,5 +1,6 @@
 /* Common things used by the various darwin files
    Copyright (C) 1995-2024 Free Software Foundation, Inc.
+   Copyright (C) 2021 Intel Corporation
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by

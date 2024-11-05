@@ -1,6 +1,7 @@
 /* Target-dependent code for the RISC-V architecture, for GDB.
 
    Copyright (C) 2018-2024 Free Software Foundation, Inc.
+   Copyright (C) 2023 Intel Corporation
 
    This file is part of GDB.
 

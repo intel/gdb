@@ -1,5 +1,6 @@
 /* Notification to GDB.
    Copyright (C) 1989-2024 Free Software Foundation, Inc.
+   Copyright (C) 2023 Intel Corporation
 
    This file is part of GDB.
 

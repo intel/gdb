@@ -1,6 +1,7 @@
 /* Top level stuff for GDB, the GNU debugger.
 
    Copyright (C) 1986-2024 Free Software Foundation, Inc.
+   Copyright (C) 2018-2023 Intel Corporation
 
    This file is part of GDB.
 

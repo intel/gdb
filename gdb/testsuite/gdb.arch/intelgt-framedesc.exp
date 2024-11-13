@@ -43,23 +43,62 @@ proc test_unwound_framedesc {frame_id framedesc_input_values} {
     set expected_framedesc $framedesc_values($frame_id)
     set next_framedesc $framedesc_values([expr $frame_id - 1])
 
-    # Make sure that the $framedesc registers have the correct format.
-    if {![string match "\{return_ip =* return_callmask =* be_sp =* be_fp =* fe_fp =* fe_sp =*\}" $expected_framedesc]} {
-	verbose -log "Wrong expected_framedesc format: $expected_framedesc"
-	fail "test_unwound_framedesc"
-	return -1
-    }
-
-    if {![string match "\{return_ip =* return_callmask =*\}" $next_framedesc]} {
+    if {![string match "\{*return_ip =* return_callmask =*\}" $next_framedesc]} {
 	verbose -log "Wrong next_framedesc format: $next_framedesc"
 	fail "test_unwound_framedesc"
 	return -1
     }
 
-    # Read different fields of the $framedesc.
-    scan $expected_framedesc "\{return_ip = %*\[$hex_char\], return_callmask = %*\[$hex_char\], be_sp = %\[$hex_char\], be_fp = %\[$hex_char\], fe_fp = %\[$hex_char\], fe_sp = %\[$hex_char\]\}" \
-	be_sp be_fp fe_fp fe_sp
-    scan $next_framedesc "\{return_ip = %\[$hex_char\], return_callmask = %\[$hex_char\], *\}" return_ip return_callmask
+    # Get Heap mode.  Heapless: $MF0 & 0x1 == 0x1
+    set heapless 0
+    set mf0 [get_valueof "/x" "\$mf0" "void"]
+    if {$mf0 != "void"} {
+	set heapless [expr $mf0 & 0x1]
+    }
+
+    if {$heapless == 1} {
+	# Make sure that the $framedesc registers have the correct format.
+	if {![string match "\{be_fp =* be_sp =* return_ip =* return_callmask =* fe_fp =* fe_sp =*\}" $expected_framedesc]} {
+	    verbose -log "Wrong expected_framedesc format: $expected_framedesc"
+	    fail "test_unwound_framedesc"
+	    return -1
+	}
+
+	# Read different fields of the $framedesc.
+	scan $expected_framedesc "\{be_fp = %\[$hex_char\], <reserved> = %*\[$hex_char\], \
+				    be_sp = %\[$hex_char\], <reserved> = %*\[$hex_char\], \
+				    return_ip = %*\[$hex_char\], \
+				    return_callmask = %*\[$hex_char\], <reserved> = %*\[$hex_char\], \
+				    fe_fp = %\[$hex_char\], \
+				    fe_sp = %\[$hex_char\]\}" \
+	    be_fp be_sp fe_fp fe_sp
+
+	scan $next_framedesc "\{be_fp = %*\[$hex_char\], <reserved> = %*\[$hex_char\], \
+				be_sp = %*\[$hex_char\], <reserved> = %*\[$hex_char\], \
+				return_ip = %\[$hex_char\], return_callmask = %\[$hex_char\], *\}" \
+				return_ip return_callmask
+    } else {
+
+	# Make sure that the $framedesc registers have the correct format.
+	if {![string match "\{return_ip =* return_callmask =* be_sp =* be_fp =* fe_fp =* fe_sp =*\}" $expected_framedesc]} {
+	    verbose -log "Wrong expected_framedesc format: $expected_framedesc"
+	    fail "test_unwound_framedesc"
+	    return -1
+	}
+
+	# Read different fields of the $framedesc.
+	scan $expected_framedesc "\{return_ip = %*\[$hex_char\], \
+				    return_callmask = %*\[$hex_char\], \
+				    be_sp = %\[$hex_char\], \
+				    be_fp = %\[$hex_char\], \
+				    fe_fp = %\[$hex_char\], \
+				    fe_sp = %\[$hex_char\]\}" \
+	    be_sp be_fp fe_fp fe_sp
+
+	scan $next_framedesc "\{return_ip = %\[$hex_char\], return_callmask = %\[$hex_char\], *\}" \
+	    return_ip return_callmask
+    }
+
 
     gdb_test "print /x \$framedesc.return_ip" "$return_ip" \
 	"Check return_ip field"

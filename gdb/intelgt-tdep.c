@@ -460,6 +460,8 @@ intelgt_write_register_part (regcache *regcache, int regnum,
 static uint32_t get_device_id (inferior *inferior);
 static uint32_t get_device_id (gdbarch *gdbarch);
 
+static bool is_heapless (readable_regcache *regcache);
+
 /* Intelgt memory handler to manage memory allocation and releasing of
    a target memory region.  We are using a linked list to keep track of
    memory blocks and serve the ALLOC request with the first-fit approach.
@@ -730,7 +732,13 @@ struct intelgt_gdbarch_data
   get_framedesc_type (regcache *regcache)
   {
     /* Cache the type of the framedesc user register individually.  */
-    static type *framedesc_type = nullptr;
+    static type *framedesc_type_heapless = nullptr;
+    static type *framedesc_type_heapful = nullptr;
+
+    bool heapless = is_heapless (regcache);
+
+    type *&framedesc_type
+      = (heapless ? framedesc_type_heapless : framedesc_type_heapful);
 
     if (framedesc_type != nullptr)
       return framedesc_type;
@@ -738,18 +746,36 @@ struct intelgt_gdbarch_data
     gdbarch *arch = regcache->arch ();
     const struct builtin_type *bt = builtin_type (arch);
 
-    type *framedesc
-      = arch_composite_type (regcache->arch (), "framedesc", TYPE_CODE_STRUCT);
-    append_composite_type_field (framedesc, "return_ip", bt->builtin_int32);
-    append_composite_type_field (framedesc, "return_callmask",
-				 bt->builtin_int32);
-    append_composite_type_field (framedesc, "be_sp", bt->builtin_int32);
-    append_composite_type_field (framedesc, "be_fp", bt->builtin_int32);
-    append_composite_type_field (framedesc, "fe_fp", bt->builtin_int64);
-    append_composite_type_field (framedesc, "fe_sp", bt->builtin_int64);
+    const static std::array<std::pair<const char *, type *>, 9> heapless_elems
+      = {{{"be_fp", bt->builtin_int32},
+	  {"<reserved>", bt->builtin_int32},
+	  {"be_sp", bt->builtin_int32},
+	  {"<reserved>", bt->builtin_int32},
+	  {"return_ip", bt->builtin_int64},
+	  {"return_callmask", bt->builtin_int32},
+	  {"<reserved>", bt->builtin_int32},
+	  {"fe_fp", bt->builtin_int64},
+	  {"fe_sp", bt->builtin_int64}}};
 
-    framedesc_type = framedesc;
-    return framedesc;
+    const static std::array<std::pair<const char *, type *>, 6> heapful_elems
+      = {{{"return_ip", bt->builtin_int32},
+	  {"return_callmask", bt->builtin_int32},
+	  {"be_sp", bt->builtin_int32},
+	  {"be_fp", bt->builtin_int32},
+	  {"fe_fp", bt->builtin_int64},
+	  {"fe_sp", bt->builtin_int64}}};
+
+    const char *type_name
+      = (heapless ? "framedesc_heapless" : "framedesc_heapful");
+    framedesc_type = arch_composite_type (regcache->arch (), type_name,
+					  TYPE_CODE_STRUCT);
+    auto begin
+      = (heapless ? heapless_elems.cbegin () : heapful_elems.cbegin ());
+    auto end = (heapless) ? heapless_elems.cend () : heapful_elems.cend ();
+    for (auto itr = begin; itr < end; ++itr)
+      append_composite_type_field (framedesc_type, itr->first, itr->second);
+
+    return framedesc_type;
   }
 
 #if defined (HAVE_LIBIGA64)

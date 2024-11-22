@@ -4173,12 +4173,17 @@ infrun_thread_stop_requested (ptid_t ptid)
 
       /* If the thread is stopped, but the user/frontend doesn't
 	 know about that yet, queue a pending event, as if the
-	 thread had just stopped now.  Unless the thread already had
-	 a pending event.  */
+	 thread had just stopped now.  Unless the thread already had a
+	 pending event.  If the thread was unavailable when we tried to
+	 stop it, queue an unavailable event instead.  */
       if (!tp->has_pending_waitstatus ())
 	{
 	  target_waitstatus ws;
-	  ws.set_stopped (GDB_SIGNAL_0);
+	  if (tp->is_unavailable ())
+	    ws.set_unavailable ();
+	  else
+	    ws.set_stopped (GDB_SIGNAL_0);
+
 	  tp->set_pending_waitstatus (ws);
 	}
 

@@ -898,15 +898,22 @@ static bool is_a_promotable_small_struct (type *arg_type, int max_size);
 /* Implementation of gdbarch's return_value method.  */
 
 static enum return_value_convention
-intelgt_return_value (gdbarch *gdbarch, value *function,
-		      type *valtype, regcache *regcache,
-		      gdb_byte *readbuf, const gdb_byte *writebuf)
+intelgt_return_value_as_value (gdbarch *gdbarch, value *function,
+			       type *valtype, regcache *regcache,
+			       value **read_value, const gdb_byte *writebuf)
 {
   dprintf ("return type length %ld", valtype->length ());
   gdb_assert (inferior_ptid != null_ptid);
 
   if (writebuf != nullptr)
     error (_("intelgt target does not support the return command"));
+
+  gdb_byte *readbuf = nullptr;
+  if (read_value != nullptr)
+    {
+      *read_value = value::allocate (valtype);
+      readbuf = (*read_value)->contents_raw ().data ();
+    }
 
   int address_size_byte = gdbarch_addr_bit (gdbarch) / 8;
   CORE_ADDR function_pc = function->address ();
@@ -2647,9 +2654,9 @@ intelgt_get_inferior_call_return_value (gdbarch *gdbarch,
   value *retval = nullptr;
 
   retval = value::allocate (ri->value_type);
-  intelgt_return_value (ri->gdbarch, ri->function, ri->value_type,
-			get_thread_regcache (inferior_thread ()),
-			retval->contents_raw ().data (), nullptr);
+  intelgt_return_value_as_value (ri->gdbarch, ri->function, ri->value_type,
+				 get_thread_regcache (inferior_thread ()),
+				 &retval, nullptr);
 
   gdb_assert (retval != nullptr);
   return retval;
@@ -4646,7 +4653,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   dwarf2_append_unwinders (gdbarch);
   frame_unwind_append_unwinder (gdbarch, &intelgt_unwinder);
 
-  set_gdbarch_return_value (gdbarch, intelgt_return_value);
+  set_gdbarch_return_value_as_value (gdbarch, intelgt_return_value_as_value);
   set_gdbarch_supports_return_cmd (gdbarch, false);
 
   set_gdbarch_memory_insert_breakpoint (gdbarch,

@@ -31,14 +31,11 @@
 
 #include "../features/i386/x32-core.c"
 
-/* Create amd64 target descriptions according to XCR0.  If IS_X32 is
-   true, create the x32 ones.  If IS_LINUX is true, create target
-   descriptions for Linux.  If SEGMENTS is true, then include
-   the "org.gnu.gdb.i386.segments" feature registers.  */
+/* See amd64.h.  */
 
 target_desc *
-amd64_create_target_description (uint64_t xcr0, bool is_x32, bool is_linux,
-				 bool segments)
+amd64_create_target_description (uint64_t xstate_bv_mask, bool is_x32,
+				 bool is_linux, bool segments)
 {
   target_desc_up tdesc = allocate_target_description ();
 
@@ -63,16 +60,16 @@ amd64_create_target_description (uint64_t xcr0, bool is_x32, bool is_linux,
   if (segments)
     regnum = create_feature_i386_64bit_segments (tdesc.get (), regnum);
 
-  if (xcr0 & X86_XSTATE_AVX)
+  if (xstate_bv_mask & X86_XSTATE_AVX)
     regnum = create_feature_i386_64bit_avx (tdesc.get (), regnum);
 
-  if (xcr0 & X86_XSTATE_AVX512)
+  if (xstate_bv_mask & X86_XSTATE_AVX512)
     regnum = create_feature_i386_64bit_avx512 (tdesc.get (), regnum);
 
-  if (xcr0 & X86_XSTATE_PKRU)
+  if (xstate_bv_mask & X86_XSTATE_PKRU)
     regnum = create_feature_i386_pkeys (tdesc.get (), regnum);
 
-  if (xcr0 & X86_XSTATE_AMX)
+  if (xstate_bv_mask & X86_XSTATE_AMX)
     regnum = create_feature_i386_64bit_amx (tdesc.get (), regnum);
 
   return tdesc.release ();

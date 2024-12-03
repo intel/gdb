@@ -96,6 +96,9 @@ constexpr bool operator!= (const x86_xsave_layout &lhs,
 #define X86_XSTATE_AVX_AVX512_PKU_AMX_MASK (X86_XSTATE_AVX_AVX512_PKU_MASK\
 					| X86_XSTATE_AMX)
 
+/* Supported mask of state-component bitmap xstate_bv.  The SDM defines
+   xstate_bv as XCR0 | IA32_XSS.  */
+
 #define X86_XSTATE_ALL_MASK		(X86_XSTATE_AVX_AVX512_PKU_AMX_MASK)
 
 

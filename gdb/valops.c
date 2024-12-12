@@ -1716,6 +1716,9 @@ value_array (int lowbound, gdb::array_view<struct value *> elemvec)
   /* Validate that the bounds are reasonable and that each of the
      elements have the same size.  */
 
+  if (elemvec.empty ())
+    error (_("array must not be empty"));
+
   typelength = type_length_units (elemvec[0]->enclosing_type ());
   for (struct value *other : elemvec.slice (1))
     {

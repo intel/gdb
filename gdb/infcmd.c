@@ -261,7 +261,15 @@ post_create_inferior (int from_tty)
 	throw;
     }
 
-  if (current_program_space->exec_bfd ())
+  /* Some targets (e.g.  GPUs) may still have solibs although they do
+     not have the notion of an exec file.  */
+  const char *exec_file
+    = target_pid_to_exec_file (current_inferior ()->pid);
+  bool target_may_have_solibs
+    = (exec_file != nullptr && *exec_file == '\0');
+
+  if (current_program_space->exec_bfd () != nullptr
+      || target_may_have_solibs)
     {
       const unsigned solib_add_generation
 	= current_program_space->solib_add_generation;

@@ -94,8 +94,13 @@ struct solib : intrusive_list_node<solib>
      map we've already loaded.  */
   std::string original_name;
 
-  /* Shared object file name, expanded to something GDB can open.  */
+  /* Shared object file name, expanded to something GDB can open.
+     This is an empty string for in-memory shared objects.  */
   std::string name;
+
+  /* The address range of an in-memory shared object.  Both BEGIN and END
+     are zero for on-disk shared objects.  */
+  CORE_ADDR begin = 0, end = 0;
 
   /* The following fields of the structure are built from
      information gathered from the shared object file itself, and
@@ -259,6 +264,11 @@ struct solib_ops
      The supports_namespaces method must return true for this to be called.  */
   virtual std::vector<const solib *> get_solibs_in_ns (int ns) const
   { gdb_assert_not_reached ("namespaces not supported"); }
+
+  /* Open an in-memory shared library at ADDR of at most SIZE bytes.
+     The TARGET string is used to identify the target.  */
+  virtual gdb_bfd_ref_ptr bfd_open_from_target_memory
+    (CORE_ADDR addr, CORE_ADDR size, const char *target) const;
 };
 
 /* A unique pointer to an solib_ops.  */

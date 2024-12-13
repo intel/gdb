@@ -196,6 +196,12 @@ vFile:lstat
   vFile:stat but if the filename is a symbolic link, return
   information about the link itself, the file the link refers to.
 
+qXfer:libraries:read's response
+
+  The qXfer:libraries:read query supports reporting in-memory libraries.  GDB
+  indicates support by supplying qXfer:libraries:read:in-memory-library+ in the
+  qSupported packet.
+
 * Changed remote packets
 
 qXfer:threads:read

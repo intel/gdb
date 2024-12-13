@@ -196,6 +196,9 @@ struct client_state
      are not supported with qRcmd and m packets, but are still supported
      everywhere else.  This is for backward compatibility reasons.  */
   bool error_message_supported = false;
+
+  /* True if qXfer:libraries:read supports in-memory-library.  */
+  bool in_memory_library_supported = false;
 };
 
 client_state &get_client_state ();

@@ -1885,6 +1885,128 @@ handle_qxfer_features (const char *annex,
   return len;
 }
 
+/* Turn an in-memory library DLL into an on-disk library using a temporary
+   file.  */
+
+static void
+dll_to_tmpfile (dll_info &dll)
+{
+  gdb_assert (dll.location == dll_info::in_memory);
+
+  if (dll.end <= dll.begin)
+    error (_("bad in-memory-library location: begin=%s, end=%s"),
+	   core_addr_to_string_nz (dll.begin),
+	   core_addr_to_string_nz (dll.end));
+
+  std::vector<unsigned char> buffer (dll.end - dll.begin);
+  int errcode = gdb_read_memory (dll.begin, buffer.data (), buffer.size ());
+  if (errcode != buffer.size ())
+    error (_("failed to read in-memory library at %s..%s"),
+	   core_addr_to_string_nz (dll.begin),
+	   core_addr_to_string_nz (dll.end));
+
+  std::string name = get_standard_temp_dir ()
+    + "/gdb-in-memory-"
+    + core_addr_to_string_nz (dll.begin)
+    + "-"
+    + core_addr_to_string_nz (dll.end);
+
+  gdb::char_vector tmpname = make_temp_filename (name);
+
+  scoped_fd fd { gdb_mkostemp_cloexec (tmpname.data (), O_BINARY) };
+  if (fd.get () == -1)
+    error (_("failed to create temporary file %s: %s"), tmpname.data (),
+	   safe_strerror (errno));
+
+  gdb::unlinker unlinker (tmpname.data ());
+  size_t size = buffer.size ();
+  unsigned char *head = buffer.data ();
+  do
+    {
+      ssize_t written = write (fd.get (), head, size);
+      if (written <= 0)
+	error (_("failed to write into %s"), name.c_str ());
+
+      head += written;
+      size -= written;
+    }
+  while (size > 0);
+
+  dll.location = dll_info::on_disk;
+  dll.name = tmpname.data ();
+  dll.unlinker.emplace (dll.name.c_str ());
+
+  unlinker.keep ();
+}
+
+/* Print a qXfer:libraries:read entry for DLL.  */
+
+static std::string
+print_qxfer_libraries_entry (dll_info &dll)
+{
+  switch (dll.location)
+    {
+    case dll_info::in_memory:
+      if (get_client_state ().in_memory_library_supported)
+	return string_printf
+	  ("  <in-memory-library begin=\"0x%s\" end=\"0x%s\">"
+	   "<segment address=\"0x%s\"/></in-memory-library>\n",
+	   paddress (dll.begin), paddress (dll.end),
+	   paddress (dll.base_addr));
+
+      /* GDB does not support in-memory-library.  Fall back to storing it in a
+	 temporary file and report that file to GDB.  */
+      try
+	{
+	  dll_to_tmpfile (dll);
+	}
+      catch (const gdb_exception &ex)
+	{
+	  warning ("%s", ex.what ());
+	  return std::string ();
+	}
+
+      [[fallthrough]];
+    case dll_info::on_disk:
+      return string_printf
+	("  <library name=\"%s\"><segment address=\"0x%s\"/></library>\n",
+	 dll.name.c_str (), paddress (dll.base_addr));
+    }
+
+  gdb_assert_not_reached ("unknown dll location: %x", dll.location);
+}
+
+/* Determine the library-list version required for communicating the shared
+   libraries.  */
+
+static std::string
+library_list_version_needed (const std::list<dll_info> &dlls)
+{
+  const client_state &cs = get_client_state ();
+  int major = 1, minor = 0;
+
+  for (const dll_info &dll : dlls)
+    {
+      switch (dll.location)
+	{
+	case dll_info::on_disk:
+	  major = std::max (major, 1);
+	  minor = std::max (minor, 0);
+	  break;
+
+	case dll_info::in_memory:
+	  if (cs.in_memory_library_supported)
+	    {
+	      major = std::max (major, 1);
+	      minor = std::max (minor, 1);
+	    }
+	  break;
+	}
+    }
+
+  return std::to_string (major) + std::string (".") + std::to_string (minor);
+}
+
 /* Handle qXfer:libraries:read.  */
 
 static int
@@ -1898,13 +2020,13 @@ handle_qxfer_libraries (const char *annex,
   if (annex[0] != '\0' || current_thread == NULL)
     return -1;
 
-  std::string document = "<library-list version=\"1.0\">\n";
-
   process_info *proc = current_process ();
-  for (const dll_info &dll : proc->all_dlls)
-    document += string_printf
-      ("  <library name=\"%s\"><segment address=\"0x%s\"/></library>\n",
-       dll.name.c_str (), paddress (dll.base_addr));
+  std::string document = "<library-list version=\""
+    + library_list_version_needed (proc->all_dlls)
+    + "\">\n";
+
+  for (dll_info &dll : proc->all_dlls)
+    document += print_qxfer_libraries_entry (dll);
 
   document += "</library-list>\n";
 
@@ -2742,6 +2864,8 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 		}
 	      else if (feature == "error-message+")
 		cs.error_message_supported = true;
+	      else if (feature == "qXfer:libraries:read:in-memory-library+")
+		cs.in_memory_library_supported = true;
 	      else
 		{
 		  /* Move the unknown features all together.  */
@@ -2772,6 +2896,7 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 	  /* We do not have any hook to indicate whether the non-SVR4 target
 	     backend supports qXfer:libraries:read, so always report it.  */
 	  strcat (own_buf, ";qXfer:libraries:read+");
+	  strcat (own_buf, ";qXfer:libraries:read:in-memory-library+");
 	}
 
       if (the_target->supports_read_auxv ())

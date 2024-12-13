@@ -29,6 +29,8 @@ struct target_solib_ops : solib_ops
   void relocate_section_addresses (solib &so, target_section *) const override;
   owning_intrusive_list<solib> current_sos () const override;
   bool in_dynsym_resolve_code (CORE_ADDR pc) const override;
+  gdb_bfd_ref_ptr bfd_open_from_target_memory
+    (CORE_ADDR addr, CORE_ADDR size, const char *target) const override;
 };
 
 /* Return a new solib_ops for systems fetching solibs from the target.  */

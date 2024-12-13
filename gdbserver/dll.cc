@@ -40,6 +40,31 @@ loaded_dll (process_info *proc, const char *name, CORE_ADDR base_addr)
   proc->dlls_changed = true;
 }
 
+/* Record a newly loaded in-memory DLL at BASE_ADDR for PROC.  */
+
+void
+loaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
+	    CORE_ADDR base_addr)
+{
+  gdb_assert (proc != nullptr);
+
+  /* We do not support duplicate in-memory libraries.  */
+  std::list<dll_info> &dlls = proc->all_dlls;
+  std::list<dll_info>::iterator it
+    = std::find_if (dlls.begin (), dlls.end (),
+		    [begin, end] (const dll_info &dll)
+	{
+	  return ((dll.begin == begin) && (dll.end == end));
+	});
+
+  if (it != dlls.end ())
+    error (_("Duplicate in-memory library; begin: %s, end: %s, base: %s."),
+	   paddress (begin), paddress (end), paddress (base_addr));
+
+  proc->all_dlls.emplace_back (begin, end, base_addr);
+  proc->dlls_changed = true;
+}
+
 /* Record that the DLL with NAME and BASE_ADDR has been unloaded
    from the current process.  */
 
@@ -49,25 +74,10 @@ unloaded_dll (const char *name, CORE_ADDR base_addr)
   unloaded_dll (current_process (), name, base_addr);
 }
 
-/* Record that the DLL with NAME and BASE_ADDR has been unloaded
-   from PROC.  */
-
-void
-unloaded_dll (process_info *proc, const char *name, CORE_ADDR base_addr)
+static void
+unload_dll_if (process_info *proc,
+	       std::function<bool (const dll_info &)> pred)
 {
-  gdb_assert (proc != nullptr);
-  auto pred = [&] (const dll_info &dll)
-    {
-      if (base_addr != UNSPECIFIED_CORE_ADDR
-	  && base_addr == dll.base_addr)
-	return true;
-
-      if (name != NULL && dll.name == name)
-	return true;
-
-      return false;
-    };
-
   auto iter = std::find_if (proc->all_dlls.begin (), proc->all_dlls.end (),
 			    pred);
 
@@ -88,4 +98,53 @@ unloaded_dll (process_info *proc, const char *name, CORE_ADDR base_addr)
       proc->all_dlls.erase (iter);
       proc->dlls_changed = true;
     }
+}
+
+/* Record that the DLL with NAME and BASE_ADDR has been unloaded
+   from PROC.  */
+
+void
+unloaded_dll (process_info *proc, const char *name, CORE_ADDR base_addr)
+{
+  unload_dll_if (proc, [&] (const dll_info &dll)
+    {
+      if (dll.location != dll_info::on_disk)
+	return false;
+
+      if (base_addr != UNSPECIFIED_CORE_ADDR
+	  && base_addr == dll.base_addr)
+	return true;
+
+      if (name != NULL && dll.name == name)
+	return true;
+
+      return false;
+    });
+}
+
+/* Record that the in-memory DLL from BEGIN to END loaded at BASE_ADDR has been
+   unloaded.  */
+
+void
+unloaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
+	      CORE_ADDR base_addr)
+{
+  unload_dll_if (proc, [&] (const dll_info &dll)
+    {
+      if (dll.location != dll_info::in_memory)
+	return false;
+
+      if (base_addr != UNSPECIFIED_CORE_ADDR
+	  && base_addr == dll.base_addr)
+	return true;
+
+      /* We do not require the end address to be specified - we don't
+	 support partially unloaded libraries, anyway.  */
+      if ((begin == dll.begin)
+	  && (end == UNSPECIFIED_CORE_ADDR
+	      || end == dll.end))
+	return true;
+
+      return false;
+    });
 }

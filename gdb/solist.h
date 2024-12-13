@@ -67,8 +67,13 @@ struct solib : intrusive_list_node<solib>
      map we've already loaded.  */
   std::string so_original_name;
 
-  /* Shared object file name, expanded to something GDB can open.  */
+  /* Shared object file name, expanded to something GDB can open.  This is
+     an empty string for in-memory shared objects.  */
   std::string so_name;
+
+  /* The address range of an in-memory shared object.  Both BEGIN and END
+     are zero for on-disk shared objects.  */
+  CORE_ADDR begin, end;
 
   /* The following fields of the structure are built from
      information gathered from the shared object file itself, and
@@ -180,6 +185,12 @@ struct solib_ops
      name).  */
 
   std::optional<CORE_ADDR> (*find_solib_addr) (solib &so);
+
+  /* Open an in-memory shared library at ADDR of at most SIZE bytes.  The
+     TARGET string is used to identify the target.  */
+  gdb_bfd_ref_ptr (*bfd_open_from_target_memory) (CORE_ADDR addr,
+						  CORE_ADDR size,
+						  const char *target);
 };
 
 /* A unique pointer to a so_list.  */

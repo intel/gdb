@@ -168,6 +168,9 @@ struct client_state
      space randomization feature before starting an inferior.  */
   int disable_randomization = 1;
 
+  /* True if qXfer:libraries:read supports in-memory-library.  */
+  bool in_memory_library_supported = false;
+
   int pass_signals[GDB_SIGNAL_LAST];
   int program_signals[GDB_SIGNAL_LAST];
   int program_signals_p = 0;

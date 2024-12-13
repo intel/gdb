@@ -174,6 +174,12 @@ vFile:stat
   vFile:fstat but takes a filename rather than an open file
   descriptor.
 
+qXfer:libraries:read's response
+
+  The qXfer:libraries:read query supports reporting in-memory libraries.  GDB
+  indicates support by supplying qXfer:libraries:read:in-memory-library+ in the
+  qSupported packet.
+
 * Changed remote packets
 
 qXfer:features:read:target.xml

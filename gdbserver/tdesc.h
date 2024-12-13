@@ -60,6 +60,9 @@ struct target_desc final : tdesc_element
   /* The value of <osabi> element in the XML, replying GDB.  */
   gdb::unique_xmalloc_ptr<char> osabi;
 
+  /* The value of the <device> element in the XML, replying GDB.  */
+  tdesc_device_up device;
+
 public:
   target_desc ()
     : registers_size (0)

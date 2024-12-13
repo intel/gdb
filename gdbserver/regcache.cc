@@ -44,6 +44,7 @@ get_thread_regcache (thread_info *thread, bool fetch)
 
       thread->set_regcache (std::make_unique<struct regcache> (proc->tdesc));
       regcache = thread->regcache ();
+      regcache->thread = thread;
     }
 
   if (fetch && !regcache->registers_fetched)

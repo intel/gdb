@@ -292,6 +292,9 @@ extern gdb_bfd_ref_ptr solib_bfd_fopen (const char *pathname, int fd);
 /* Find solib binary file and open it.  */
 extern gdb_bfd_ref_ptr solib_bfd_open (const char *in_pathname);
 
+/* Initialize an opened BFD.  */
+extern void solib_bfd_init (bfd *abfd);
+
 /* Called when we free all symtabs of PSPACE, to free the shared library
    information as well.  */
 

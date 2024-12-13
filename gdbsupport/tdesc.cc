@@ -417,6 +417,8 @@ void print_xml_feature::visit_pre (const target_desc *e)
   for (const auto &c : compatible_list)
     add_line ("<compatible>%s</compatible>",
 	      tdesc_compatible_info_arch_name (c));
+
+  this->visit (tdesc_device_info (e));
 #endif
 }
 
@@ -424,6 +426,28 @@ void print_xml_feature::visit_post (const target_desc *e)
 {
   indent (-1);
   add_line ("</target>");
+}
+
+void
+print_xml_feature::visit (const tdesc_device *device)
+{
+  if (device == nullptr)
+    return;
+
+  std::string tmp = "<device";
+  if (device->vendor_id.has_value ())
+    string_appendf (tmp, " vendor-id=\"0x%04" PRIx32 "\"",
+		    *device->vendor_id);
+
+  if (device->target_id.has_value ())
+    string_appendf (tmp, " target-id=\"0x%04" PRIx32 "\"",
+		    *device->target_id);
+
+  if (!device->name.empty ())
+    string_appendf (tmp, " name=\"%s\"", device->name.c_str ());
+
+  string_appendf (tmp, "/>");
+  add_line (tmp);
 }
 
 /* See gdbsupport/tdesc.h.  */

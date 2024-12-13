@@ -137,6 +137,33 @@ tdesc_end_compatible (struct gdb_xml_parser *parser,
   tdesc_add_compatible (data->tdesc, arch);
 }
 
+/* Handle the start of a <device> element and its value.  */
+
+static void
+tdesc_start_device (struct gdb_xml_parser *parser,
+		    const gdb_xml_element *element,
+		    void *user_data, std::vector<gdb_xml_value> &attributes)
+{
+  tdesc_parsing_data *data = (struct tdesc_parsing_data *) user_data;
+  tdesc_device *device = new tdesc_device ();
+
+  gdb_xml_value *attr;
+
+  attr = xml_find_attribute (attributes, "vendor-id");
+  if (attr != nullptr)
+    device->vendor_id = * (ULONGEST *) attr->value.get ();
+
+  attr = xml_find_attribute (attributes, "target-id");
+  if (attr != nullptr)
+    device->target_id = * (ULONGEST *) attr->value.get ();
+
+  attr = xml_find_attribute (attributes, "name");
+  if (attr != nullptr)
+    device->name = (char *) attr->value.get ();
+
+  set_tdesc_device_info (data->tdesc, device);
+}
+
 /* Handle the start of a <target> element.  */
 
 static void
@@ -587,6 +614,13 @@ static const struct gdb_xml_element feature_children[] = {
   { NULL, NULL, NULL, GDB_XML_EF_NONE, NULL, NULL }
 };
 
+static const struct gdb_xml_attribute device_attributes[] = {
+  { "vendor-id", GDB_XML_AF_OPTIONAL, gdb_xml_parse_attr_ulongest, NULL },
+  { "target-id", GDB_XML_AF_OPTIONAL, gdb_xml_parse_attr_ulongest, NULL },
+  { "name", GDB_XML_AF_OPTIONAL, NULL, NULL },
+  { NULL, GDB_XML_EF_NONE, NULL, NULL }
+};
+
 static const struct gdb_xml_attribute target_attributes[] = {
   { "version", GDB_XML_AF_NONE, NULL, NULL },
   { NULL, GDB_XML_AF_NONE, NULL, NULL }
@@ -599,6 +633,8 @@ static const struct gdb_xml_element target_children[] = {
     NULL, tdesc_end_osabi },
   { "compatible", NULL, NULL, GDB_XML_EF_OPTIONAL | GDB_XML_EF_REPEATABLE,
     NULL, tdesc_end_compatible },
+  { "device", device_attributes, NULL, GDB_XML_EF_OPTIONAL,
+    tdesc_start_device, NULL },
   { "feature", feature_attributes, feature_children,
     GDB_XML_EF_OPTIONAL | GDB_XML_EF_REPEATABLE,
     tdesc_start_feature, NULL },

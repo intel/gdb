@@ -3,6 +3,14 @@
 
 *** Changes since GDB 18
 
+* Changed remote packets
+
+qXfer:features:read:target.xml
+
+  The XML that is sent as a response can now include a "device" element
+  that can be used for passing information when the remote inferior
+  represents a device, e.g. a GPU.
+
 *** Changes in GDB 18
 
 * Support for the Common Trace Format (CTF) has been removed.  GDB now

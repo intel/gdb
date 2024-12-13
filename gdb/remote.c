@@ -8636,18 +8636,23 @@ remote_target::process_stop_reply (stop_reply_up stop_reply,
 	    }
 	}
 
-      remote_thread_info *remote_thr = get_remote_thread_info (this, ptid);
-      remote_thr->core = stop_reply->core;
-      remote_thr->stop_reason = stop_reply->stop_reason;
-      remote_thr->watch_data_address = stop_reply->watch_data_address;
-
-      if (target_is_non_stop_p ())
+      if (!ptid.is_pid ())
 	{
-	  /* If the target works in non-stop mode, a stop-reply indicates that
-	     only this thread stopped.  */
-	  remote_thr->set_not_resumed ();
+	  remote_thread_info *remote_thr
+	    = get_remote_thread_info (this, ptid);
+	  remote_thr->core = stop_reply->core;
+	  remote_thr->stop_reason = stop_reply->stop_reason;
+	  remote_thr->watch_data_address = stop_reply->watch_data_address;
+
+	  if (target_is_non_stop_p ())
+	    {
+	      /* If the target works in non-stop mode, a stop-reply
+		 indicates that only this thread stopped.  */
+	      remote_thr->set_not_resumed ();
+	    }
 	}
-      else
+
+      if (!target_is_non_stop_p ())
 	{
 	  /* If the target works in all-stop mode, a stop-reply indicates that
 	     all the target's threads stopped.  */

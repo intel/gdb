@@ -1,0 +1,246 @@
+# Copyright 2026 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test defining and hitting breakpoints.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return
+}
+
+if {[build_executable "failed to compile $srcfile" "$binfile" "$srcfile" \
+	 {sycl debug}]} {
+    return
+}
+
+# Returns the symbol of the current kernel or "".
+proc find_kernel_symbol_gpu {} {
+    set symbol ""
+
+    # The kernel is at the top of the stack - at least on GPUs.
+    gdb_test_multiple "up" "find top frame" {
+	-re -wrap "Initial frame selected; you cannot go up." {
+	    gdb_test_multiple "with print demangle off -- info symbol \$pc" \
+		"find kernel symbol" {
+		    -re -wrap "(\[A-Za-z0-9_\]+) \[^\r\n\]*in section .*" {
+			set symbol $expect_out(1,string)
+			pass $gdb_test_name
+		    }
+		    -re -wrap "" {
+			fail $gdb_test_name
+		    }
+		}
+	}
+	-re -wrap "#\[0-9\]+ .*" {
+	    send_gdb "up\n"
+	    exp_continue
+	}
+    }
+
+    return $symbol
+}
+
+foreach device $sycl_device_list {
+    sycl_with_intelgt_lock $device {
+	clean_restart $testfile
+
+	if {![sycl_start $device]} {
+	    continue
+	}
+
+	set foo_1 [gdb_get_line_number "foo.1"]
+	set bar_1 [gdb_get_line_number "bar.1"]
+	set host_1 [gdb_get_line_number "host.1"]
+	set host_2 [gdb_get_line_number "host.2"]
+	set host_3 [gdb_get_line_number "host.3"]
+	set host_4 [gdb_get_line_number "host.4"]
+	set lambda_1 [gdb_get_line_number "lambda.1"]
+	set kernel_1 [gdb_get_line_number "kernel.1"]
+	set kernel_2 [gdb_get_line_number "kernel.2"]
+	set kernel_3 [gdb_get_line_number "kernel.3"]
+	set kernel_4 [gdb_get_line_number "kernel.4"]
+	set kernel_5 [gdb_get_line_number "kernel.5"]
+	set kernel_6 [gdb_get_line_number "kernel.6"]
+
+	# The user-defined kernel function is wrapped by an actual kernel
+	# provided by the compiler when offloading to a device, so the
+	# user-defined kernel is actually a device function that is called
+	# from or inlined into the actual kernel.
+	#
+	# To test breaking on the kernel and sliding the breakpoint across
+	# the kernel prologue with its potentially multiple entries, we
+	# run each kernel twice.
+	#
+	#   - in the first run, we break at the user-defined kernel
+	#     function symbol and determine the actual kernel symbol.
+	#
+	#   - in the second run, we break at the actual kernel symbol and
+	#     run the rest of the breakpoint tests for this kernel.
+	#
+	# When running on CPU, the kernel function is not actually
+	# offloaded but called by the runtime.  We simply use the same
+	# user kernel function symbol again in this case.
+	#
+	# We're going to set breakpoints
+	#
+	#   - from the host process into kernels
+	#   - from kernels into the host process
+	#   - from kernels into other kernels
+	gdb_breakpoint "SingleTask::operator ()" -message -temporary \
+	    -allow-pending
+	gdb_breakpoint "ParallelFor::operator ()" -message -temporary \
+	    -allow-pending
+
+	with_test_prefix "single_task" {
+	    # We also cover breakpoints leaking into and out of kernels,
+	    # so we start with a host breakpoint located above the kernel.
+	    gdb_breakpoint $host_1 -message
+
+	    gdb_continue_to_breakpoint "host.1" ".*host.1.*"
+	    gdb_continue_to_breakpoint "function.single_task" \
+		".*kernel.single_task.*"
+
+	    # This part only works for kernels offloaded to a device.
+	    set symbol ""
+	    if {[require_sycl_device "$device" "gpu" "*"]} {
+		set symbol [find_kernel_symbol_gpu]
+	    }
+	    # Fall back to the original user kernel function symbol.
+	    if {$symbol eq ""} {
+		set symbol "SingleTask::operator ()"
+	    }
+
+	    # We do not know where the breakpoint ends up.
+	    gdb_breakpoint $symbol -message -allow-pending
+	    gdb_continue_to_breakpoint "kernel.single_task"
+
+	    # We're at the start of the second run of the first kernel.
+	    #
+	    # Set breakpoints for the rest of the tests for this kernel.
+	    # We stopped in the actual kernel, which may be located in a
+	    # different source file.
+	    gdb_breakpoint $srcfile:$kernel_1 -message
+	    gdb_breakpoint $srcfile:$kernel_2 -message
+	    gdb_breakpoint $srcfile:foo -message
+	    gdb_breakpoint $srcfile:bar -message
+	    gdb_breakpoint $srcfile:$foo_1 -message
+	    gdb_breakpoint $srcfile:$bar_1 -message
+
+	    gdb_continue_to_breakpoint "kernel.1" ".*kernel.1.*"
+	    gdb_continue_to_breakpoint "foo.entry" ".*foo.entry.*"
+	    gdb_continue_to_breakpoint "foo.1" ".*foo.1.*"
+	    gdb_continue_to_breakpoint "kernel.2" ".*kernel.2.*"
+	    gdb_continue_to_breakpoint "bar.entry" ".*bar.entry.*"
+	    gdb_continue_to_breakpoint "bar.1" ".*bar.1.*"
+	}
+
+	with_test_prefix "lambda" {
+	    # Test that we are not leaking breakpoints into or out of
+	    # kernels defined as lambdas.
+	    #
+	    # We need a breakpoint before
+	    #
+	    #   queue.single_task ([] ()
+	    #
+	    # because that line also contains the lambda definition.
+	    gdb_breakpoint $host_3 -message
+	    gdb_breakpoint $lambda_1 -message
+
+	    gdb_continue_to_breakpoint "host.3" ".*host.3.*"
+	    gdb_continue_to_breakpoint "lambda.1" ".*lambda.1.*"
+	}
+
+	with_test_prefix "parallel_for" {
+	    # Now move on to the next kernel, again with an intermediate
+	    # stop in the host process.
+	    gdb_breakpoint $srcfile:$host_2 -message
+
+	    gdb_continue_to_breakpoint "host.2" ".*host.2.*"
+	    gdb_continue_to_breakpoint "function.parallel_for" \
+		".*kernel.parallel_for.*"
+
+	    # This part only works for kernels offloaded to a device.
+	    set symbol ""
+	    if {[require_sycl_device "$device" "gpu" "*"]} {
+		set symbol [find_kernel_symbol_gpu]
+	    }
+	    # Fall back to the original user kernel function symbol.
+	    if {$symbol eq ""} {
+		set symbol "ParallelFor::operator ()"
+	    }
+
+	    # We only want to hit this once to not complicate the test.
+	    #
+	    # Until kernel.6, threads race to the next breakpoint, but we
+	    # only get one stop from the winner; the loser will silently
+	    # skip this breakpoint.
+	    #
+	    # This allows the test to be serial even though we're testing
+	    # a parallel_for kernel.  We may switch threads at every stop,
+	    # but we don't really care which thread stops.
+	    #
+	    # But first, we need to get back to the host process so the
+	    # other thread does not stop on this new breakpoint in this
+	    # kernel instance.
+	    gdb_breakpoint $srcfile:$host_4 -message -temporary
+	    gdb_continue_to_breakpoint "host.4" ".*host.4.*"
+	    #
+	    # Now we can add the kernel breakpoint for the second run.
+	    #
+	    # We do not know where the breakpoint ends up.
+	    gdb_breakpoint $symbol -message -temporary -allow-pending
+	    gdb_continue_to_breakpoint "kernel.parallel_for"
+
+	    # We're at the start of the second run.
+	    #
+	    # We're now running a kernel with two workgroups and hence two
+	    # threads and we're going to cover
+	    #
+	    #   - temporary breakpoints
+	    #   - disable breakpoints
+	    #   - delete breakpoints
+	    #
+	    # and we're making sure that only one thread stops.
+	    #
+	    # Set breakpoints for the rest of the tests.  We stopped in
+	    # the actual kernel, which may be located in a different
+	    # source file.
+	    gdb_breakpoint $srcfile:$kernel_3 -message -temporary
+	    gdb_breakpoint $srcfile:$kernel_4 -message
+	    set bp_dis [get_integer_valueof "\$bpnum" invalid "disable bp"]
+	    gdb_breakpoint $srcfile:$kernel_5 -message
+	    set bp_del [get_integer_valueof "\$bpnum" invalid "delete bp"]
+	    gdb_breakpoint $srcfile:$kernel_6 -message
+
+	    gdb_continue_to_breakpoint "kernel.3" ".*kernel.3.*"
+	    gdb_continue_to_breakpoint "kernel.4" ".*kernel.4.*"
+	    gdb_test_no_output "disable $bp_dis"
+
+	    gdb_continue_to_breakpoint "kernel.5" ".*kernel.5.*"
+	    gdb_test_no_output "delete $bp_del"
+
+	    # We hit kernel.6 once for each workgroup.
+	    gdb_continue_to_breakpoint "kernel.6.1" ".*kernel.6.*"
+	    gdb_continue_to_breakpoint "kernel.6.2" ".*kernel.6.*"
+
+	    gdb_test "continue" "$inferior_exited_re normally.*"
+	}
+    }
+}

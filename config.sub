@@ -2149,6 +2149,7 @@ case $os in
 	| winnt* \
 	| xenix* \
 	| xray* \
+	| ze* \
 	| zephyr* \
 	| zvmoe* )
 		;;
@@ -2211,7 +2212,7 @@ esac
 case $kernel-$os-$obj in
 	linux-gnu*- | linux-android*- | linux-dietlibc*- | linux-llvm*- \
 		    | linux-mlibc*- | linux-musl*- | linux-newlib*- \
-		    | linux-relibc*- | linux-uclibc*- | linux-ohos*- )
+		    | linux-relibc*- | linux-uclibc*- | linux-ohos*- | linux-ze*- )
 		;;
 	uclinux-uclibc*- | uclinux-gnu*- )
 		;;

@@ -1665,6 +1665,8 @@ enum bfd_architecture
   bfd_arch_ia64,      /* HP/Intel ia64.  */
 #define bfd_mach_ia64_elf64    64
 #define bfd_mach_ia64_elf32    32
+  bfd_arch_intelgt,   /* Intel(R) Graphics Technology.  */
+#define bfd_mach_intelgt       9
   bfd_arch_ip2k,      /* Ubicom IP2K microcontrollers. */
 #define bfd_mach_ip2022        1
 #define bfd_mach_ip2022ext     2
@@ -7461,6 +7463,10 @@ enum bfd_reloc_code_real
   BFD_RELOC_LARCH_TLS_LD_PCREL20_S2,
   BFD_RELOC_LARCH_TLS_GD_PCREL20_S2,
   BFD_RELOC_LARCH_TLS_DESC_PCREL20_S2,
+
+  /* IntelGT relocations.  */
+  BFD_RELOC_ZE_SYM_ADDR32_HI,
+  BFD_RELOC_ZE_PER_THREAD_PAYLOAD_OFFSET_32,
   BFD_RELOC_UNUSED
 };
 typedef enum bfd_reloc_code_real bfd_reloc_code_real_type;

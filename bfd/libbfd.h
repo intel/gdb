@@ -3626,6 +3626,8 @@ static const char *const bfd_reloc_code_real_names[] = { "@@uninitialized@@",
   "BFD_RELOC_LARCH_TLS_LD_PCREL20_S2",
   "BFD_RELOC_LARCH_TLS_GD_PCREL20_S2",
   "BFD_RELOC_LARCH_TLS_DESC_PCREL20_S2",
+  "BFD_RELOC_ZE_SYM_ADDR32_HI",
+  "BFD_RELOC_ZE_PER_THREAD_PAYLOAD_OFFSET_32",
  "@@overflow: BFD_RELOC_UNUSED@@",
 };
 #endif

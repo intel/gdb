@@ -967,6 +967,7 @@ solib_add (const char *pattern, int from_tty, int readsyms)
     if (from_tty)
       add_flags |= SYMFILE_VERBOSE;
 
+    std::list<solib *> added_solibs;
     for (solib &gdb : current_program_space->solibs ())
       if (!pattern || re_exec (gdb.so_name.c_str ()))
 	{
@@ -989,13 +990,22 @@ solib_add (const char *pattern, int from_tty, int readsyms)
 				styled_string (file_name_style.style (),
 					       gdb.so_name.c_str ()));
 		}
-	      else if (solib_read_symbols (gdb, add_flags))
-		loaded_any_symbols = true;
+	      else
+		added_solibs.emplace_back (&gdb);
 	    }
 	}
 
+    for (solib *gdb : added_solibs)
+      if (solib_read_symbols (*gdb, add_flags))
+	loaded_any_symbols = true;
+
     if (loaded_any_symbols)
       breakpoint_re_set ();
+
+    /* Acknowledge loading of new solibs.  This must be called after
+       breakpoints have been set in this newly loaded solib.  */
+    for (solib *gdb : added_solibs)
+      solib_ack_library (*gdb);
 
     if (from_tty && pattern && !any_matches)
       gdb_printf ("No loaded shared libraries match the pattern `%s'.\n",
@@ -1698,6 +1708,16 @@ std::optional<CORE_ADDR>
 default_find_solib_addr (solib &so)
 {
   return {};
+}
+
+/* See solist.h.  */
+
+void solib_ack_library (solib &so)
+{
+  const solib_ops *ops = gdbarch_so_ops (current_inferior ()->arch ());
+
+  if (ops->ack_library != nullptr)
+    (*ops->ack_library) (so);
 }
 
 void _initialize_solib ();

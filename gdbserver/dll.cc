@@ -25,18 +25,24 @@
 /* Record a newly loaded DLL at BASE_ADDR for the current process.  */
 
 void
-loaded_dll (const char *name, CORE_ADDR base_addr)
+loaded_dll (const char *name, CORE_ADDR base_addr, bool need_ack)
 {
-  loaded_dll (current_process (), name, base_addr);
+  loaded_dll (current_process (), name, base_addr, need_ack);
 }
 
 /* Record a newly loaded DLL at BASE_ADDR for PROC.  */
 
 void
-loaded_dll (process_info *proc, const char *name, CORE_ADDR base_addr)
+loaded_dll (process_info *proc, const char *name, CORE_ADDR base_addr,
+	    bool need_ack)
 {
+  if (need_ack && !get_client_state ().vack_library_supported)
+    throw_error (NOT_SUPPORTED_ERROR,
+		 _("library acknowledgement not supported."));
+
   gdb_assert (proc != nullptr);
-  proc->all_dlls.emplace_back (name != nullptr ? name : "", base_addr);
+  proc->all_dlls.emplace_back (name != nullptr ? name : "", base_addr,
+			       need_ack);
   proc->dlls_changed = true;
 }
 
@@ -44,10 +50,16 @@ loaded_dll (process_info *proc, const char *name, CORE_ADDR base_addr)
 
 void
 loaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
-	    CORE_ADDR base_addr)
+	    CORE_ADDR base_addr, bool need_ack)
 {
+  /* It suffices to assert support for on-disk library acknowledgement since we
+     can fall back to that.  */
+  if (need_ack && !get_client_state ().vack_library_supported)
+    throw_error (NOT_SUPPORTED_ERROR,
+		 _("library acknowledgement not supported."));
+
   gdb_assert (proc != nullptr);
-  proc->all_dlls.emplace_back (begin, end, base_addr);
+  proc->all_dlls.emplace_back (begin, end, base_addr, need_ack);
   proc->dlls_changed = true;
 }
 
@@ -58,6 +70,78 @@ void
 unloaded_dll (const char *name, CORE_ADDR base_addr)
 {
   unloaded_dll (current_process (), name, base_addr);
+}
+
+static void
+ack_dll (process_info *process, dll_info &dll)
+{
+  gdb_assert (dll.need_ack);
+
+  switch (dll.location)
+    {
+    case dll_info::on_disk:
+      /* Check if this is a temporary file for an in-memory library.  */
+      if (dll.begin == UNSPECIFIED_CORE_ADDR)
+	{
+	  target_ack_library (process, dll.name.c_str ());
+	  dll.need_ack = false;
+	  return;
+	}
+
+      [[fallthrough]];
+    case dll_info::in_memory:
+      target_ack_in_memory_library (process, dll.begin, dll.end);
+      dll.need_ack = false;
+      return;
+    }
+
+  internal_error (_("bad library location: %d."), dll.location);
+}
+
+void
+ack_dll (process_info *proc, const char *name)
+{
+  std::list<dll_info> &dlls = proc->all_dlls;
+  std::list<dll_info>::iterator it
+    = std::find_if (dlls.begin (), dlls.end (),
+		    [name] (const dll_info &dll)
+	{
+	  return (dll.name == std::string (name));
+	});
+
+  if (it != dlls.end ())
+    ack_dll (proc, *it);
+}
+
+void
+ack_dll (const char *name)
+{
+  ack_dll (current_process (), name);
+}
+
+void
+ack_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end)
+{
+  std::list<dll_info> &dlls = proc->all_dlls;
+  std::list<dll_info>::iterator it
+    = std::find_if (dlls.begin (), dlls.end (),
+		    [begin, end] (const dll_info &dll)
+	{
+	  /* For root devices with multiple sub-devices, modules with
+	     identical start/end addresses may be received for different
+	     sub-devices.  Therefore we check for the 'NEED_ACK' flag in
+	     the search, too.  */
+	  return ((dll.begin == begin) && (dll.end == end) && dll.need_ack);
+	});
+
+  if (it != dlls.end ())
+    ack_dll (proc, *it);
+}
+
+void
+ack_dll (CORE_ADDR begin, CORE_ADDR end)
+{
+  ack_dll (current_process (), begin, end);
 }
 
 /* Record that the DLL with NAME and BASE_ADDR has been unloaded
@@ -99,6 +183,8 @@ unloaded_dll (process_info *proc, const char *name, CORE_ADDR base_addr)
     {
       /* DLL has been found so remove the entry and free associated
 	 resources.  */
+      if (iter->need_ack)
+	ack_dll (proc, *iter);
       proc->all_dlls.erase (iter);
       proc->dlls_changed = true;
     }
@@ -144,6 +230,8 @@ unloaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
     {
       /* DLL has been found so remove the entry and free associated
 	 resources.  */
+      if (iter->need_ack)
+	ack_dll (proc, *iter);
       proc->all_dlls.erase (iter);
       proc->dlls_changed = 1;
     }

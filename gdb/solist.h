@@ -191,6 +191,10 @@ struct solib_ops
   gdb_bfd_ref_ptr (*bfd_open_from_target_memory) (CORE_ADDR addr,
 						  CORE_ADDR size,
 						  const char *target);
+
+  /* Acknowledge a library.  This is called from add_solib after loading
+     symbols and placing breakpoints.  */
+  void (*ack_library) (solib &so);
 };
 
 /* A unique pointer to a so_list.  */
@@ -214,5 +218,8 @@ extern gdb_bfd_ref_ptr solib_bfd_open (const char *in_pathname);
    This just returns an empty std::optional<CORE_ADDR> indicating GDB is
    unable to find an address within the library SO.  */
 extern std::optional<CORE_ADDR> default_find_solib_addr (solib &so);
+
+/* Acknowledge a library.  */
+extern void solib_ack_library (solib &so);
 
 #endif

@@ -6193,7 +6193,26 @@ handle_inferior_event (struct execution_control_state *ecs)
       ecs->event_thread = ecs->target->find_thread (ecs->ptid);
       /* If it's a new thread, add it to the thread database.  */
       if (ecs->event_thread == nullptr)
-	ecs->event_thread = add_thread (ecs->target, ecs->ptid);
+	{
+	  /* Do not create a thread if the event is for the whole process.  */
+	  if (!ecs->ptid.is_pid ())
+	    ecs->event_thread = add_thread (ecs->target, ecs->ptid);
+	  else
+	    {
+	      inferior *inf = find_inferior_pid (ecs->target,
+						 ecs->ptid.pid ());
+	      gdb_assert (inf != nullptr);
+	      ecs->event_thread = any_live_thread_of_inferior (inf);
+	      /* If we end up here with no thread, that means that
+		 the eventing process has no non-exited threads.
+		 This situation is unexpected -- we need the thread's
+		 context.  */
+	      gdb_assert (ecs->event_thread != nullptr);
+	      /* Now that we have picked a representative thread,
+		 adjust the event ptid, too.  */
+	      ecs->ptid = ecs->event_thread->ptid;
+	    }
+	}
 
       /* Disable range stepping.  If the next step request could use a
 	 range, this will be end up re-enabled then.  */

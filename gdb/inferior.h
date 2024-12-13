@@ -64,6 +64,7 @@ struct thread_info;
 #include "displaced-stepping.h"
 
 #include <unordered_map>
+#include <optional>
 
 struct infcall_suspend_state;
 struct infcall_control_state;
@@ -319,6 +320,9 @@ struct inferior_control_state
 
   /* See the definition of stop_kind above.  */
   enum stop_kind stop_soon;
+
+  /* The waitstatus for this inferior's last event.  */
+  std::optional<target_waitstatus> waitstatus;
 };
 
 /* Initialize the inferior-related global state.  */

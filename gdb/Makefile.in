@@ -751,6 +751,7 @@ ALL_64_TARGET_OBS = \
 	arch/aarch64-scalable-linux.o \
 	arch/amd64-linux-tdesc.o \
 	arch/amd64.o \
+	arch/intelgt.o \
 	arch/riscv.o \
 	bpf-tdep.o \
 	ia64-linux-tdep.o \

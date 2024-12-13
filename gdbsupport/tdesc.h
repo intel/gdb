@@ -26,6 +26,7 @@ struct tdesc_type_builtin;
 struct tdesc_type_vector;
 struct tdesc_type_with_fields;
 struct tdesc_reg;
+struct tdesc_device;
 struct target_desc;
 
 /* The interface to visit different elements of target description.  */
@@ -55,6 +56,9 @@ public:
   {}
 
   virtual void visit (const tdesc_reg *e)
+  {}
+
+  virtual void visit (const tdesc_device *e)
   {}
 };
 
@@ -315,6 +319,84 @@ struct tdesc_feature : tdesc_element
 
 typedef std::unique_ptr<tdesc_feature> tdesc_feature_up;
 
+/* The device information in a target description.  */
+
+struct tdesc_device : tdesc_element
+{
+  tdesc_device ()
+  {
+    family = "-";
+    model = "-";
+    name = "-";
+    pci_slot = "-";
+    uuid = "-";
+  }
+
+  virtual ~tdesc_device () = default;
+
+  DISABLE_COPY_AND_ASSIGN (tdesc_device);
+
+  /* The id of the device vendor.  */
+  std::optional<uint32_t> vendor_id;
+
+  /* The id of the device, given by its vendor.  */
+  std::optional<uint32_t> target_id;
+
+  /* The family of the device.  */
+  std::string family;
+
+  /* The model of the device.  */
+  std::string model;
+
+  /* The stepping of the device.  */
+  std::optional<uint32_t> stepping;
+
+  /* The name of the device.  */
+  std::string name;
+
+  /* The location where the device is positioned.  */
+  std::string pci_slot;
+
+  /* The UUID of the device.  */
+  std::string uuid;
+
+  /* The number of cores available in the device.  */
+  std::optional<size_t> total_cores;
+
+  /* The number of threads available in the device.  */
+  std::optional<size_t> total_threads;
+
+  /* The subdevice id, if this device is a subdevice.  */
+  std::optional<uint32_t> subdevice_id;
+
+  void accept (tdesc_element_visitor &v) const override
+  {
+    v.visit (this);
+  }
+
+  bool operator== (const tdesc_device &other) const
+  {
+    return (vendor_id == other.vendor_id
+	    && target_id == other.target_id
+	    && family == other.family
+	    && model == other.model
+	    && stepping == other.stepping
+	    && name == other.name
+	    && pci_slot == other.pci_slot
+	    && uuid == other.uuid
+	    && total_cores == other.total_cores
+	    && total_threads == other.total_threads
+	    && subdevice_id == other.subdevice_id);
+  }
+
+  bool operator!= (const tdesc_device &other) const
+  {
+    return !(*this == other);
+  }
+};
+
+typedef std::unique_ptr<tdesc_device> tdesc_device_up;
+
 /* A deleter adapter for a target_desc.  There are different
    implementations of this deleter class in gdb and gdbserver because even
    though the target_desc name is shared between the two projects, the
@@ -346,6 +428,13 @@ void set_tdesc_osabi (target_desc *target_desc, enum gdb_osabi osabi);
 /* Return the osabi associated with this target description as a string,
    or NULL if no osabi was specified.  */
 const char *tdesc_osabi_name (const struct target_desc *target_desc);
+
+/* Set TARGET_DESC's device information.  */
+void set_tdesc_device_info (target_desc *target_desc, tdesc_device *device);
+
+/* Return the device information associated with this target
+   description or NULL if device info does not exist.  */
+const tdesc_device *tdesc_device_info (const target_desc *target_desc);
 
 /* Return the type associated with ID in the context of FEATURE, or
    NULL if none.  */
@@ -439,6 +528,7 @@ public:
   void visit (const tdesc_type_vector *type) override;
   void visit (const tdesc_type_with_fields *type) override;
   void visit (const tdesc_reg *reg) override;
+  void visit (const tdesc_device *device) override;
 
 private:
 

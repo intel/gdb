@@ -404,6 +404,9 @@ enum {
      errors, and so they should not need to check for this feature.  */
   PACKET_accept_error_message,
 
+  /* Support TARGET_WAITKIND_UNAVAILABLE.  */
+  PACKET_unavailable,
+
   PACKET_MAX
 };
 
@@ -5858,6 +5861,8 @@ static const struct protocol_feature remote_protocol_features[] = {
     PACKET_memory_tagging_feature },
   { "error-message", PACKET_ENABLE, remote_supported_packet,
     PACKET_accept_error_message },
+  { "unavailable", PACKET_DISABLE, remote_supported_packet,
+    PACKET_unavailable },
   { "vAck:library", PACKET_DISABLE, remote_supported_packet,
     PACKET_vAck_library },
   { "vAck:in-memory-library", PACKET_DISABLE, remote_supported_packet,
@@ -5972,6 +5977,10 @@ remote_target::remote_query_supported ()
       if (m_features.packet_set_cmd_state (PACKET_memory_tagging_feature)
 	  != AUTO_BOOLEAN_FALSE)
 	remote_query_supported_append (&q, "memory-tagging+");
+
+      if (m_features.packet_set_cmd_state (PACKET_unavailable)
+	  != AUTO_BOOLEAN_FALSE)
+	remote_query_supported_append (&q, "unavailable+");
 
       remote_query_supported_append
 	(&q, "qXfer:libraries:read:in-memory-library+");
@@ -8359,6 +8368,10 @@ Packet: '%s'\n"),
       event->ws.set_no_resumed ();
       event->ptid = minus_one_ptid;
       break;
+    case 'U':
+      event->ws.set_unavailable ();
+      event->ptid = read_ptid (&buf[1], NULL);
+      break;
     }
 }
 
@@ -8772,7 +8785,7 @@ remote_target::wait_as (ptid_t ptid, target_waitstatus *status,
 	     again.  Keep waiting for events.  */
 	  rs->waiting_for_stop_reply = 1;
 	  break;
-	case 'N': case 'T': case 'S': case 'X': case 'W': case 'w':
+	case 'N': case 'T': case 'S': case 'X': case 'W': case 'w': case 'U':
 	  {
 	    /* There is a stop reply to handle.  */
 	    rs->waiting_for_stop_reply = 0;
@@ -16544,6 +16557,9 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
 
   add_packet_config_cmd (PACKET_accept_error_message,
 			 "error-message", "error-message", 0);
+
+  add_packet_config_cmd (PACKET_unavailable,
+			 "U stop reply", "unavailable-stop-reply", 0);
 
   /* Assert that we've registered "set remote foo-packet" commands
      for all packet configs.  */

@@ -257,6 +257,11 @@ private:
      memory reads to come from the passed-in buffer.  */
   void read_mem (gdb_byte *buf, CORE_ADDR addr, size_t length);
 
+  /* Read BITSIZE bits from the register indicated by the DWARF register
+     number DWREGNUM starting at bit BITOFFSET into BUF.  */
+  void read_reg (gdb_byte *buf, size_t bitoffset, size_t bitsize,
+		 int dwregnum);
+
   /* Deref ADDR with size SIZE and return a value of type TYPE.
      If TYPE == nullptr, defaults to this->address_type ().  */
   value *deref (CORE_ADDR addr, int size, struct type *type = nullptr);

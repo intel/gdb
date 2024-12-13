@@ -379,6 +379,12 @@ enum {
   /* Support remote CTRL-C.  */
   PACKET_vCtrlC,
 
+  /* Support acknowledging libraries.  */
+  PACKET_vAck_library,
+
+  /* Support acknowledging in-memory-libraries.  */
+  PACKET_vAck_in_memory_library,
+
   /* Support TARGET_WAITKIND_NO_RESUMED.  */
   PACKET_no_resumed,
 
@@ -1156,6 +1162,9 @@ public:
 		      const gdb::byte_vector &tags, int type) override;
 
   bool is_address_tagged (gdbarch *gdbarch, CORE_ADDR address) override;
+
+  void ack_library (const char *name) override;
+  void ack_in_memory_library (CORE_ADDR begin, CORE_ADDR end) override;
 
 public: /* Remote specific methods.  */
 
@@ -5864,6 +5873,10 @@ static const struct protocol_feature remote_protocol_features[] = {
   { "error-message", PACKET_ENABLE, remote_supported_packet,
     PACKET_accept_error_message },
   { "binary-upload", PACKET_DISABLE, remote_supported_packet, PACKET_x },
+  { "vAck:library", PACKET_DISABLE, remote_supported_packet,
+    PACKET_vAck_library },
+  { "vAck:in-memory-library", PACKET_DISABLE, remote_supported_packet,
+    PACKET_vAck_in_memory_library },
 };
 
 static char *remote_support_xml;
@@ -5977,6 +5990,14 @@ remote_target::remote_query_supported ()
 
       remote_query_supported_append
 	(&q, "qXfer:libraries:read:in-memory-library+");
+
+      if (m_features.packet_set_cmd_state (PACKET_vAck_library)
+	  != AUTO_BOOLEAN_FALSE)
+	remote_query_supported_append (&q, "vAck:library+");
+
+      if (m_features.packet_set_cmd_state (PACKET_vAck_in_memory_library)
+	  != AUTO_BOOLEAN_FALSE)
+	remote_query_supported_append (&q, "vAck:in-memory-library+");
 
       /* Keep this one last to work around a gdbserver <= 7.10 bug in
 	 the qSupported:xmlRegisters=i386 handling.  */
@@ -15760,6 +15781,94 @@ remote_target::vcont_r_supported ()
 	  && get_remote_state ()->supports_vCont.r);
 }
 
+/* Acknowledge processing of library NAME is complete.  */
+
+void
+remote_target::ack_library (const char *name)
+{
+  if (m_features.packet_support (PACKET_vAck_library) == PACKET_DISABLE)
+    error (_("vAck:library packet disabled."));
+
+  remote_state *rs = get_remote_state ();
+  char *p = rs->buf.data ();
+  long size = get_remote_packet_size ();
+
+  int written = snprintf (p, size, "vAck:library:");
+  if (written == size)
+    error (_("Remote packet buffer too small for vAck:library packet."));
+
+  p += written;
+  size -= written;
+
+  int len = strnlen (name, size);
+  if (size <= (2 * len))
+    error (_("Library name too long for vAck:library packet."));
+
+  int converted = bin2hex ((const gdb_byte *) name, p, len);
+  if (converted < len)
+    error (_("Failed to encode library name for vAck:library packet."));
+
+  written = 2 * converted;
+  p += written;
+  size -= written;
+
+  gdb_assert (size > 0);
+  *p = 0;
+
+  putpkt (rs->buf);
+  getpkt (&rs->buf, 0);
+
+  packet_result result = m_features.packet_ok (rs->buf, PACKET_vAck_library);
+  switch (result.status ())
+    {
+    case PACKET_OK:
+      break;
+    case PACKET_UNKNOWN:
+      error (_("No support for acknowledging libraries."));
+    case PACKET_ERROR:
+      error (_("Acknowledging library '%s' failed: '%s'"), name,
+	     rs->buf.data ());
+    }
+}
+
+/* Acknowledge processing of in-memory library BEGIN..END is complete.  */
+
+void
+remote_target::ack_in_memory_library (CORE_ADDR begin, CORE_ADDR end)
+{
+  if (m_features.packet_support (PACKET_vAck_in_memory_library)
+      == PACKET_DISABLE)
+    error (_("vAck:in-memory-library packet disabled."));
+
+  remote_state *rs = get_remote_state ();
+  char *p = rs->buf.data ();
+  long size = get_remote_packet_size ();
+
+  int written = snprintf (p, size, "vAck:in-memory-library:%s,%s",
+			  core_addr_to_string_nz (begin),
+			  core_addr_to_string_nz (end));
+  if (written == size)
+    error (_("Remote packet buffer too small for vAck:in-memory-library "
+	     "packet."));
+
+  putpkt (rs->buf);
+  getpkt (&rs->buf, 0);
+
+  packet_result result
+    = m_features.packet_ok (rs->buf, PACKET_vAck_in_memory_library);
+  switch (result.status ())
+    {
+    case PACKET_OK:
+      break;
+    case PACKET_UNKNOWN:
+      error (_("No support for acknowledging in-memory libraries."));
+    case PACKET_ERROR:
+      error (_("Failed to acknowledge in-memory library %s-%s: %s"),
+	     core_addr_to_string_nz (begin), core_addr_to_string_nz (end),
+	     rs->buf.data ());
+    }
+}
+
 /* The "set/show range-stepping" set hook.  */
 
 static void
@@ -16524,6 +16633,11 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
 			 "exec-event-feature", 0);
 
   add_packet_config_cmd (PACKET_vCtrlC, "vCtrlC", "ctrl-c", 0);
+
+  add_packet_config_cmd (PACKET_vAck_library, "vAck:library", "ack-library", 0);
+
+  add_packet_config_cmd (PACKET_vAck_in_memory_library,
+			 "vAck:in-memory-library", "ack-in-memory-library", 0);
 
   add_packet_config_cmd (PACKET_QThreadEvents, "QThreadEvents", "thread-events",
 			 0);

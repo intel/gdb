@@ -269,6 +269,10 @@ struct solib_ops
      The TARGET string is used to identify the target.  */
   virtual gdb_bfd_ref_ptr bfd_open_from_target_memory
     (CORE_ADDR addr, CORE_ADDR size, const char *target) const;
+
+  /* Acknowledge a library.  This is called from add_solib after
+     loading symbols and placing breakpoints.  */
+  virtual void ack_library (solib &so) const {}
 };
 
 /* A unique pointer to an solib_ops.  */

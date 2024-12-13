@@ -31,12 +31,15 @@ struct dll_info
     in_memory
   };
 
-  dll_info (const std::string &name_, CORE_ADDR base_addr_)
-    : location (on_disk), name (name_), base_addr (base_addr_)
+  dll_info (const std::string &name_, CORE_ADDR base_addr_, bool need_ack_)
+    : location (on_disk), name (name_), begin (0), end (0),
+      base_addr (base_addr_), need_ack (need_ack_)
   {}
 
-  dll_info (CORE_ADDR begin_, CORE_ADDR end_, CORE_ADDR base_addr_)
-    : location (in_memory), begin (begin_), end (end_), base_addr (base_addr_)
+  dll_info (CORE_ADDR begin_, CORE_ADDR end_, CORE_ADDR base_addr_,
+	    bool need_ack_)
+    : location (in_memory), begin (begin_), end (end_), base_addr (base_addr_),
+      need_ack (need_ack_)
   {}
 
   /* Where the library bits are stored.  */
@@ -58,17 +61,28 @@ struct dll_info
 
   /* The base address at which the library is loaded.  */
   CORE_ADDR base_addr;
+
+  /* Whether we need to acknowledge that we processed the library event,
+     e.g. that we inserted pending breakpoints.  */
+  bool need_ack;
 };
 
-extern void loaded_dll (const char *name, CORE_ADDR base_addr);
+/* Throws NOT_SUPPORTED_ERROR if library acknowledgement is requested
+  (NEED_ACK = TRUE) and not supported.  */
+extern void loaded_dll (const char *name, CORE_ADDR base_addr,
+			bool need_ack = false);
 extern void loaded_dll (process_info *proc, const char *name,
-			CORE_ADDR base_addr);
+			CORE_ADDR base_addr, bool need_ack = false);
 extern void loaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
-			CORE_ADDR base_addr);
+			CORE_ADDR base_addr, bool need_ack = false);
 extern void unloaded_dll (const char *name, CORE_ADDR base_addr);
 extern void unloaded_dll (process_info *proc, const char *name,
 			  CORE_ADDR base_addr);
 extern void unloaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
 			  CORE_ADDR base_addr);
+extern void ack_dll (const char *name);
+extern void ack_dll (process_info *proc, const char *name);
+extern void ack_dll (CORE_ADDR begin, CORE_ADDR end);
+extern void ack_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end);
 
 #endif /* GDBSERVER_DLL_H */

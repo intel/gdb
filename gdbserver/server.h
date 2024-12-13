@@ -199,6 +199,10 @@ struct client_state
 
   /* True if qXfer:libraries:read supports in-memory-library.  */
   bool in_memory_library_supported = false;
+
+  /* Track supported packets.  */
+  bool vack_library_supported = false;
+  bool vack_in_memory_library_supported = false;
 };
 
 client_state &get_client_state ();

@@ -18,25 +18,57 @@
 #ifndef GDBSERVER_DLL_H
 #define GDBSERVER_DLL_H
 
+#include "gdbsupport/gdb_unlinker.h"
 #include <list>
 
 struct process_info;
 
 struct dll_info
 {
+  enum location_t
+  {
+    on_disk,
+    in_memory
+  };
+
   dll_info (const std::string &name_, CORE_ADDR base_addr_)
-  : name (name_), base_addr (base_addr_)
+    : location (on_disk), name (name_), base_addr (base_addr_)
   {}
 
+  dll_info (CORE_ADDR begin_, CORE_ADDR end_, CORE_ADDR base_addr_)
+    : location (in_memory), begin (begin_), end (end_), base_addr (base_addr_)
+  {}
+
+  /* Where the library bits are stored.  */
+  location_t location;
+
+  /* The name of a file on disk containing the library.
+
+     This is only valid if LOCATION == ON_DISK.  */
   std::string name;
+
+  /* An optional unlinker in case this is a temporary file.  */
+  std::optional<gdb::unlinker> unlinker;
+
+  /* The address range in memory containing the library.
+
+     This is only valid if LOCATION == IN_MEMORY.  */
+  CORE_ADDR begin;
+  CORE_ADDR end;
+
+  /* The base address at which the library is loaded.  */
   CORE_ADDR base_addr;
 };
 
 extern void loaded_dll (const char *name, CORE_ADDR base_addr);
 extern void loaded_dll (process_info *proc, const char *name,
 			CORE_ADDR base_addr);
+extern void loaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
+			CORE_ADDR base_addr);
 extern void unloaded_dll (const char *name, CORE_ADDR base_addr);
 extern void unloaded_dll (process_info *proc, const char *name,
+			  CORE_ADDR base_addr);
+extern void unloaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
 			  CORE_ADDR base_addr);
 
 #endif /* GDBSERVER_DLL_H */

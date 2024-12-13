@@ -1,0 +1,63 @@
+# Copyright 2020-2026 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test the scheduler-locker for resuming inside a SYCL kernel.
+
+load_lib sycl.exp
+
+standard_testfile parallel-for-1D.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return
+}
+
+if {[build_executable "failed to compile $srcfile" "$binfile" "$srcfile" \
+	 {sycl debug}]} {
+    return
+}
+
+foreach device $sycl_device_list {
+    sycl_with_intelgt_lock $device {
+	clean_restart $testfile
+
+	if {![sycl_start $device]} {
+	    continue
+	}
+
+	set first_line [gdb_get_line_number "kernel-first-line"]
+	set last_line [gdb_get_line_number "kernel-last-line"]
+	gdb_breakpoint $first_line
+	gdb_breakpoint $last_line
+
+	for {set i 1} {$i <= 5} {incr i} {
+	    with_test_prefix "trip $i" {
+		gdb_test_no_output "set scheduler-locking off"
+		gdb_continue_to_breakpoint ".*kernel-first-line.*"
+
+		# Resuming should make only the current thread move.
+		set current_thread [get_current_thread "kernel-first-line"]
+
+		gdb_test_no_output "set scheduler-locking step"
+		gdb_test "next" "int in_elem = .*"
+
+		gdb_test_no_output "set scheduler-locking on"
+		gdb_test "continue" \
+		    "Thread $current_thread \[^\r\n\]+$srcfile:$last_line.*"
+	    }
+	}
+    }
+}

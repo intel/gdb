@@ -2657,6 +2657,27 @@ resume_1 (enum gdb_signal sig)
   gdb_assert (!tp->stop_requested);
   gdb_assert (!thread_is_in_step_over_chain (tp));
 
+  inferior *inf = tp->inf;
+  process_stratum_target *target = inf->process_target ();
+  if (inf->control.waitstatus.has_value ())
+    {
+      infrun_debug_printf
+	("inferior %s has pending wait status %s.",
+	 target_pid_to_str (ptid_t (inf->pid)).c_str (),
+	 inf->control.waitstatus->to_string ().c_str ());
+
+      target->threads_executing = true;
+
+      if (target_can_async_p ())
+	{
+	  target_async (1);
+	  /* Tell the event loop we have an event to process.  */
+	  mark_async_event_handler (infrun_async_inferior_event_token);
+	}
+
+      return;
+    }
+
   if (tp->has_pending_waitstatus ())
     {
       infrun_debug_printf
@@ -4030,6 +4051,20 @@ do_target_wait_1 (inferior *inf, ptid_t ptid,
      such we want to make sure that INFERIOR_PTID is reset so that none of
      the wait code relies on it - doing so is always a mistake.  */
   switch_to_inferior_no_thread (inf);
+
+  /* Check if we have any saved waitstatus for the inferior itself.  */
+  if (inf->control.waitstatus.has_value ())
+    {
+      /* Wake up the event loop again, until all pending events are
+	 processed.  */
+      if (target_is_async_p ())
+	mark_async_event_handler (infrun_async_inferior_event_token);
+
+      *status = *inf->control.waitstatus;
+      inf->control.waitstatus.reset ();
+
+      return ptid_t (inf->pid);
+    }
 
   /* First check if there is a resumed thread with a wait status
      pending.  */
@@ -5486,6 +5521,22 @@ handle_one (const wait_one_event &event)
 		}
 	    }
 	}
+    }
+  else if (event.ptid.is_pid ())
+    {
+      /* This may be the first time we see the inferior report
+	 a stop.  */
+      inferior *inf = find_inferior_ptid (event.target, event.ptid);
+      if (inf->needs_setup)
+	setup_inferior (0);
+
+      /* This is needed to mark all the relevant threads in
+	 case the event is received from an all-stop
+	 target.  */
+      mark_non_executing_threads (event.target, event.ptid, event.ws);
+
+      /* Save the waitstatus for later.  */
+      *inf->control.waitstatus = event.ws;
     }
   else
     {

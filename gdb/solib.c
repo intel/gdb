@@ -485,8 +485,29 @@ solib_map_sections (solib &so)
 {
   const solib_ops *ops = gdbarch_so_ops (current_inferior ()->arch ());
 
-  gdb::unique_xmalloc_ptr<char> filename (tilde_expand (so.so_name.c_str ()));
-  gdb_bfd_ref_ptr abfd (ops->bfd_open (filename.get ()));
+  gdb_bfd_ref_ptr abfd;
+  if (so.so_name[0] != '\0')
+    {
+      gdb::unique_xmalloc_ptr<char> filename
+	(tilde_expand (so.so_name.c_str ()));
+      abfd = ops->bfd_open (filename.get ());
+    }
+  else if (so.begin != 0 && so.end != 0)
+    {
+      if (ops->bfd_open_from_target_memory == nullptr)
+	error (_("Target does not support in-memory shared libraries."));
+
+      if (so.end <= so.begin)
+	error (_("Bad address range [%s; %s) for in-memory shared library."),
+	       core_addr_to_string_nz (so.begin),
+	       core_addr_to_string_nz (so.end));
+
+      abfd = ops->bfd_open_from_target_memory (so.begin,
+					       so.end - so.begin,
+					       gnutarget);
+    }
+  else
+    internal_error (_("bad so_list"));
 
   /* If we have a core target then the core target might have some helpful
      information (i.e. build-ids) about the shared libraries we are trying
@@ -533,7 +554,7 @@ solib_map_sections (solib &so)
 	    {
 	      warning (_ ("Build-id of %ps does not match core file."),
 		       styled_string (file_name_style.style (),
-				      filename.get ()));
+				      so.so_name.c_str ()));
 	      abfd = nullptr;
 	    }
 	}

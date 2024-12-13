@@ -491,7 +491,16 @@ target_solib_ops::bfd_open_from_target_memory (CORE_ADDR addr,
 					       CORE_ADDR size,
 					       const char *target) const
 {
-  return gdb_bfd_open_from_target_memory (addr, size, target);
+  /* Open bfd for shared library.  */
+  gdb_bfd_ref_ptr abfd
+    = gdb_bfd_open_from_target_memory (addr, size, target);
+  if (abfd == nullptr)
+    error (_("Could not open file from target '%s' "
+	     "at address %s with size %s."), target,
+	   core_addr_to_string_nz (addr), core_addr_to_string_nz (size));
+  solib_bfd_init (abfd.get ());
+
+  return abfd;
 }
 
 void

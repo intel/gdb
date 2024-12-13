@@ -1,0 +1,83 @@
+# Copyright 2020-2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test that GDB steps over program breakpoints (i.e. breakpoints
+# manually inserted by the user by modifying an instruction) on an
+# Intel GT target.
+
+load_lib sycl.exp
+
+standard_testfile sycl-simple.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	unsupported "test is aimed at Intel GPUs only"
+	continue
+    }
+
+    sycl_with_intelgt_lock $device {
+	clean_restart "${binfile}"
+
+	if {![sycl_start $device]} {
+	    continue
+	}
+
+	set kernel_line [gdb_get_line_number "inside-kernel"]
+	# Make the BP temporary, so that GDB will remove it.  We will
+	# then set it manually.
+	gdb_breakpoint $kernel_line {temporary}
+	gdb_continue_to_breakpoint "inside kernel" ".*$srcfile:$kernel_line.*"
+
+	# Manually set the BP bit on the current PC and the next one.
+	with_test_prefix "current pc" {
+	    set first_pc [get_hexadecimal_valueof "\$pc" 0 "first stop pc"]
+	    set_breakpoint_bit $first_pc
+	}
+
+	with_test_prefix "next pc" {
+	    if {[is_compact_insn $first_pc]} {
+		# A compacted instruction is 8 bytes.
+		set next_pc [format 0x%x [expr $first_pc + 0x08]]
+	    } else {
+		# A full instruction is 16 bytes.
+		set next_pc [format 0x%x [expr $first_pc + 0x10]]
+	    }
+	    set_breakpoint_bit $next_pc
+	}
+
+	# We should now step-over the current PC and hit the manually-inserted
+	# BP on the next PC.
+	gdb_test "continue" \
+	    "Thread \[^\r\n\]+ received signal SIGTRAP.*" \
+	    "continue to the manual BP"
+	set second_pc [get_hexadecimal_valueof "\$pc" 0 "second stop pc"]
+	gdb_assert {$second_pc == $next_pc}
+
+	# Resuming should not hit the manual BP again.  Expect to terminate.
+	gdb_test "continue" "$inferior_exited_re normally].*" \
+	    "continue to end"
+    }
+}

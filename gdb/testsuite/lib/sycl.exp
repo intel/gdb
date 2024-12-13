@@ -1,0 +1,410 @@
+# Copyright 2019-2024 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Support library for testing SYCL GDB features
+#
+# A particular SYCL device can be selected by passing the SYCL program
+# three command-line arguments:
+#   1. the device type, whose value is in {cpu, gpu, accelerator}.
+#   2. a substring of the device name.
+#   3. backend name.
+#
+# To set these arguments properly, use a SYCL board file, and
+# make your test program select a queue via the get_sycl_queue
+# function in gdb.sycl/sycl-util.cpp.  See gdb.sycl/sycl-hello.cpp
+# for a sample SYCL program setup.
+
+load_lib intelgt-utils.exp
+
+# Define global variables for the driver version and platform.
+
+if {![info exists OFFLOAD_DEVICE_GROUP]} {
+    set OFFLOAD_DEVICE_GROUP "cpu,gpu,accelerator"
+}
+
+verbose -log "OFFLOAD_DEVICE_GROUP is '$OFFLOAD_DEVICE_GROUP'"
+
+# Return true if the SYCL device selected via the board file
+# matches the arguments.  Otherwise return false.
+# Input arg DEVICE contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version.
+# See an example in init_sycl_devices_list.
+
+proc require_sycl_device {device type name} {
+    set args_list [sycl_get_device_args $device]
+    if {[llength $args_list] <= 2} {
+	return 0
+    }
+
+    set type_match [expr {[lindex $args_list 0] eq $type}]
+    set name_match [string match $name [lindex $args_list 1]]
+
+    return [expr $type_match && $name_match]
+}
+
+# Run a test on the target to check if it recognizes SYCL.
+# Remove device from the available devices list if SYCL is not supported
+# and return the updated list.
+
+proc get_sycl_supported_devices {sycl_device_list} {
+    global srcdir inferior_exited_re
+
+    set supported_sycl_device_list {}
+
+    # Set up, compile, and execute a simple SYCL program.
+    set exe [standard_output_file sycl-hello]
+    set src "$srcdir/lib/sycl-hello.cpp"
+
+    if {[build_executable "failed to compile $src" \
+	     $exe $src {sycl debug}]} {
+	verbose "SYCL: Compilation failed" 0
+	return 1
+    }
+    verbose -log "\nSYCL: Compilation succeeded"
+
+    foreach device $sycl_device_list {
+	if ![is_sycl_device_filtered $device] {
+	    continue
+	}
+
+	clean_restart "${exe}"
+
+	if {![sycl_start $device]} {
+	    verbose "SYCL: Support not detected for ${device}" 0
+	    gdb_exit
+	    continue
+	}
+
+	set inside_kernel [gdb_get_line_number "inside-kernel" $src]
+	gdb_breakpoint "sycl-hello.cpp:$inside_kernel"
+
+	set result 1
+	sycl_with_intelgt_lock $device {
+	    gdb_test_multiple "continue" "continue" {
+		-re -wrap "$inferior_exited_re normally].*" {
+		    set result 1
+		}
+		-re -wrap "$inferior_exited_re with code.*" {
+		    set result 1
+		}
+		-re -wrap "(?:Breakpoint) .* (at|in).*sycl-hello.cpp:$inside_kernel.*" {
+		    set result 0
+		}
+		-re -wrap "received signal SIGABRT, Aborted.*" {
+		    set result 1
+		}
+	    }
+	}
+
+	if {$result == 0} {
+	    verbose "SYCL: Support detected for ${device}" 0
+	    lappend supported_sycl_device_list "${device}"
+	} else {
+	    verbose "SYCL: Support not detected for ${device}" 0
+	}
+
+	gdb_exit
+    }
+
+    return $supported_sycl_device_list
+}
+
+# Run the program under debug by passing DEVICE as the command line
+# argument.  If the device is not Intel GT, stop at main.  If the
+# device is Intel GT, continue until the zeContextCreate API call and
+# attempt to create another inferior connected to an Intel GT
+# gdbserver target.
+#
+# Return 1 on success, 0 on failure.
+
+proc sycl_start {device} {
+    if {[require_sycl_device $device "gpu" "Intel*"]} {
+	# To debug an Intel GT device, we create an additional
+	# inferior.  For the multi-target setting to work, we
+	# need to operate in target-non-stop mode.
+	gdb_test_no_output "maint set target-non-stop on"
+    }
+
+    set args ""
+    foreach arg [sycl_get_device_args $device] {
+	append args "'$arg' "
+    }
+    gdb_test_no_output "set args $args"
+
+    if {![runto_main]} {
+	return 0
+    }
+
+    if {[require_sycl_device $device "gpu" "Intel*"]} {
+	# For the Intel GT target, define a "hook" BP at a
+	# Level-Zero API function at which the Level-Zero backend
+	# would have been already initialized, attaching to the
+	# device would be expected to succeed.  Once we hit the
+	# hook BP, we create the additional inferior.
+	gdb_breakpoint "zeContextCreate" {*}"allow-pending temporary"
+	set hook_bp_hit [gdb_continue_to_breakpoint "hook bp" \
+			     "zeContextCreate\[^\r\n\]*"]
+	if {$hook_bp_hit != 0} {
+	    return 0
+	}
+
+	with_test_prefix "$device" {
+	    set inf_pid [get_inferior_pid]
+	    gdb_test "add-inferior -no-connection"
+	    gdb_test "inferior 2"
+	    set cmd "gdbserver-intelgt --once --attach - $inf_pid"
+	    gdb_test "target remote | $cmd" \
+		"Remote debugging.*" "connect the remote target"
+	    gdb_test "inferior 1"
+	    gdb_test "set schedule-multi on"
+	    gdb_test "info inferior" ".*" "inferiors for logging"
+	}
+    }
+
+    return 1
+}
+
+# Get list of devices and return 0 if device list is non-empty else
+# return 1.  Each device entry of this list contains ";" separated
+# following information:
+# Device name;Backend Type;Backend Platform version.
+# e.g.
+# Intel(R) ..;ext_oneapi_level_zero;1.3.24347
+
+gdb_caching_proc init_sycl_devices_list {} {
+    global srcdir
+    global inferior_exited_re
+    global sycl_device_list
+
+    set sycl_device_list {}
+    set supported_sycl_device_list {}
+
+    # Set up, compile, and execute a simple SYCL program.
+    set exe [standard_output_file sycl-devices]
+    set src "$srcdir/lib/sycl-devices.cpp"
+
+    if {![test_compiler_info {icx-*} c++]} {
+	unsupported "SYCL tests supported only for dpcpp and icpx compilers"
+	return $sycl_device_list
+    }
+
+    if {[prepare_for_testing "failed to compile $src" \
+	     $exe $src {sycl debug}]} {
+	verbose "SYCL: Compilation failed" 0
+	return $sycl_device_list
+    }
+    verbose -log "\nSYCL: Compilation succeeded"
+
+    if {![runto_main]} {
+	untested "failed to run sycl-devices to main"
+	return $sycl_device_list
+    }
+
+    set result 1
+    gdb_test_multiple "continue" "continue" {
+	-re "SYCL: List of Target devices: \\\[(\[^\r\n\]+)\\\]" {
+	    set sycl_device_list [split $expect_out(1,string) ","]
+	    exp_continue
+	}
+	-re -wrap "$inferior_exited_re normally].*" {
+	    set result 0
+	}
+	-re -wrap "$inferior_exited_re with code.*" {
+	    set result 1
+	}
+    }
+
+    set supported_sycl_device_list [get_sycl_supported_devices $sycl_device_list]
+    if {($result == 0) && ([llength $supported_sycl_device_list] > 0)} {
+	verbose "SYCL: Devices found: $supported_sycl_device_list" 0
+    } else {
+	set result 1
+	verbose "SYCL: No device found" 0
+    }
+
+    gdb_exit
+
+    return $supported_sycl_device_list
+}
+
+# Return the ID of the current thread (<inferior number>.<thread
+# number>).  This procedure can be more practical than using the
+# $_thread and $_inferior convenience variables, because if the SYCL
+# kernel is offloaded to a CPU target, the current thread would be a
+# single integer, but if offloaded to a GPU, it may be an
+# inferior-qualified number like N.M.
+proc get_current_thread {location} {
+    global decimal
+
+    gdb_test_multiple "thread" "get current thread at $location" {
+	-re -wrap "Current thread is ($decimal|$decimal\.$decimal).*" {
+	    pass $gdb_test_name
+	    return $expect_out(1,string)
+	}
+	-re -wrap "" {
+	    fail $gdb_test_name
+	}
+    }
+    return 0
+}
+
+# Returns 1 if the target device is selected via OFFLOAD_DEVICE_GROUP
+# and 0 otherwise.
+# DEVICE contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version.
+# See an example in init_sycl_devices_list.
+
+proc is_sycl_device_filtered {device} {
+    global OFFLOAD_DEVICE_GROUP
+
+    # Filter according to OFFLOAD_DEVICE_GROUP.
+    set device_info [split "$device" ";"]
+    set backend [lindex $device_info 1]
+    set device_type [lindex $device_info 3]
+
+    if {[lsearch -nocase [split $OFFLOAD_DEVICE_GROUP ","] $device_type] < 0} {
+	verbose -log "SYCL: device type $device_type is unwanted, skipping '$device'"
+	return 0
+    }
+
+    if {$device_type == "gpu"
+	&& [string match -nocase "*opencl*" $backend]} {
+	verbose -log "SYCL: unsupported combination: $device_type & $backend"
+	return 0
+    }
+
+    return 1
+}
+
+# Returns number of devices found in device string.
+
+proc sycl_get_device_count {device} {
+    set device_info [split "$device" ";"]
+    set device_count [lindex $device_info 4]
+    return $device_count
+}
+
+# Gets the list of args required for running the SYCL tests, where input device
+# contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version;Device Type;count.
+# See an example in init_sycl_devices_list.
+
+proc sycl_get_device_args {device} {
+    global hex
+
+    set device_info [split "$device" ";"]
+    set sycl_driver_platform [lindex $device_info 1]
+    set sycl_driver_version [lindex $device_info 2]
+    set device_type [lindex $device_info 3]
+    set device_name ""
+    set args_list {}
+
+    if {$device_type eq "gpu"} {
+	lappend args_list "gpu"
+	lappend args_list [lindex $device_info 0]
+    } elseif {$device_type eq "cpu"} {
+	lappend args_list "cpu"
+	if {[string match "*Intel*" $device]} {
+	    lappend args_list "Intel"
+	}
+    } elseif {$device_type eq "accelerator"} {
+	lappend args_list "accelerator"
+	if {[string match "*Intel*" $device]} {
+	    lappend args_list "Intel"
+	}
+    } else {
+	verbose "SYCL: Unexpected device type: ${device_type}" 0
+    }
+    lappend args_list $sycl_driver_platform
+    lappend args_list $sycl_driver_version
+    return $args_list
+}
+
+# Gets the prefix string required for the SYCL tests.
+# DEVICE contains ";" separated following information:
+# Device name;Backend Type;Backend Platform version;Device type.
+# e.g.
+# Intel(R) ...;ext_oneapi_level_zero;1.3.24347;gpu
+# Function returns ":" separated test prefix which has following info:
+# In case of non GPU device: Device type:Backend type:cpp
+# and in case of GPU: Device type GPU: Backend type: Graphics device ID
+# e.g. gpu:opencl:{0x1234}
+
+proc sycl_get_device_prefix {device} {
+    global hex
+    set args_list [sycl_get_device_args $device]
+
+    if {[string match -nocase "*Graphics*" $device]
+	 || [string match -nocase "*GPU*" $device]} {
+	    # In case of GPU device, add device ID to the prefix to get a unique
+	    # test name for multi GPU test machines.
+	    return "[lindex $args_list 0]:[lindex $args_list 2]:\
+		    {[regexp -all -inline $hex [lindex $args_list 1]]}"
+    }
+    return "[lindex $args_list 0]:[lindex $args_list 2]:cpp"
+}
+
+# Run BODY under the lock, if DEVICE is an Intel GPU.  Also calls
+# gdb_exit before releasing the GPU lock.
+#
+# See the similar 'with_gpu_lock' in rocm.exp.
+
+proc sycl_with_intelgt_lock {device body} {
+    with_test_prefix [sycl_get_device_prefix $device] {
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    set code [catch {uplevel 1 $body} result]
+	} else {
+	    with_lock $::intelgt_lock_filename {
+		set code [catch {uplevel 1 $body} result]
+	    }
+	}
+
+	# In case BODY returned early due to some testcase failing.
+	gdb_exit
+    }
+
+    if {$code == 1} {
+	return -code $code -errorinfo $::errorInfo \
+	    -errorcode $::errorCode $result
+    } else {
+	return -code $code $result
+    }
+}
+
+# Get the namespace version for the SYCL header corresponding to the compiler
+# used.  Return 0 for older compilers using SYCL without namespace versioning.
+
+proc get_sycl_header_version {} {
+    if {[test_compiler_info {icx-202[3-9]-*} c++]} {
+	return 1
+    }
+
+    return 0
+}
+
+# Spawn a SYCL program targeting DEVICE.
+
+proc spawn_sycl_proc {executable device} {
+    # We directly use 'remote_spawn' to be able to pass
+    # the program arguments.
+    set command [list $executable]
+    foreach arg [sycl_get_device_args $device] {
+	lappend command $arg
+    }
+    verbose -log "command: $command"
+
+    set spawn_id [remote_spawn target $command]
+    return $spawn_id
+}

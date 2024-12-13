@@ -340,6 +340,15 @@ by switching to a different user on the same machine.  These users
 will have random files copied into their $HOME directories, so it is a
 good idea to setup new users just for this purpose.
 
+OFFLOAD_DEVICE_GROUP
+
+This option can be used to restrict the offloading tests to run only
+on a specific group/family of devices.  Multiple target device groups
+can be selected by passing a comma separated list.  By default, it is
+set to "cpu,gpu,accelerator".  Example use:
+
+	make check RUNTESTFLAGS='OFFLOAD_DEVICE_GROUP="gpu,cpu"'
+
 Testing All Simple Boards
 *************************
 

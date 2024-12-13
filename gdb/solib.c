@@ -395,13 +395,36 @@ solib_bfd_fopen (const char *pathname, int fd)
   return abfd;
 }
 
+/* Initialize ABFD.  */
+
+static void
+solib_bfd_init (bfd *abfd)
+{
+  const struct bfd_arch_info *b;
+
+  /* Check bfd format.  */
+  if (!gdb_bfd_check_format (abfd, bfd_object))
+    error (_("`%ps': not in executable format: %s"),
+	   styled_string (file_name_style.style (),
+			  bfd_get_filename (abfd)),
+	   bfd_errmsg (bfd_get_error ()));
+
+  /* Check bfd arch.  */
+  b = gdbarch_bfd_arch_info (current_inferior ()->arch ());
+  if (!b->compatible (b, bfd_get_arch_info (abfd)))
+    error (_("`%ps': Shared library architecture %s is not compatible "
+	     "with target architecture %s."),
+	   styled_string (file_name_style.style (),
+			  bfd_get_filename (abfd)),
+	   bfd_get_arch_info (abfd)->printable_name, b->printable_name);
+}
+
 /* Find shared library PATHNAME and open a BFD for it.  */
 
 gdb_bfd_ref_ptr
 solib_bfd_open (const char *pathname)
 {
   int found_file;
-  const struct bfd_arch_info *b;
 
   /* Search for shared library file.  */
   gdb::unique_xmalloc_ptr<char> found_pathname
@@ -418,22 +441,7 @@ solib_bfd_open (const char *pathname)
 
   /* Open bfd for shared library.  */
   gdb_bfd_ref_ptr abfd (solib_bfd_fopen (found_pathname.get (), found_file));
-
-  /* Check bfd format.  */
-  if (!gdb_bfd_check_format (abfd.get (), bfd_object))
-    error (_("`%ps': not in executable format: %s"),
-	   styled_string (file_name_style.style (),
-			  bfd_get_filename (abfd.get ())),
-	   bfd_errmsg (bfd_get_error ()));
-
-  /* Check bfd arch.  */
-  b = gdbarch_bfd_arch_info (current_inferior ()->arch ());
-  if (!b->compatible (b, bfd_get_arch_info (abfd.get ())))
-    error (_("`%ps': Shared library architecture %s is not compatible "
-	     "with target architecture %s."),
-	   styled_string (file_name_style.style (),
-			  bfd_get_filename (abfd.get ())),
-	   bfd_get_arch_info (abfd.get ())->printable_name, b->printable_name);
+  solib_bfd_init (abfd.get ());
 
   return abfd;
 }
@@ -456,6 +464,23 @@ solib_ops::iterate_over_objfiles_in_search_order
       return;
 }
 
+gdb_bfd_ref_ptr
+solib_ops::bfd_open_from_target_memory (CORE_ADDR addr,
+					CORE_ADDR size,
+					const char *target) const
+{
+  /* Open bfd for shared library.  */
+  gdb_bfd_ref_ptr abfd
+    = gdb_bfd_open_from_target_memory (addr, size, target);
+  if (abfd == nullptr)
+    error (_("Could not open file from target '%s' "
+	     "at address %s with size %s."), target,
+	   core_addr_to_string_nz (addr), core_addr_to_string_nz (size));
+  solib_bfd_init (abfd.get ());
+
+  return abfd;
+}
+
 /* Given a pointer to one of the shared objects in our list of mapped
    objects, use the recorded name to open a bfd descriptor for the
    object, build a section table, relocate all the section addresses
@@ -471,9 +496,22 @@ solib_ops::iterate_over_objfiles_in_search_order
 static int
 solib_map_sections (solib &so)
 {
-  gdb::unique_xmalloc_ptr<char> filename
-    = gdb_rl_tilde_expand (so.name.c_str ());
-  gdb_bfd_ref_ptr abfd (so.ops ().bfd_open (filename.get ()));
+  gdb_bfd_ref_ptr abfd;
+  if (!so.name.empty ())
+    {
+      gdb::unique_xmalloc_ptr<char> filename
+	= gdb_rl_tilde_expand (so.name.c_str ());
+      abfd = so.ops ().bfd_open (filename.get ());
+    }
+  else if (so.begin != 0 && so.end != 0)
+    {
+      gdb_assert (so.begin < so.end);
+      abfd = so.ops ().bfd_open_from_target_memory (so.begin,
+						    so.end - so.begin,
+						    gnutarget);
+    }
+  else
+    internal_error (_("solib has neither a name nor a memory range"));
 
   /* If we have a core target then the core target might have some helpful
      information (i.e. build-ids) about the shared libraries we are trying
@@ -520,7 +558,7 @@ solib_map_sections (solib &so)
 	    {
 	      warning (_("Build-id of %ps does not match core file."),
 		       styled_string (file_name_style.style (),
-				      filename.get ()));
+				      so.name.c_str ()));
 	      abfd = nullptr;
 	    }
 	}

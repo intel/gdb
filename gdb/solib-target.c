@@ -26,9 +26,25 @@
 #include <vector>
 #include "inferior.h"
 
+/* The location of a loaded library.  */
+
+enum lm_location_t
+{
+  lm_on_disk,
+  lm_in_memory
+};
+
 /* Private data for each loaded library.  */
 struct lm_info_target final : public lm_info
 {
+  /* The library's location.  */
+  lm_location_t location = lm_on_disk;
+
+  /* The library's begin and end memory addresses.
+
+     This is only valid if location == lm_in_memory.  */
+  CORE_ADDR begin = 0ull, end = 0ull;
+
   /* The target can either specify segment bases or section bases, not
      both.  */
 
@@ -133,6 +149,26 @@ library_list_start_library (struct gdb_xml_parser *parser,
 				       std::make_unique<lm_info_target> () });
 }
 
+/* Handle the start of a <in-memory-library> element.  */
+
+static void
+in_memory_library_list_start_library (struct gdb_xml_parser *parser,
+				      const struct gdb_xml_element *element,
+				      void *user_data,
+				      std::vector<gdb_xml_value> &attributes)
+{
+  const auto list = static_cast<std::vector<target_library> *> (user_data);
+  list->emplace_back (target_library { "",
+				       std::make_unique<lm_info_target> () });
+
+  lm_info_target &info = *list->back ().info;
+  info.location = lm_in_memory;
+  info.begin = (CORE_ADDR) *(ULONGEST *)
+    xml_find_attribute (attributes, "begin")->value.get ();
+  info.end = (CORE_ADDR) *(ULONGEST *)
+    xml_find_attribute (attributes, "end")->value.get ();
+}
+
 static void
 library_list_end_library (struct gdb_xml_parser *parser,
 			  const struct gdb_xml_element *element,
@@ -196,10 +232,19 @@ static const struct gdb_xml_attribute library_attributes[] = {
   { NULL, GDB_XML_AF_NONE, NULL, NULL }
 };
 
+static const struct gdb_xml_attribute in_memory_library_attributes[] = {
+  { "begin", GDB_XML_AF_NONE, gdb_xml_parse_attr_ulongest, NULL },
+  { "end", GDB_XML_AF_NONE, gdb_xml_parse_attr_ulongest, NULL },
+  { NULL, GDB_XML_AF_NONE, NULL, NULL }
+};
+
 static const struct gdb_xml_element library_list_children[] = {
   { "library", library_attributes, library_children,
     GDB_XML_EF_REPEATABLE | GDB_XML_EF_OPTIONAL,
     library_list_start_library, library_list_end_library },
+  { "in-memory-library", in_memory_library_attributes, library_children,
+    GDB_XML_EF_REPEATABLE | GDB_XML_EF_OPTIONAL,
+    in_memory_library_list_start_library, library_list_end_library },
   { NULL, NULL, NULL, GDB_XML_EF_NONE, NULL, NULL }
 };
 
@@ -249,8 +294,25 @@ target_solib_ops::current_sos () const
 
   /* Build a struct solib for each entry on the list.  */
   for (auto &library : library_list)
-    sos.emplace_back (std::move (library.info), library.name, library.name,
-		      *this);
+    {
+      switch (library.info->location)
+	{
+	  case lm_on_disk:
+	    sos.emplace_back (std::move (library.info), library.name,
+			      library.name, *this);
+	    break;
+
+	case lm_in_memory:
+	  if (library.info->end <= library.info->begin)
+	    warning (_("bad in-memory-library location: begin=%s, end=%s"),
+		     core_addr_to_string_nz (library.info->begin),
+		     core_addr_to_string_nz (library.info->end));
+	  else
+	    sos.emplace_back (std::move (library.info), library.info->begin,
+			      library.info->end, *this);
+	  break;
+	}
+    }
 
   return sos;
 }

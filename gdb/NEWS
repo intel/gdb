@@ -11,6 +11,13 @@ qXfer:features:read:target.xml
   that can be used for passing information when the remote inferior
   represents a device, e.g. a GPU.
 
+* New remote packets
+
+qXfer:libraries:read's response
+
+  The qXfer:libraries:read query supports reporting in-memory libraries.
+  Older GDB will silently ignore them.
+
 *** Changes in GDB 18
 
 * Support for the Common Trace Format (CTF) has been removed.  GDB now

@@ -58,11 +58,20 @@ struct solib_ops;
 
 struct solib : intrusive_list_node<solib>
 {
-  /* Constructor
+  /* On-disk solib constructor.
 
      OPS is the solib_ops implementation providing this solib.  */
   explicit solib (lm_info_up lm_info, std::string original_name,
 		  std::string name, const solib_ops &ops);
+
+  /* In-memory solib constructor.  */
+  explicit solib (lm_info_up lm_info, CORE_ADDR begin, CORE_ADDR end,
+		  const solib_ops &ops)
+    : lm_info (std::move (lm_info)),
+      begin (begin),
+      end (end),
+      m_ops (&ops)
+  {}
 
   /* Return the solib_ops implementation providing this solib.  */
   const solib_ops &ops () const
@@ -95,8 +104,13 @@ struct solib : intrusive_list_node<solib>
      map we've already loaded.  */
   std::string original_name;
 
-  /* Shared object file name, expanded to something GDB can open.  */
+  /* Shared object file name, expanded to something GDB can open.
+     This is an empty string for in-memory shared objects.  */
   std::string name;
+
+  /* The address range of an in-memory shared object.  Both BEGIN and END
+     are zero for on-disk shared objects.  */
+  CORE_ADDR begin = 0, end = 0;
 
   /* The following fields of the structure are built from
      information gathered from the shared object file itself, and
@@ -282,6 +296,11 @@ struct solib_ops
   virtual void iterate_over_objfiles_in_search_order
     (iterate_over_objfiles_in_search_order_cb_ftype cb,
      objfile *current_objfile) const;
+
+  /* Open an in-memory shared library at ADDR of at most SIZE bytes.
+     The TARGET string is used to identify the target.  */
+  virtual gdb_bfd_ref_ptr bfd_open_from_target_memory
+    (CORE_ADDR addr, CORE_ADDR size, const char *target) const;
 
 protected:
   /* The program space for which this solib_ops was created.  */

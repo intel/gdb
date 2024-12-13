@@ -1901,6 +1901,29 @@ handle_qxfer_features (const char *annex,
   return len;
 }
 
+/* Print a qXfer:libraries:read entry for DLL.  */
+
+static std::string
+print_qxfer_libraries_entry (const dll_info &dll)
+{
+  switch (dll.location)
+    {
+    case dll_info::in_memory:
+      return string_printf
+	("  <in-memory-library begin=\"0x%s\" end=\"0x%s\">"
+	 "<segment address=\"0x%s\"/></in-memory-library>\n",
+	 paddress (dll.begin), paddress (dll.end),
+	 paddress (dll.base_addr));
+
+    case dll_info::on_disk:
+      return string_printf
+	("  <library name=\"%s\"><segment address=\"0x%s\"/></library>\n",
+	 dll.name.c_str (), paddress (dll.base_addr));
+    }
+
+  gdb_assert_not_reached ("unknown dll location: %x", dll.location);
+}
+
 /* Handle qXfer:libraries:read.  */
 
 static int
@@ -1919,9 +1942,7 @@ handle_qxfer_libraries (const char *annex,
 
   process_info *proc = current_process ();
   for (const dll_info &dll : proc->all_dlls)
-    document += string_printf
-      ("  <library name=\"%s\"><segment address=\"0x%s\"/></library>\n",
-       dll.name.c_str (), paddress (dll.base_addr));
+    document += print_qxfer_libraries_entry (dll);
 
   document += "</library-list>\n";
 

@@ -1191,7 +1191,7 @@ static void async_file_mark (void);
    of its threads.  */
 
 int
-linux_process_target::attach (unsigned long pid)
+linux_process_target::attach (int pid)
 {
   struct process_info *proc;
   thread_info *initial_thread;
@@ -1210,7 +1210,7 @@ linux_process_target::attach (unsigned long pid)
       this->remove_linux_process (proc);
 
       std::string reason = linux_ptrace_attach_fail_reason_string (ptid, err);
-      error (_("Cannot attach to process %ld: %s"), pid, reason.c_str ());
+      error (_("Cannot attach to process %d: %s"), pid, reason.c_str ());
     }
 
   /* Don't report shared library events after attaching, even if some
@@ -1279,7 +1279,7 @@ linux_process_target::attach (unsigned long pid)
       gdb_assert (proc->tdesc != NULL);
     }
 
-  return 0;
+  return pid;
 }
 
 static int

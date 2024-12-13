@@ -604,7 +604,7 @@ win32_process_target::create_inferior (const char *program,
    PID is the process ID to attach to, specified by the user
    or a higher layer.  */
 int
-win32_process_target::attach (unsigned long pid)
+win32_process_target::attach (int pid)
 {
   HANDLE h;
   DWORD err;
@@ -619,7 +619,7 @@ win32_process_target::attach (unsigned long pid)
 	  /* win32_wait needs to know we're attaching.  */
 	  windows_process.attaching = 1;
 	  do_initial_child_stuff (h, pid, 1);
-	  return 0;
+	  return pid;
 	}
 
       CloseHandle (h);

@@ -1,0 +1,179 @@
+# Copyright 2019-2024 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDBs support for SYCL when there are function calls inside
+# the kernel.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+# Return the current line number.
+proc get_current_line {} {
+    global decimal gdb_prompt
+    gdb_test_multiple "info line" "get current line" {
+	-re "Line ($decimal).*$gdb_prompt $" {
+	    pass $gdb_test_name
+	    return $expect_out(1,string)
+	}
+	-re "$gdb_prompt $" {
+	    fail $gdb_test_name
+	    return 0
+	}
+    }
+}
+
+proc test_call_stack {device} {
+    global srcfile valnum_re decimal inferior_exited_re gdb_prompt
+
+    set fourth_loc [gdb_get_line_number "ordinary-fourth-loc"]
+    set third_loc [gdb_get_line_number "ordinary-third-loc"]
+    set second_loc [gdb_get_line_number "ordinary-second-loc"]
+    set first_loc [gdb_get_line_number "ordinary-first-loc"]
+    set outer_loc [gdb_get_line_number "ordinary-outer-loc"]
+    set inlined_inner_loc [gdb_get_line_number "inlined-inner-loc"]
+    set inlined_middle_loc [gdb_get_line_number "inlined-middle-loc"]
+    set inlined_outer_loc [gdb_get_line_number "inlined-outer-loc"]
+
+    set fill "\[^\r\n\]*"
+
+    set fourth_desc "fourth \\(x4=$fill, y4=$fill\\) at ${fill}$srcfile:$fourth_loc"
+    set third_desc "third \\(x3=$fill, y3=$fill\\) at ${fill}$srcfile:$third_loc"
+    set second_desc "second \\(x2=$fill, y2=$fill\\) at ${fill}$srcfile:$second_loc"
+    set first_desc "first \\(x1=$fill, y1=$fill\\) at ${fill}$srcfile:$first_loc"
+    set outer_desc "${fill}operator\\(\\)${fill} at ${fill}$srcfile:$outer_loc"
+    set inlined_inner_desc \
+	"inlined_second ${fill} at ${fill}$srcfile:$inlined_inner_loc"
+    set inlined_middle_desc \
+	"inlined_first ${fill} at ${fill}$srcfile:$inlined_middle_loc"
+    set inlined_outer_desc \
+	"${fill}operator\\(\\)${fill} at ${fill}$srcfile:$inlined_outer_loc"
+
+    # Test breaking on function names inside the kernel.
+    gdb_breakpoint "first"
+
+    gdb_test "continue" ".*$srcfile:$first_loc.*"
+
+    # Set breakpoint inside the kernel.
+    gdb_breakpoint "$srcfile:$fourth_loc"
+    gdb_continue_to_breakpoint "innermost-body" ".*$srcfile:$fourth_loc.*"
+
+    # Limit the backtrace to 5 frames because frame #5
+    # and beyond are implementation-specific to the SYCL runtime.
+    gdb_test "backtrace 5" [multi_line \
+				"#0${fill} $fourth_desc" \
+				"#1${fill} $third_desc" \
+				"#2${fill} $second_desc" \
+				"#3${fill} $first_desc" \
+				"#4${fill} $outer_desc.*"] \
+	"first backtrace"
+
+    # Test inlined function calls.
+    gdb_breakpoint $inlined_inner_loc
+
+    gdb_continue_to_breakpoint "inlined-body" ".*$srcfile:$inlined_inner_loc.*"
+
+    gdb_test "backtrace 3" [multi_line \
+				"#0${fill} $inlined_inner_desc" \
+				"#1${fill} $inlined_middle_desc" \
+				"#2${fill} $inlined_outer_desc.*"] \
+	"backtrace for inlined calls"
+
+    delete_breakpoints
+
+    # Now we will stop at the beginning of prologue of the fourth function
+    # and instruction step through the function until it returns back
+    # to the third.
+    gdb_breakpoint "*fourth"
+
+    gdb_test "continue" "fourth.*$srcfile.*" "continue to fourth prologue"
+    set i 0
+    set current_line [get_current_line]
+    set fourth_prologue_line $current_line
+
+    # Update description to not include arguments.
+    set third_desc "third ${fill} at ${fill}$srcfile:$third_loc"
+    set second_desc "second ${fill} at ${fill}$srcfile:$second_loc"
+    set first_desc "first ${fill} at ${fill}$srcfile:$first_loc"
+
+    # Print the current instruction and framedesc for logging purposes.
+    gdb_test "display/i \$pc"
+    gdb_test "display/x \$framedesc"
+
+    # Check the backtrace at each instruction until the return.  We do not
+    # check the args here, as they might be invalid at prologue and epilogue.
+    # Also check that there are no additional messages after
+    # the backtrace except "(More stack frames follow...)".
+    while {($current_line == $fourth_prologue_line
+	    || $current_line == $fourth_loc)
+	   && $i < 100} {
+	with_test_prefix "iteration $i" {
+	    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+		set fourth_desc "fourth ${fill} at ${fill}$srcfile:$current_line"
+		gdb_test "backtrace 6" [multi_line \
+					    "#0${fill} $fourth_desc" \
+					    "#1${fill} $third_desc" \
+					    "#2${fill} $second_desc" \
+					    "#3${fill} $first_desc" \
+					    "#4${fill} main${fill}operator${fill}lambda${fill} at .*" \
+					    "#5${fill}(\r\n\\(More stack frames follow\\.\\.\\.\\))?"] \
+		    "backtrace in fourth"
+	    } else {
+		# On CPU the backtrace in prologue might include
+		# additional RT specific frames.  Do not assume any
+		# frame numbers and do a deeper backtrace.  Do not
+		# expect the line number at fourth.  We expect to see
+		# our frames somewhere in the middle.
+		set fourth_desc "fourth ${fill} at ${fill}$srcfile:$decimal"
+		gdb_test "backtrace 10" [multi_line \
+					     "${fill} $fourth_desc" \
+					     "${fill} $third_desc" \
+					     "${fill} $second_desc" \
+					     "${fill} $first_desc" \
+					     "${fill} main${fill}operator${fill}lambda${fill} at .*"] \
+		    "backtrace in fourth"
+	    }
+	    gdb_test "with scheduler-locking on -- stepi"
+	    incr i
+	    set current_line [get_current_line]
+	}
+    }
+
+    # Disable printing of PC and FRAMEDESC.
+    gdb_test "undisplay 1-2"
+}
+
+foreach device $sycl_device_list {
+    sycl_with_intelgt_lock $device {
+	clean_restart "${binfile}"
+
+	if {![sycl_start $device]} {
+	    continue
+	}
+
+	test_call_stack "$device"
+    }
+}

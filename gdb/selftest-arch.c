@@ -124,7 +124,8 @@ selftest_skip_warning_arch (struct gdbarch *gdbarch)
      that seems more trouble than it's worth.  */
   return (streq (name, "m68hc11")
 	  || streq (name, "m68hc12")
-	  || streq (name, "m68hc12:HCS12"));
+	  || streq (name, "m68hc12:HCS12")
+	  || streq (name, "intelgt"));
 }
 
 } /* namespace selftests */

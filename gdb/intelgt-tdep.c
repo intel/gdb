@@ -31,6 +31,10 @@
 #include "inferior.h"
 #include "user-regs.h"
 #include <algorithm>
+#include "disasm.h"
+#if defined (HAVE_LIBIGA64)
+#include "iga/iga.h"
+#endif /* defined (HAVE_LIBIGA64)  */
 
 /* Global debug flag.  */
 static bool intelgt_debug = false;
@@ -96,6 +100,11 @@ struct intelgt_gdbarch_tdep : gdbarch_tdep_base
 
   /* The framedesc user register's type.  */
   type *framedesc_type = nullptr;
+
+#if defined (HAVE_LIBIGA64)
+  /* libiga context for disassembly.  */
+  iga_context_t iga_ctx = nullptr;
+#endif
 };
 
 /* Per-inferior cached data for the Intelgt target.  */
@@ -547,13 +556,83 @@ intelgt_sw_breakpoint_from_kind (gdbarch *gdbarch, int kind, int *size)
   return nullptr;
 }
 
+#if defined (HAVE_LIBIGA64)
+/* Map CORE_ADDR to symbol names for jump labels in an IGA disassembly.  */
+
+static const char *
+intelgt_disasm_sym_cb (int addr, void *ctx)
+{
+  disassemble_info *info = (disassemble_info *) ctx;
+  symbol *sym = find_symbol_for_pc (addr + (uintptr_t) info->private_data);
+  return sym ? sym->linkage_name () : nullptr;
+}
+#endif /* defined (HAVE_LIBIGA64)  */
+
 /* Print one instruction from MEMADDR on INFO->STREAM.  */
 
 static int
 intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
 {
-  /* Disassembler is to be added in a later patch.  */
+#if !defined (HAVE_LIBIGA64)
+  gdb_printf (_("\nDisassemble feature not available: libiga64 "
+		"is missing.\n"));
   return -1;
+#else
+  gdb_disassemble_info *di
+    = static_cast<gdb_disassemble_info *> (info->application_data);
+  struct gdbarch *gdbarch = di->arch ();
+
+  iga_context_t iga_ctx
+    = gdbarch_tdep<intelgt_gdbarch_tdep> (gdbarch)->iga_ctx;
+  if (iga_ctx == nullptr)
+    {
+      gdb_printf (_("\nDisassemble feature not available: libiga64 "
+		    "context is invalid.\n"));
+      return -1;
+    }
+
+  bfd_byte insn[intelgt::MAX_INST_LENGTH];
+
+  int status = (*info->read_memory_func) (memaddr, insn,
+					  intelgt::COMPACT_INST_LENGTH,
+					  info);
+  if (status != 0)
+    {
+      /* Aborts disassembling with a memory_error exception.  */
+      (*info->memory_error_func) (status, memaddr, info);
+      return -1;
+    }
+
+  uint32_t device_id = get_device_id (current_inferior ());
+  gdb::array_view<bfd_byte> insn_view
+    = gdb::make_array_view (insn, intelgt::COMPACT_INST_LENGTH);
+  unsigned int length = intelgt::inst_length (insn_view, device_id);
+
+  if (length == intelgt::MAX_INST_LENGTH)
+    {
+      status = (*info->read_memory_func) (memaddr, insn,
+					  intelgt::MAX_INST_LENGTH, info);
+      if (status != 0)
+	{
+	  /* Aborts disassembling with a memory_error exception.  */
+	  (*info->memory_error_func) (status, memaddr, info);
+	  return -1;
+	}
+    }
+
+  char *dbuf;
+  iga_disassemble_options_t dopts = IGA_DISASSEMBLE_OPTIONS_INIT ();
+  iga_status_t iga_status
+    = iga_context_disassemble_instruction (iga_ctx, &dopts, insn,
+					   intelgt_disasm_sym_cb,
+					   info, &dbuf);
+  if (iga_status != IGA_SUCCESS)
+    return -1;
+
+  (*info->fprintf_func) (info->stream, "%s", dbuf);
+
+  return length;
+#endif /* defined (HAVE_LIBIGA64)  */
 }
 
 /* The "read_pc" gdbarch method.  */
@@ -766,6 +845,48 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   gdbarch *gdbarch = gdbarch_u.get ();
   intelgt_gdbarch_tdep *data
     = gdbarch_tdep<intelgt_gdbarch_tdep> (gdbarch);
+
+#if defined (HAVE_LIBIGA64)
+  iga_gen_t iga_version = IGA_GEN_INVALID;
+
+  if (tdesc != nullptr)
+    {
+      const tdesc_device *device_info = tdesc_device_info (tdesc);
+      if (!(device_info->vendor_id.has_value ()
+	    && device_info->target_id.has_value ()))
+	{
+	  warning (_("\
+Device vendor id and target id not found in intelgt target description."));
+	  return nullptr;
+	}
+
+      uint32_t vendor_id = *device_info->vendor_id;
+      uint32_t device_id = *device_info->target_id;
+      if (vendor_id != 0x8086)
+	{
+	  warning (_("Device not recognized: vendor id=0x%04x,"
+		     " device id=0x%04x"), vendor_id, device_id);
+	  return nullptr;
+	}
+
+      iga_version = (iga_gen_t) intelgt::get_xe_version (device_id);
+      if (iga_version == IGA_GEN_INVALID)
+	warning (_("Intel GT device id is unrecognized: ID 0x%04x"),
+		 device_id);
+    }
+
+  /* Take the best guess in case IGA_VERSION is still invalid.  */
+  if (iga_version == IGA_GEN_INVALID)
+    iga_version = IGA_XE_HPC;
+
+  const iga_context_options_t options = IGA_CONTEXT_OPTIONS_INIT (iga_version);
+  if (iga_context_create (&options, &data->iga_ctx) != IGA_SUCCESS)
+    {
+      warning (_("Intel GT disassembler context could not be created"));
+      data->iga_ctx = nullptr;
+    }
+
+#endif
 
   set_gdbarch_ptr_bit (gdbarch, 64);
   set_gdbarch_addr_bit (gdbarch, 64);

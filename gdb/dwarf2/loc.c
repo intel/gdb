@@ -2087,6 +2087,7 @@ dwarf2_get_symbol_read_needs (gdb::array_view<const gdb_byte> expr,
 	case DW_OP_GNU_parameter_ref:
 	case DW_OP_regval_type:
 	case DW_OP_GNU_regval_type:
+	case DW_OP_INTEL_regval_bits:
 	  symbol_needs = SYMBOL_NEEDS_FRAME;
 	  break;
 
@@ -3344,6 +3345,7 @@ disassemble_dwarf_expression (struct ui_file *stream,
 	  break;
 
 	case DW_OP_const1u:
+	case DW_OP_INTEL_regval_bits:
 	  ul = extract_unsigned_integer (data, 1, gdbarch_byte_order (arch));
 	  data += 1;
 	  gdb_printf (stream, " %s", pulongest (ul));

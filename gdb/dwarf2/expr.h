@@ -252,6 +252,11 @@ private:
      but with the address being 0.  In this situation, we arrange for
      memory reads to come from the passed-in buffer.  */
   void read_mem (gdb_byte *buf, CORE_ADDR addr, size_t length);
+
+  /* Read BITSIZE bits from the register indicated by the DWARF register
+     number DWREGNUM starting at bit BITOFFSET into BUF.  */
+  void read_reg (gdb_byte *buf, size_t bitoffset, size_t bitsize,
+		 int dwregnum);
 };
 
 /* Return the value of register number REG (a DWARF register number),

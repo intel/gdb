@@ -1703,6 +1703,12 @@ decode_location_expression (unsigned char * data,
 	  printf ("DW_OP_PGI_omp_thread_num");
 	  break;
 
+	  /* Intel wide registers extension.  */
+	case DW_OP_INTEL_regval_bits:
+	  SAFE_BYTE_GET_AND_INC (uvalue, data, 1, end);
+	  printf ("DW_OP_INTEL_regval_bits: %lu", (unsigned long) uvalue);
+	  break;
+
 	default:
 	  if (op >= DW_OP_lo_user
 	      && op <= DW_OP_hi_user)

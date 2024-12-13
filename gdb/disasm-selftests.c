@@ -116,6 +116,10 @@ get_test_insn (struct gdbarch *gdbarch, size_t *len)
 	*len = bplen;
       }
       break;
+    case bfd_arch_intelgt:
+      /* The intelgt architecture needs to initialize the gdbarch with
+	 an IGA context to be able to use the disassembler.  */
+      return insn;
     case bfd_arch_i386:
       {
 	const struct bfd_arch_info *info = gdbarch_bfd_arch_info (gdbarch);
@@ -312,6 +316,14 @@ memory_error_test (struct gdbarch *gdbarch)
       if (info->bits_per_address > sizeof (bfd_vma) * CHAR_BIT)
 	return;
     }
+
+#if !defined (HAVE_LIBIGA64)
+  if (gdbarch_bfd_arch_info (gdbarch)->arch == bfd_arch_intelgt)
+    {
+      /* Disassembler for intelgt requires libiga64.  */
+      return;
+    }
+#endif
 
   gdb_disassembler_test di (gdbarch);
   bool saw_memory_error = false;

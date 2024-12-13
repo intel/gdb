@@ -40984,6 +40984,11 @@ to download GNU Libiconv, unpack it inside the top-level directory of
 the @value{GDBN} source tree, and then rename the directory holding
 the Libiconv source code to @samp{libiconv}.
 
+@item libiga64 (IGA)
+@value{GDBN} can disassemble IntelGT machine code if this library is
+included.  Use the @option{--with-libiga64-prefix} option to specify
+its non-standard location.
+
 @cindex compressed debug sections
 @item lzma
 @value{GDBN} can support debugging sections that are compressed with

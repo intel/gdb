@@ -1,0 +1,82 @@
+# Copyright 2023-2026 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test the target's handling of stepping.
+#
+# In this scenario we start stepping for a thread and resume the
+# others.  There is a breakpoint close to the current PC.  We expect
+# other threads to hit that BP before the current thread finishes
+# stepping its range.  Hence, the step flow would be broken and
+# canceled.  We should be able to resume the thread without problems.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return
+}
+
+if {[build_executable "failed to compile $srcfile" "$binfile" "$srcfile" \
+	 {sycl debug}]} {
+    return
+}
+
+foreach device $sycl_device_list {
+    sycl_with_intelgt_lock $device {
+	clean_restart $testfile
+
+	if {![sycl_start $device]} {
+	    continue
+	}
+
+	set spin_line [gdb_get_line_number "kernel.spin"]
+	set end_line [gdb_get_line_number "kernel.end"]
+
+	gdb_breakpoint $spin_line -temporary
+	gdb_breakpoint $end_line
+
+	gdb_test_no_output "set scheduler-locking off"
+	gdb_continue_to_breakpoint "kernel.spin"
+
+	set spin_thread [get_current_thread "kernel.spin"]
+	set ntrips "10000000"
+
+	# With scheduler-locking off, we expect other threads to hit the
+	# next breakpoint first.  Of course there is a slight chance that
+	# this will not happen and the first thread will win the race.
+	gdb_test "print ntrips = $ntrips" "= $ntrips"
+	gdb_test "step" "kernel.end.*" "start stepping"
+	set other_thread [get_current_thread "kernel.end"]
+
+	if {$spin_thread eq $other_thread} {
+	    # There was really a very very low chance of this happening.
+	    untested "test condition could not be satisfied"
+	    continue
+	}
+
+	gdb_test "thread $spin_thread"
+	gdb_test "print ntrips = 0" "= 0"
+
+	# With scheduler-locking on, we expect to hit the breakpoint.
+	gdb_test_no_output "set scheduler-locking on"
+	gdb_continue_to_breakpoint "kernel.end"
+
+	set curr_thread [get_current_thread "kernel.end again"]
+	gdb_assert {"$curr_thread" eq "$spin_thread"}
+    }
+}

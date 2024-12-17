@@ -62,6 +62,7 @@ foreach device_info ${device_list} {
 
 	# Test breaking on function names inside the kernel.
 	gdb_breakpoint "${srcfile}:first"
+	setup_kfail "JIRA CMPLRLLVM/64302" "*-*-*"
 	gdb_continue_to_breakpoint "break_at_first" ".*${srcfile}:${middle_loc}.*"
 
 	# Set breakpoint inside the kernel.

@@ -44,12 +44,15 @@ foreach device_info ${device_list} {
 	# openmp single pragma.
 	set kernel_line [gdb_get_line_number "kernel-line-2"]
 	gdb_breakpoint ${srcfile}:${kernel_line} {temporary}
+	setup_kfail "JIRA CMPLRLLVM/64303" "*-*-*"
 	gdb_continue_to_breakpoint "kernel second line" \
 	    ".*${srcfile}:${kernel_line}.*"
 
+	setup_kfail "JIRA CMPLRLLVM/64303" "*-*-*"
 	gdb_test_no_output "set scheduler-locking step" \
 	    "enable scheduler locking"
 
+	setup_kfail "JIRA CMPLRLLVM/64303" "*-*-*"
 	gdb_test "next" ".*kernel-single-pragma-entry.*" "next 1"
 	setup_xfail "JIRA IGDB/3392" "*-*-*"
 	gdb_test "next" ".*kernel-single-pragma-line-1.*" \

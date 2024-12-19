@@ -152,6 +152,7 @@ proc test_pf_thread {tid simd_lane gsd_10020} {
 	    "Switching to thread $tid:$simd_lane.*"
 
 	if {! $gsd_10020} {
+	    setup_kfail "JIRA IGDB/5383" "*-*-*"
 	    gdb_test "backtrace 5" \
 		[multi_line \
 		    "#0$::fill fourth $::fill at $::srcfile:$::pf_ln" \
@@ -166,8 +167,9 @@ proc test_pf_thread {tid simd_lane gsd_10020} {
 	gdb_assert {[get_integer_valueof "\$cr0\[1\]" "0"] & [expr 1 << 15]} \
 	     "CR0.1 bit 15 is set"
 
-	set y4 [get_integer_valueof "\*y4" 0]
+	set y4 [get_integer_valueof "\*y4" 0 "" "JIRA IGDB/5383"]
 	set expected_x4 [expr $y4 + 138]
+	setup_kfail "JIRA IGDB/5383" "*-*-*"
 	gdb_test "print x4" "= $expected_x4"
     }
 }
@@ -180,6 +182,7 @@ proc test_other_thread {tid simd_lane gsd_10020} {
 	    "Switching to thread $tid:$simd_lane.*"
 
 	if {! $gsd_10020} {
+	    setup_kfail "JIRA IGDB/5383" "*-*-*"
 	    gdb_test "backtrace 5" \
 		[multi_line \
 		    "#0$::fill fourth $::fill at $::srcfile:$::spin_ln" \
@@ -195,8 +198,9 @@ proc test_other_thread {tid simd_lane gsd_10020} {
 	     "CR0.1 bit 15 is clear"
 
 	gdb_test "frame 4"
-	set in_elem2 [get_integer_valueof "in_elem2" 0]
+	set in_elem2 [get_integer_valueof "in_elem2" 0 "" "JIRA IGDB/5383"]
 	set expected_in_elem [expr $in_elem2 + 123]
+	setup_kfail "JIRA IGDB/5383" "*-*-*"
 	gdb_test "print in_elem" "= $expected_in_elem"
     }
 }
@@ -242,7 +246,7 @@ proc read_corefile {corefile} {
 		    }
 		}
 	    } else {
-		fail $gdb_test_name
+		kfail "JIRA IGDB/5383" $gdb_test_name
 	    }
 	}
     }

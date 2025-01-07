@@ -73,13 +73,36 @@ foreach device $sycl_device_list {
 	# We should have four threads.
 	set wpfa "with print frame-arguments none -- "
 	set stopped_threads {}
-	gdb_test_multiple "${wpfa}info threads -stopped" "stopped threads" -lbl {
+	set gsd10021 0
+	gdb_test_multiple "${wpfa}info threads -stopped" "stopped threads" \
+	    -lbl {
 	    -re "\r\n. (\[2-9\]\.$decimal)\:\[$fill" {
 		lappend stopped_threads $expect_out(1,string)
 		exp_continue
 	    }
 	    -re "$gdb_prompt" {
-		gdb_assert {"[llength $stopped_threads]" == "4"} $gdb_test_name
+		setup_kfail "JIRA GSD/10021" "*-*-*"
+		if {[gdb_assert {"[llength $stopped_threads]" == "4"} \
+		    $gdb_test_name] != 0} {
+		    set gsd10021 1
+		}
+	    }
+	}
+	if { $gsd10021 } {
+	    # GSD-10021: UMD reports non-faulting threads unavailable.
+	    # If we step once, UMD should again report them as stopped.
+	    gdb_test "stepi"
+	    set stopped_threads {}
+	    gdb_test_multiple "${wpfa}info threads -stopped" \
+		"stopped threads 2" -lbl {
+		-re "\r\n. (\[2-9\]\.$decimal)\:\[$fill" {
+		    lappend stopped_threads $expect_out(1,string)
+		    exp_continue
+		}
+		-re "$gdb_prompt" {
+		    gdb_assert {"[llength $stopped_threads]" == "4"} \
+			$gdb_test_name
+		}
 	    }
 	}
 

@@ -116,6 +116,7 @@ foreach device $sycl_device_list {
 		}
 	    }
 	}
+	setup_kfail "JIRA GSD/10020" "*-*-*"
 	gdb_assert {"$cr01_pf_set" == "1"} "page fault on one thread"
     }
 }

@@ -57,11 +57,17 @@ foreach device $sycl_device_list {
 	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*" \
 	    "hit the segmentation fault"
 
+	if {[is_xe2 $device]} {
+	    setup_kfail "JIRA GSD/10020" "*-*-*"
+	}
 	# Stopped thread should have local variable 'src',
 	# and it should have CR0.1 bit 15 set.
 	gdb_test "print src" "= \\(int \\*\\) 0x0"
 	gdb_assert {[get_integer_valueof "\$cr0\[1\]" "0"] & [expr 1 << 15]} \
 	    "CR0.1 bit 15"
+	if {[is_xe2 $device]} {
+	    setup_kfail "JIRA GSD/10020" "*-*-*"
+	}
 	gdb_test "backtrace 5" \
 		[multi_line \
 		    "#0$fill fourth $fill at $srcfile:$pf_spin_ln" \
@@ -73,13 +79,36 @@ foreach device $sycl_device_list {
 	# We should have four threads.
 	set wpfa "with print frame-arguments none -- "
 	set stopped_threads {}
-	gdb_test_multiple "${wpfa}info threads -stopped" "stopped threads" -lbl {
+	set gsd10021 0
+	gdb_test_multiple "${wpfa}info threads -stopped" "stopped threads" \
+	    -lbl {
 	    -re "\r\n. (\[2-9\]\.$decimal)\:\[$fill" {
 		lappend stopped_threads $expect_out(1,string)
 		exp_continue
 	    }
 	    -re "$gdb_prompt" {
-		gdb_assert {"[llength $stopped_threads]" == "4"} $gdb_test_name
+		setup_kfail "JIRA GSD/10021" "*-*-*"
+		if {[gdb_assert {"[llength $stopped_threads]" == "4"} \
+		    $gdb_test_name] != 0} {
+		    set gsd10021 1
+		}
+	    }
+	}
+	if { $gsd10021 } {
+	    # GSD-10021: UMD reports non-faulting threads unavailable.
+	    # If we step once, UMD should again report them as stopped.
+	    gdb_test "stepi"
+	    set stopped_threads {}
+	    gdb_test_multiple "${wpfa}info threads -stopped" \
+		"stopped threads 2" -lbl {
+		-re "\r\n. (\[2-9\]\.$decimal)\:\[$fill" {
+		    lappend stopped_threads $expect_out(1,string)
+		    exp_continue
+		}
+		-re "$gdb_prompt" {
+		    gdb_assert {"[llength $stopped_threads]" == "4"} \
+			$gdb_test_name
+		}
 	    }
 	}
 

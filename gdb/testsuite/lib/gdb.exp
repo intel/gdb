@@ -9236,7 +9236,7 @@ proc get_local_valueof { exp default {test ""} } {
 # TEST is the test message to use.  It can be omitted, in which case
 # a test message is built from EXP.
 
-proc get_integer_valueof { exp default {test ""} } {
+proc get_integer_valueof { exp default {test ""} {kfail ""} } {
     global gdb_prompt
 
     if {$test == ""} {
@@ -9244,6 +9244,7 @@ proc get_integer_valueof { exp default {test ""} } {
     }
 
     set val ${default}
+    if { $kfail ne "" } { setup_kfail $kfail "*-*-*" }
     gdb_test_multiple "print /d ${exp}" "$test" {
 	-re -wrap "^\\$\[0-9\]* = (\[-\]*\[0-9\]*).*" {
 	    set val $expect_out(1,string)

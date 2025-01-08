@@ -1157,6 +1157,7 @@ enum
   PREFIX_VEX_0F38F6_L_0,
   PREFIX_VEX_0F38F7_L_0,
   PREFIX_VEX_0F3AF0_L_0,
+  PREFIX_VEX_MAP5_FD_X86_64_L_0_W_0,
   PREFIX_VEX_MAP7_F6_L_0_W_0_R_0_X86_64,
   PREFIX_VEX_MAP7_F8_L_0_W_0_R_0_X86_64,
 
@@ -1358,6 +1359,7 @@ enum
   X86_64_VEX_0F386F,
   X86_64_VEX_0F38Ex,
 
+  X86_64_VEX_MAP5_FD,
   X86_64_VEX_MAP7_F6_L_0_W_0_R_0,
   X86_64_VEX_MAP7_F8_L_0_W_0_R_0,
 };
@@ -1380,6 +1382,7 @@ enum
   VEX_0F = 0,
   VEX_0F38,
   VEX_0F3A,
+  VEX_MAP5,
   VEX_MAP7,
 };
 
@@ -1478,6 +1481,7 @@ enum
   VEX_LEN_0F3ADE_W_0,
   VEX_LEN_0F3ADF,
   VEX_LEN_0F3AF0,
+  VEX_LEN_MAP5_FD_X86_64,
   VEX_LEN_MAP7_F6,
   VEX_LEN_MAP7_F8,
   VEX_LEN_XOP_08_85,
@@ -1650,6 +1654,7 @@ enum
   VEX_W_0F3ACE,
   VEX_W_0F3ACF,
   VEX_W_0F3ADE,
+  VEX_W_MAP5_FD_X86_64_L_0,
   VEX_W_MAP7_F6_L_0,
   VEX_W_MAP7_F8_L_0,
 
@@ -4276,6 +4281,14 @@ static const struct dis386 prefix_table[][4] = {
     { "%XErorxS",		{ Gdq, Edq, Ib }, 0 },
   },
 
+  /* PREFIX_VEX_MAP5_FD_X86_64_L_0_W_0 */
+  {
+    { "tdpbf8ps",	{ TMM, Rtmm, VexTmm }, 0 },
+    { "tdphbf8ps",	{ TMM, Rtmm, VexTmm }, 0 },
+    { "tdphf8ps",	{ TMM, Rtmm, VexTmm }, 0 },
+    { "tdpbhf8ps",	{ TMM, Rtmm, VexTmm }, 0 },
+  },
+
   /* PREFIX_VEX_MAP7_F6_L_0_W_0_R_0_X86_64 */
   {
     { Bad_Opcode },
@@ -4676,6 +4689,12 @@ static const struct dis386 x86_64_table[][2] = {
   {
     { Bad_Opcode },
     { "%XEcmp%CCxadd", { Mdq, Gdq, VexGdq }, PREFIX_DATA },
+  },
+
+  /* X86_64_VEX_MAP5_FD */
+  {
+    { Bad_Opcode },
+    { VEX_LEN_TABLE (VEX_LEN_MAP5_FD_X86_64) },
   },
 
   /* X86_64_VEX_MAP7_F6_L_0_W_0_R_0 */
@@ -7466,6 +7485,11 @@ static const struct dis386 vex_len_table[][2] = {
     { PREFIX_TABLE (PREFIX_VEX_0F3AF0_L_0) },
   },
 
+  /* VEX_LEN_MAP5_FD_X86_64 */
+  {
+    { VEX_W_TABLE (VEX_W_MAP5_FD_X86_64_L_0) },
+  },
+
   /* VEX_LEN_MAP7_F6 */
   {
     { VEX_W_TABLE (VEX_W_MAP7_F6_L_0) },
@@ -8101,6 +8125,10 @@ static const struct dis386 vex_w_table[][2] = {
   {
     /* VEX_W_0F3ADE */
     { VEX_LEN_TABLE (VEX_LEN_0F3ADE_W_0) },
+  },
+  {
+    /* VEX_W_MAP5_FD_X86_64 */
+    { PREFIX_TABLE (PREFIX_VEX_MAP5_FD_X86_64_L_0_W_0) },
   },
   {
     /* VEX_W_MAP7_F6_L_0 */
@@ -8851,6 +8879,7 @@ static const struct dis386 bad_opcode = { "(bad)", { XX }, 0 };
 /* Fetch error indicator.  */
 static const struct dis386 err_opcode = { NULL, { XX }, 0 };
 
+static const struct dis386 map5_fd_opcode = { X86_64_TABLE (X86_64_VEX_MAP5_FD) };
 static const struct dis386 map7_f6_opcode = { VEX_LEN_TABLE (VEX_LEN_MAP7_F6) };
 static const struct dis386 map7_f8_opcode = { VEX_LEN_TABLE (VEX_LEN_MAP7_F8) };
 
@@ -9125,6 +9154,9 @@ get_valid_dis386 (const struct dis386 *dp, instr_info *ins)
 	case 0x3:
 	  vex_table_index = VEX_0F3A;
 	  break;
+	case 0x5:
+	  vex_table_index = VEX_MAP5;
+	  break;
 	case 0x7:
 	  vex_table_index = VEX_MAP7;
 	  break;
@@ -9163,12 +9195,14 @@ get_valid_dis386 (const struct dis386 *dp, instr_info *ins)
       ins->codep++;
       vindex = *ins->codep++;
       ins->condition_code = vindex & 0xf;
-      if (vex_table_index != VEX_MAP7)
+      if (vex_table_index != VEX_MAP7 && vex_table_index != VEX_MAP5)
 	dp = &vex_table[vex_table_index][vindex];
       else if (vindex == 0xf6)
 	dp = &map7_f6_opcode;
       else if (vindex == 0xf8)
 	dp = &map7_f8_opcode;
+      else if (vindex == 0xfd)
+	dp = &map5_fd_opcode;
       else
 	dp = &bad_opcode;
       ins->end_codep = ins->codep;

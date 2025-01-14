@@ -2453,14 +2453,19 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
   uint32_t dst_reg = data->framedesc_base_regnum ();
   calla_inst[7] = dst_reg;
 
+  /* Set the source register to be (framedesc-regnum - 1), we use this register
+     to store the JIP address.  */
+  uint32_t src_regnum = dst_reg - 1;
+  calla_inst[8] = 0x4;
+  calla_inst[9] = src_regnum;
+
   /* Determine the jump IP from function address.
      FUNADDR = JIP + $isabase.  */
   CORE_ADDR jump_ip = funaddr - isabase;
 
-  /* Store the JIP in the last 4 bytes of the CALLA instruction.  */
-  bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-  store_unsigned_integer (calla_inst + intelgt::MAX_INST_LENGTH - 4, 4,
-			  byte_order, (uint32_t) jump_ip);
+  /* Store the JIP in the source register.  */
+  regcache->cooked_write_part (src_regnum, 0, sizeof (uint32_t),
+			       (gdb_byte *) &jump_ip);
 
   /* Use the NOP instruction for the return breakpoint.  */
   constexpr uint32_t nop_opcode = 0x60;

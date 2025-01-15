@@ -50,6 +50,9 @@ foreach device $sycl_device_list {
 	gdb_breakpoint "$bp" {temporary}
 	gdb_continue_to_breakpoint "the bp" ".*$srcfile:$bp.*"
 
+	set inferior [get_integer_valueof "\$_inferior" -1]
+	gdb_assert {$inferior > 0}
+
 	# Count the number of devices.
 	set num_devices 0
 	gdb_test_multiple "info devices" "info devices" {
@@ -85,7 +88,7 @@ foreach device $sycl_device_list {
 	# schedule-multiple is off.  This should still be handled fine, all
 	# GPU threads should be resumed, and the program should reach
 	# termination.
-	gdb_test "inferior 2" "Switching to inferior 2.*"
+	gdb_test "inferior $inferior" "Switching to inferior $inferior.*"
 	continue_sycl_program_to_termination
     }
 }

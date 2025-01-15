@@ -60,6 +60,9 @@ foreach device $sycl_device_list {
 
 	gdb_continue_to_breakpoint "kernel bp1" ".*$srcfile:$kernel_bp1.*"
 
+	set inferior [get_integer_valueof "\$_inferior" -1]
+	gdb_assert {$inferior > 0}
+
 	set fill "\[^\r\n\]+"
 
 	# Switch to the host and resume.  We should continue just normal.  Use
@@ -82,7 +85,7 @@ foreach device $sycl_device_list {
 	    "continue to post-kernel bp 1"
 
 	# Now the symmetric case: switch to the kernel inferior and resume.
-	gdb_test "inferior 2" "Switching to inferior 2.*" "third switch"
+	gdb_test "inferior $inferior" "Switching to inferior $inferior.*" "third switch"
 	gdb_test "continue" \
 	    [multi_line "Continuing." \
 		"Result is 42" \

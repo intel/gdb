@@ -69,6 +69,8 @@ proc total_inferiors {} {
 
 proc prepare_nonstop_test_scenario {non_stop_mode device} {
     global srcfile
+    global gdb_prompt
+    global decimal
 
     gdb_test_no_output "set non-stop $non_stop_mode"
 
@@ -84,8 +86,19 @@ proc prepare_nonstop_test_scenario {non_stop_mode device} {
     # Set a breakpoint inside the kernel and hit it.
     set inside_kernel [gdb_get_line_number "kernel-line-1"]
     gdb_breakpoint "$srcfile:$inside_kernel"
-    gdb_continue_to_breakpoint "kernel line" \
-	".*$srcfile:$inside_kernel.*"
+    set fill "\[^\r\n\]*"
+    set tid_re "($decimal)\(\.$decimal\)?"
+    set inferior -1
+    gdb_test_multiple "continue" "" {
+	-re -wrap "Thread $tid_re $fill Breakpoint $fill $srcfile:$inside_kernel.*" {
+	    set inferior $expect_out(1,string)
+	    pass $gdb_test_name
+	}
+    }
+
+    gdb_assert {$inferior > 0}
+
+    return $inferior
 }
 
 # Run until the end, potentially with BPs inside and outside the kernel.
@@ -173,11 +186,11 @@ proc run_to_bp {which_bp scenario iter device} {
 proc run_restart_scenario {non_stop_mode device} {
     global srcfile inferior_exited_re gdb_prompt
 
-    prepare_nonstop_test_scenario $non_stop_mode $device
+    set inferior [prepare_nonstop_test_scenario $non_stop_mode $device]
 
     if {$non_stop_mode eq "on"} {
 	# In non-stop mode we should still sit at the host inferior.
-	gdb_test "inferior 2" "Switching to inferior 2.*" "switch to gt inferior"
+	gdb_test "inferior $inferior" "Switching to inferior $inferior.*" "switch to gt inferior"
     }
 
     # Restarting the gt inferior is disabled.

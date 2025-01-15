@@ -142,7 +142,8 @@ foreach device $sycl_device_list {
 			set subdevices [get_integer_valueof "subdevices_count" 0]
 
 			# Compute the current inferior id.
-			set current_inf [expr $trip + 2]
+			set current_inf [get_integer_valueof "\$_inferior" -1]
+			gdb_assert {$current_inf > 0}
 
 			# LAST_DEVICE_INF represents the last inferior id of the current device.
 			set last_device_inf $current_inf

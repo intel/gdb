@@ -62,6 +62,9 @@ foreach device_info ${device_list} {
 	# For GPU offload we have to switch to the host inferior to access host
 	# variables.
 	if {[require_openmp_device "GPU"] && [omp_is_level_zero_debug_api]} {
+	    set inferior [get_integer_valueof "\$_inferior" -1]
+	    gdb_assert {$inferior > 0}
+
 	    gdb_test "inferior 1" "Switching to inferior 1.*" \
 		"switch to inferior 1"
 	}
@@ -90,8 +93,8 @@ foreach device_info ${device_list} {
 	    }
 	}
 	if {[require_openmp_device "GPU"] && [omp_is_level_zero_debug_api]} {
-	    gdb_test "inferior 2" "Switching to inferior 2.*" \
-		"switch to inferior 2"
+	    gdb_test "inferior $inferior" "Switching to inferior $inferior.*" \
+		"switch to inferior $inferior"
 	}
 
 	gdb_breakpoint [gdb_get_line_number "args-check"]

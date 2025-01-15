@@ -61,10 +61,11 @@ foreach device $sycl_device_list {
 
 	set first_thread [get_current_thread "odd branch"]
 	set second_thread [get_another_stopped_thread $srcfile $odd_branch $first_thread]
+	set inferior [lindex [split $first_thread "."] 0]
 	set first_thread [lindex [split $first_thread "."] 1]
 	set second_thread [lindex [split $second_thread "."] 1]
 
-	gdb_test "thread" "Current thread is 2.$first_thread:1 (.*lane 1).*"\
+	gdb_test "thread" "Current thread is $inferior.$first_thread:1 (.*lane 1).*"\
 	    "current thread displays lanes"
 	gdb_test "print \$_simd_lane" "= 1"
 
@@ -90,12 +91,12 @@ foreach device $sycl_device_list {
 	    "Switching to.*$second_thread:5.*(.*lane 5).*"\
 	    "current inferior, explicitly set thread and lane"
 	# thread 2.2:1
-	gdb_test "thread 2.$first_thread:1"\
-	    "Switching to.*2.$first_thread:1.*(.*lane 1).*"\
+	gdb_test "thread $inferior.$first_thread:1"\
+	    "Switching to.*$inferior.$first_thread:1.*(.*lane 1).*"\
 	    "explicitly set inferior, thread, lane"
 
 	gdb_test "thread $second_thread:2"\
-	    "SIMD lane 2 is inactive in thread 2.$second_thread."\
+	    "SIMD lane 2 is inactive in thread $inferior.$second_thread."\
 	    "inactive SIMD lane not set"
 	gdb_test "thread $second_thread:999"\
 	    "Incorrect SIMD lane number: 999."\

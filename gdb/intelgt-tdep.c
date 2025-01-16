@@ -2695,13 +2695,16 @@ encode_ret (gdb_byte buff[], gdbarch *gdbarch, uint32_t device_id)
 	buff[0] = 0x2d;
 
 	intelgt_gdbarch_data *arch_data = get_intelgt_gdbarch_data (gdbarch);
-	/* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
-	   sub-register 0.  */
-	buff[8] = 0x04;
+	thread_info *tp = inferior_thread ();
+	bool heapless = is_heapless (get_thread_regcache (tp));
+
+	/* We are building r<framedesc-regnum>.<retip-subreg>, set RegFile to
+	   GRF, and use sub-register 4 in heapless mode, and 0 in heapful
+	   mode.  */
+	buff[8] = (heapless ? 0x44 : 0x04);
 	/* Destination register number for the RET instruction.  */
 	buff[9] = arch_data->framedesc_base_regnum ();
 
-	thread_info *tp = inferior_thread ();
 	const uint32_t simd_width = tp->get_simd_width ();
 	gdb_byte exec_size = 0;
 	while ((simd_width >> exec_size) > 1)
@@ -2824,15 +2827,24 @@ intelgt_infcall_dummy_dtor (void *data, int unused)
 	     See 'intelgt_push_dummy_code' for mode details on the
 	     injected instructions.  */
 	  CORE_ADDR bp_addr = calla_addr + intelgt::MAX_INST_LENGTH;
-	  CORE_ADDR isabase = intelgt_get_isabase (regcache);
-	  uint32_t return_ip = (uint32_t) (bp_addr - isabase);
-	  intelgt_write_register_part (regcache, framedesc_regnum, 0, 4,
+	  uint64_t return_ip = is_heapless (regcache)
+			       ? bp_addr
+			       : bp_addr - intelgt_get_isabase (regcache);
+	  struct_elt elt
+	    = lookup_struct_elt (arch_data->get_framedesc_type (regcache),
+				 "return_ip", 0);
+	  intelgt_write_register_part (regcache, framedesc_regnum,
+				       elt.offset / 8,
+				       elt.field->type ()->length (),
 				       (gdb_byte *) &return_ip,
 				       _("Cannot write return_ip."));
 
+	  elt = lookup_struct_elt (arch_data->get_framedesc_type (regcache),
+				   "return_callmask", 0);
 	  /* Update the RETURN_MASK to reflect the caller CE.  */
-	  intelgt_write_register_part (regcache, framedesc_regnum, 4,
-				       sizeof (uint32_t),
+	  intelgt_write_register_part (regcache, framedesc_regnum,
+				       elt.offset / 8,
+				       elt.field->type ()->length (),
 				       (gdb_byte *) &return_mask,
 				       _("Cannot write return_mask."));
 
@@ -2868,6 +2880,7 @@ encode_calla (gdb_byte buff[], CORE_ADDR funaddr, regcache *regcache,
 	buff[0] = 0x2b;
 
 	thread_info *current_thread = inferior_thread ();
+	bool heapless = is_heapless (regcache);
 	int predication_bit = 0;
 
 	/* Compute the execution size from SIMD_WIDTH, below is the EXEC_SIZE
@@ -2934,9 +2947,10 @@ encode_calla (gdb_byte buff[], CORE_ADDR funaddr, regcache *regcache,
 	    regcache->cooked_write (f0_regnum, f0);
 	  }
 
-	/* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
-	   sub-register 0.  */
-	buff[6] = 0x04;
+	/* We are building r<framedesc-regnum>.<retip-subreg>, set RegFile to
+	   GRF, and use sub-register 4 in heapless mode, and 0 in heapful
+	   mode.  */
+	buff[6] = (heapless ? 0x44 : 0x04);
 	/* Destination register number for the CALLA instruction.  Since we
 	   enumerate GRF's starting at GDB reg number 0, it is safe to use GDB
 	   numbering.  */
@@ -2949,15 +2963,16 @@ encode_calla (gdb_byte buff[], CORE_ADDR funaddr, regcache *regcache,
 	buff[8] = 0x4;
 	buff[9] = src_regnum;
 
-	CORE_ADDR isabase = intelgt_get_isabase (regcache);
-
 	/* Determine the jump IP from function address.
-	   FUNADDR = JIP + $isabase.  */
-	CORE_ADDR jump_ip = funaddr - isabase;
+	   In heapful mode: FUNADDR = JIP + $isabase
+	   In heapless mode: FUNADDR = JIP.  */
+	CORE_ADDR jump_ip
+	  = (heapless ? funaddr : (funaddr - intelgt_get_isabase (regcache)));
+	int ip_size = (heapless ? sizeof (uint64_t) : sizeof (uint32_t));
 
 	/* Store the JIP in the source register.  */
 	intelgt_write_register_part (regcache, src_regnum, 0,
-				     sizeof (uint32_t),
+				     ip_size,
 				     (gdb_byte *) &jump_ip,
 				     _("Cannot store jump IP."));
 	return;
@@ -3014,7 +3029,7 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
 {
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
   target_memory_allocator *scratch_area = get_scratch_area (gdbarch);
-  CORE_ADDR isabase = intelgt_get_isabase (regcache);
+  bool heapless = is_heapless (regcache);
 
   /* We are executing a dummy RET instruction to fix the running flow.
      Hence we do not need to inject a calla.  */
@@ -3022,12 +3037,18 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
     {
       /* Use the RETURN_IP as a breakpoint address for the dummy RET.  */
       const int framedesc_regnum = data->framedesc_base_regnum ();
-      uint32_t return_ip = 0x0;
-      intelgt_read_register_part (regcache, framedesc_regnum, 0, 4,
+      struct_elt elt
+	= lookup_struct_elt (data->get_framedesc_type (regcache),
+			     "return_ip", 0);
+      uint64_t return_ip = 0x0;
+      intelgt_read_register_part (regcache, framedesc_regnum,
+				  elt.offset / 8,
+				  elt.field->type ()->length (),
 				  (gdb_byte *) &return_ip,
 				  _("Cannot read return_ip from framedesc."));
       *real_pc = funaddr;
-      *bp_addr = return_ip + isabase;
+      *bp_addr
+	= heapless ? return_ip : (return_ip + intelgt_get_isabase (regcache));
       return sp;
     }
 

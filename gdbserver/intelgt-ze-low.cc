@@ -857,9 +857,14 @@ intelgt_ze_target::prepare_thread_resume (thread_info *tp)
   /* When stepping over a breakpoint, we need to suppress the breakpoint
      exception we would otherwise get immediately.
 
+     In case of resuming at a different PC (i. e. with "jump"), we won't
+     suppress it so if there's a breakpoint at that PC and the thread is
+     resumed, it will be hit.
+
      This requires breakpoints to be already inserted when this function
      is called.  It also handles permanent breakpoints.  */
-  if (is_at_breakpoint (tp))
+  CORE_ADDR pc = read_pc (regcache);
+  if ((pc == zetp->stop_pc) && is_at_breakpoint (tp))
     cr0[0] |= (1 << intelgt_cr0_0_breakpoint_suppress);
 
   intelgt_write_cr0 (regcache, 0, cr0[0]);

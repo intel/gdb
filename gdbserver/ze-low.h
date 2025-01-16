@@ -259,6 +259,11 @@ struct ze_thread_info
   CORE_ADDR step_range_start = 0;
   CORE_ADDR step_range_end = 0;
 
+  /* The thread's pc value when it got stopped.
+
+     Used to detect when the thread is resumed from a different PC.  */
+  CORE_ADDR stop_pc = 0;
+
   /* The thread's execution state.
 
      What is this thread actually doing.  */

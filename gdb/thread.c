@@ -2532,8 +2532,8 @@ get_filtered_thread_id (thread_info *tp,
 }
 
 /* Assuming that TP is the current thread, apppend the string version to
-   the TID_LIST in FILTER_PARAMS, if filter options specified in the
-   FILTER_PARAMS are successfully evaluated to true.  */
+   the TID_LIST in FILTER_PARAMS with lane information, if filter options
+   specified in the FILTER_PARAMS are successfully evaluated to true.  */
 
 static void
 thread_filter_append_thread_info (thread_info *tp,
@@ -2548,6 +2548,11 @@ thread_filter_append_thread_info (thread_info *tp,
 	filter_params->tid_list.append (" ");
 
       filter_params->tid_list.append (tid);
+      if (tp->has_simd_lanes () && tp->is_active ())
+	{
+	  int lane = tp->current_simd_lane ();
+	  filter_params->tid_list.append (":").append (std::to_string (lane));
+	}
     }
 }
 
@@ -2700,7 +2705,11 @@ thread_apply_and_filter_all_cmd_1 (const char *cmd, int from_tty,
 		  if (tp->is_simd_lane_active (lane))
 		    {
 		      tp->set_current_simd_lane (lane);
-		      thread_try_catch_cmd (tp, {}, cmd, from_tty, flags);
+
+		      if (is_filter)
+			thread_filter_append_thread_info (tp, filter_params);
+		      else
+			thread_try_catch_cmd (tp, {}, cmd, from_tty, flags);
 		    }
 
 		  return true;
@@ -3077,7 +3086,11 @@ thread_apply_and_filter_cmd (const char *tidlist,
 	  /* If thread has SIMD lanes, check that the specified one is
 	       currently active.  */
 	  if (tp->is_simd_lane_active (simd_lane_num))
-	    tp->set_current_simd_lane (simd_lane_num);
+	    {
+	      tp->set_current_simd_lane (simd_lane_num);
+	      if (is_filter)
+		thread_filter_append_thread_info (tp, filter_params);
+	    }
 	  else
 	    {
 	      if (!is_simd_from_star)
@@ -3140,14 +3153,15 @@ thread_apply_and_filter_cmd (const char *tidlist,
 	  /* If the lane was not specified, switch to the default lane.  */
 	  tp->set_default_simd_lane ();
 
+	  if (is_filter)
+	    thread_filter_append_thread_info (tp, filter_params);
+
 	  /* Note, we allow running the command for an inactive thread,
 	     as user can manually switch to this thread and execute
 	     the command.  */
 	}
 
-      if (is_filter)
-	thread_filter_append_thread_info (tp, filter_params);
-      else
+      if (!is_filter)
 	thread_try_catch_cmd (tp, {}, cmd, from_tty, flags);
     }
 }
@@ -3195,6 +3209,23 @@ thread_filter_all_command (const char *cmd, int from_tty)
   thread_apply_and_filter_all_cmd_1 (cmd, from_tty,
 				     simd_lane_kind::SIMD_LANE_DEFAULT, true,
 				     &filter_params);
+
+  if (!filter_params.tid_list.empty ())
+    print_filtered_thread_ids (&filter_params);
+}
+
+/* Implementation of the "thread filter all-lanes" command.
+   CMD - Contains all optional arguments of the command.
+   FROM_TTY - Specifies whether the command is originated from the user.  */
+
+static void
+thread_filter_all_lanes_command (const char *cmd, int from_tty)
+{
+  thread_filter_parameters filter_params;
+
+  thread_apply_and_filter_all_cmd_1 (cmd, from_tty,
+				     simd_lane_kind::SIMD_LANE_ALL_ACTIVE,
+				     true, &filter_params);
 
   if (!filter_params.tid_list.empty ())
     print_filtered_thread_ids (&filter_params);
@@ -3987,9 +4018,11 @@ Options:\n\
 
   static std::string thread_filter_help = gdb::option::build_help (_("\
 Filter from a list of threads.\n\
-Usage: thread filter ID... [OPTION]... [EXPRESSION]\n\
+Usage: thread filter ID[:LANE]... [OPTION]... [EXPRESSION]\n\
 ID is a space-separated list of IDs, which can be filtered using a location\n\
-specified in OPTION and the EXPRESSION.\n"
+specified in OPTION and the EXPRESSION.  For threads with SIMD lanes use\n\
+additional :LANE specifier in the input thread IDs list to filter from a\n\
+lane range of the thread ID.\n"
 THREAD_FILTER_OPTION_HELP),
 			       thread_filter_opts);
 
@@ -4003,7 +4036,7 @@ THREAD_FILTER_OPTION_HELP),
     = make_thread_filter_all_options_def_group (nullptr, nullptr, nullptr);
 
   static std::string thread_filter_all_help = gdb::option::build_help (_("\
-Filter from all threads.\n\
+Filter from the selected active lane of all available threads.\n\
 \n\
 Usage: thread filter all [OPTION]... [EXPRESSION]\n"
 THREAD_FILTER_OPTION_HELP),
@@ -4011,6 +4044,19 @@ THREAD_FILTER_OPTION_HELP),
 
   c = add_cmd ("all", class_run, thread_filter_all_command,
 	       thread_filter_all_help.c_str (),
+	       &thread_filter_list);
+  set_cmd_completer_handle_brkchars (c, thread_filter_all_command_completer);
+
+  static std::string thread_filter_all_lanes_help
+    = gdb::option::build_help (_("\
+Filter command to all active lanes in all available threads.\n\
+\n\
+Usage: thread filter all-lanes [OPTION]... [EXPRESSION]\n"
+THREAD_FILTER_OPTION_HELP),
+				 thread_filter_all_opts);
+
+  c = add_cmd ("all-lanes", class_run, thread_filter_all_lanes_command,
+	       thread_filter_all_lanes_help.c_str (),
 	       &thread_filter_list);
   set_cmd_completer_handle_brkchars (c, thread_filter_all_command_completer);
 

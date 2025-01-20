@@ -1,0 +1,407 @@
+# Copyright 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# This test is used for testing the "thread filter" command on targets
+# where SIMD lanes support is available.
+# This is a generic test and reusing the test simd-thread-apply.exp.
+
+load_lib sycl.exp
+
+standard_testfile simd-thread-apply.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+# Execute a "thread filter ... expression ..." command and check the output
+# according to the given arguments.
+#
+# CONTEXT: The context in which to run the command.  Typically a
+# thread:lane id / all / all-lanes and optionally with location information.
+#
+# MATCH_CTX: A list of strings or none.  If it is not "none" then contexts
+# of the form N.T:L, where 'N' is the inferior num, 'T' is thread num, and 'L'
+# is the lane num, are matched against the filtered list.
+#
+# TOTAL_MATCHES: If it is not "none" then only the length of the filtered
+# thread ids list is compared against it and MATCH_CTX is not used for
+# comparison.
+#
+# EXP_VALUE: Expression for filtering threads using convenience and
+# program variables.
+#
+# OPTIONS: The optional flags for the command.
+#
+# MESSAGE: A message to append to the test name.
+#
+# Return value: The function returns the list of filtered thread ids.
+
+proc thread_filter_raw {context match_ctxs total_matches \
+			expr_value options message} {
+    global decimal
+
+    verbose -log "context: \"$context\""
+    verbose -log "match_ctxs: \"$match_ctxs\""
+    verbose -log "total_matches: \"$total_matches\""
+    verbose -log "options: \"$options\""
+    verbose -log "message: \"$message\""
+
+    set cmd "thread filter $context $options $expr_value"
+    append message $cmd
+    # Escape special characters to be able to use it as a regexp.
+    set escaped_cmd [regsub -all {\W} $cmd {\\&}]
+    set num_expected_matches [llength $match_ctxs]
+
+    set filtered_tid_list ""
+    set match_list {}
+    set fill "\[^\r\n\]+"
+    gdb_test_multiple $cmd $message {
+	-re "^$escaped_cmd\r\n" {
+	    # Trim the expect buffer.
+	    exp_continue
+	}
+	-re "Filtered Threads.*\\\"(${fill})\\\"\r\n" {
+	    set filtered_tid_list [split $expect_out(1,string) ","]
+	    set ctx_out [lsearch -all -inline $filtered_tid_list "$match_ctxs"]
+	    set match_list [split "$ctx_out" " "]
+	    exp_continue
+	}
+	-re -wrap "" {
+	    # In case the input matching list is empty and TOTAL_MATCHES is
+	    # none, then just return the list of filtered thread ids.  This
+	    # is required in cases where the length of filtered threads is
+	    # unknwon.  For example while filtering a list of threads using
+	    # a program variable.
+	    if {$num_expected_matches == 0
+		&& [string match "none" $total_matches]} {
+		return [split "$filtered_tid_list" " "]
+	    }
+
+	    gdb_assert {[llength $filtered_tid_list] > 0} \
+		" $gdb_test_name: Recevied filtered threads list"
+
+	    # MATCH_LIST is the comparison result of filtered list and the
+	    # input MATCH_CTX list.  If MATCH_CTX is empty then outcome is
+	    # filtered list.
+
+	    # If the input TOTAL_MATCHES is none then MATCH_LIST size is
+	    # compared with the input MATCH_CTX list size.  Otherwise, if the
+	    # input TOTAL_MATCHES is not none then only compare it with the
+	    # size of MATCH_LIST.  This is used when the lane information
+	    # for all threads is not known for comparing with the filtered
+	    # threads list but the number of expected filtered threads is
+	    # known.
+	    if {[string match "none" $total_matches]} {
+		gdb_assert {[llength $match_list] == $num_expected_matches} \
+		    " $gdb_test_name: Number of filtered threads count matches \
+			the expected list"
+	    } else {
+		set filtered_count [llength [split "$filtered_tid_list" " "]]
+		gdb_assert {$filtered_count == $total_matches} \
+		    " $gdb_test_name: Number of filtered threads matches the \
+			expected count"
+	    }
+	}
+    }
+    return [split "$filtered_tid_list" " "]
+}
+
+# Convenience wrapper for the raw function.
+
+proc thread_filter {context match_ctxs {total_matches "none"} \
+		    {expr ""} {message ""} {options ""}} {
+    # The "-c" option is added by default, to avoid termination of the
+    # command on an error and instead continue to run the commmand till
+    # the end.
+    thread_filter_raw $context $match_ctxs $total_matches \
+	"$expr" "-c $options" $message
+}
+
+# Convenience procedures to build a string of the form
+# "thread:L1 thread:L2 ... thread:Ln".
+
+proc lanes_of {thread lanes} {
+    return [lmap x $lanes {string cat "$thread:" "$x"}]
+}
+
+proc all_lanes_of {num_lanes thread} {
+    set lanes ""
+    for {set i 0} {$i < $num_lanes} {incr i} {
+	append lanes "$i "
+    }
+    return [lanes_of "$thread" "$lanes"]
+}
+
+proc all_even_lanes_of {num_lanes thread} {
+    set lanes ""
+    for {set i 0} {$i < $num_lanes} {incr i} {
+	append lanes "$i "
+	incr i
+    }
+    return [lanes_of "$thread" "$lanes"]
+}
+
+# Check that all lanes are preserved.
+
+proc check_lanes {where inf t_1 t_2 t_3 t_4} {
+    set fill "\[^\r\n\]+"
+    gdb_test "thread $inf.$t_2" \
+	"Switching to thread $inf.$t_2:3 ${fill} lane 3\\).*" \
+	"thread $inf.$t_2 $where"
+    gdb_test "thread $inf.$t_3" \
+	"Switching to thread $inf.$t_3:4 ${fill} lane 4\\).*" \
+	"thread $inf.$t_3 $where"
+    gdb_test "thread $inf.$t_4" \
+	"Switching to thread $inf.$t_4:5 ${fill} lane 5\\).*" \
+	"thread $inf.$t_4 $where"
+    gdb_test "thread $inf.$t_1" \
+	"Switching to thread $inf.$t_1:2 ${fill} lane 2\\).*" \
+	"thread $inf.$t_1 $where"
+}
+
+# Check that the 'thread filter' command gives an error.
+
+proc thread_filter_error {tid_list exp_error} {
+   gdb_test "thread filter $tid_list \$_thread>0" "$exp_error"
+}
+
+# Issue thread filter TID_LIST and expect the command to error out
+# with "Invalid thread ID: $EXPECTED".  EXPECTED is a literal string,
+# not a regexp.  If EXPECTED is omitted, TID_LIST is expected instead.
+
+proc thread_filter_invalid {tid_list {expected ""}} {
+    if {$expected eq ""} {
+	set expected $tid_list
+    }
+    set expected [string_to_regexp $expected]
+    gdb_test "thread filter $tid_list dim0==0" \
+	"Please specify an expression following the thread ID list.*" \
+	"thread filter $tid_list"
+}
+
+foreach device $sycl_device_list {
+    clean_restart "${binfile}"
+    with_test_prefix [sycl_get_device_prefix $device] {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	if {![runto_main [sycl_get_device_args $device]]} {
+	    continue
+	}
+
+	set kernel_line [gdb_get_line_number "kernel-condition-line"]
+	set even_branch [gdb_get_line_number "kernel-even-branch"]
+
+	gdb_breakpoint "$kernel_line" {temporary}
+	gdb_continue_to_breakpoint "hit the kernel BP" \
+	    ".*$srcfile:$kernel_line.*"
+
+	set cur_thread [get_current_thread "after first BP hit"]
+	verbose -log "current thread: $cur_thread"
+	set inf [get_integer_valueof "\$_inferior" 0]
+	gdb_assert {"$inf" > 1}
+
+	set num_lanes [get_integer_valueof "\$_simd_width" 0]
+	verbose -log "num_lanes: $num_lanes"
+	gdb_assert {"$num_lanes" >= 8}
+
+	# Switching to non-zero SIMD lane.
+	gdb_test "thread :6" "Switching to thread $cur_thread:6.*"
+
+	# Corner cases for thread filter where a specified lane is outside
+	# SIMD width range.
+	set l_in_t "$num_lanes in thread $cur_thread"
+	set not_rn "\[^\r\n\]+"
+	set iouts "is outside $not_rn"
+	set aouts "are outside $not_rn"
+	gdb_test "thread filter :$num_lanes \$_inferior==$inf" \
+	    "warning: SIMD lane $num_lanes $iouts $l_in_t"
+	set nln_m_1 [expr $num_lanes - 1]
+	gdb_test "thread filter :$nln_m_1 \$_inferior==$inf" \
+	    "Filtered Threads.*$cur_thread:$nln_m_1.*"
+	gdb_test "thread filter :$nln_m_1-$num_lanes \$_inferior==$inf" \
+	    "warning: SIMD lane $num_lanes $iouts $l_in_t.*Filtered Threads.*$cur_thread:$nln_m_1.*"
+	set nln_p_1 [expr $num_lanes + 1]
+	gdb_test "thread filter :$nln_m_1-$nln_p_1 \$_inferior==$inf" \
+	    "warning: SIMD lanes \\\[$num_lanes-$nln_p_1\\\] $aouts $l_in_t.*Filtered Threads.*$cur_thread:$nln_m_1.*"
+
+	# Check error handling
+	gdb_test "p \$one = 1" " = 1"
+	gdb_test "p \$minus_one = -1" " = -1"
+	gdb_test "p \$two = 2" " = 2"
+	gdb_test "p \$three = 3" " = 3"
+	foreach prefix {"" "2" "\$one" "2-3" "2.2" "\$one.\$two-3"} {
+	    thread_filter_invalid "$prefix:-"
+	    thread_filter_error "$prefix:-1" "negative value"
+	    thread_filter_error "$prefix:\$minus_one" \
+		"Incorrect SIMD lane number: -1."
+	    thread_filter_invalid "$prefix:-*"
+	    thread_filter_invalid "$prefix:*-"
+	    thread_filter_invalid "$prefix:*-1"
+	    thread_filter_invalid "$prefix:1*"
+	    thread_filter_invalid "$prefix:1-"
+	    thread_filter_invalid "$prefix:1-*"
+	    thread_filter_invalid "$prefix:1-2-3"
+	    thread_filter_invalid "$prefix:1-*-3"
+	    thread_filter_invalid "$prefix:1-2-*"
+	    thread_filter_invalid "$prefix:1:2"
+	    thread_filter_invalid "$prefix:1:2-3"
+	    thread_filter_invalid "$prefix:1-3:2"
+	    thread_filter_error "$prefix:3-\$one" "inverted range"
+	    thread_filter_error "$prefix:128" "Incorrect SIMD lane number: 128."
+	}
+
+	# SIMD lane range exceeds range
+	thread_filter_error ":0-128" \
+	    ".*SIMD lanes .*128.*are outside of SIMD width range $decimal in thread.*"
+
+	# Point goes after the colon.
+	thread_filter_invalid "3:2.1"
+
+	# Default thread and lange range input
+	thread_filter ":3" "$cur_thread:3"
+	thread_filter "$cur_thread" "$cur_thread:6"
+	thread_filter ":3-5" "$cur_thread:3 $cur_thread:4 $cur_thread:5"
+	thread_filter ":*" "[all_lanes_of $num_lanes $cur_thread]"
+
+	# Find 4 threads that are active.  Do a linear search.  This makes
+	# sure that t_1 < t_2 < t_3 < t_4.  But note that the ids are not
+	# necessarily consecutive.
+	set stopped_threads [get_stopped_threads "$srcfile" $kernel_line]
+
+	gdb_assert {[llength $stopped_threads] >= 4}
+
+	set t_1 [lindex $stopped_threads 0]
+	set t_2 [lindex $stopped_threads 1]
+	set t_3 [lindex $stopped_threads 2]
+	set t_4 [lindex $stopped_threads 3]
+
+	# Trim the inferior number from thread ids.
+	regexp "$inf\.($decimal)" $t_1 ignore t_1
+	regexp "$inf\.($decimal)" $t_2 ignore t_2
+	regexp "$inf\.($decimal)" $t_3 ignore t_3
+	regexp "$inf\.($decimal)" $t_4 ignore t_4
+
+	verbose -log "t_1: $t_1"
+	verbose -log "t_2: $t_2"
+	verbose -log "t_3: $t_3"
+	verbose -log "t_4: $t_4 inferior is ::: $inf"
+
+	set fill "\[^\r\n\]+"
+	# Switch the stopped threads to non-zero SIMD lanes to later
+	# verify the lane is preserved for each of them.
+	gdb_test "thread $inf.$t_1:2" \
+	    "Switching to thread $inf.$t_1:2 ${fill} lane 2\\).*"
+	gdb_test "thread $inf.$t_2:3" \
+	    "Switching to thread $inf.$t_2:3 ${fill} lane 3\\).*"
+	gdb_test "thread $inf.$t_3:4" \
+	    "Switching to thread $inf.$t_3:4 ${fill} lane 4\\).*"
+	gdb_test "thread $inf.$t_4:5" \
+	    "Switching to thread $inf.$t_4:5 ${fill} lane 5\\).*"
+
+	# Define an internal variable.
+	gdb_test "p \$thread_3 = $t_3" " = $t_3"
+
+	# Prepare some long contexts for reuse.
+	set all_lanes_1 [all_lanes_of $num_lanes "$inf.$t_1"]
+	set all_lanes_2 [all_lanes_of $num_lanes "$inf.$t_2"]
+	set all_lanes_3 [all_lanes_of $num_lanes "$inf.$t_3"]
+	set all_lanes_4 [all_lanes_of $num_lanes "$inf.$t_4"]
+
+	set thr_expr_group "\(\$_thread==$t_1 || \$_thread==$t_2 \
+	    || \$_thread==$t_3 || \$_thread==$t_4\)"
+
+	# Check thread filter all , expected to show all threads till the max
+	# $_thread.
+	thread_filter "all" "" "4" \
+	    "\(\$_inferior==$inf && $thr_expr_group\)"
+
+	# Check thread filter all with -location and result should be only
+	# available threads.
+	thread_filter "all -location $::srcfile" "" \
+	    "4" "\(\$_inferior==$inf && $thr_expr_group\)"
+
+	check_lanes "after filter all" $inf $t_1 $t_2 $t_3 $t_4
+
+	thread_filter "all-lanes" \
+	    [lreverse "$all_lanes_1 $all_lanes_2 $all_lanes_3 $all_lanes_4"] \
+	    "none" "\(\$_inferior==$inf && $thr_expr_group\)"
+
+	thread_filter "all-lanes -ascending" \
+	    "$all_lanes_1 $all_lanes_2 $all_lanes_3 $all_lanes_4" \
+	    "none" "\(\$_inferior==$inf && $thr_expr_group\)"
+
+	check_lanes "after filter all-lanes" $inf $t_1 $t_2 $t_3 $t_4
+
+	# Check filter using program variables.
+	set filtered_list \
+	    [thread_filter "all-lanes" "" "none" \
+		"\(\$_inferior==$inf && dim0>50 && dim0<100\)"]
+
+	set max_count [llength $filtered_list]
+	if {$max_count > 5} {
+	    set max_count 5
+	}
+
+	# Check dim0 value of maximum filtered threads.
+	set filter_index 0
+	foreach select_thr $filtered_list {
+	    set select_thr [string map { "\{" "" } $select_thr]
+	    set select_thr [string map { "\}" "" } $select_thr]
+	    gdb_test "thread ${select_thr}" "Switching to thread $select_thr.*"
+	    gdb_test "p (dim0>50 && dim0<100)" " = true" \
+		"Iteration $filter_index for thread $select_thr"
+	    incr filter_index
+	    if {$filter_index >= $max_count} {
+		break
+	    }
+	}
+
+	# At even branch, lanes [0 2 4 6] are active.
+	gdb_breakpoint "$even_branch" {temporary}
+	gdb_continue_to_breakpoint "hit the BP at even branch " \
+	    ".*$srcfile:$even_branch.*"
+	set cur_thread [get_current_thread "after second BP hit"]
+
+	# Only even lanes are active.
+	thread_filter_error ":1" \
+	    "warning: SIMD lane 1 is inactive in thread $cur_thread"
+	thread_filter_error ":3" \
+	    "warning: SIMD lane 3 is inactive in thread $cur_thread"
+
+	set msg " at even branch "
+	thread_filter ":4" "$cur_thread:4" "none" "" $msg
+	thread_filter ":*" [all_even_lanes_of $num_lanes $cur_thread] \
+	    "none" "" $msg ""
+
+	thread_filter "$t_1:*" [all_even_lanes_of $num_lanes "$inf.$t_1"] \
+	    "none" "\$_simd_lane%2==0"
+	set t1_2_even_list \
+	    [string cat [all_even_lanes_of $num_lanes "$inf.$t_1"] " " \
+	    [all_even_lanes_of $num_lanes "$inf.$t_2"]]
+	thread_filter "$t_1-$t_2:*" "$t1_2_even_list" "none" \
+	    "\$_simd_lane%2==0"
+    }
+}

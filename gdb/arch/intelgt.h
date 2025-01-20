@@ -189,6 +189,27 @@ inst_length (const gdb_byte inst[])
 	  : inst_length_full ());
 }
 
+/* The encoding for XE version enumerates follows this pattern, which is
+   aligned with the IGA encoding.  */
+
+#define XE_VERSION(MAJ, MIN) (((MAJ) << 24) | (MIN))
+
+/* Supported GDB GEN platforms.  */
+
+enum xe_version
+{
+  XE_INVALID = 0,
+  XE_HP = XE_VERSION (1, 1),
+  XE_HPG = XE_VERSION (1, 2),
+  XE_HPC = XE_VERSION (1, 4),
+  XE2 = XE_VERSION (2, 0),
+  XE3 = XE_VERSION (3, 0),
+};
+
+/* Helper function to translate the device id to a device version.  */
+
+xe_version get_xe_version (unsigned int device_id);
+
 } /* namespace intelgt */
 
 #endif

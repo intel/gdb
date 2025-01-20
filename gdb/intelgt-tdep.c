@@ -348,26 +348,8 @@ private:
 		       gdb_byte *buff_write, int len);
 };
 
-/* The encoding for XE version enumerates follows this pattern, which is
-   aligned with the IGA encoding.  */
-
-#define XE_VERSION(MAJ, MIN) (((MAJ) << 24) | (MIN))
-
-/* Supported GDB GEN platforms.  */
-
-enum xe_version
-{
-  XE_INVALID = 0,
-  XE_HP = XE_VERSION (1, 1),
-  XE_HPG = XE_VERSION (1, 2),
-  XE_HPC = XE_VERSION (1, 4),
-  XE2 = XE_VERSION (2, 0),
-  XE3 = XE_VERSION (3, 0),
-};
-
 /* Helper functions to request and translate the device id/version.  */
 
-static xe_version get_xe_version (unsigned int device_id);
 static uint32_t get_device_id (inferior *inferior);
 static uint32_t get_device_id (gdbarch *gdbarch);
 
@@ -801,8 +783,9 @@ intelgt_dispatch_mask (gdbarch *gdbarch, thread_info *tp)
 			      _("Failed to read the dispatch mask."));
 
   dprintf ("sr0_2: %x", sr0_2);
-  xe_version device_version = get_xe_version (get_device_id (tp->inf));
-  if (device_version == XE_HP || device_version == XE_HPG)
+  intelgt::xe_version device_version
+    = intelgt::get_xe_version (get_device_id (tp->inf));
+  if (device_version == intelgt::XE_HP || device_version == intelgt::XE_HPG)
     {
       /* The higher bits of dmask are undefined if they are outside the
 	 SIMD width.  Clear them explicitly.  */
@@ -2231,16 +2214,16 @@ intelgt_run_ret_inst (gdbarch *gdbarch)
   gdb_assert (1 << exec_size == simd_width);
 
   uint32_t device_id = get_device_id (current_inferior ());
-  xe_version device_version = get_xe_version (device_id);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
   switch (device_version)
     {
-    case XE_HP:
-    case XE_HPG:
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
       buff[2] = exec_size;
       break;
-    case XE_HPC:
-    case XE2:
-    case XE3:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
       buff[2] = exec_size << 2;
       break;
     default:
@@ -2406,17 +2389,17 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
      the correct encoding for some fields of the instruction.  */
   int predication_bit = 0;
   uint32_t device_id = get_device_id (current_thread->inf);
-  xe_version device_version = get_xe_version (device_id);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
   switch (device_version)
     {
-    case XE_HP:
-    case XE_HPG:
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
       predication_bit = 24;
       calla_inst[2] = exec_size;
       break;
-    case XE_HPC:
-    case XE2:
-    case XE3:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
       predication_bit = 26;
       calla_inst[2] = exec_size << 2;
       break;
@@ -3017,126 +3000,6 @@ get_device_id (gdbarch *gdbarch)
     error (_("A target id for the device is required."));
 
   return *device_info->target_id;
-}
-
-/* Helper function to translate the device id to a device version.  */
-
-[[maybe_unused]]
-static xe_version
-get_xe_version (unsigned int device_id)
-{
-  xe_version device_xe_version = XE_INVALID;
-  switch (device_id)
-    {
-      case 0x4F80:
-      case 0x4F81:
-      case 0x4F82:
-      case 0x4F83:
-      case 0x4F84:
-      case 0x4F85:
-      case 0x4F86:
-      case 0x4F87:
-      case 0x4F88:
-      case 0x5690:
-      case 0x5691:
-      case 0x5692:
-      case 0x5693:
-      case 0x5694:
-      case 0x5695:
-      case 0x5696:
-      case 0x5697:
-      case 0x5698:
-      case 0x56A0:
-      case 0x56A1:
-      case 0x56A2:
-      case 0x56A3:
-      case 0x56A4:
-      case 0x56A5:
-      case 0x56A6:
-      case 0x56A7:
-      case 0x56A8:
-      case 0x56A9:
-      case 0x56B0:
-      case 0x56B1:
-      case 0x56B2:
-      case 0x56B3:
-      case 0x56BA:
-      case 0x56BB:
-      case 0x56BC:
-      case 0x56BD:
-      case 0x56C0:
-      case 0x56C1:
-      case 0x56C2:
-      case 0x56CF:
-      case 0x7D40:
-      case 0x7D45:
-      case 0x7D67:
-      case 0x7D41:
-      case 0x7D55:
-      case 0x7DD5:
-      case 0x7D51:
-      case 0x7DD1:
-	device_xe_version = XE_HPG;
-	break;
-
-      case 0x0201:
-      case 0x0202:
-      case 0x0203:
-      case 0x0204:
-      case 0x0205:
-      case 0x0206:
-      case 0x0207:
-      case 0x0208:
-      case 0x0209:
-      case 0x020A:
-      case 0x020B:
-      case 0x020C:
-      case 0x020D:
-      case 0x020E:
-      case 0x020F:
-      case 0x0210:
-	device_xe_version = XE_HP;
-	break;
-
-      case 0x0BD0:
-      case 0x0BD4:
-      case 0x0BD5:
-      case 0x0BD6:
-      case 0x0BD7:
-      case 0x0BD8:
-      case 0x0BD9:
-      case 0x0BDA:
-      case 0x0BDB:
-      case 0x0B69:
-      case 0x0B6E:
-	device_xe_version = XE_HPC;
-	break;
-
-      case 0x6420:
-      case 0x64A0:
-      case 0x64B0:
-
-      case 0xE202:
-      case 0xE20B:
-      case 0xE20C:
-      case 0xE20D:
-      case 0xE212:
-	device_xe_version = XE2;
-	break;
-
-      case 0xB080:
-      case 0xB081:
-      case 0xB082:
-      case 0xB083:
-      case 0xB08F:
-      case 0xB090:
-      case 0xB0A0:
-      case 0xB0B0:
-	device_xe_version = XE3;
-	break;
-    }
-
-  return device_xe_version;
 }
 
 /* Return the entry point of the kernel.
@@ -4141,14 +4004,14 @@ intelgt_core_xfer_siginfo (gdbarch *gdbarch, gdb_byte *readbuf,
 static bool
 is_branch (const gdb_byte inst[], uint32_t device_id)
 {
-  xe_version device_version = get_xe_version (device_id);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
   switch (device_version)
     {
-    case XE_HP:
-    case XE_HPG:
-    case XE_HPC:
-    case XE2:
-    case XE3:
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
       {
 	/* Check the opcode.  */
 	switch (inst[0] & 0x7f)
@@ -4171,14 +4034,14 @@ is_branch (const gdb_byte inst[], uint32_t device_id)
 static bool
 is_atomic (const gdb_byte inst[], uint32_t device_id)
 {
-  xe_version device_version = get_xe_version (device_id);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
   switch (device_version)
     {
-    case XE_HP:
-    case XE_HPG:
-    case XE_HPC:
-    case XE2:
-    case XE3:
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
       {
 	/* For instructions with CompactCtrl clear, we can check AtomicCtrl.  */
 	if ((inst[3] & 0x20) == 0)
@@ -4191,7 +4054,7 @@ is_atomic (const gdb_byte inst[], uint32_t device_id)
 	  case 0x5a: /* DPASW.  */
 	    {
 	      /* The 0x5A opcode is not used on XE2 platforms.  */
-	      if ((inst[0] & 0x7f) == 0x5a && device_version == XE2)
+	      if ((inst[0] & 0x7f) == 0x5a && device_version == intelgt::XE2)
 		return false;
 
 	      /* For DPAS, the DPAS Control Index determines which flavors are
@@ -4363,14 +4226,14 @@ intelgt_displaced_step_copy_insn (gdbarch *gdbarch, CORE_ADDR from,
   memcpy (closure->inst_buf.data (), inst.data (), inst_len);
 
   uint32_t device_id = get_device_id (current_inferior ());
-  xe_version device_version = get_xe_version (device_id);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
   switch (device_version)
     {
-    case XE_HP:
-    case XE_HPG:
-    case XE_HPC:
-    case XE2:
-    case XE3:
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
       {
 	if (!is_atomic (inst.data (), device_id))
 	  break;
@@ -4431,16 +4294,16 @@ intelgt_displaced_step_copy_insn (gdbarch *gdbarch, CORE_ADDR from,
 	   allows the system routine to wait for the GRF write-back.  */
 	switch (device_version)
 	  {
-	  case XE_HP:
-	  case XE_HPG:
+	  case intelgt::XE_HP:
+	  case intelgt::XE_HPG:
 	    if (!(inst[1] & 0x80) /* DualInfo.  */
 		&& !((inst[1] & 0x70) == 0x40) /* SingleInfo.  */)
 	      inst[1] |= 0x40;
 	    break;
 
-	  case XE_HPC:
-	  case XE2:
-	  case XE3:
+	  case intelgt::XE_HPC:
+	  case intelgt::XE2:
+	  case intelgt::XE3:
 	    if (!((inst[2] & 0x3) == 0x1) /* DualInfo.  */
 		&& !(((inst[2] & 0x3) == 0) /* SingleInfo.  */
 		     && ((inst[1] & 0xe0) == 0xc0)))
@@ -4600,7 +4463,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 	}
       else
 	{
-	  iga_version = (iga_gen_t) get_xe_version (device_id);
+	  iga_version = (iga_gen_t) intelgt::get_xe_version (device_id);
 	  if (iga_version == IGA_GEN_INVALID)
 	    warning (_("Intel GT device id is unrecognized: ID 0x%04x"),
 		     device_id);

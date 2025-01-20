@@ -64,16 +64,17 @@ show print shadowed
   the option is 'off' shadowed variables will be omitted in output.  The
   default is to print shadowed variables.
 
-thread filter thread-list|all [-ascending]
-			      [-q/-s/-c]
-			      [-location loc]
-			      [EXPRESSION]
+thread filter thread-list|all|all-lanes [-ascending]
+					[-q/-s/-c]
+					[-location loc]
+					[EXPRESSION]
   Print a list of thread ids from the selected range of threads.  To optionally
   filter from the selected list of threads options like "location" or
-  "expression" can be used either individually or together.  For the "all"
-  range selection option, by default the list of filtered thread ids is printed
-  in descending order.  To print in ascending order the "-ascending" option can
-  be used.  The "-q/-s/-c" optional flags are used to control the output.
+  "expression" can be used either individually or together.  For the "all" and
+  the "all-lanes" range selection options, by default the list of filtered
+  thread ids with lane information is printed in descending order.  To print in
+  ascending order the "-ascending" option can be used.  The "-q/-s/-c" optional
+  flags are used to control the output.
 
 * Changed commands
 

@@ -548,6 +548,7 @@ proc_with_prefix test-thread-filter {} {
 
     foreach cmd {
 	"thread filter all"
+	"thread filter all-lanes"
 	"thread filter 1"
     } {
 	test_gdb_completion_offers_commands "$cmd "

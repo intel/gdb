@@ -3740,7 +3740,7 @@ and if available, among SIMD lanes within a thread
 @item @samp{info threads}, a command to inquire about existing threads
 @item @samp{thread apply [@var{thread-id-list} | all | all-lanes] @var{args}},
 a command to apply a command to a list of threads
-@item @samp{thread filter [@var{thread-id-list} | all] @var{args}},
+@item @samp{thread filter [@var{thread-id-list} | all | all-lanes] @var{args}},
 a command to get a list of thread ids from the selected range of threads,
 or optionally filter from the selection using the location and expression
 options.
@@ -4158,17 +4158,22 @@ Flags @code{-c} and @code{-s} cannot be used together.
 
 @kindex thread filter
 @cindex command to filter threads
-The @code{thread filter} command allows you to get a list of thread ids.  The
-first argument is mandatory to specify the thread range for filtering using the
-thread ID list syntax (@pxref{thread ID lists}) or specify @code{all} to
-filter from all threads.  For the @code{all}, this command by default prints
-the list of filtered thread ids in descending order.  To print in ascending
-order, type @kbd{thread filter all -ascending}
+The @code{thread filter} command allows you to get a list of thread ids.  If
+SIMD lanes are supported, the command filters from all active SIMD lanes within
+a thread.  The first argument is mandatory to specify the thread range for
+filtering using the thread ID list syntax (@pxref{thread ID lists}), specify
+@code{all} to filter using the selected lanes of the available threads, or
+specify @code{all-lanes} to filter from all active SIMD lanes in available
+threads.  For the @code{all} and the @code{all-lanes}, this command by default
+prints the list of filtered thread ids in descending order.  To print in
+ascending order, type @kbd{thread filter all -ascending} or
+@kbd{thread filter all-lanes -ascending}
 
 The command provides the optional argument @code{-location} to filter from
-the selected range of threads using the location.  To filter using this
-option, type
-@kbd{thread filter all -location @var{filename}:@var{linenum}}
+the selected range of available threads using the location.  To filter using
+this option, type
+@kbd{thread filter all -location @var{filename}:@var{linenum}} or
+@kbd{thread filter all-lanes -location @var{filename}:@var{linenum}}
 
 @item @var{filename}:@var{linenum}
 Specifies the line @var{linenum} in the source file @var{filename} for the
@@ -4181,7 +4186,8 @@ variables.  To filter using this option, type
 
 @itemize @bullet
 @item @kbd{thread filter @var{thread-id-list} @var{expression}}
-@item @kbd{thread filter all @var{expression}}
+@item @kbd{thread filter all @var{expression}} or
+@item @kbd{thread filter all-lanes @var{expression}}
 @end itemize
 
 The @var{flag} arguments control what output to produce and how to handle

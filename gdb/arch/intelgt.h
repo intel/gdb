@@ -62,6 +62,7 @@ constexpr const char *feature_fc = "org.gnu.gdb.intelgt.fc";
 constexpr const char *feature_mf = "org.gnu.gdb.intelgt.mf";
 constexpr const char *feature_debugger = "org.gnu.gdb.intelgt.debugger";
 constexpr const char *feature_scratch = "org.gnu.gdb.intelgt.scratch";
+constexpr const char *feature_scalar = "org.gnu.gdb.intelgt.scalar";
 
 /* Register sets/groups needed for DWARF mapping.  Used for
    declaring static arrays for various mapping tables.  */

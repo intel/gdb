@@ -36,7 +36,7 @@ if {[build_executable "failed to compile $srcfile" \
 
 # Run a set of tests on a single rank.
 
-proc test_per_rank {rank} {
+proc test_per_rank {rank device} {
     global srcfile
 
     set fill "\[^\r\n\]*"
@@ -67,9 +67,16 @@ proc test_per_rank {rank} {
 
     # Test that we actually hit the breakpoints.
     for {set i 1} {$i <= $num_kernel_locations} {incr i} {
-	gdb_test -prompt $::impi_gdb_prompt "continue" \
-	    "\\\[$rank\\\]$fill$srcfile:$bp_locations_kernel($i).*" \
-	    "continue to $bp_locations_kernel($i)"
+	if {[is_dg2 $device]} {
+	    setup_kfail "JIRA IGDB/5448" "*-*-*"
+	}
+	if {[gdb_test -prompt $::impi_gdb_prompt "continue" \
+		"\\\[$rank\\\]$fill$srcfile:$bp_locations_kernel($i).*" \
+		"continue to $bp_locations_kernel($i)"] != 0} {
+	    if {[is_dg2 $device]} {
+		return 1
+	    }
+	}
     }
 
     impi_gdb_continue_to_breakpoint 1 "line after kernel" \
@@ -104,7 +111,7 @@ save_vars { env(ZE_FLAT_DEVICE_HIERARCHY) } {
 
 	    for {set i 0} {$i < $ranks} {incr i} {
 		with_test_prefix "rank $i" {
-		    if {[test_per_rank $i] != 0} {
+		    if {[test_per_rank $i $device] != 0} {
 			break
 		    }
 		}
@@ -112,6 +119,9 @@ save_vars { env(ZE_FLAT_DEVICE_HIERARCHY) } {
 
 	    with_test_prefix "rank all" {
 		# Activate all the ranks.
+		if {[is_dg2 $device]} {
+		    setup_kfail "JIRA IGDB/5448" "*-*-*"
+		}
 		if {[gdb_test -prompt $::impi_gdb_prompt "z all" ""] != 0} {
 		    # If activating the ranks fails, there is no point to
 		    # continue the test on this device.

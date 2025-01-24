@@ -75,6 +75,9 @@ foreach device $sycl_device_list {
 	    gdb_test "print \$_simd_width" " = 32"
 
 	    for {set lane 1} {$lane < 32} {incr lane 2} {
+		if {$lane > 15 && [is_xe2 $device]} {
+		    setup_kfail "JIRA GSD/10667" "*-*-*"
+		}
 		gdb_test "thread :$lane" \
 		    "Switching to thread ${fill}:$lane ${fill}\\\].*"
 	    }

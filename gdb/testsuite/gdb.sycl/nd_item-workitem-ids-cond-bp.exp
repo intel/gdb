@@ -78,7 +78,9 @@ foreach device $sycl_device_list {
 	set kernel_2 [gdb_get_line_number "kernel-2"]
 
 	set kfail ""
-	if {![is_pvc $device]} {
+	if {[is_xe2 $device]} {
+	    set kfail "JIRA GSD/10670"
+	} elseif {![is_pvc $device]} {
 	    set kfail "JIRA GSD/10235"
 	}
 	# Set a BP in the first kernel with the false condition, but which
@@ -86,23 +88,31 @@ foreach device $sycl_device_list {
 	gdb_breakpoint "$kernel_1 if \$_workitem_local_id == {9,9,9}"
 	# Set a BP in the second kernel.
 	gdb_breakpoint "$kernel_2 if \$_workitem_local_id == {0,1,2}" {temporary}
-	if {![is_pvc $device]} {
+	if {[is_xe2 $device]} {
+	    setup_kfail "JIRA GSD/10670" "*-*-*"
+	} elseif {![is_pvc $device]} {
 	    setup_kfail "JIRA GSD/10235" "*-*-*"
 	}
 	gdb_continue_to_breakpoint "kernel" ".*$srcfile:$kernel_2.*"
 	set local_id [get_id "workitem_local_id" 0 $kfail]
-	if {![is_pvc $device]} {
+	if {[is_xe2 $device]} {
+	    setup_kfail "JIRA GSD/10670" "*-*-*"
+	} elseif {![is_pvc $device]} {
 	    setup_kfail "JIRA GSD/10235" "*-*-*"
 	}
 	gdb_assert {$local_id eq "0, 1, 2"} "check local id"
 
 	set local_size [get_id "workitem_local_size" 0 $kfail]
-	if {![is_pvc $device]} {
+	if {[is_xe2 $device]} {
+	    setup_kfail "JIRA GSD/10670" "*-*-*"
+	} elseif {![is_pvc $device]} {
 	    setup_kfail "JIRA GSD/10235" "*-*-*"
 	}
 	gdb_assert {$local_size eq "3, 3, 3"} "check local size"
 	set global_size [get_id "workitem_global_size" 0 $kfail]
-	if {![is_pvc $device]} {
+	if {[is_xe2 $device]} {
+	    setup_kfail "JIRA GSD/10670" "*-*-*"
+	} elseif {![is_pvc $device]} {
 	    setup_kfail "JIRA GSD/10235" "*-*-*"
 	}
 	gdb_assert {$global_size eq "6, 12, 18"} "check global size"

@@ -98,6 +98,9 @@ struct thread_filter_parameters
   /* Filter threads where location is matching this file name.  */
   std::string filename;
 
+  /* Filter threads where this expression evaluates to true.  */
+  std::string expression;
+
   /* The list of thread ids for the output, which may be filtered if one of the
      optional filtering options are used.  */
   std::string tid_list;
@@ -2350,10 +2353,14 @@ is_all_digits (const char *linenum)
 }
 
 /* Parse the LOCATION option of the "thread filter" command to set the filename
-   and the line number elements of the FILTER_PARAMS.  */
+   and the line number elements of the FILTER_PARAMS.  The ARG contains
+   whatever is left in the input after processing the defined group options
+   of the "thread filter" command.  The expression filter option is extracted
+   from it and set in the FILTER_PARAMS.  */
 
 static const void
-parse_thread_filter_command_options (const std::string location,
+parse_thread_filter_command_options (const char *arg,
+				     const std::string location,
 				     thread_filter_parameters *filter_params)
 {
   filter_params->lineno = -1;
@@ -2390,19 +2397,132 @@ Line number for thread filter command should be an integer value"));
 	    }
 	}
     }
+
+  if (arg != nullptr)
+    filter_params->expression = arg;
+}
+
+static inline void
+handle_thread_filter_error_msg_for_flags (const char *err, const char *expr,
+					  const qcs_flags *flags)
+{
+  if (flags->cont)
+    gdb_printf ("%s: %s\n", err, expr);
+  else if (flags->quiet)
+    error (_(" "));
+  else
+    error (_("%s: %s\n"), err, expr);
+}
+
+static inline void
+handle_exception_for_flags (thread_info *thr,
+			    const gdb_exception_error &ex,
+			    const qcs_flags *flags)
+{
+  if (!flags->silent)
+    {
+      std::string lane_info = "";
+      unsigned int lane_mask = 0;
+
+      if (thr->has_simd_lanes () && thr->is_active ())
+	{
+	  /* Show lane information only for active threads.  */
+	  int lane = thr->current_simd_lane ();
+	  lane_info = " lane " + std::to_string (lane);
+	  lane_mask = 1 << lane;
+	}
+
+      if (!flags->quiet)
+	gdb_printf (_("\nThread %s (%s%s):\n"),
+		    print_thread_id (thr, lane_mask),
+		    thread_target_id_str (thr).c_str (),
+		    lane_info.c_str ());
+
+      if (flags->cont)
+	gdb_printf ("%s\n", ex.what ());
+      else
+	throw;
+    }
+}
+
+/* Returns true only if input expression EXPR is successfully evaluated for the
+   current selected thread.  If EXPR could not be successfully evaluated,
+   based on the configuration of FLAGS, print the error message and return
+   false or end the further execution of the command.  */
+
+static bool
+validate_filter_expression (thread_info *thr, const char *expr,
+			    const qcs_flags *flags)
+{
+  expression_up val_expr;
+  value *val = nullptr;
+
+  try
+    {
+      val_expr = parse_expression (expr, nullptr, 0);
+    }
+  catch (const gdb_exception_error &ex)
+    {
+      handle_exception_for_flags (thr, ex, flags);
+      return false;
+    }
+
+  /* The expression enclosed in quotes either has no affect or may result
+     in assert.  */
+  if (*expr == '"' || expr[strlen (expr) - 1] == '"')
+    {
+      const char *err = "\
+Filter expressions enclosed in '\"' are not supported";
+      handle_thread_filter_error_msg_for_flags (err, expr, flags);
+      return false;
+    }
+
+  try
+    {
+      /* Compute the return value.  Should the computation fail, this
+	 call throws an error.  */
+      val = val_expr->evaluate ();
+    }
+  catch (const gdb_exception_error &ex)
+    {
+      handle_exception_for_flags (thr, ex, flags);
+      return false;
+    }
+
+  type *val_type = val->type ();
+  val_type = check_typedef (val_type);
+  if (!is_integral_type (val_type))
+    {
+      const char *err = "Filter expression result is non-boolen type";
+      handle_thread_filter_error_msg_for_flags (err, expr, flags);
+      return false;
+    }
+
+  /*  Return false, if the expression result is evaluated to ZERO.  */
+  if (value_as_long (val) == 0)
+    return false;
+
+  return true;
 }
 
 /* Return the string version of the currently selected TP if FILTER_PARAMS
-   does not contain any filter option or the filter option "location" specified
-   in FILTER_PARAMS matches the current location of TP.  Return nullptr
-   otherwise.  */
+   does not contain any filter option or if both the filter option "location"
+   specified in FILTER_PARAMS matches the current location of TP and the
+   expression specified in FILTER_PARAMS is successfully evaluated to true.
+   Return nullptr otherwise.  */
 
 static const char*
 get_filtered_thread_id (thread_info *tp,
 			thread_filter_parameters *filter_params)
 {
-  if (filter_params->filename.empty () && filter_params->lineno == -1)
+  if (filter_params->expression.empty () && filter_params->filename.empty ()
+      && filter_params->lineno == -1)
     return print_thread_id (tp);
+
+  if (!filter_params->expression.empty ()
+      && !validate_filter_expression (tp, filter_params->expression.c_str (),
+				      &filter_params->flags))
+    return nullptr;
 
   frame_info_ptr frame = get_selected_frame (nullptr);
   symtab_and_line sal = find_frame_sal (frame);
@@ -2466,10 +2586,10 @@ thread_filter_append_thread_info (thread_info *tp,
    thread apply all-lanes p foo(1)    Apply p foo(1) cmd to all active SIMD
    lanes of all threads
 
-   thread filter 1 2 7 -location file.c:10	Print the list of thread ids
-   from threads 1->7 having file name file.c, line number equals to 10.  The
-   input list in the form of range is similar to the thread apply example
-   above.
+   thread filter 1 2 7 -location file.c:10 $_thread>2	Print the list of
+   thread ids from threads 1->7 having file name file.c, line number equals to
+   10 and thread id is greater than 2.  The input list in the form of range
+   is similar to the thread apply example above.
 
    If IS_FILTER is "true", this function processes the "thread filter"
    command, otherwise it handles the "thread apply" command.  For
@@ -2528,8 +2648,16 @@ thread_apply_and_filter_all_cmd_1 (const char *cmd, int from_tty,
     : simd_lane_order::SIMD_LANE_ORDER_DESCENDING;
 
   if (is_filter)
-    parse_thread_filter_command_options (expr_opts.location, filter_params);
-
+    {
+      parse_thread_filter_command_options (cmd, expr_opts.location,
+					   filter_params);
+      if (!filter_params->expression.empty ())
+	{
+	  char *re_err = re_comp (filter_params->expression.c_str ());
+	  if (re_err)
+	    error (_("Invalid regexp: %s"), re_err);
+	}
+    }
   else if (cmd == nullptr || *cmd == '\000')
     {
       const char *cmd_name = for_all_lanes
@@ -2826,7 +2954,11 @@ thread_apply_and_filter_cmd (const char *tidlist,
 	(&cmd, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group);
       validate_flags_qcs ("thread filter", &flags);
       filter_params->flags = flags;
-      parse_thread_filter_command_options (expr_opts.location, filter_params);
+      parse_thread_filter_command_options (cmd, expr_opts.location,
+					   filter_params);
+
+      if (tidlist == filter_params->expression)
+	error (_("Please specify an expression following the thread ID list"));
     }
   else
     {
@@ -3861,7 +3993,7 @@ THREAD_APPLY_OPTION_HELP),
 
 #define THREAD_FILTER_OPTION_HELP "\
 Prints a list of thread ids from the selected range of threads,\n\
-which can be filtered using a location\".\n\
+which can be filtered using a location and the expression\".\n\
 \n\
 Options:\n\
 %OPTIONS%"
@@ -3871,9 +4003,9 @@ Options:\n\
 
   static std::string thread_filter_help = gdb::option::build_help (_("\
 Filter from a list of threads.\n\
-Usage: thread filter ID... [OPTION]\n\
+Usage: thread filter ID... [OPTION]... [EXPRESSION]\n\
 ID is a space-separated list of IDs, which can be filtered using a location\n\
-specified in OPTION.\n"
+specified in OPTION and the EXPRESSION.\n"
 THREAD_FILTER_OPTION_HELP),
 			       thread_filter_opts);
 
@@ -3889,7 +4021,7 @@ THREAD_FILTER_OPTION_HELP),
   static std::string thread_filter_all_help = gdb::option::build_help (_("\
 Filter from all threads.\n\
 \n\
-Usage: thread filter all [OPTION]\n"
+Usage: thread filter all [OPTION]... [EXPRESSION]\n"
 THREAD_FILTER_OPTION_HELP),
 			       thread_filter_all_opts);
 

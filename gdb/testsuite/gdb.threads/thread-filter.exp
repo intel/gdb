@@ -39,14 +39,14 @@ proc get_stopped_threads {match_text} {
     return $stopped_threads
 }
 
-proc test_thread_filter {thr_range {location ""} {m_list ""} \
+proc test_thread_filter {thr_range {location ""} {expr ""} {m_list ""} \
 			 {expected_len ""}} {
     set filtered_tid_list {}
     set fill "\[^\r\n\]+"
 
     if {$location ne ""} { set location "-location $location" }
 
-    set cmd "thread filter $thr_range $location"
+    set cmd "thread filter $thr_range $location $expr"
     gdb_test_multiple $cmd $cmd {
 	-re "^warning: Unknown thread $::decimal\r\n" {
 	    exp_continue
@@ -75,6 +75,10 @@ proc test_thread_filter {thr_range {location ""} {m_list ""} \
     }
 }
 
+proc check_filter_expr_error {thr_range expr err_msg} {
+    gdb_test "thread filter $thr_range $expr" ".*$err_msg.*"
+}
+
 clean_restart $::binfile
 runto_main
 
@@ -87,19 +91,40 @@ set all_stopped_threads [get_stopped_threads ""]
 set stopped_threads [get_stopped_threads "thread_function"]
 set total_stopped [llength $stopped_threads]
 
-set test_list_a [lsort -increasing [split $stopped_threads " "]]
-set test_list_d [lsort -decreasing [split $stopped_threads " "]]
+set test_list_a [lsort -increasing $stopped_threads]
+set test_list_d [lsort -decreasing $stopped_threads]
 
-test_thread_filter "all" "" "" [llength [split $all_stopped_threads " "]]
-test_thread_filter "all -ascending" $bp_location $test_list_a
-test_thread_filter "all" $bp_location $test_list_d
-test_thread_filter "1 2 3 4 5 6" $bp_location $test_list_a
-test_thread_filter "1-6" $bp_location $test_list_a
-test_thread_filter "all" "$srcfile" $test_list_d
-test_thread_filter "all" "$linenum" $test_list_d
-test_thread_filter "all" "${srcfile}:" $test_list_d
-test_thread_filter "all" ":$linenum" $test_list_d
+test_thread_filter "all" "" "" "" [llength [split $all_stopped_threads " "]]
+test_thread_filter "all -ascending" $bp_location "" $test_list_a
+test_thread_filter "all" $bp_location "" $test_list_d
+test_thread_filter "1 2 3 4 5 6" $bp_location "" $test_list_a
+test_thread_filter "1-6" $bp_location "" $test_list_a
+test_thread_filter "all" "$srcfile" "" $test_list_d
+test_thread_filter "all" "$linenum" "" $test_list_d
+test_thread_filter "all" "${srcfile}:" "" $test_list_d
+test_thread_filter "all" ":$linenum" "" $test_list_d
 gdb_test "thread filter all -location ${srcfile}:$linenum:$linenum" \
     "Line number for thread filter command should be an integer value"
 gdb_test "thread filter all -location ${srcfile}:${linenum}999999999999999999" \
     "out of integer range.*"
+
+set first_thread "[lindex $test_list_a 0]"
+set first_thread [lindex $stopped_threads 0]
+test_thread_filter "all -ascending" $bp_location \
+    "\$_thread>=$first_thread" $test_list_a
+test_thread_filter "all -c" $bp_location "x==0" $test_list_a "1"
+
+check_filter_expr_error "all" "\"\$_thread>0\"" \
+    "Filter expressions enclosed in '\"' are not supported"
+check_filter_expr_error "all" "\$_thread>0&&\$_thread==\"3\"" \
+    "Filter expressions enclosed in '\"' are not supported"
+check_filter_expr_error "all" "unknown_variable" \
+    "No symbol \"unknown_variable\" in current context"
+check_filter_expr_error "1 2 3" "\"\$_thread==3\"" \
+    "Filter expressions enclosed in '\"' are not supported"
+check_filter_expr_error "1 2 3" "unknown_variable" \
+    "No symbol \"unknown_variable\" in current context"
+check_filter_expr_error "1 2 3" "arg\"" "Unterminated string in expression"
+gdb_test "set \$_THREE=3" ".*"
+check_filter_expr_error "\$_THREE" "<= 5" \
+    "Please specify an expression following the thread ID list"

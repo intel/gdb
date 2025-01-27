@@ -4175,6 +4175,11 @@ prints the list of filtered thread ids in descending order.  To print in
 ascending order, type @kbd{thread filter all -ascending} or
 @kbd{thread filter all-lanes -ascending}
 
+The command defaults to filter only from available threads.  To also filter
+unavailable threads, type
+@kbd{thread filter all -unavailable} or
+@kbd{thread filter all-lanes -unavailable}
+
 The command provides the optional argument @code{-location} to filter from
 the selected range of available threads using the location.  To filter using
 this option, type

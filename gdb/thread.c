@@ -2347,28 +2347,32 @@ make_thread_apply_options_def_group (bool *unavailable, qcs_flags *flags)
 }
 
 /* Create an option_def_group for the "thread filter all" options, with
-   ASCENDING, FLAGS and the LOCATION filter option as context.  */
+   ASCENDING, UNAVAILABLE, FLAGS and the LOCATION filter option as context.  */
 
-static inline std::array<gdb::option::option_def_group, 3>
+static inline std::array<gdb::option::option_def_group, 4>
 make_thread_filter_all_options_def_group (bool *ascending,
+					  bool *unavailable,
 					  thr_filter_options *location,
 					  qcs_flags *flags)
 {
   return {{
     { {ascending_option_def.def ()}, ascending},
+    { {unavailable_option_def.def ()}, unavailable},
     { {thr_filter_options_defs}, location},
     { {thr_qcs_flags_option_defs}, flags},
   }};
 }
 
 /* Create an option_def_group for the "thread filter [thread-id-list]" options,
-   with FLAGS and the LOCATION filter option as context.  */
+   with UNAVAILABLE, FLAGS and the LOCATION filter option as context.  */
 
-static inline std::array<gdb::option::option_def_group, 2>
-make_thread_filter_options_def_group (thr_filter_options *location,
+static inline std::array<gdb::option::option_def_group, 3>
+make_thread_filter_options_def_group (bool *unavailable,
+				      thr_filter_options *location,
 				      qcs_flags *flags)
 {
   return {{
+    { {unavailable_option_def.def ()}, unavailable},
     { {thr_filter_options_defs}, location},
     { {thr_qcs_flags_option_defs}, flags},
   }};
@@ -2670,8 +2674,8 @@ thread_apply_and_filter_all_cmd_1 (const char *cmd, int from_tty,
       gdb_assert (filter_params != nullptr);
 
       auto group
-	= make_thread_filter_all_options_def_group (&ascending, &expr_opts,
-						    &flags);
+	= make_thread_filter_all_options_def_group (&ascending, &unavailable,
+						    &expr_opts, &flags);
       gdb::option::process_options
 	(&cmd, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group);
       validate_flags_qcs ("thread filter all", &flags);
@@ -2911,7 +2915,7 @@ thread_filter_command_completer (cmd_list_element *ignore,
   text = cmd;
 
   const auto group
-    = make_thread_filter_options_def_group (nullptr, nullptr);
+    = make_thread_filter_options_def_group (nullptr, nullptr, nullptr);
   if (gdb::option::complete_options
       (tracker, &text, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group))
     return;
@@ -2928,6 +2932,7 @@ thread_filter_all_command_completer (cmd_list_element *ignore,
 				     const char *text, const char *word)
 {
   const auto group = make_thread_filter_all_options_def_group (nullptr,
+							       nullptr,
 							       nullptr,
 							       nullptr);
   if (gdb::option::complete_options
@@ -2998,7 +3003,8 @@ thread_apply_and_filter_cmd (const char *tidlist,
       gdb_assert (filter_params != nullptr);
 
       auto group
-	= make_thread_filter_options_def_group (&expr_opts, &flags);
+	= make_thread_filter_options_def_group (&unavailable, &expr_opts,
+						&flags);
       gdb::option::process_options
 	(&cmd, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group);
       validate_flags_qcs ("thread filter", &flags);
@@ -4058,7 +4064,7 @@ Options:\n\
 %OPTIONS%"
 
   const auto thread_filter_opts
-    = make_thread_filter_options_def_group (nullptr, nullptr);
+    = make_thread_filter_options_def_group (nullptr, nullptr, nullptr);
 
   static std::string thread_filter_help = gdb::option::build_help (_("\
 Filter from a list of threads.\n\
@@ -4077,7 +4083,8 @@ THREAD_FILTER_OPTION_HELP),
   set_cmd_completer_handle_brkchars (c, thread_filter_command_completer);
 
   const auto thread_filter_all_opts
-    = make_thread_filter_all_options_def_group (nullptr, nullptr, nullptr);
+    = make_thread_filter_all_options_def_group (nullptr, nullptr, nullptr,
+						nullptr);
 
   static std::string thread_filter_all_help = gdb::option::build_help (_("\
 Filter from the selected active lane of all available threads.\n\

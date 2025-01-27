@@ -128,7 +128,7 @@ proc thread_filter_raw {context match_ctxs total_matches \
 # Convenience wrapper for the raw function.
 
 proc thread_filter {context match_ctxs {total_matches "none"} \
-		    {expr ""} {message ""} {options ""}} {
+		    {expr ""} {message ""} {options "-unavailable"}} {
     # The "-c" option is added by default, to avoid termination of the
     # command on an error and instead continue to run the commmand till
     # the end.
@@ -176,6 +176,22 @@ proc check_lanes {where inf t_1 t_2 t_3 t_4} {
     gdb_test "thread $inf.$t_1" \
 	"Switching to thread $inf.$t_1:2 ${fill} lane 2\\).*" \
 	"thread $inf.$t_1 $where"
+}
+
+# Check only one warning is output.
+
+proc check_one_warning {tid msg} {
+    set number_of_warnings 0
+    gdb_test_multiple "thread filter $tid thread" $msg -lbl {
+	-re "\r\nwarning\[^\r\n\]+" {
+	    incr number_of_warnings
+	    exp_continue
+	}
+	-re -wrap "" {
+	    gdb_assert {$number_of_warnings == 1} \
+		"$gdb_test_name: number of warnings"
+	}
+    }
 }
 
 # Check that the 'thread filter' command gives an error.
@@ -276,6 +292,15 @@ foreach device $sycl_device_list {
 	# SIMD lane range exceeds range
 	thread_filter_error ":0-128" \
 	    ".*SIMD lanes .*128.*are outside of SIMD width range $decimal in thread.*"
+
+	# Check that only one warning is output.
+	set unav_t [get_one_unavailable_thread]
+	verbose -log "unavailable thread: $unav_t"
+	check_one_warning "$unav_t:*" "One warning for wildcard lane"
+	check_one_warning "$unav_t:1" "One warning for specific lane"
+	check_one_warning "$unav_t:3-7" "One warning for lane range"
+	check_one_warning "$unav_t:$num_lanes" \
+	    "One warning for outside lane mask range"
 
 	# Point goes after the colon.
 	thread_filter_invalid "3:2.1"

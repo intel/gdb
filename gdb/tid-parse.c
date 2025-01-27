@@ -253,6 +253,40 @@ tid_range_parser::init (const char *tidlist,
   m_in_simd_lane_star_range = false;
 }
 
+/* This function returns true only if CUR_TOK is immediately followed by a
+   logical operator.  Because a CUR_TOK value, starting with "$" and
+   followed by a logical operator is considered as an expression.  Otherwise,
+   it returns false and the parser will continue to parse the thread ids.
+   These are the input examples:
+
+   thread filter $ONE-$TWO $_VAR>0
+   thread filter $ONE-$TWO $_VAR > 0
+   thread filter 1 2 3 $VAR==2
+*/
+
+static bool
+is_filter_expression (const char *cur_tok)
+{
+  const char *p = cur_tok;
+  const char *space = skip_to_space (cur_tok);
+
+  /* If input contains logical operator before the first space then
+     end the parser.  */
+  while (p < space && *p != ' ' && !(THREAD_FILTER_IS_LOGICAL_OP (*p)))
+    p++;
+
+  if (THREAD_FILTER_IS_LOGICAL_OP (*p))
+    return true;
+
+  /* Skip space if the expression itself contains space after the
+     convenience variable in expression.  */
+  const char *s = skip_spaces (p);
+  if (*s != '\0' && THREAD_FILTER_IS_LOGICAL_OP (*s))
+    return true;
+
+  return false;
+}
+
 /* See tid-parse.h.  */
 
 bool
@@ -262,11 +296,12 @@ tid_range_parser::finished () const
     {
     case STATE_INFERIOR:
       /* Parsing is finished when at end of string or null string,
-	 or we are not in a range and not in front of an integer, negative
-	 integer, convenience var or negative convenience var.  */
+	 or we are not in a range or if $ is used in an expression and
+	 not in front of an integer, negative integer, convenience var
+	 or negative convenience var.  */
       return (*m_cur_tok == '\0'
 	      || !(isdigit (*m_cur_tok)
-		   || *m_cur_tok == '$'
+		   || (*m_cur_tok == '$' && !is_filter_expression (m_cur_tok))
 		   || *m_cur_tok == '*'
 		   || *m_cur_tok == ':'));
     case STATE_THREAD_RANGE:

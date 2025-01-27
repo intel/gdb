@@ -531,6 +531,8 @@ proc_with_prefix test-info-threads {} {
 
 # Basic option-machinery + "thread filter" command integration tests.
 proc_with_prefix test-thread-filter {} {
+    gdb_test "thread filter 1-" \
+	"Please specify an expression following the thread ID list"
     gdb_test "thread filter 1-2147483648" "Out of bounds value: 1-2147483648"
 
     foreach cmd {
@@ -558,6 +560,17 @@ proc_with_prefix test-thread-filter {} {
 		"-s"
 	    }
 	}
+
+	with_test_prefix "no-trailing-space" {
+	    test_gdb_complete_unique "$cmd --" "$cmd --"
+	}
+
+	with_test_prefix "trailing-space" {
+	    test_gdb_completion_offers_commands "$cmd -- "
+	}
+
+	test_gdb_complete_none "$cmd -foo"
+	test_gdb_completion_offers_commands "$cmd -c "
     }
 }
 

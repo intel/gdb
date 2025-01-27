@@ -51,6 +51,11 @@ extern bool debug_threads;
 #define threads_debug_printf(fmt, ...) \
   debug_prefixed_printf_cond (debug_threads, "threads", fmt, ##__VA_ARGS__)
 
+/* Check if char is logical operator.  */
+
+#define THREAD_FILTER_IS_LOGICAL_OP(op) \
+  (op == '>' || op == '<' || op == '=')
+
 /* The options for the "info threads" command.  */
 struct info_threads_opts
 {

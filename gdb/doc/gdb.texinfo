@@ -3742,7 +3742,8 @@ and if available, among SIMD lanes within a thread
 a command to apply a command to a list of threads
 @item @samp{thread filter [@var{thread-id-list} | all] @var{args}},
 a command to get a list of thread ids from the selected range of threads,
-or optionally filter from the selection using the location option.
+or optionally filter from the selection using the location and expression
+options.
 @item thread-specific breakpoints
 @item @samp{set print thread-events}, which controls printing of 
 messages on thread start and exit.
@@ -4172,6 +4173,16 @@ option, type
 @item @var{filename}:@var{linenum}
 Specifies the line @var{linenum} in the source file @var{filename} for the
 stopped thread.
+
+The command also allows to filter the selected range of threads using the
+optional argument @var{expression} and such expressions are comprised of
+convenience (see @ref{Convenience Vars,, Convenience Variables}) or program
+variables.  To filter using this option, type
+
+@itemize @bullet
+@item @kbd{thread filter @var{thread-id-list} @var{expression}}
+@item @kbd{thread filter all @var{expression}}
+@end itemize
 
 The @var{flag} arguments control what output to produce and how to handle
 errors raised when filtering.  They must start with a @code{-} directly

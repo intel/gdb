@@ -551,6 +551,7 @@ proc_with_prefix test-thread-filter {} {
 		"-location"
 		"-q"
 		"-s"
+		"-unavailable"
 	    }
 	} else {
 	    # "-ascending" only works with "all".
@@ -559,6 +560,7 @@ proc_with_prefix test-thread-filter {} {
 		"-location"
 		"-q"
 		"-s"
+		"-unavailable"
 	    }
 	}
 

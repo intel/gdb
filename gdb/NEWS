@@ -83,6 +83,7 @@ show print shadowed
   default is to print shadowed variables.
 
 thread filter thread-list|all|all-lanes [-ascending]
+					[-unavailable]
 					[-q/-s/-c]
 					[-location loc]
 					[EXPRESSION]
@@ -91,7 +92,9 @@ thread filter thread-list|all|all-lanes [-ascending]
   "expression" can be used either individually or together.  For the "all" and
   the "all-lanes" range selection options, by default the list of filtered
   thread ids with lane information is printed in descending order.  To print in
-  ascending order the "-ascending" option can be used.  The "-q/-s/-c" optional
+  ascending order the "-ascending" option can be used.  By default this command
+  filters only from the available threads.  To consider unavailable threads also
+  for filtering, the "-unavailable" option can be used.  The "-q/-s/-c" optional
   flags are used to control the output.
 
 * Changed commands

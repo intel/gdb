@@ -32,7 +32,7 @@
 #include <optional>
 
 /* Ze-low target's packet buffer size.  */
-#define ZE_TARGET_PBUFSIZ 34728
+#define ZE_TARGET_PBUFSIZ 67544
 
 /* Information about register sets reported in target descriptions.
 

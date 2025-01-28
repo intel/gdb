@@ -716,6 +716,9 @@ struct intelgt_gdbarch_data
       case intelgt::XE3:
 	return grf_count - 1;
 
+      case intelgt::XE3P_XPC:
+	return ((grf_count == 512) ? grf_count - 2 : grf_count - 1);
+
       case intelgt::XE_INVALID:
 	break;
       }

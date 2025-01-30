@@ -51,6 +51,52 @@
 static int ze_event_pipe[2] = { -1, -1 };
 #endif
 
+/* Returns the ZE thread id for node at index NODE_IDX.  */
+
+static ze_device_thread_t
+ze_thread_id_from_node_index (const ze_device_tree &tree, uint32_t node_idx)
+{
+  constexpr uint32_t all = UINT32_MAX;
+  uint32_t tid[] = {0, all, all, all, all};
+
+  /* Go upwards in the tree until the root node (i.e., the device node) is
+     reached.  Update the ZE device thread id on the corresponding level.
+     Lower levels are set to 'all'.  */
+  while (node_idx > 0)
+    {
+      const ze_device_tree_node &node = tree[node_idx];
+      tid[node.level] = node.ze_index;
+      node_idx -= node.parent;
+    }
+
+  return ze_device_thread_t {tid[1], tid[2], tid[3], tid[4]};
+}
+
+/* Returns ptid for node at index NODE_IDX.  */
+
+static ptid_t
+ze_ptid_from_node_index (const ze_device_info &device, uint32_t node_idx)
+{
+  const ze_device_tree &tree = device.tree;
+
+  gdb_assert (tree[node_idx].level == ze_node_level_thread);
+
+  ze_device_thread_t tid = ze_thread_id_from_node_index (tree, node_idx);
+
+  /* Threads are added to the processes' thread list w.r.t. the device
+     properties, see 'ze_add_process ()'.  We can directly deduce the
+     thread's lwp if the number of threads per level is available.  */
+  long lwp = tid.slice * tree.num_threads[ze_node_level_slice]
+    + tid.subslice * tree.num_threads[ze_node_level_subslice]
+    + tid.eu * tree.num_threads[ze_node_level_eu]
+    + tid.thread + 1;
+
+  gdb_assert (device.process != nullptr);
+  ptid_t ptid = ptid_t (device.process->pid, lwp, 0l);
+
+  return ptid;
+}
+
 /* Return whether we're in async mode.  */
 
 static bool
@@ -283,48 +329,42 @@ ze_add_process (ze_device_info *device, ze_process_state state)
   /* Initial target descriptor for all threads.  */
   const ze_tdesc *cached_tdesc = device->tdesc_cache.any ();
 
-  long tid = 0;
-  uint32_t slice, sslice, eu, thread;
   const ze_device_properties_t &properties = device->properties;
-  for (slice = 0; slice < properties.numSlices; ++slice)
-    for (sslice = 0; sslice < properties.numSubslicesPerSlice; ++sslice)
-      for (eu = 0; eu < properties.numEUsPerSubslice; ++eu)
-	for (thread = 0; thread < properties.numThreadsPerEU; ++thread)
-	  {
-	    /* We use the device ordinal as process id.  */
-	    ptid_t ptid = ptid_t ((int) device->ordinal, ++tid, 0l);
+  const ze_device_tree &tree = device->tree;
 
-	    /* We can only support that many threads.  */
-	    if (tid < 0)
-	      error (_("Too many threads on device %lu: %s."),
-		     device->ordinal, properties.name);
+  for (uint32_t node_idx = 1; node_idx < tree.nodes.size (); node_idx++)
+    {
+      if (tree[node_idx].level == ze_node_level_thread)
+	{
+	  ptid_t ptid = ze_ptid_from_node_index (*device, node_idx);
 
-	    /* Storing the 128b device thread id in the private data.  We might
-	       want to extend ptid_t and put it there so GDB can show it to the
-	       user.  */
-	    ze_thread_info *zetp = new ze_thread_info {};
-	    zetp->id.slice = slice;
-	    zetp->id.subslice = sslice;
-	    zetp->id.eu = eu;
-	    zetp->id.thread = thread;
+	  /* Storing the 128b device thread id in the private data.  We might
+	     want to extend ptid_t and put it there so GDB can show it to the
+	     user.  */
+	  ze_thread_info *zetp = new ze_thread_info {};
+	  zetp->id = ze_thread_id_from_node_index (tree, node_idx);
 
-	    /* Assume threads are running until we hear otherwise.  */
-	    zetp->exec_state = ze_thread_state_running;
+	  zetp->node_index = node_idx;
 
-	    thread_info *tp = process->add_thread (ptid, zetp);
+	  /* Assume threads are running until we hear otherwise.  */
+	  zetp->exec_state = ze_thread_state_running;
 
-	    /* Start each thread with the device's tdesc.  This will change
-	       possibly later but it's important that each thread reports
-	       that it has a tdesc which will be indicated during thread list
-	       query.  */
-	    ze_store_tdesc (tp, cached_tdesc);
-	  }
+	  thread_info *tp = process->add_thread (ptid, zetp);
 
-  device->nthreads = tid;
-  device->nresumed = tid;
+	  /* Start each thread with the device's tdesc.  This will change
+	     possibly later but it's important that each thread reports
+	     that it has a tdesc which will be indicated during thread list
+	     query.  */
+	  ze_store_tdesc (tp, cached_tdesc);
+	}
+    }
 
-  dprintf ("process %d (%s) with %ld threads created for device %lu: %s.",
-	   (int) device->ordinal, ze_process_state_str (state), tid,
+  device->nthreads = tree.num_threads[ze_node_level_device];
+  device->nresumed = tree.num_threads[ze_node_level_device];
+
+  dprintf ("process %lu (%s) with %d threads created for device %lu: %s.",
+	   device->ordinal, ze_process_state_str (state),
+	   tree.num_threads[ze_node_level_device],
 	   device->ordinal, properties.name);
 
   return process;
@@ -1307,6 +1347,14 @@ ze_target::attach_to_device (uint32_t pid, ze_device_handle_t device)
   std::unique_ptr<ze_device_info> dinfo
     = std::make_unique<ze_device_info> (pid, device, properties);
 
+  /* Do not attach if the device does not fit into the device-tree.
+     The tree's node array is empty in this case.  */
+  if (dinfo->tree.nodes.empty ())
+    {
+      dprintf ("skipping unsupported device %s.", properties.name);
+      return nattached;
+    }
+
   ze_pci_ext_properties_t pci_properties {};
   status = zeDevicePciGetPropertiesExt (device, &pci_properties);
   if (status != ZE_RESULT_SUCCESS)
@@ -2250,6 +2298,120 @@ find_wildcard_devices (thread_resume *resume_info, size_t n,
     }
 
   return wildcard_devices;
+}
+
+ze_device_tree::ze_device_tree (const ze_device_properties_t &properties)
+{
+  /* Initialize the number of children per node level.  */
+  num_children[ze_node_level_thread] = 0;
+  num_children[ze_node_level_eu] = properties.numThreadsPerEU;
+
+  /* Check for overflow on subslice level.  */
+  uint64_t num_nodes = (uint64_t) properties.numEUsPerSubslice
+    * (num_children[ze_node_level_eu] + 1);
+  if (num_nodes > UINT32_MAX)
+    {
+      dprintf ("initialize the device-tree data structure: "
+	       "overflow of nodes count on subslice level.");
+      return;
+    }
+
+  num_children[ze_node_level_subslice] = (uint32_t) num_nodes;
+
+  /* Check for overflow on slice level.  */
+  num_nodes = (uint64_t) properties.numSubslicesPerSlice
+    * (num_children[ze_node_level_subslice] + 1);
+  if (num_nodes > UINT32_MAX)
+    {
+      dprintf ("initialize the device-tree data structure: "
+	       "overflow of nodes count on slice level.");
+      return;
+    }
+
+  num_children[ze_node_level_slice] = (uint32_t) num_nodes;
+
+  /* Check for overflow on device level.  */
+  num_nodes = (uint64_t) properties.numSlices
+    * (num_children[ze_node_level_slice] + 1);
+  if (num_nodes > UINT32_MAX)
+    {
+      dprintf ("initialize the device-tree data structure: "
+	       "overflow of nodes count on device level.");
+      return;
+    }
+
+  num_children[ze_node_level_device] = (uint32_t) num_nodes;
+
+  /* Include device root node.  */
+  num_nodes++;
+
+  if (num_nodes > UINT32_MAX)
+    {
+      dprintf ("initialize the device-tree data structure: "
+		"overflow of total nodes count.");
+       return;
+    }
+
+  /* A node's 'ze_index' field is of type 'uint16_t'.  Check for overflows
+     based on the device properties before allocating the nodes.  */
+  if ((properties.numSlices > UINT16_MAX)
+      || (properties.numSubslicesPerSlice > UINT16_MAX)
+      || (properties.numEUsPerSubslice > UINT16_MAX)
+      || (properties.numThreadsPerEU > UINT16_MAX))
+    return;
+
+  /* Initialize the vector containing the tree nodes in pre-order layout.  */
+  nodes.resize (num_nodes);
+
+  /* Initialize the number of threads per node level.  */
+  num_threads[ze_node_level_eu] = properties.numThreadsPerEU;
+  num_threads[ze_node_level_subslice]
+    = num_threads[ze_node_level_eu] * properties.numEUsPerSubslice;
+  num_threads[ze_node_level_slice]
+    = num_threads[ze_node_level_subslice] * properties.numSubslicesPerSlice;
+  num_threads[ze_node_level_device]
+    = num_threads[ze_node_level_slice] * properties.numSlices;
+
+  /* Manually setup the root node at index 0.  */
+  nodes[0].level = ze_node_level_device;
+  nodes[0].parent = 0;
+
+  /* Setup a device tree node at INDEX.  */
+  auto setup_node = ([this] (const uint32_t index, const ze_node_level_t level,
+			     const uint32_t ze_index)
+    {
+      nodes[index].level = level;
+      nodes[index].ze_index = (uint16_t) ze_index;
+      nodes[index].parent = ze_index * (num_children[level] + 1) + 1;
+    });
+
+  /* Initialize the tree nodes.  */
+  uint32_t slice, sslice, eu, thread;
+  uint32_t node_idx = 1;
+
+  for (slice = 0; slice < properties.numSlices; slice++)
+    {
+      setup_node (node_idx, ze_node_level_slice, slice);
+      node_idx++;
+
+      for (sslice = 0; sslice < properties.numSubslicesPerSlice; sslice++)
+	{
+	  setup_node (node_idx, ze_node_level_subslice, sslice);
+	  node_idx++;
+
+	  for (eu = 0; eu < properties.numEUsPerSubslice; eu++)
+	    {
+	      setup_node (node_idx, ze_node_level_eu, eu);
+	      node_idx++;
+
+	      for (thread = 0; thread < properties.numThreadsPerEU; thread++)
+		{
+		  setup_node (node_idx, ze_node_level_thread, thread);
+		  node_idx++;
+		}
+	    }
+	}
+    }
 }
 
 void

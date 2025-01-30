@@ -29,6 +29,7 @@
 #include <vector>
 #include <list>
 #include <map>
+#include <optional>
 
 /* Ze-low target's packet buffer size.  */
 #define ZE_TARGET_PBUFSIZ 34728
@@ -101,6 +102,126 @@ private:
   ze_tdesc_map tdescs_m;
 };
 
+/* A device tree's node resume state.  */
+
+enum class ze_node_state_t : uint8_t
+{
+  /* The node is not tested.  */
+  unknown,
+
+  /* The node is a thread node that cannot be resumed or there is at
+     least one child node that cannot be resumed.  */
+  not_resumable,
+
+  /* The node is a thread node that can be resumed or all child nodes
+     of the node can be resumed.  */
+  resumable
+};
+
+/* A device tree's node level.  */
+
+enum ze_node_level_t : uint8_t
+{
+  /* The node represents the whole device.  */
+  ze_node_level_device,
+
+  /* The node represents a slice.  */
+  ze_node_level_slice,
+
+  /* The node represents a subslice.  */
+  ze_node_level_subslice,
+
+  /* The node represents an EU.  */
+  ze_node_level_eu,
+
+  /* The node represents a thread.  */
+  ze_node_level_thread
+};
+
+/* A single node of the device-tree.  */
+
+struct ze_device_tree_node
+{
+  /* The node's state.  */
+  ze_node_state_t state;
+
+  /* The node's level.  */
+  ze_node_level_t level;
+
+  /* The node's ZE index corresponding to the node's level, e.g.,
+     if the node's level is 'ze_device_tree_node_level_subslice'
+     and 'ze_index' is '4', the corresponding 'ze_device_thread_t'
+     is 'ZE (slice, 4, all, all)'.  The value of 'slice' can be
+     deduced by visiting the parent node.  */
+  uint16_t ze_index;
+
+  /* The offset to the parent node.  The tree is stored in pre-order
+     layout, i.e., subtract the parent offset from the node's index
+     to get the index of the parent node.  */
+  uint32_t parent;
+};
+
+/* A device tree.  It implements a merge algorithm to form clusters
+   of threads by walking the tree.  Instead of resuming invidual threads,
+   the cluster root can be resumed to reduce the number of calls to the ZE
+   debug API.  */
+
+struct ze_device_tree
+{
+  /* The tree nodes stored in pre-order layout.  */
+  std::vector<ze_device_tree_node> nodes;
+
+  /* The total number of children per level (device, slice, subslice, EU,
+     thread). For example, for a subslice node, this includes all EUs
+     (direct children) and all threads.  Store the number of children for
+     threads, too.  This is not needed but simplifies the setup of nodes.  */
+  std::array<uint32_t, 5> num_children;
+
+  /* The number of threads per level (device, slice, subslice, EU).  */
+  std::array<uint32_t, 4> num_threads;
+
+  /* The index of the current cluster root node that can be resumed.  */
+  std::optional<uint32_t> current_cluster;
+
+  /* The number of threads that need to be resumed.  */
+  uint32_t num_pending_resumes = 0;
+
+  /* TRUE if there is a wildcard resume request for this device.  */
+  bool wildcard = false;
+
+  explicit ze_device_tree (const ze_device_properties_t &properties);
+
+  ~ze_device_tree ()
+  {};
+
+  ze_device_tree (ze_device_tree&) = delete;
+
+  ze_device_tree& operator= (ze_device_tree&) = delete;
+
+  ze_device_tree_node& operator[] (std::size_t idx)
+  {
+    gdb_assert (idx < nodes.size ());
+    return nodes[idx];
+  }
+
+  const ze_device_tree_node& operator[] (std::size_t idx) const
+  {
+    gdb_assert (idx < nodes.size ());
+    return nodes[idx];
+  }
+
+  /* Reset the device-tree's resume-related state.  */
+  void reset ()
+  {
+    num_pending_resumes = 0;
+    current_cluster.reset ();
+    wildcard = false;
+
+    for (uint32_t i = 0; i < nodes.size (); i++)
+      nodes[i].state = ze_node_state_t::unknown;
+  }
+};
+
 /* Information about devices we're attached to.
 
    This is pretty similar to process_info.  The difference is that we only
@@ -111,7 +232,8 @@ struct ze_device_info
 {
   ze_device_info (uint32_t pid, ze_device_handle_t device,
 		  ze_device_properties_t &properties)
-    : config ({pid}), handle (device), properties (properties)
+    : config ({pid}), handle (device), properties (properties),
+      tree (properties)
     {}
 
   /* The debug session configuration.  */
@@ -172,6 +294,10 @@ struct ze_device_info
   /* Each device can have multiple different regsets and expedites
      depending on the regset layout.  */
   ze_tdesc_cache tdesc_cache;
+
+  /* One tree per device.  The device tree implements the clustering
+     of resume requests.  */
+  ze_device_tree tree;
 };
 
 /* A thread's resume state.
@@ -287,6 +413,9 @@ struct ze_thread_info
      Initially this needs to be set to TRUE since all threads are new and are
      therefore changed.  */
   bool thread_changed = true;
+
+  /* The index of this thread in the ze_device_tree's nodes array.  */
+  uint32_t node_index = 0;
 };
 
 /* Return the ZE thread info for TP.  */

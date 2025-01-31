@@ -31,6 +31,31 @@ if {[build_executable "failed to compile $srcfile" \
     return -1
 }
 
+# If the input inferior INF is not empty then it returns the ID of the first
+# running thread of an inferior INF.  In this case, the returned thread ID is
+# in the format of (<inferior number>.<thread number>) and SIMD lane
+# information is omitted.  If INF is empty, then it return the <thread number>
+# only of any running thread.  Returns "none" if no thread ID is found with
+# given parameters.
+
+proc get_one_running_thread {inf} {
+    set running_thread "none"
+
+    gdb_test_multiple "info threads" "get running thread" -lbl {
+	-re " +($inf\(\.$::decimal\)?) +\[^\r\n\]+\(running\)" {
+	    if {$running_thread eq "none"} {
+		set running_thread $expect_out(1,string)
+	    }
+	    exp_continue
+	}
+	-re -wrap "" {
+	    gdb_assert {$running_thread ne "none"} $gdb_test_name
+	}
+    }
+
+    return $running_thread
+}
+
 foreach device $sycl_device_list {
     clean_restart "${binfile}"
     sycl_with_intelgt_lock $device {
@@ -98,5 +123,34 @@ foreach device $sycl_device_list {
 	# Once more, for the log.
 	gdb_test "info threads $stopped_threads" ".*" \
 	    "second info threads for logging"
+
+	# On the Intel GPU, a "running" thread is either a thread that was
+	# never utilized by the program, or a thread that hit a BP but has
+	# been resumed by GDB because the condition was false.  In the latter,
+	# the thread must have already finished its kernel.  In either case,
+	# the thread must be unavailable.  Trying to stop such a running thread
+	# does not succeed and we should see the "could not be stopped" message.
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    set stop_msg "could not be stopped"
+	    set inf [get_integer_valueof "\$_inferior" -1]
+	    gdb_assert {$inf > 0}
+	} else {
+	    set stop_msg "stopped"
+	    set inf ""
+	}
+
+	set running_t [get_one_running_thread $inf]
+	gdb_test "thread ${running_t}" \
+	    "Switching to thread.*${running_t}.*running.*" \
+	    "switch to a running thread"
+
+	gdb_test_multiple "interrupt" "interrupt the running thread" {
+	    -re ".*Thread.*$running_t ${fill}${stop_msg}.*" {
+		pass $gdb_test_name
+	    }
+	    -re -wrap "" {
+		exp_continue
+	    }
+	}
     }
 }

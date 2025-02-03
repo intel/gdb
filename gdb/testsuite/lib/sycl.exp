@@ -490,6 +490,42 @@ proc get_stopped_threads {srcfile line {msg "get stopped threads"}} {
     return $stopped_threads
 }
 
+# Check threads stopped at $SRCFILE:$LINE.  Unblock threads by stepping
+# over join instructions.
+
+proc skip_join_instructions {srcfile line {threads {}}} {
+    global gdb_prompt
+
+    # The compiler may emit join instructions and threads stopped at a join
+    # instruction are reported as inactive, $ce = 0.  The 'thread apply'
+    # command fails to update the thread's lanes in this case.  Single step
+    # one instruction to unblock subsequent commands.
+    if {[llength $threads] == 0} {
+	set stopped_threads [get_stopped_threads $srcfile $line]
+    } else {
+	set stopped_threads $threads
+    }
+
+    foreach thread $stopped_threads {
+	with_test_prefix "Thread $thread" {
+
+	    gdb_test "thread $thread" \
+		".Switching to thread ${thread}.*" \
+		"switch to thread"
+
+	    gdb_test_multiple "x/i \$pc" "Check for join instruction" {
+		-re "join" {
+		    verbose -log "Thread $thread: Skipping join instruction"
+		    gdb_test "with scheduler-locking step -- stepi" ".*"
+		}
+		-re "$gdb_prompt $" {
+		    pass $gdb_test_name
+		}
+	    }
+	}
+    }
+}
+
 # Returns the ID of any unavailable thread.  The returned thread ID is in the
 # format of (<inferior number>.<thread number>) and SIMD lane information is
 # omitted.

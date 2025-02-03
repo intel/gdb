@@ -65,6 +65,7 @@ save_vars { env(ZE_FLAT_DEVICE_HIERARCHY) } {
 		continue
 	    }
 
+	    set busy_wait [gdb_get_line_number "busy-wait"]
 	    set bp1 [gdb_get_line_number "kernel-line-1"]
 	    gdb_breakpoint $bp1
 	    set bp2 [gdb_get_line_number "kernel-line-2"]
@@ -84,6 +85,8 @@ save_vars { env(ZE_FLAT_DEVICE_HIERARCHY) } {
 	    # We should hit bp1 first.  The order thereafter is not fixed.
 	    gdb_continue_to_breakpoint "kernel bp1 first hit" "$srcfile:$bp1.*"
 	    incr bp1_hit
+
+	    skip_join_instructions "$srcfile" "$busy_wait"
 
 	    # Reset the spin-flag for all lanes to bring the threads to a
 	    # fair state to compete with each other.  This makes the test

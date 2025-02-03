@@ -112,6 +112,8 @@ foreach device $sycl_device_list {
 	    ".*$srcfile:$bp_then.*"
 	set first_thread [get_current_thread "line $bp_then"]
 
+	skip_join_instructions "$srcfile" "$bp_spin"
+
 	gdb_test_no_output "set scheduler-locking on"
 
 	foreach_with_prefix spin_thread_id {1 2} {

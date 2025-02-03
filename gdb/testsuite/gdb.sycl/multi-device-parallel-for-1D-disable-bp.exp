@@ -65,6 +65,7 @@ proc test_multi_device {} {
 	return 0
     }
 
+    set busy_wait [gdb_get_line_number "busy-wait"]
     set bp1 [gdb_get_line_number "kernel-first-line"]
     gdb_breakpoint $bp1
     set first_line_bp_num [get_integer_valueof "\$bpnum" 0 "get bpnum 1"]
@@ -78,6 +79,8 @@ proc test_multi_device {} {
 
     gdb_continue_to_breakpoint "$srcfile:$bp1.*"
     gdb_test_no_output "disable $first_line_bp_num"
+
+    skip_join_instructions "$srcfile" "$busy_wait"
 
     # Reset the spin-flag for all lanes to bring the threads to a
     # fair state to compete with each other.  This makes the test

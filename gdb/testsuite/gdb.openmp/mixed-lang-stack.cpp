@@ -63,14 +63,12 @@ extern "C"
   extern void
   mixed_func_1h ()
   {
-    derived_type *obj = new derived_type();
+    derived_type obj;
 
     #pragma omp target teams num_teams(1) thread_limit(1) map(to: obj)
     {
-      mixed_func_1i (*obj);
+      mixed_func_1i (obj);
     }
-
-    delete obj;
   }
 }
 

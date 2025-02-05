@@ -493,7 +493,7 @@ proc get_stopped_threads {srcfile line {msg "get stopped threads"}} {
 # Check threads stopped at $SRCFILE:$LINE.  Unblock threads by stepping
 # over join instructions.
 
-proc skip_join_instructions {srcfile line {threads {}}} {
+proc skip_join_instructions {srcfile line {threads {}} {known_fail ""}} {
     global gdb_prompt
 
     # The compiler may emit join instructions and threads stopped at a join
@@ -513,14 +513,20 @@ proc skip_join_instructions {srcfile line {threads {}}} {
 		".Switching to thread ${thread}.*" \
 		"switch to thread"
 
+	    set join 0
 	    gdb_test_multiple "x/i \$pc" "Check for join instruction" {
 		-re "join" {
-		    verbose -log "Thread $thread: Skipping join instruction"
-		    gdb_test "with scheduler-locking step -- stepi" ".*"
+		    set join 1
+		    exp_continue
 		}
-		-re "$gdb_prompt $" {
+		-re -wrap "" {
 		    pass $gdb_test_name
 		}
+	    }
+
+	    if {$join == 1} {
+		if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
+		gdb_test "with scheduler-locking step -- stepi" "$line.*"
 	    }
 	}
     }

@@ -164,9 +164,21 @@ foreach device $sycl_device_list {
 		continue
 	    }
 
+	    set spinning_line [gdb_get_line_number "spinning-line"]
+
+	    # GDB may fail to stepi over the join instruction in non-stop mode.
+	    set known_fail ""
+	    if {$non_stop == "on"} {
+		set known_fail "JIRA IGDB/5473"
+	    }
+
 	    # For each spinning thread, stop spinning.
 	    foreach thread $spinning_threads_2 {
-		skip_join_instructions "" "" [list $thread]
+		skip_join_instructions "$srcfile" "$spinning_line" [list $thread] "$known_fail"
+
+		if {$non_stop == "on"} {
+		    setup_kfail "JIRA IGDB/5473" "*-*-*"
+		}
 		gdb_test "thread apply $thread:* -q -s p spin = false" \
 		    " = false" "break the loop at $thread"
 	    }

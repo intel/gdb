@@ -154,6 +154,13 @@ foreach device $sycl_device_list {
 		set spinning_threads_2 [test_attach $test_pid $non_stop]
 	    }
 
+	    # Test attach may return an empty list, see JIRA IGDB/5046.
+	    # Stop the test in this case.
+	    if {$non_stop && [llength $spinning_threads_2] == 0} {
+		kfail "JIRA IGDB/5046" "Test attach may return an empty list for non-stop"
+		return
+	    }
+
 	    # For each spinning thread, stop spinning.
 	    foreach thread $spinning_threads_2 {
 		skip_join_instructions "" "" [list $thread]

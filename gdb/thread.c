@@ -2940,8 +2940,7 @@ thread_apply_and_filter_cmd (const char *tidlist,
       gdb_assert (filter_params != nullptr);
 
       auto group
-	= make_thread_filter_options_def_group (&expr_opts,
-						&flags);
+	= make_thread_filter_options_def_group (&expr_opts, &flags);
       gdb::option::process_options
 	(&cmd, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, group);
       validate_flags_qcs ("thread filter", &flags);
@@ -4013,8 +4012,7 @@ Options:\n\
 %OPTIONS%"
 
   const auto thread_filter_opts
-    = make_thread_filter_options_def_group (nullptr,
-					    nullptr);
+    = make_thread_filter_options_def_group (nullptr, nullptr);
 
   static std::string thread_filter_help = gdb::option::build_help (_("\
 Filter from a list of threads.\n\

@@ -20,7 +20,7 @@
 #include "../lib/sycl-util.cpp"
 
 #ifndef DIM0
-#define DIM0 1024
+#define DIM0 10240
 #endif
 
 static int
@@ -55,7 +55,9 @@ main (int argc, char *argv[])
 	  {
 	    int dim0 = get_dim (wiID, 0); /* kernel-first-line */
 	    int in_elem = accessorIn[wiID];
-	    int in_elem2 = accessorIn[dim0] + accessorIn[dim0] + accessorIn[dim0];
+	    int in_elem2
+	      = accessorIn[dim0] + accessorIn[dim0] + accessorIn[dim0];
+	    in_elem2 += accessorIn[dim0] + accessorIn[dim0] + accessorIn[dim0];
 	    accessorOut[wiID] = in_elem + 100; /* kernel-last-line */
 	  });
       });

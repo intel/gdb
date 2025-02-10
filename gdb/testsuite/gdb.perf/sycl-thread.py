@@ -17,15 +17,15 @@ from perftest import perftest
 
 
 class SyclThread(perftest.TestCaseWithBasicMeasurements):
-    def __init__(self, bp_last_line, device_type):
+    def __init__(self, bp_first_line, device_type):
         test_name = "Sycl_Thread-" + device_type
         super(SyclThread, self).__init__(test_name)
-        self.bp_last_line = str(bp_last_line)
+        self.bp_first_line = str(bp_first_line)
         self.bp = None
 
     def warm_up(self):
         """Set breakpoint inside kernel."""
-        self.bp = gdb.Breakpoint(self.bp_last_line)
+        self.bp = gdb.Breakpoint(self.bp_first_line)
 
     def _do_thread_info(self):
         """Run the thread info command."""

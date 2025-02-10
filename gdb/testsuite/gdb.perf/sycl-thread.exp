@@ -16,7 +16,7 @@
 # This test case is to test the performance of GDB performing GPU
 # and CPU offload using DPCPP compiler.
 # There are three parameters in this test:
-#  - bp_last_line contains last kernel line number.
+#  - bp_first_line contains kernel first line number.
 #  - device_type contains target device info to use in testname.
 
 load_lib perftest.exp
@@ -37,22 +37,22 @@ PerfTest::assemble {
 
     return 0
 } {
-    global bp_last_line device
+    global bp_first_line device
 
     if {![runto_main [sycl_get_device_args $device]]} {
 	return -1
     }
 
-    set bp_last_line [gdb_get_line_number "kernel-last-line"]
+    set bp_first_line [gdb_get_line_number "kernel-first-line"]
 
     return 0
 } {
-    global bp_last_line device
+    global bp_first_line device
 
     set args_list [sycl_get_device_args $device]
     set device_type [lindex $args_list 0]
 
-    gdb_test_python_run "SyclThread\($bp_last_line, \"$device_type\" \)"
+    gdb_test_python_run "SyclThread\($bp_first_line, \"$device_type\" \)"
 
     return 0
 }

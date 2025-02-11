@@ -262,9 +262,10 @@ proc init_numba_dpex_devices_list {{interpreter "python3"} {path ""}} {
 #
 # DEVICE is the string initiated in init_xxx_devices_list.
 #
-# Returns the device filter string.  For the format of
-# a device and filter strings, see is_device_filtered.
-
+# Returns the test prefix string, which is derived from the
+# device filter string.  Test prefix string format:
+#    <cpu|gpu|accelerator>:<opencl|level_zero|numba>:<0|1|...>
+# For the format of a device and filter strings, see is_device_filtered.
 
 proc numba_init_device {device} {
     global numba_binfile numba_uniform_marker
@@ -325,7 +326,12 @@ proc numba_init_device {device} {
     # Delete the breakpoint at the uniform marker.
     delete_breakpoints
 
-    return $numba_dev_fltr
+    set device_fltr [split $numba_dev_fltr ":"]
+    set test_prefix "[lindex $device_fltr 1]"
+    append test_prefix ":" [lindex $device_fltr 0]
+    append test_prefix ":" [lindex $device_fltr 2]
+
+    return $test_prefix
 }
 
 
@@ -344,7 +350,7 @@ gdb_caching_proc get_njit_devices_list {} {
     }
 
     # NJIT supports only CPU.
-    lappend numba_device_list {cpu;:cpu:0}
+    lappend numba_device_list {cpu;numba:cpu:0}
     set njit_device_list [test_numba_support_for_devices $numba_device_list]
 
     if {[llength $njit_device_list]} {

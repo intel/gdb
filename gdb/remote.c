@@ -7029,11 +7029,11 @@ extended_remote_target::attach (const char *args, int from_tty)
     /* Because we are attaching, pretend that the target is starting
        up, so that the new inferior(s) will be set up accordingly.  */
     scoped_mark_target_starting target_is_starting (this);
-    this->has_delta_thread_list = false;
-    update_thread_list ();
 
     /* Check if this target has a delta list of threads.  */
     this->has_delta_thread_list = remote_query_delta_thread_list ();
+
+    update_thread_list ();
   }
 
   pid = current_inf->pid;

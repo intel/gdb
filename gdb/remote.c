@@ -4450,6 +4450,11 @@ remote_target::remote_get_threads_with_qxfer (threads_listing_context *context)
 
       if (xml && (*xml)[0] != '\0')
 	{
+	  /* Ensure we're in sync with the remote side.  */
+	  if (std::string (xml->data ()).find ("<threads delta=")
+	      != std::string::npos)
+	    gdb_assert (this->has_delta_thread_list);
+
 	  gdb_xml_parse_quick (_("threads"), "threads.dtd",
 			       threads_elements, xml->data (), context);
 	  get_remote_state ()->fetch_unknown_tdescs (this);
@@ -5486,6 +5491,9 @@ remote_target::start_remote_1 (int from_tty, int extended_p)
      address spaces in the program spaces.  */
   update_address_spaces ();
 
+  /* Check if this target is able to send partial changes in threads.  */
+  this->has_delta_thread_list = remote_query_delta_thread_list ();
+
   /* On OSs where the list of libraries is global to all
      processes, we fetch them early.  */
   if (gdbarch_has_global_solist (current_inferior ()->arch ()))
@@ -5509,9 +5517,6 @@ remote_target::start_remote_1 (int from_tty, int extended_p)
 	 The '?' query below will then tell us about which threads are
 	 stopped.  */
       this->update_thread_list ();
-
-      /* Check if this target is able to send partial changes in threads.  */
-      this->has_delta_thread_list = remote_query_delta_thread_list ();
     }
   else if (m_features.packet_support (PACKET_QNonStop) == PACKET_ENABLE)
     {
@@ -5559,11 +5564,6 @@ remote_target::start_remote_1 (int from_tty, int extended_p)
 
       /* Fetch thread list.  */
       target_update_thread_list ();
-
-      /* Check if this target has a delta list of threads.  It is
-	 important to do this check *after* the update_thread_list
-	 call above to receive the list of threads initially.  */
-      this->has_delta_thread_list = remote_query_delta_thread_list ();
 
       /* Let the stub know that we want it to return the thread.  */
       set_continue_thread (any_thread_ptid);

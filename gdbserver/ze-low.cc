@@ -2152,23 +2152,37 @@ print_resume_info (const thread_resume &rinfo)
 {
   ptid_t rptid = rinfo.thread;
 
+  ze_device_thread_t tid;
+  if (rptid == minus_one_ptid || rptid.is_pid ())
+    tid = ze_thread_id_all ();
+  else
+    {
+      /* The thread map allows a fast lookup of threads based on the ptid.  */
+      thread_info *tp = find_thread_ptid (rptid);
+      gdb_assert (tp != nullptr);
+      tid = ze_thread_id (tp);
+    }
+
   switch (rinfo.kind)
     {
     case resume_continue:
-      dprintf ("received 'continue' resume request for (%s)",
-	       rptid.to_string ().c_str ());
+      dprintf ("received 'continue' resume request for (%s), thread=%s",
+	       rptid.to_string ().c_str (),
+	       ze_thread_id_str (tid).c_str ());
       return;
 
     case resume_step:
-      dprintf ("received 'step' resume request for (%s)"
+      dprintf ("received 'step' resume request for (%s), thread=%s,"
 	       " in range [0x%" PRIx64 ", 0x%" PRIx64 ")",
 	       rptid.to_string ().c_str (),
+	       ze_thread_id_str (tid).c_str (),
 	       rinfo.step_range_start, rinfo.step_range_end);
       return;
 
     case resume_stop:
-      dprintf ("received 'stop' resume request for (%s)",
-	       rptid.to_string ().c_str ());
+      dprintf ("received 'stop' resume request for (%s), thread=%s",
+	       rptid.to_string ().c_str (),
+	       ze_thread_id_str (tid).c_str ());
       return;
     }
 
@@ -2185,14 +2199,14 @@ normalize_resume_infos (thread_resume *resume_info, size_t n)
       thread_resume &rinfo = resume_info[i];
       ptid_t rptid = rinfo.thread;
 
-      /* Log the original requests.  */
-      print_resume_info (rinfo);
-
       /* We convert ptids of the form (p, -1, 0) to (p, 0, 0) to make
 	 'ptid.matches' work.  This transformation is safe because we
 	 enumerate the threads starting at 1.  */
       if ((rptid.lwp () == -1) && (rptid.pid () > 0))
 	rinfo.thread = ptid_t (rptid.pid (), 0, 0);
+
+      /* Log the original requests.  */
+      print_resume_info (rinfo);
 
       if (rinfo.sig != 0)
 	{

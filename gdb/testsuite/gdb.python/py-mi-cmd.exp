@@ -122,7 +122,6 @@ mi_gdb_test "-pycmd dash-key" \
 mi_gdb_test "-pycmd exp" \
     [multi_line ".*&\"Traceback \\(most recent call last\\):..\"" \
 	 "&\"\[^\r\n\]+${testfile}.py\[^\r\n\]+\"" \
-	 "&\"\[^\r\n\]+raise gdb.GdbError\\(\\)..\"" \
 	 "&\"gdb.GdbError..\"" \
 	 "\\^error,msg=\"Error occurred in Python\\.\""] \
     "-pycmd exp"

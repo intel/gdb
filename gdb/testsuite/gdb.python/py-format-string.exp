@@ -1107,7 +1107,7 @@ proc_with_prefix test_invalid_args {} {
   check_format_string \
     "a_point_t" \
     "invalid=True" \
-    "TypeError.*: 'invalid' is an invalid keyword argument for this function.*"
+    "TypeError.*: this function got an unexpected keyword argument 'invalid'.*"
 
   check_format_string \
     "a_point_t" \

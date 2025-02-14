@@ -298,3 +298,30 @@ proc omp_is_pvc {device} {
 
     return 0;
 }
+
+# Return non-zero if the device is DG2.
+
+proc omp_is_dg2 {device} {
+
+    if {[string match "*Intel* Arc* A* Graphics*" $device]} {
+	return 1;
+    }
+
+    return 0;
+}
+
+# Return non-zero if the device is XE2.
+
+proc omp_is_xe2 {device} {
+
+    if {[omp_is_dg2 $device]} {
+	return 0
+    }
+
+    if {[string match "*Intel* Arc* Graphics*" $device]
+	|| [string match -nocase "*Intel*Graphics*E20*" $device]} {
+	return 1
+    }
+
+    return 0;
+}

@@ -57,11 +57,17 @@ foreach device $sycl_device_list {
 	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*" \
 	    "hit the segmentation fault"
 
+	if {[is_xe2 $device]} {
+	    setup_kfail "JIRA GSD/10020" "*-*-*"
+	}
 	# Stopped thread should have local variable 'src',
 	# and it should have CR0.1 bit 15 set.
 	gdb_test "print src" "= \\(int \\*\\) 0x0"
 	gdb_assert {[get_integer_valueof "\$cr0\[1\]" "0"] & [expr 1 << 15]} \
 	    "CR0.1 bit 15"
+	if {[is_xe2 $device]} {
+	    setup_kfail "JIRA GSD/10020" "*-*-*"
+	}
 	gdb_test "backtrace 5" \
 		[multi_line \
 		    "#0$fill fourth $fill at $srcfile:$pf_spin_ln" \

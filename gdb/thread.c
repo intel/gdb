@@ -2419,11 +2419,29 @@ handle_thread_filter_error_msg_for_flags (const char *err, const char *expr,
 }
 
 static inline void
-handle_exception_for_flags (const gdb_exception_error &ex,
+handle_exception_for_flags (thread_info *thr,
+			    const gdb_exception_error &ex,
 			    const qcs_flags *flags)
 {
   if (!flags->silent)
     {
+      std::string lane_info = "";
+      unsigned int lane_mask = 0;
+
+      if (thr->has_simd_lanes () && thr->is_active ())
+	{
+	  /* Show lane information only for active threads.  */
+	  int lane = thr->current_simd_lane ();
+	  lane_info = " lane " + std::to_string (lane);
+	  lane_mask = 1 << lane;
+	}
+
+      if (!flags->quiet)
+	gdb_printf (_("\nThread %s (%s%s):\n"),
+		    print_thread_id (thr, lane_mask),
+		    thread_target_id_str (thr).c_str (),
+		    lane_info.c_str ());
+
       if (flags->cont)
 	gdb_printf ("%s\n", ex.what ());
       else
@@ -2437,7 +2455,7 @@ handle_exception_for_flags (const gdb_exception_error &ex,
    false or end the further execution of the command.  */
 
 static bool
-validate_filter_expression (const char *expr,
+validate_filter_expression (thread_info *thr, const char *expr,
 			    const qcs_flags *flags)
 {
   expression_up val_expr;
@@ -2449,7 +2467,7 @@ validate_filter_expression (const char *expr,
     }
   catch (const gdb_exception_error &ex)
     {
-      handle_exception_for_flags (ex, flags);
+      handle_exception_for_flags (thr, ex, flags);
       return false;
     }
 
@@ -2471,7 +2489,7 @@ Filter expressions enclosed in '\"' are not supported";
     }
   catch (const gdb_exception_error &ex)
     {
-      handle_exception_for_flags (ex, flags);
+      handle_exception_for_flags (thr, ex, flags);
       return false;
     }
 
@@ -2506,7 +2524,7 @@ get_filtered_thread_id (thread_info *tp,
     return print_thread_id (tp);
 
   if (!filter_params->expression.empty ()
-      && !validate_filter_expression (filter_params->expression.c_str (),
+      && !validate_filter_expression (tp, filter_params->expression.c_str (),
 				      &filter_params->flags))
     return nullptr;
 

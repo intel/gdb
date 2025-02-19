@@ -1,6 +1,15 @@
 		What has changed in GDB?
 	     (Organized release by release)
 
+*** Changes since GDB 16
+* Changed remote packets
+
+qXfer:threads:read
+  The XML that is sent as a response can now include an "id_str"
+  attribute for a thread element.  The attribute indicates what GDB
+  should print as the target ID of the thread, for example in the
+  "info threads" command or when switching to the thread.
+
 *** Changes in GDB 16
 
 * Support for Nios II targets has been removed as this architecture

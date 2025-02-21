@@ -1,0 +1,76 @@
+# Copyright 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# This test verifies that instructions that push callee-saved registers
+# and allocate space on the stack in the prologue of SP and BP based functions
+# are skipped.  Each function is written in assembly to ensure all variants
+# are tested and we don't rely too much on what compiler is goiong to output,
+# as testing this behavior is very instruction-sensitive.  After the prologue,
+# there is always a 'nop' instruction that this test expects.  It will also
+# check backtrace output and the ability to unwind a callee-saved register.
+
+require is_x86_64_m64_target
+standard_testfile
+
+proc test_func { func_name do_unwind_reg main_r12 } {
+    gdb_breakpoint $func_name
+    gdb_continue_to_breakpoint "Continue to $func_name"
+
+    gdb_test "x/i \$pc" \
+	"=> $::hex \<$func_name\\\+$::decimal\>\[^s\]+nop\[^s\]*" \
+	"Stop at nop after $func_name prologue"
+
+    gdb_test "backtrace" ".*$func_name.*main.*" \
+	"Verify $func_name backtrace output"
+
+    if { $do_unwind_reg == 0 } {
+	return
+    }
+
+    set func_r12 1234
+    gdb_test "print \$r12 = $func_r12" "$func_r12" \
+	"Set $func_name %r12 to $func_r12"
+
+    gdb_test "up" ".*main.*" "Go up a frame from $func_name"
+    gdb_test "print \$r12" "$main_r12" "$func_name %r12 unwound"
+
+    gdb_test "down" ".*$func_name.*" "Go back down a frame to $func_name"
+    gdb_test "print \$r12" "$func_r12" "$func_name %r12 unwound back"
+}
+
+if { [prepare_for_testing "failed to prepare" $testfile $srcfile \
+    { optimize=-O0 nodebug }] } {
+    return -1
+}
+
+if { ![runto_main] } {
+    return -1
+}
+
+set main_r12 4
+gdb_test "print \$r12=$main_r12" "\\\$$decimal = $main_r12"
+
+set function_runs {
+    prologue_standard_fp 1
+    prologue_no_locals_fp 1
+    prologue_no_callee_regs_push_fp 0
+    prologue_standard_sp 1
+    prologue_no_locals_sp 1
+    prologue_no_callee_regs_push_sp 0
+}
+
+foreach { func do_unwing_reg } $function_runs {
+    test_func $func $do_unwing_reg $main_r12
+}

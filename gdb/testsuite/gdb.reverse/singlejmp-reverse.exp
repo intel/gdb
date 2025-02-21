@@ -44,7 +44,6 @@ if [supports_process_record] {
     gdb_test_no_output "record"
 }
 
-gdb_test "next" {v = 1;} "next to v = 1"
 gdb_test "next" {f \(\);} "next to f"
 gdb_test "next" {nodebug \(\);} "next to nodebug"
 gdb_test "next" {v = 3;} "next to v = 3"

@@ -1644,10 +1644,6 @@ ze_target::fetch_events (ze_device_info &device)
 		    zetp->stop_reason = reason;
 		    zetp->waitstatus.set_stopped (signal);
 		    nstopped += 1;
-
-		    regcache *regcache
-		      = get_thread_regcache (tp, /* fetch = */ false);
-		    zetp->stop_pc = read_pc (regcache);
 		  }
 		/* FIXME: exceptions
 
@@ -2094,13 +2090,11 @@ ze_target::mark_eventing_threads (ptid_t resume_ptid, resume_kind rkind)
 	 still there.  Because we are inside the 'resume' request, if
 	 the BP is valid, GDB must have already re-inserted it.
 
-	 Also check if we resumed at a different PC.  In such case, we want
-	 to discard this event that could prevent a thread from resuming.  */
-      regcache *regcache = get_thread_regcache (tp, /* fetch= */ false);
-      CORE_ADDR pc = read_pc (regcache);
+	 FIXME: Keep track of the stop_pc and compare it with the
+	 current (i.e. to-be-resumed) pc.  */
       if ((zetp->exec_state == ze_thread_state_stopped)
 	  && (zetp->stop_reason == TARGET_STOPPED_BY_SW_BREAKPOINT)
-	  && ((pc != zetp->stop_pc) || !is_at_breakpoint (tp)))
+	  && !is_at_breakpoint (tp))
 	{
 	  /* The BP is gone.  Clear the waitstatus, too.  */
 	  target_waitstatus waitstatus = ze_move_waitstatus (tp);

@@ -40,6 +40,53 @@ proc get_stopped_threads {match_text} {
     return $stopped_threads
 }
 
+# Transform consecutive ids in THREADS to ranges, e.g.,
+# the input {1 2 3 5 7 8 9} is transformed to "1-3 5 7-9".
+
+proc range_from_threads {threads} {
+    set thread_range ""
+    set start -1
+    set prev -1
+
+    for {set i 0} {$i < [llength $threads]} {incr i} {
+
+	set thread [lindex $threads $i]
+
+	if {$start == -1} {
+	    set start [lindex $threads $i]
+	} elseif {abs ([expr $thread - $prev]) > 1} {
+
+	    set stop [expr max ($start, $prev)]
+	    set start [expr min ($start, $prev)]
+
+	    set thread_range "${thread_range} ${start}"
+
+	    if {[expr $start < $stop]} {
+		    set thread_range "${thread_range}-$stop"
+	    }
+
+	    set thread_range "${thread_range}"
+	    set start $thread
+	}
+
+	set prev $thread
+    }
+
+    # Parse last list element.
+    set stop [expr max ($start, $prev)]
+    set start [expr min ($start, $prev)]
+    set thread_range "${thread_range} ${start}"
+
+    if {[expr $start < $stop]} {
+	set thread_range "${thread_range}\-$stop"
+    }
+
+    set thread_range "${thread_range}"
+    set thread_range [string trim $thread_range " "]
+
+    return $thread_range
+}
+
 proc test_thread_filter {thr_range expr m_list test_name} {
     set filtered_tid_list {}
     set fill "\[^\r\n\]+"
@@ -69,6 +116,7 @@ gdb_continue_to_breakpoint "$srcfile:$linenum"
 set stopped_threads [get_stopped_threads "thread_function"]
 
 set test_list_d [lsort -decreasing $stopped_threads]
+set test_list_d [range_from_threads $test_list_d]
 
 # Verify the "thread filter" command returns the expected list of threads
 # using $_location_filename and $_location_linenum convenience variables

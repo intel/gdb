@@ -3159,9 +3159,107 @@ print_filtered_thread_ids (thread_filter_parameters *filter_params)
   if (!filter_params->flags.silent && !filter_params->flags.quiet)
     gdb_printf ("Filtered Threads:\n");
 
+  std::vector<gdb::unique_xmalloc_ptr<char>> tids
+    = delim_string_to_char_ptr_vec (filter_params->tid_list.c_str (), ' ');
+
+  /* The filtered input thread list must not be empty.  */
+  gdb_assert (!tids.empty ());
+
+  int simd_lane = -1;
+  unsigned int lane_mask = 0;
+  thread_info *prev_tp = nullptr;
+
+  /* Create a vector of thread_info* objects and the accumulated lane mask.  */
+  std::vector <std::pair<thread_info*, unsigned int>> parsed_threads;
+
+  /* Accumulate the lane mask for each thread in FILTER_PARAMS->TID_LIST.  */
+  for (const auto &thread : tids)
+    {
+      thread_info *tp = parse_thread_id (thread.get (), nullptr, &simd_lane);
+
+      /* Initialize previous thread pointer.  */
+      if (prev_tp == nullptr)
+	prev_tp = tp;
+      /* Next thread.  */
+      else if (tp != prev_tp)
+	{
+	  parsed_threads.push_back ({prev_tp, lane_mask});
+	  lane_mask = 0;
+	}
+
+      if (simd_lane != -1)
+	lane_mask |= (1 << simd_lane);
+
+      prev_tp = tp;
+    }
+
+  /* Last thread.  */
+  parsed_threads.push_back ({prev_tp, lane_mask});
+
+  using const_thread_iter
+    = std::vector<std::pair<thread_info*, unsigned int>>::const_iterator;
+
+  auto print_thread_range = ([] (const_thread_iter start,
+				 const_thread_iter end)
+    {
+      if (start->first->per_inf_num > end->first->per_inf_num)
+	std::swap (start, end);
+
+      std::string thread_range = start->first->get_qualified_id ();
+      if (start != end)
+	thread_range += "-" + std::to_string (end->first->per_inf_num);
+
+      if (start->second > 0)
+	{
+	  thread_range += ":";
+	  thread_range += make_ranges_from_mask (start->second, -1);
+	}
+
+      return thread_range;
+    });
+
+  /* Assert if parsing the input thread list failed.  */
+  gdb_assert (parsed_threads.size () > 0);
+
+  std::string filtered_threads;
+  /* Pre-allocate space for the filtered threads.  We assume parsed
+     threads cannot be merged into a thread range.  Likewise, assume
+     the worst case for the SIMD lanes, see 'make_ranges_from_mask'
+     for details.  */
+  filtered_threads.reserve (parsed_threads.size () * 64);
+  const_thread_iter start = parsed_threads.begin ();
+  const_thread_iter prev = start;
+
+  /* Now accumulate threads with matching lane mask.  */
+  for (const_thread_iter it = std::next (start);
+       it != parsed_threads.end (); ++it)
+    {
+      bool print = false;
+
+      /* Don't accumulate among multiple processes.  */
+      if ((it->first->ptid.pid () != start->first->ptid.pid ())
+	  || (it->second != start->second))
+	print = true;
+
+      if (std::abs (it->first->per_inf_num - prev->first->per_inf_num) > 1)
+	print = true;
+
+      if (print)
+	{
+	  filtered_threads += print_thread_range (start, prev) + " ";
+	  start = it;
+	}
+
+      prev = it;
+    }
+
+  filtered_threads
+    += print_thread_range (start, std::prev (parsed_threads.end ()));
+
   value_print_options print_opts;
   get_user_print_options (&print_opts);
-  filter_params->tid_list = "\"" + filter_params->tid_list + "\"";
+  filter_params->tid_list = "\"" + filtered_threads + "\"";
+
   expression_up expr = parse_expression (filter_params->tid_list.c_str (),
 					 nullptr, 0);
   value *val = expr->evaluate ();

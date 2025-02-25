@@ -136,28 +136,15 @@ proc thread_filter {context match_ctxs {total_matches "none"} \
 	"$expr" "-c $options" $message
 }
 
-# Convenience procedures to build a string of the form
-# "thread:L1 thread:L2 ... thread:Ln".
-
-proc lanes_of {thread lanes} {
-    return [lmap x $lanes {string cat "$thread:" "$x"}]
-}
-
-proc all_lanes_of {num_lanes thread} {
-    set lanes ""
-    for {set i 0} {$i < $num_lanes} {incr i} {
-	append lanes "$i "
-    }
-    return [lanes_of "$thread" "$lanes"]
-}
-
-proc all_even_lanes_of {num_lanes thread} {
+proc all_even_lanes_of {num_lanes} {
     set lanes ""
     for {set i 0} {$i < $num_lanes} {incr i} {
 	append lanes "$i "
 	incr i
     }
-    return [lanes_of "$thread" "$lanes"]
+    set lanes [string trim $lanes]
+    set lanes "\\\[$lanes\\\]"
+    return $lanes
 }
 
 # Check that all lanes are preserved.
@@ -212,6 +199,47 @@ proc thread_filter_invalid {tid_list {expected ""}} {
     gdb_test "thread filter $tid_list dim0==0" \
 	"Please specify an expression following the thread ID list.*" \
 	"thread filter $tid_list"
+}
+
+# Transform consecutive ids in THREADS to ranges, e.g.,
+# the input {1 2 3 5 7 8 9} is transformed to "1-3 5 7-9".
+
+proc range_from_threads {threads {prefix ""} {suffix ""}} {
+    set thread_range ""
+    set start -1
+    set prev -1
+
+    for {set i 0} {$i < [llength $threads]} {incr i} {
+
+	set thread [lindex $threads $i]
+
+	if {$start == -1} {
+	    set start [lindex $threads $i]
+	} elseif {abs ([expr $thread - $prev]) > 1} {
+	    set thread_range "${thread_range} ${prefix}${start}"
+
+	    if {[expr $start < $prev]} {
+		set thread_range "${thread_range}-$prev"
+	    }
+
+	    set thread_range "${thread_range}${suffix}"
+	    set start $thread
+	}
+
+	set prev $thread
+    }
+
+    # Parse last list element.
+    set thread_range "${thread_range} ${prefix}${start}"
+
+    if {[expr $start < $prev]} {
+	set thread_range "${thread_range}\-$prev"
+    }
+
+    set thread_range "${thread_range}${suffix}"
+    set thread_range [string trim $thread_range " "]
+
+    return $thread_range
 }
 
 foreach device $sycl_device_list {
@@ -308,8 +336,9 @@ foreach device $sycl_device_list {
 	# Default thread and lange range input
 	thread_filter ":3" "$cur_thread:3"
 	thread_filter "$cur_thread" "$cur_thread:6"
-	thread_filter ":3-5" "$cur_thread:3 $cur_thread:4 $cur_thread:5"
-	thread_filter ":*" "[all_lanes_of $num_lanes $cur_thread]"
+	thread_filter ":3-5" "$cur_thread\\\:\\\[3-5\\\]"
+	set last_lane [expr {$num_lanes - 1}]
+	thread_filter ":*" "$cur_thread\\\:\\\[0-$last_lane\\\]"
 
 	# Find 4 threads that are active.  Do a linear search.  This makes
 	# sure that t_1 < t_2 < t_3 < t_4.  But note that the ids are not
@@ -334,6 +363,9 @@ foreach device $sycl_device_list {
 	verbose -log "t_3: $t_3"
 	verbose -log "t_4: $t_4 inferior is ::: $inf"
 
+	set stopped_threads [list $t_1 $t_2 $t_3 $t_4]
+	set stopped_threads_d [list $t_4 $t_3 $t_2 $t_1]
+
 	set fill "\[^\r\n\]+"
 	# Switch the stopped threads to non-zero SIMD lanes to later
 	# verify the lane is preserved for each of them.
@@ -350,10 +382,10 @@ foreach device $sycl_device_list {
 	gdb_test "p \$thread_3 = $t_3" " = $t_3"
 
 	# Prepare some long contexts for reuse.
-	set all_lanes_1 [all_lanes_of $num_lanes "$inf.$t_1"]
-	set all_lanes_2 [all_lanes_of $num_lanes "$inf.$t_2"]
-	set all_lanes_3 [all_lanes_of $num_lanes "$inf.$t_3"]
-	set all_lanes_4 [all_lanes_of $num_lanes "$inf.$t_4"]
+	set suffix "\:\\\[0-$last_lane\\\]"
+	set prefix "$inf\."
+	set thread_range_a [range_from_threads $stopped_threads $prefix $suffix]
+	set thread_range_d [range_from_threads $stopped_threads_d $prefix $suffix]
 
 	set thr_expr_group "\(\$_thread==$t_1 || \$_thread==$t_2 \
 	    || \$_thread==$t_3 || \$_thread==$t_4\)"
@@ -371,11 +403,11 @@ foreach device $sycl_device_list {
 	check_lanes "after filter all" $inf $t_1 $t_2 $t_3 $t_4
 
 	thread_filter "all-lanes" \
-	    [lreverse "$all_lanes_1 $all_lanes_2 $all_lanes_3 $all_lanes_4"] \
+	    "$thread_range_d" \
 	    "none" "\(\$_inferior==$inf && $thr_expr_group\)"
 
 	thread_filter "all-lanes -ascending" \
-	    "$all_lanes_1 $all_lanes_2 $all_lanes_3 $all_lanes_4" \
+	    "$thread_range_a" \
 	    "none" "\(\$_inferior==$inf && $thr_expr_group\)"
 
 	check_lanes "after filter all-lanes" $inf $t_1 $t_2 $t_3 $t_4
@@ -395,9 +427,15 @@ foreach device $sycl_device_list {
 	foreach select_thr $filtered_list {
 	    set select_thr [string map { "\{" "" } $select_thr]
 	    set select_thr [string map { "\}" "" } $select_thr]
-	    gdb_test "thread ${select_thr}" "Switching to thread $select_thr.*"
+	    set select_thr_split [split "$select_thr" ":"]
+	    set thr_info [lindex $select_thr_split 0]
+	    set lane_info [lindex $select_thr_split 1]
+	    set lane_info_split [split "$lane_info" "-"]
+	    set first_lane [lindex $lane_info_split 0]
+	    set first_lane [string map { "\[" "" } $first_lane]
+	    gdb_test "thread ${thr_info}:${first_lane}" "Switching to thread ${thr_info}:${first_lane}.*"
 	    gdb_test "p (dim0>50 && dim0<100)" " = true" \
-		"Iteration $filter_index for thread $select_thr"
+		"Iteration $filter_index for thread ${thr_info}:${first_lane}"
 	    incr filter_index
 	    if {$filter_index >= $max_count} {
 		break
@@ -408,6 +446,11 @@ foreach device $sycl_device_list {
 	gdb_breakpoint "$even_branch" {temporary}
 	gdb_continue_to_breakpoint "hit the BP at even branch " \
 	    ".*$srcfile:$even_branch.*"
+
+	set stopped_threads [get_stopped_threads "$srcfile" "$even_branch" \
+	    "stopped threads at even branch"]
+	gdb_assert {[llength $stopped_threads] > 1}
+
 	set cur_thread [get_current_thread "after second BP hit"]
 
 	# Only even lanes are active.
@@ -416,17 +459,32 @@ foreach device $sycl_device_list {
 	thread_filter_error ":3" \
 	    "warning: SIMD lane 3 is inactive in thread $cur_thread"
 
-	set msg " at even branch "
-	thread_filter ":4" "$cur_thread:4" "none" "" $msg
-	thread_filter ":*" [all_even_lanes_of $num_lanes $cur_thread] \
-	    "none" "" $msg ""
+	thread_filter ":4" "$cur_thread:4" "none" "" "current thread lane 4"
 
-	thread_filter "$t_1:*" [all_even_lanes_of $num_lanes "$inf.$t_1"] \
+	# Test even lanes for threads at breakpoint.
+	set even_lanes [all_even_lanes_of $num_lanes]
+	thread_filter ":*" "$cur_thread:$even_lanes" \
+	    "none" "" "current thread all lanes"
+
+	# Get threads stopped at 'even branch'.
+	set t_1 [lindex $stopped_threads 0]
+	set t_2 [lindex $stopped_threads 1]
+	regexp "$inf\.($decimal)" $t_1 ignore t_1
+	regexp "$inf\.($decimal)" $t_2 ignore t_2
+
+	set suffix "\:$even_lanes"
+	set threads_at_even_branch {}
+	lappend threads_at_even_branch $t_1 $t_2
+
+	# All even lanes for t_1.
+	thread_filter "$t_1:*" "$inf.$t_1:$even_lanes" \
 	    "none" "\$_simd_lane%2==0"
-	set t1_2_even_list \
-	    [string cat [all_even_lanes_of $num_lanes "$inf.$t_1"] " " \
-	    [all_even_lanes_of $num_lanes "$inf.$t_2"]]
-	thread_filter "$t_1-$t_2:*" "$t1_2_even_list" "none" \
+
+	# Get expected output for threads t_1 and t_2.
+	set thread_range \
+	    [range_from_threads $threads_at_even_branch $prefix $suffix]
+
+	thread_filter "$t_1:* $t_2:*" "$thread_range" "none" \
 	    "\$_simd_lane%2==0"
     }
 }

@@ -800,7 +800,7 @@ run_inferior_call (std::unique_ptr<call_thread_fsm> sm,
 
       /* Setup a timer (if possible, and if the settings allow) to prevent
 	 the inferior call running forever.  */
-      bool direct_call_p = !call_thread->control.in_cond_eval;
+      bool direct_call_p = !call_thread->control.in_cond_eval ();
       infcall_timer_controller infcall_timer (call_thread, direct_call_p);
 
       /* Inferior function calls are always synchronous, even if the

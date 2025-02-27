@@ -37,6 +37,7 @@ struct symtab;
 #include "gdbsupport/intrusive_list.h"
 #include "thread-fsm.h"
 #include "language.h"
+#include <list>
 
 struct inferior;
 struct process_stratum_target;
@@ -215,8 +216,14 @@ struct thread_control_state
      step" behaves like "on" or "off".  */
   int stepping_command = 0;
 
+  /* A list of conditional breakpoints (if any) that the thread is evaluating.
+     This list is tracking breakpoint hits during expressions evaluation to make
+     sure we don't run into cycles.  */
+  std::list<breakpoint *> cond_eval_bps;
+
   /* True if the thread is evaluating a BP condition.  */
-  bool in_cond_eval = false;
+  bool in_cond_eval () const
+  { return !cond_eval_bps.empty (); };
 
   /* Whether the thread was replaying when the command was issued.  */
   bool is_replaying = false;

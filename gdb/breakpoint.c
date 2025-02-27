@@ -5912,10 +5912,24 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
 	}
       if (within_current_scope)
 	{
+	  /* Check if we are already evaluating the same condition.  This would
+	     lead to a infinite cycle.  */
+	  std::list<breakpoint *> &cond_eval_bps
+	    = thread->control.cond_eval_bps;
+	  if (std::find (cond_eval_bps.begin (), cond_eval_bps.end (), b)
+	      != cond_eval_bps.end ())
+	    error (_("Aborting expression evaluation for the conditional bp:\n"
+		     "A cycle was detected during the evaluation."));
+
 	  try
 	    {
-	      scoped_restore reset_in_cond_eval
-		= make_scoped_restore (&thread->control.in_cond_eval, true);
+	      cond_eval_bps.push_back (b);
+	      auto delete_bp
+		= make_scope_exit ([&cond_eval_bps] ()
+		  {
+		    cond_eval_bps.pop_back ();
+		  });
+
 	      scoped_restore_current_simd_lane restore_lane {thread};
 	      unsigned int condition_mask = 0x0;
 

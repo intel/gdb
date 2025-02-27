@@ -1,0 +1,73 @@
+# Copyright 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test that GDB is able to detect a cycle when evaluating a conditional
+# breakpoint.  In such case, GDB should report the cycle and abort the
+# evaluation.
+
+require {!target_info exists gdb,nosignals}
+
+standard_testfile .c
+
+if { [prepare_for_testing "failed to prepare" $testfile $srcfile] } {
+    return -1
+}
+
+set bp_line [gdb_get_line_number "cond-bp-line"]
+set conditional_bps [list \
+    [list "$bp_line if foo (1) == 2"] \
+    [list "foo if foo (1) == 2"] \
+    [list "foo if bar (1)" \
+	  "bar if foo (1)"] \
+    [list "bar if baz (1)" \
+	  "baz if add_one (1)" \
+	  "add_one if bar (1)"]]
+
+foreach_with_prefix bps $conditional_bps {
+    clean_restart "${binfile}"
+    if {![runto_main]} {
+	return
+    }
+    foreach bp $bps {
+	gdb_breakpoint "$bp" "Breakpoint $decimal at.*"
+    }
+    gdb_test "continue" "A cycle was detected during the evaluation.*"
+
+    delete_breakpoints
+    set fill "\[^\r\n\]*"
+    set keep_going 1
+    set itr 0
+    while {$keep_going && $itr < 10} {
+	set keep_going 0
+	gdb_test_multiple "backtrace" "check dummy frames: itr $itr" {
+	    -re "#$::decimal  <function called from gdb>" {
+		set keep_going 1
+		exp_continue
+	    }
+	    -re "#$::decimal${fill}" {
+		exp_continue
+	    }
+	    -re -wrap "" {
+		pass $gdb_test_name
+	    }
+	}
+	if {$keep_going} {
+	    gdb_test "continue" ".*" "skip dummy frame: itr $itr"
+	}
+	incr itr
+    }
+
+    gdb_continue_to_end
+}

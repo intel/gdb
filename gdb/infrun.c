@@ -2624,7 +2624,7 @@ user_visible_resume_ptid (int step)
   else if (schedlock_applies_to_opts (schedlock.normal, step, tp))
     return inferior_ptid;
 
-  if (tp != nullptr && tp->control.in_cond_eval)
+  if (tp != nullptr && tp->control.in_cond_eval ())
     {
       /* The inferior thread is evaluating a BP condition.  Other threads
 	 might be stopped or running and we do not want to change their
@@ -4967,7 +4967,7 @@ fetch_inferior_event ()
     /* Is the current thread performing an inferior function call as part
        of a breakpoint condition evaluation?  */
     bool in_cond_eval = (inferior_ptid != null_ptid
-			 && inferior_thread ()->control.in_cond_eval);
+			 && inferior_thread ()->control.in_cond_eval ());
 
     /* If the thread is in the middle of the condition evaluation, wait for
        an event from the current thread.  Otherwise, wait for an event from
@@ -5036,7 +5036,7 @@ fetch_inferior_event ()
 	       function call as part of a condition evaluation, then we
 	       don't want to stop all the other threads.  */
 	    if (ecs.event_thread == nullptr
-		|| !ecs.event_thread->control.in_cond_eval)
+		|| !ecs.event_thread->control.in_cond_eval ())
 	      {
 		set_stop_requested (ecs.target, ecs.ptid, false);
 		stop_all_threads_if_all_stop_mode ();

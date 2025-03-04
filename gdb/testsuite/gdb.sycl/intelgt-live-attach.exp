@@ -38,7 +38,7 @@ if {[build_executable "failed to compile $srcfile" \
 # Find the stopped threads, check their backtrace, and return the
 # thread ids.
 
-proc test_attach {testpid non_stop} {
+proc test_attach {testpid non_stop device} {
     global srcfile gdb_prompt decimal
 
     # It is expected to find 4 threads exactly, as the input data size
@@ -52,7 +52,22 @@ proc test_attach {testpid non_stop} {
 
     # Attach GDB to the process.
     if {!$non_stop} {
-	gdb_test "attach $testpid" "Attaching to program.*" "attach"
+	if {[is_xe2 $device]} {
+	    setup_kfail "JIRA IGDB/5532" "*-*-*"
+	}
+	gdb_test_multiple "attach $testpid" "attach" {
+	    -re "Attaching to program" {
+		gdb_test_multiple "" $gdb_test_name {
+		    -re "Recursive internal problem.*" {
+			fail $gdb_test_name
+			return ""
+		    }
+		    -re -wrap "" {
+			pass $gdb_test_name
+		    }
+		}
+	    }
+	}
     } else {
 	# In non-stop mode, threads are interrupted and we see stop
 	# events after the prompt.
@@ -173,7 +188,13 @@ foreach device $sycl_device_list {
 	    verbose -log "spawn id: $test_spawn_id, test pid: $test_pid"
 
 	    with_test_prefix "first attach" {
-		set spinning_threads_1 [test_attach $test_pid $non_stop]
+		set spinning_threads_1 [test_attach $test_pid $non_stop $device]
+		if {$spinning_threads_1 == ""} {
+		    # Should make sure process is killed just in case.
+		    kill_wait_spawned_process $test_spawn_id
+		    clean_restart "${binfile}"
+		    continue
+		}
 	    }
 
 	    # Detach from the host application and attach again.
@@ -182,7 +203,7 @@ foreach device $sycl_device_list {
 
 	    # Re-attach and test the spinning threads, again.
 	    with_test_prefix "second attach" {
-		set spinning_threads_2 [test_attach $test_pid $non_stop]
+		set spinning_threads_2 [test_attach $test_pid $non_stop $device]
 	    }
 
 	    # For each spinning thread, stop spinning.

@@ -204,12 +204,24 @@ Continuing with GPU-debugging disabled.
             if platform.system() != "Linux":
                 return False
 
-            cmd = "find /sys/class/drm/card*/device/ -name 'enable_eudebug' \
-                    -o -name 'prelim_enable_eu_debug'"
-            find_out = subprocess.check_output(cmd, shell=True).decode()
-            lines = find_out.split("\n")
-            if len(lines) == 0:
+            cmd = "ls"
+            # For XeKMD:
+            cmd += " /sys/class/drm/card*/device/prelim_enable_eudebug"
+            cmd += " /sys/class/drm/card*/device/enable_eudebug"
+            # For i915:
+            cmd += " /sys/class/drm/card*/prelim_enable_eu_debug"
+
+            # Subsume errors.
+            cmd += " || true"
+            DebugLogger.log(f"KMD settings command: '{cmd}'")
+
+            cmd_out = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode()
+            DebugLogger.log(f"KMD settings found at '{cmd_out}'")
+
+            if cmd_out == "":
                 return False
+
+            lines = cmd_out.split("\n")
 
             # Set the eu_debug_path so that we can use it in
             # is_initialization_error to distinguish between XeKMD and i915.

@@ -106,6 +106,11 @@ enum
   /* The position of the Systolic Exception Status bit in CR0.1.  */
   intelgt_cr0_1_systolic_exception_status = 27,
 
+  /* The position of the Out-Of-Bound exception Status bit in CR0.1.
+     This exception is raised when there is an out-of-bounds register file
+     access.  */
+  intelgt_cr0_1_oob_status = 27,
+
   /* The position of the Force Exception Status and Control bit in CR0.1.  */
   intelgt_cr0_1_force_exception_status = 26,
 
@@ -584,6 +589,29 @@ is_systolic_exception (uint32_t device_id, uint32_t cr0_1)
   error (_("Unsupported device id 0x%" PRIx32), device_id);
 }
 
+static bool
+is_oob_exception (uint32_t device_id, uint32_t cr0_1)
+{
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      return false;
+
+    case intelgt::XE3P_XPC:
+      return (cr0_1 & (1 << intelgt_cr0_1_oob_status)) != 0;
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
+}
+
 target_stop_reason
 intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 {
@@ -599,6 +627,7 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
   uint32_t device_id = get_device_id (ze_thread_device (tp));
 
   bool is_systolic = is_systolic_exception (device_id, cr0[1]);
+  bool is_oob = is_oob_exception (device_id, cr0[1]);
 
   std::string ex_keywords
     = std::string ("[ ")
@@ -613,6 +642,7 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
     + (((cr0[1] & (1 << intelgt_cr0_1_external_halt_status)) != 0)
        ? "eh " : "")
     + (is_systolic ? "se " : "")
+    + (is_oob ? "oob " : "")
     + (((cr0[1] & (1 << intelgt_cr0_1_pagefault_status)) != 0)
        ? "pf " : "")
     + "]";
@@ -629,6 +659,15 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
       intelgt_write_cr0 (regcache, 1, cr0[1]);
 
       signal = GDB_SIGNAL_SEGV;
+      return TARGET_STOPPED_BY_NO_REASON;
+    }
+
+  if (is_oob)
+    {
+      cr0[1] &= ~(1 << intelgt_cr0_1_oob_status);
+      intelgt_write_cr0 (regcache, 1, cr0[1]);
+
+      signal = GDB_SIGNAL_ILL;
       return TARGET_STOPPED_BY_NO_REASON;
     }
 

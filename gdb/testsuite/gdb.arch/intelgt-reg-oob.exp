@@ -1,0 +1,92 @@
+# Copyright 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Tests out of bounds GRF register file access exception.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+foreach device $sycl_device_list {
+
+    sycl_with_intelgt_lock $device {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    return 0
+	}
+
+	if {![is_xe3p "$device"]} {
+	    unsupported "test is aimed at Intel XE3P GPUs only"
+	    return 0
+	}
+
+	set grf_count 96
+	set aot_opts [list "additional_flags=-fsycl-targets=spir64_gen" \
+	    "ldflags=-Xsycl-target-backend=spir64_gen \
+		\"-q -device xe3p -options \
+		'-ze-exp-register-file-size=$grf_count'\""]
+	if {[build_executable "failed to compile $srcfile" "${binfile}" \
+		 $srcfile [concat sycl debug $aot_opts]]} {
+	    return -1
+	 }
+
+	clean_restart "${binfile}"
+
+	if {![sycl_start $device]} {
+	    continue
+	}
+
+	set kernel_line [gdb_get_line_number "kernel-start"]
+	gdb_breakpoint $kernel_line {temporary}
+	gdb_continue_to_breakpoint "kernel breakpoint" \
+	    ".*$srcfile:$kernel_line.*"
+
+	set fill "\[^\r\n\]*"
+
+	# Find the address of a CALL instruction that uses a GRF as a
+	# destination register.
+	set call_instr_addr "invalid"
+	gdb_test_multiple "disassemble" "find a call instruction address" -lbl {
+	    -re "${fill}($hex)${fill}call${fill}r${decimal}${fill}" {
+		scan $expect_out(1,string) %x addr
+		if {($call_instr_addr eq "invalid")} {
+		    set call_instr_addr $expect_out(1,string)
+		    verbose -log "found call at $call_instr_addr"
+		}
+		exp_continue
+	    }
+	    -re -wrap "" {
+		gdb_assert {$call_instr_addr ne "invalid"} $gdb_test_name
+	    }
+	}
+
+	# Set an out-of-bound GRF number.
+	set oob_grf [format 0x%x $grf_count]
+	gdb_test "p /x ((char *)$call_instr_addr)\[7\] = $oob_grf" "= $oob_grf"
+	gdb_test "x /i $call_instr_addr" "call ${fill} r${grf_count}${fill}" \
+	    "confirm that the instruction has been changed"
+
+	# We should stop with the 'EXC_BAD_INSTRUCTION' signal upon resuming.
+	gdb_test "continue" "received signal SIGILL, Illegal instruction.*" \
+	    "continue until hitting the exception"
+    }
+}

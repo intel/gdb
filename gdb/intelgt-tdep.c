@@ -51,6 +51,7 @@
 #include "xml-tdesc.h"
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <unordered_map>
 #if defined (HAVE_LIBYAML_CPP)
 #include <yaml-cpp/yaml.h>
@@ -163,6 +164,12 @@ intelgt_implicit_args_find_value_pair (gdbarch *gdbarch, thread_info *tp);
 
 static uint8_t
 intelgt_get_hw_simd_width (gdbarch *gdbarch, thread_info *tp);
+
+/* Return size of the prologue using
+   `offset_to_skip_per_thread_data_load` from zeinfo.  */
+
+static std::optional<uint32_t>
+find_prologue_size_using_zeinfo (CORE_ADDR start_address);
 
 /* Read and write vectors on the stack while considering the SIMD
    vectorization.
@@ -862,6 +869,7 @@ intelgt_skip_prologue (gdbarch *gdbarch, CORE_ADDR start_pc)
   dprintf ("start_pc: %lx", start_pc);
   CORE_ADDR func_addr;
 
+  /* Find the end of prologue using SAL.  */
   if (find_pc_partial_function (start_pc, nullptr, &func_addr, nullptr))
     {
       CORE_ADDR post_prologue_pc
@@ -873,7 +881,17 @@ intelgt_skip_prologue (gdbarch *gdbarch, CORE_ADDR start_pc)
        return std::max (start_pc, post_prologue_pc);
     }
 
-  /* Could not find the end of prologue using SAL.  */
+  /* Find the end of prologue using zeinfo.  */
+  auto prologue_size = find_prologue_size_using_zeinfo (start_pc);
+  if (prologue_size.has_value ())
+    {
+      CORE_ADDR post_prologue_pc = start_pc + *prologue_size;
+      dprintf ("post prologue pc with offset from zeinfo: %lx",
+	       post_prologue_pc);
+      return post_prologue_pc;
+    }
+
+  /* Could not find the end of prologue.  */
   return start_pc;
 }
 
@@ -3403,6 +3421,7 @@ struct zeinfo
 
     std::string name;
     uint8_t simd_size;
+    std::optional<uint32_t> offset_to_skip_per_thread_data_load;
     std::vector<mem_buffer> per_thread_memory_buffers;
   };
 
@@ -3561,6 +3580,22 @@ struct convert<zeinfo::kernel> {
        is '8' and for SIMD width 16 we would get an error.  */
     rhs.simd_size = kernel_node["execution_env"]["simd_size"].as<uint32_t> ();
 
+    const char *offset_to_skip_name = "offset_to_skip_per_thread_data_load";
+    if (!kernel_node["execution_env"][offset_to_skip_name]
+	|| !kernel_node["execution_env"][offset_to_skip_name].IsScalar ())
+      {
+	dprintf ("%s \'%s\' for kernel \"%s\" is missing or invalid.",
+		 error_prefix, offset_to_skip_name, rhs.name.c_str ());
+      }
+    else
+      {
+	rhs.offset_to_skip_per_thread_data_load
+	  = kernel_node["execution_env"][offset_to_skip_name].as<uint32_t> ();
+	dprintf ("Found \'%s\' for kernel \"%s\" in .ze_info: %d.",
+		 offset_to_skip_name, rhs.name.c_str (),
+		 *rhs.offset_to_skip_per_thread_data_load);
+      }
+
     if (!kernel_node["per_thread_memory_buffers"]
 	|| !kernel_node["per_thread_memory_buffers"].IsSequence ())
       {
@@ -3714,6 +3749,43 @@ intelgt_on_solib_unloaded (program_space *pspace, const solib &kernel_so)
 }
 
 #endif /* defined (HAVE_LIBYAML_CPP) */
+
+static std::optional<uint32_t>
+find_prologue_size_using_zeinfo (CORE_ADDR start_address)
+{
+  auto sec = find_pc_section (start_address);
+  /* If the address doesn't point to the beginning of the kernel
+     don't skip the prologue.  */
+  if (sec == nullptr || start_address != sec->the_bfd_section->vma)
+    return {};
+
+  auto zeinfo_iter = zeinfo_cache.find (sec->the_bfd_section->owner);
+  if (zeinfo_iter == zeinfo_cache.end ())
+    {
+      dprintf ("No entry in zeinfo_cache for \'%s\'.",
+	       sec->the_bfd_section->name);
+      return {};
+    }
+
+  const std::optional<std::string> kernel_name = intelgt_get_kernel_name (sec);
+  if (!kernel_name.has_value ())
+    return {};
+
+  for (const auto &kernels_entry : zeinfo_iter->second.kernels)
+    if (kernels_entry.first == *kernel_name)
+      {
+	auto pr_size = kernels_entry.second.offset_to_skip_per_thread_data_load;
+	if (pr_size.has_value () && *pr_size > sec->the_bfd_section->size)
+	  {
+	    dprintf ("Error: prologue is larger than the kernel (%d vs %ld).",
+		     *pr_size, sec->the_bfd_section->size);
+	    return {};
+	  }
+	return pr_size;
+      }
+
+  return {};
+}
 
 /* Return workgroup coordinates of the specified thread TP.  */
 

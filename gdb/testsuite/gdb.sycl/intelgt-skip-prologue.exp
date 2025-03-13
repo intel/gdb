@@ -1,0 +1,60 @@
+# Copyright 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test hitting breakpoint set with gpu kernel's name without debug info.
+# Given program without debug info, set a breakpoint using the name of
+# the kernel.  GDB is expected to find prologue size based on the 'zeinfo'
+# section, and adjust breakpoint accordingly.  Continue, and check that
+# the breakpoint has been hit.
+
+load_lib sycl.exp
+load_lib intelgt-utils.exp
+
+standard_testfile parallel-for-1D.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl nodebug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    sycl_with_intelgt_lock $device {
+	# Skip if it's not GPU.
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	clean_restart "${binfile}"
+	if {![sycl_start $device]} {
+	    continue
+	}
+
+	gdb_breakpoint "kernel" {temporary}
+	gdb_continue_to_breakpoint "breakpoint at the kernel" \
+	    ".*main::\\\{lambda\\\(.*\\\)#1\\\}::operator\\\(\\\)\\\(.*\\\).*"
+
+	gdb_test "info shared"
+	gdb_test "x/i \$pc"
+
+	gdb_continue_to_end "" continue 1
+    }
+}

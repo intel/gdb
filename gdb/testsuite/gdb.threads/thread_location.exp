@@ -1,0 +1,80 @@
+# Copyright (C) 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests the $_location_filename and $_location_linenum convenience
+# variables for the "thread filter" command.
+
+standard_testfile "multi-create.c"
+
+if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
+    executable {debug}] != "" } {
+    return -1
+}
+
+proc get_stopped_threads {match_text} {
+    set stopped_threads {}
+    set fill "\[^\r\n\]+"
+
+    gdb_test_multiple "info threads -stopped" "stopped threads: $match_text" {
+	-re "\r\n. ($::decimal)${fill} $match_text" {
+	    lappend stopped_threads $expect_out(1,string)
+	    exp_continue
+	}
+	-re -wrap "" {
+	    pass $gdb_test_name
+	}
+    }
+
+    return $stopped_threads
+}
+
+proc test_thread_filter {thr_range expr m_list test_name} {
+    set filtered_tid_list {}
+    set fill "\[^\r\n\]+"
+
+    set cmd "thread filter $thr_range $expr"
+    gdb_test_multiple $cmd "$test_name" {
+	-re "Filtered Threads.*\\\"(${fill})\\\"\r\n" {
+	    set filtered_tid_list [split $expect_out(1,string) ","]
+	    exp_continue
+	}
+	-re -wrap "" {
+	}
+    }
+
+    gdb_assert {[lsearch -exact $filtered_tid_list $m_list] == 0} \
+	"Filtered list matches for $test_name"
+}
+
+clean_restart $::binfile
+runto_main
+
+set linenum [gdb_get_line_number "thread-filter-bp"]
+set bp_location $srcfile:$linenum
+gdb_breakpoint $bp_location
+gdb_continue_to_breakpoint "$srcfile:$linenum"
+
+set stopped_threads [get_stopped_threads "thread_function"]
+
+set test_list_d [lsort -decreasing $stopped_threads]
+
+# Verify the "thread filter" command returns the expected list of threads
+# using $_location_filename and $_location_linenum convenience variables
+# in the expression option.
+test_thread_filter "all" \
+    "\$_streq(\$_location_filename, \"${srcdir}/${subdir}/${srcfile}\")" \
+    $test_list_d "Test location_filename convenience variable"
+test_thread_filter "all" "\$_location_linenum==$linenum" $test_list_d \
+    "Test location_linenum convenience variable"

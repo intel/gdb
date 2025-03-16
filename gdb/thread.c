@@ -3721,6 +3721,62 @@ simd_width_make_value (gdbarch *gdbarch, internalvar *var, void *ignore)
 			     simd_width);
 }
 
+/* Returns the location filename info of the selected thread.  Returns an
+   empty string value if sal is null for the current selected frame.  */
+
+static value *
+location_filename_make_value (gdbarch *gdbarch, internalvar *var, void *ignore)
+{
+  const struct builtin_type *bt = builtin_type (gdbarch);
+  frame_info_ptr frame = nullptr;
+
+  try
+    {
+      frame = get_selected_frame (nullptr);
+    }
+  catch (...)
+    {
+      return value::allocate (bt->builtin_void);
+    }
+
+  symtab_and_line sal = find_frame_sal (frame);
+
+  std::string filename = (sal.symtab != nullptr)
+    ? symtab_to_filename_for_display (sal.symtab)
+    : "";
+
+  return current_language->value_string (gdbarch, filename.c_str (),
+					 strlen (filename.c_str ()));
+}
+
+/* Returns the location line number info of the selected thread.  Returns a
+   value of -1 if sal is null for the current selected frame.  */
+
+static value *
+location_linenum_make_value (gdbarch *gdbarch, internalvar *var, void *ignore)
+{
+  const struct builtin_type *bt = builtin_type (gdbarch);
+  frame_info_ptr frame = nullptr;
+
+  try
+    {
+      frame = get_selected_frame (nullptr);
+    }
+  catch (...)
+    {
+      return value::allocate (bt->builtin_void);
+    }
+
+  symtab_and_line sal = find_frame_sal (frame);
+
+  int line_num = (sal.symtab != nullptr)
+    ? sal.line
+    : -1;
+
+  return value_from_longest (builtin_type (gdbarch)->builtin_int,
+			     line_num);
+}
+
 /* Return a new value with workgroup coordinates of the selected thread.
    Return void if the workgroup is not defined or there is no thread
    selected.  */
@@ -3885,6 +3941,22 @@ static const internalvar_funcs simd_lane_funcs =
 static const internalvar_funcs simd_width_funcs =
 {
   simd_width_make_value,
+  nullptr,
+};
+
+/* Implementation of the `$_location_filename' variable.  */
+
+static const internalvar_funcs thread_location_filename_info =
+{
+  location_filename_make_value,
+  nullptr,
+};
+
+/* Implementation of the `$_location_linenum' variable.  */
+
+static const internalvar_funcs thread_location_linenum_info =
+{
+  location_linenum_make_value,
   nullptr,
 };
 
@@ -4142,4 +4214,8 @@ When on messages about thread creation and deletion are printed."),
 				&workitem_global_size_funcs, nullptr);
   create_internalvar_type_lazy ("_kernel_instance_id",
 				&kernel_instance_id_funcs, nullptr);
+  create_internalvar_type_lazy ("_location_filename",
+				&thread_location_filename_info, nullptr);
+  create_internalvar_type_lazy ("_location_linenum",
+				&thread_location_linenum_info, nullptr);
 }

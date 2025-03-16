@@ -669,6 +669,8 @@ set show_conv_list \
 	{$_simd_width = -1} \
 	{$_thread = 0} \
 	{$_thread_workgroup = void} \
+	{$_location_filename = void} \
+	{$_location_linenum = void} \
 	{$_workitem_local_id = void} \
 	{$_workitem_global_id = void} \
 	{$_workitem_local_size = void} \

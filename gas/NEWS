@@ -1,5 +1,10 @@
 -*- text -*-
 
+* Support for x86 AVX10.2 256 bit rounding has been dropped, as all the
+  hardware would directly support 512 bit vecotr width.
+
+Changes in 2.44:
+
 * Add support for the x86 Intel Diamond Rapids AMX instructions, including
   AMX-AVX512, AMX-FP8, AMX-MOVRS, AMX-TF32 and AMX-TRANSPOSE.
 

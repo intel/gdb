@@ -1,0 +1,203 @@
+# Copyright 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests that offloaded kernel code can be debugged w/o using a native host
+# inferior.
+
+load_lib sycl.exp
+load_lib gdbserver-support.exp
+
+standard_testfile .cpp
+
+require have_gdbserver_ze
+
+# Helper joining all ARGS with whitespaces inbetween and at the end.
+proc wrap_regex_with_spaces_and_tabs { args } {
+    set ws "\[ \\t\]+"
+    return "[join ${args} ${ws}]${ws}"
+}
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    $binfile $srcfile {sycl debug}]} {
+    return -1
+}
+
+proc start_gdbserver_and_attach {executable device} {
+    save_vars { env(::GDBSERVER) } {
+	set ::GDBSERVER "gdbserver-ze"
+
+	clean_restart
+	gdbserver_start_extended ""
+    }
+
+    # Spawn SYCL application and attach.
+    set test_spawn_id [spawn_sycl_proc $executable $device]
+
+    # Obtain PID to attach.
+    set test_pid [spawn_id_get_pid $test_spawn_id]
+    gdb_assert {$test_pid > 0}
+
+    # Sleep for two seconds to ensure the SYCL backend is initialized
+    # so that we can attach to the program.
+    sleep 2
+
+    verbose -log "spawn id: $test_spawn_id, test pid: $test_pid"
+
+    gdb_test "attach $test_pid" "Attaching to (process|program) $test_pid.*" \
+	"attach command"
+
+    return $test_spawn_id
+}
+
+foreach device $sycl_device_list {
+
+    sycl_with_intelgt_lock $device {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	set test_spawn_id [start_gdbserver_and_attach $binfile $device]
+	verbose -log "gdbserver spawn id: $server_spawn_id"
+
+	set kernel_first_line [gdb_get_line_number "kernel-first-line"]
+	set fourth_loc [gdb_get_line_number "fourth-loc"]
+	set third_loc [gdb_get_line_number "third-loc"]
+	set second_loc [gdb_get_line_number "second-loc"]
+	set first_loc [gdb_get_line_number "first-loc"]
+	set outer_loc [gdb_get_line_number "outer-loc"]
+
+	# MinGW and Cygwin use pseudo terminal, which is not properly detected
+	# by 'isatty ()'.  The 'gdb_breakpoint <breakpoint> {allow-pending}',
+	# is not feasible as the query to insert a pending breakpoint is
+	# defaulted to NO.
+	gdb_test_no_output "set breakpoint pending on"
+	gdb_test "break $srcfile:$kernel_first_line" \
+	    "No symbol table is loaded.*" \
+	    "First breakpoint inside kernel"
+
+	gdb_continue_to_breakpoint "continue to kernel" ".*$srcfile:$kernel_first_line.*"
+
+	# Make sure there is only a single connection.
+	set ws "\[ \t\]+"
+	gdb_test "info connections" \
+	    [multi_line \
+		"Num${ws}What${ws}Description${ws}" \
+		"\\* 1${ws}extended-remote localhost:$decimal${ws}Extended remote target using gdb-specific protocol${ws}"
+	    ]
+
+	# Check that we can step inside the kernel.
+	gdb_test_no_output "set scheduler-locking step"
+	gdb_test "next" "int elem = .*" "next 1"
+	gdb_test "next" "int elem2 = .*" "next 2"
+	gdb_test "next" "out\\\[wiID\\\] = .*" "next 3"
+
+	# Calculate expected frame arguments.
+	set x1 [get_integer_valueof "elem" 0 "get value of 'elem'"]
+	set y1 [get_integer_valueof "elem2" 0 "get value of 'elem2'"]
+	set x2 [expr $x1 + 5]
+	set y2 [expr $y1 - 3]
+	set x3 [expr $x2 + 5]
+	set y3 [expr $y2 - 3]
+	set x4 [expr $x3 + 5]
+	set y4 [expr $y3 - 3]
+
+	set fill "\[^\r\n\]*"
+	set fourth_desc "fourth \\(x4=$x4, y4=$y4\\) at ${fill}$srcfile:$fourth_loc"
+	set third_desc "third \\(x3=$x3, y3=$y3\\) at ${fill}$srcfile:$third_loc"
+	set second_desc "second \\(x2=$x2, y2=$y2\\) at ${fill}$srcfile:$second_loc"
+	set first_desc "first \\(x1=$x1, y1=$y1\\) at ${fill}$srcfile:$first_loc"
+	set outer_desc "${fill}operator\\(\\)${fill} at ${fill}$srcfile:$outer_loc"
+
+	# Check that we can step into a function.
+	gdb_test "step" "int result = .*" "step into 'first'"
+	gdb_test "step" "return third .*" "step into 'second'"
+	gdb_test "step" "return fourth .*" "step into 'third'"
+	gdb_test "step" "return x4 \\\+ y4.*" "step into 'fourth'"
+
+	# Limit the backtrace to 5 frames because frame #5
+	# and beyond are implementation-specific to the SYCL runtime.
+	gdb_test "backtrace 5" [multi_line \
+				"#0${fill} $fourth_desc" \
+				"#1${fill} $third_desc" \
+				"#2${fill} $second_desc" \
+				"#3${fill} $first_desc" \
+				"#4${fill} $outer_desc.*"]
+
+	# Setup the expected return values.
+	set return_fourth [expr $x4 + $y4]
+	set return_third [expr $return_fourth + 30]
+	set return_second [expr $return_third + 30]
+	set return_first [expr $return_second + 30]
+
+	# Store frame descriptors as a list for convenience.
+	# We use this when we apply the 'finish' command.
+	set list_desc [list $fourth_desc $third_desc $second_desc $first_desc $outer_desc]
+	set return_values [list $return_fourth $return_third $return_second $return_first]
+
+	# We finish frames from fourth to first in a loop.
+	gdb_test_no_output "set scheduler-locking on" \
+	    "first set scheduler-locking on"
+
+	for {set i 0} {$i < 4} {incr i} {
+	    with_test_prefix "finish  #$i" {
+		set val_exp [lindex $return_values $i]
+
+		# Finish the function calls.
+		set value_returned "\r\nValue returned is $valnum_re = $val_exp"
+
+		# Find frame descriptors for the starting and ending frames.
+		set desc_from [lindex $list_desc $i]
+		set desc_to [lindex $list_desc [expr $i + 1]]
+
+		gdb_test "finish" [multi_line \
+				   "Run till exit from #0$fill$desc_from" \
+				   "$fill$desc_to" \
+				   "${fill}${value_returned}"]
+	    }
+	}
+
+	# Continue to breakpoint 1 with another thread.
+	gdb_test_no_output "set scheduler-locking off"
+	gdb_continue_to_breakpoint "continue inside kernel" ".*$srcfile:$kernel_first_line.*"
+
+	# Delete first breakpoint and insert new breakpoint at end of kernel.
+	gdb_test_no_output "delete 1"
+	gdb_breakpoint "$srcfile:$outer_loc" {temporary}
+
+	# Resuming should make only the current thread move.
+	gdb_test_no_output "set scheduler-locking on" \
+	    "second set scheduler-locking on"
+	set current_thread [get_current_thread "line $kernel_first_line"]
+	gdb_test "continue" \
+	    "Thread $current_thread \[^\r\n\]+$srcfile:$outer_loc.*" \
+	    "hit the last line"
+
+	# Disable scheduler-locking and continue to end.
+	gdb_test_no_output "set scheduler-locking off" \
+	    "second set scheduler-locking off"
+
+	continue_sycl_program_to_termination
+
+	kill_wait_spawned_process $test_spawn_id
+    }
+}

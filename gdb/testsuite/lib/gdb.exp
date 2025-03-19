@@ -6036,6 +6036,7 @@ proc gdb_compile {source dest type options} {
 	    lappend new_options {additional_flags=-fuse-ld=lld}
 	    lappend new_options {additional_flags=-Xlinker /ignore:longsections}
 	    lappend new_options {additional_flags=-Wno-unused-command-line-argument}
+	    lappend new_options {additional_flags=-D_MBCS}
 	}
 
 	# icpx/icx give the following warning if '-g' is used without '-O'.

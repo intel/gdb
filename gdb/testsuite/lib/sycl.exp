@@ -61,6 +61,16 @@ proc require_sycl_device {device type name} {
     return [expr $type_match && $name_match]
 }
 
+# Return 1 if gdbserver-ze is found in the PATH variable.
+
+proc have_gdbserver_ze {} {
+    if {[catch {exec which "gdbserver-ze"}] != 0} {
+	# 'gdbserver-ze' not found.
+	return 0
+    }
+    return 1
+}
+
 # Remove duplicates from the input available devices list for CPU and FPGA.
 # Duplicates may exists due to multiple runtimes installed on a machine.  So
 # remove the duplicate entry as the test can not choose among them.

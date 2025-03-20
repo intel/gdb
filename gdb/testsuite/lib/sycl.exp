@@ -250,7 +250,14 @@ gdb_caching_proc init_sycl_devices_list {} {
 	}
     }
 
-    set supported_sycl_device_list [get_sycl_supported_devices $sycl_device_list]
+    # HACK: We need to workaround on Windows by using a single inferior only.
+    # The 'sycl-hello' example doesn't work in this case.  Simply assume the device
+    # is supported for now.
+    if {[istarget "*-*-mingw*"]} {
+	set supported_sycl_device_list $sycl_device_list
+    } else {
+	set supported_sycl_device_list [get_sycl_supported_devices $sycl_device_list]
+    }
     if {($result == 0) && ([llength $supported_sycl_device_list])} {
 	verbose "SYCL: Devices found: $supported_sycl_device_list" 0
     } else {

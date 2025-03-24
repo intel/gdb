@@ -87,28 +87,6 @@ struct tp_emask
   unsigned int emask;
 };
 
-/* A structure to store the filter options and the list of thread ids
-   for the output of the "thread filter" command.  */
-
-struct thread_filter_parameters
-{
-  /* Filter threads where location is matching this line number.  */
-  unsigned int lineno = -1;
-
-  /* Filter threads where location is matching this file name.  */
-  std::string filename;
-
-  /* Filter threads where this expression evaluates to true.  */
-  std::string expression;
-
-  /* The list of thread ids for the output, which may be filtered if one of the
-     optional filtering options are used.  */
-  std::string tid_list;
-
-  /* These flags are used to control the output.  */
-  qcs_flags flags;
-};
-
 static std::string print_thread_id_string (thread_info *, unsigned long,
 					   int current_lane = -1,
 					   const bool print_warning = false);
@@ -864,6 +842,16 @@ find_thread_id (struct inferior *inf, int thr_num)
       return tp;
 
   return NULL;
+}
+
+static struct thread_info *
+find_thread_by_global_id (struct inferior *inf, int thr_num)
+{
+  for (thread_info *tp : inf->threads ())
+    if (tp->global_num == thr_num)
+      return tp;
+
+  return nullptr;
 }
 
 /* See gdbthread.h.  */
@@ -1804,9 +1792,9 @@ No selected thread.  See `help thread'.\n");
 
 void
 print_thread_info (struct ui_out *uiout, const char *requested_threads,
-		   int pid, info_threads_opts opts)
+		   int pid, info_threads_opts opts, int global_ids)
 {
-  print_thread_info_1 (uiout, requested_threads, 1, pid, opts);
+  print_thread_info_1 (uiout, requested_threads, global_ids, pid, opts);
 }
 
 /* Create an option_def_group for the "info threads" options, with
@@ -2578,47 +2566,9 @@ thread_filter_append_thread_info (thread_info *tp,
     }
 }
 
-/* Common function for the "thread apply all" and the "thread filter all"
-   commands.
-   "thread apply": Apply a GDB command to a list of threads and SIMD lanes.
-   "thread filter": Prints the list of filtered thread ids using the
-   location option of the command.
+/* See gdbthread.h.  */
 
-   List syntax is a whitespace separated list of numbers, or ranges, or the
-   keyword `all', or the keyword `all-lanes'.  Ranges consist of two numbers
-   separated by a hyphen.  Examples:
-
-   thread apply 1 2 7 4 backtrace       Apply backtrace cmd to threads 1,2,7,4
-   thread apply 2-7 9 p foo(1)  Apply p foo(1) cmd to threads 2->7 & 9
-   thread apply all x/i $pc   Apply x/i $pc cmd to all threads, the default
-   SIMD lane.
-   thread apply all-lanes p foo(1)    Apply p foo(1) cmd to all active SIMD
-   lanes of all threads
-
-   thread filter 1 2 7 -location file.c:10 $_thread>2	Print the list of
-   thread ids from threads 1->7 having file name file.c, line number equals to
-   10 and thread id is greater than 2.  The input list in the form of range
-   is similar to the thread apply example above.
-
-   If IS_FILTER is "true", this function processes the "thread filter"
-   command, otherwise it handles the "thread apply" command.  For
-   "thread filter" command input and output parameters, pass FILTER_PARAMS.
-
-   With SIMD syntax ranges are parsed as follows:
-   Item     Expanded items
-   1.2:3    1.2:3
-   :4       1.2:4
-   1:5-7    1.1:5 1.1:6 1.1:7
-   2-3      1.2:<default lane> 1.3:<default lane>
-   2-3:4-6  1.2:2 1.2:3 1.2:4 1.3:2 1.3:3 1.3:4
-   2.3:*    2.3:<all active lanes>
-   3.4-6    3.4:<default lane> 3.5:<default lane> 3.6:<default lane>
-   3.4-5:*  3.4:<all active lanes> 3.5:<all active lanes>
-
-   Where the default lane is the currently selected lane within
-   the SIMD thread if it is active, or the first active lane.  */
-
-static void
+void
 thread_apply_and_filter_all_cmd_1 (const char *cmd, int from_tty,
 				   simd_lane_kind lane_kind, bool is_filter,
 				   thread_filter_parameters *filter_params)
@@ -2922,18 +2872,14 @@ thread_apply_all_command (const char *cmd, int from_tty)
 				     nullptr);
 }
 
-/* The implementation of the "thread apply [ID list]" and the "thread filter
-   [ID list] command.  If the IS_FILTER flag is true then this function
-   handles the "thread filter" command, otherwise it handles the
-   "thread apply" command.  The FILTER_PARAMS is used to store the input
-   arguments of the "thread filter" command and also the filtered list of
-   thread ids for the output.  */
+/* See gdbthread.h.  */
 
-static void
+void
 thread_apply_and_filter_cmd (const char *tidlist,
 			     int from_tty,
 			     bool is_filter,
-			     thread_filter_parameters *filter_params)
+			     thread_filter_parameters *filter_params,
+			     int global_ids)
 {
   qcs_flags flags;
   const char *cmd = NULL;
@@ -3018,7 +2964,12 @@ thread_apply_and_filter_cmd (const char *tidlist,
 
       inf = find_inferior_id (inf_num);
       if (inf != NULL)
-	tp = find_thread_id (inf, thr_num);
+	{
+	  if (global_ids)
+	    tp = find_thread_by_global_id (inf, thr_num);
+	  else
+	    tp = find_thread_id (inf, thr_num);
+	}
 
       bool in_thread_star_range = parser.in_thread_star_range ();
       if (in_thread_star_range)

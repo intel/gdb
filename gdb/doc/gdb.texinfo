@@ -34471,6 +34471,54 @@ The corresponding @value{GDBN} command is @samp{pwd}.
 @section @sc{gdb/mi} Thread Commands
 
 
+@findex -thread-filter
+@subheading The @code{-thread-filter} Command
+
+@subsubheading Synopsis
+
+@smallexample
+ -thread-filter [ @var{thread-id-list} | 
+                  @var{--selected-lanes} | @var{--all-lanes} ] 
+                [ @var{--unavailable} ] [ @var{expression} ]
+@end smallexample
+
+Filters and prints info of filtered threads from the selected range.
+By default, the command filters only from available threads.
+
+@subsubheading @value{GDBN} Command
+
+The equivalent CLI command is @samp{thread filter}.  It allows filtering threads 
+based on availability, SIMD lanes and expressions.
+
+Unlike @samp{thread filter}, @samp{-thread-filter} is designed for use with MI
+interfaces.
+
+@subsubheading Result
+
+The result contains the following attributes:
+
+@table @samp
+@item threads
+A list of threads that match the specified filtering criteria.
+The format of the elements of the list is described in
+@ref{GDB/MI Thread Information}.
+
+@end table
+
+@subsubheading Example
+
+@smallexample
+-thread-filter --selected-lanes $_thread == 1
+^done,threads=[
+@{id="1",target-id="Thread 1",name="worker-thread",
+   frame=@{level="0",addr="0x00007ffff7839cab",func="thread_func",
+           args=[],file="thread_module.c",
+           fullname="/project/src/thread_module.c",
+           line="42",arch="x86_64"@},
+   thread-group="tg1",state="stopped",core="3"@}]
+(gdb)
+@end smallexample
+
 @findex -thread-info
 @subheading The @code{-thread-info} Command
 
@@ -39509,6 +39557,8 @@ pretty-printing commands, and possible presence of the
 @samp{display_hint} field in the output of @code{-var-list-children}
 @item thread-info
 Indicates support for the @code{-thread-info} command.
+@item thread-filter
+Indicates support for the @code{-thread-filter} command.
 @item data-read-memory-bytes
 Indicates support for the @code{-data-read-memory-bytes} and the
 @code{-data-write-memory-bytes} commands.

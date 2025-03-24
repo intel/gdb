@@ -72,10 +72,11 @@ proc skip_openmp_tests {device} {
 	}
 
 	clean_restart $exe
+	gdb_run_cmd
 
 	set gdbserver_started 0
 	set test "Test OpenMP support"
-	gdb_test_multiple "run" $test {
+	gdb_test_multiple "" $test {
 	    -re "id ($hex) \\\((Gen$decimal)\\\).*\r\n" {
 		set openmp_device_id $expect_out(1,string)
 		set openmp_device_generation $expect_out(2,string)

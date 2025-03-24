@@ -1,0 +1,79 @@
+# Copyright (C) 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test for the '-thread-filter' command.
+
+load_lib sycl.exp
+load_lib mi-support.exp
+set MIFLAGS "-i=mi"
+
+standard_testfile "interrupt-thread-group.c"
+
+if {[gdb_compile_pthreads "$srcdir/$subdir/$srcfile" $binfile \
+	 executable {debug additional_flags=-std=gnu99}] != "" } {
+    return -1
+}
+
+set thread_filter_line [gdb_get_line_number "all_threads_started"]
+
+mi_clean_restart $binfile
+mi_create_breakpoint "$srcfile:$thread_filter_line" \
+    "set breakpoint in all_threads_started"
+mi_run_cmd
+mi_expect_stop "breakpoint-hit" "all_threads_started" ".*" ".*" ".*" \
+    {"" "disp=\"keep\""} "stops at all_threads_started"
+
+# Count the number of threads reported
+# by the "-thread-filter" command.
+foreach case {"--selected-lanes \$_gthread > 1" \
+	      "--selected-lanes \$_gthread < 1" \
+	      "2 3"} {
+    set num_threads 0
+    set cmd "-thread-filter $case"
+    gdb_test_multiple "$cmd" "$cmd" {
+	-re "\\^done,threads=\\\[" {
+	    exp_continue
+	}
+	-re "state=\"stopped\"" {
+	    incr num_threads
+	    exp_continue
+	}
+	-re ".*$mi_gdb_prompt" {
+	    if {$case eq "--selected-lanes \$_gthread > 1"} {
+		gdb_assert {$num_threads > 2} \
+		    "-thread-filter $case: $num_threads"
+	    } elseif {$case eq "--selected-lanes \$_gthread < 1"} {
+		gdb_assert {$num_threads == 0} \
+		    "-thread-filter $case: $num_threads"
+	    } else {
+		gdb_assert {$num_threads == 2} \
+		    "-thread-filter $case: $num_threads"
+	    }
+	}
+    }
+}
+
+# Check invalid combinations.
+mi_gdb_test "-thread-filter" \
+    "\\^error,msg=\"Please specify a thread ID list\"" \
+    "Please specify a thread ID list"
+
+mi_gdb_test "-thread-filter 0 1 2 3" \
+    "\\^error,msg=\"Invalid thread ID 0: 0 1 2 3 \"" \
+    "Invalid thread ID 0: 0 1 2 3"
+
+mi_gdb_test "-thread-filter --c --s" \
+    "\\^error,msg=\"-thread-filter: -c and -s are mutually exclusive\"" \
+    "thread filter all: -c and -s are mutually exclusive"

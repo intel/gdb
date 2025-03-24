@@ -593,6 +593,118 @@ mi_cmd_thread_execution_mask (const char *command, const char *const *argv,
 }
 
 void
+mi_cmd_thread_filter (const char *command, const char *const *argv, int argc)
+{
+  int index = 0;
+
+  enum option
+    {
+      ALL_OPT,
+      ALL_LANES_OPT,
+      UNAVAILABLE_OPT,
+      QUIET_OPT,
+      CONT_OPT,
+      SILENT_OPT
+    };
+
+  static const struct mi_opt opts[] =
+    {
+      {"-unavailable", UNAVAILABLE_OPT, 0},
+      {"-selected-lanes", ALL_OPT, 0},
+      {"-all-lanes", ALL_LANES_OPT, 0},
+      {"-q", QUIET_OPT, 0},
+      {"-c", CONT_OPT, 0},
+      {"-s", SILENT_OPT, 0},
+      {nullptr, 0, 0 }
+    };
+
+  qcs_flags flags;
+
+  /* Parse arguments.  */
+  int oind = 0;
+  const char *oarg;
+
+  bool enable_all = false;
+  bool enable_all_lanes = false;
+  bool unavailable = false;
+
+  while (true)
+    {
+      int opt = mi_getopt_allow_unknown ("-thread-filter",
+					 argc, argv, opts, &oind, &oarg);
+      if (opt < 0)
+	  break;
+      switch (opt)
+	{
+	  case ALL_OPT:
+	    enable_all = true;
+	    index++;
+	    break;
+	  case ALL_LANES_OPT:
+	    enable_all_lanes = true;
+	    index++;
+	    break;
+	  case UNAVAILABLE_OPT:
+	    unavailable = true;
+	    index++;
+	    break;
+	  case QUIET_OPT:
+	    flags.quiet = true;
+	    index++;
+	    break;
+	  case CONT_OPT:
+	    flags.cont = true;
+	    index++;
+	    break;
+	  case SILENT_OPT:
+	    flags.silent = true;
+	    index++;
+	    break;
+	}
+    }
+
+  // Validate qcs_flags
+  validate_flags_qcs ("-thread-filter", &flags);
+
+  std::string cmd;
+
+  if (unavailable)
+    cmd = "-unavailable ";
+  if (flags.quiet)
+    cmd += "-q ";
+  if (flags.cont)
+    cmd += "-c ";
+  if (flags.silent)
+    cmd += "-s ";
+
+  while (index < argc)
+   {
+     cmd.append (argv[index++]).append (" ");
+   }
+
+  thread_filter_parameters filter_params;
+
+  if (enable_all)
+    thread_apply_and_filter_all_cmd_1 (cmd.c_str (), 0,
+				       simd_lane_kind::SIMD_LANE_DEFAULT,
+				       true, &filter_params);
+  else if (enable_all_lanes)
+    thread_apply_and_filter_all_cmd_1 (cmd.c_str (), 0,
+				       simd_lane_kind::SIMD_LANE_ALL_ACTIVE,
+				       true, &filter_params);
+  else
+    thread_apply_and_filter_cmd (cmd.c_str (), 0, true,
+				 &filter_params, 1);
+
+  if (!filter_params.tid_list.empty ())
+    {
+      info_threads_opts it_opts {false, false, false, false};
+      print_thread_info (current_uiout, filter_params.tid_list.c_str (),
+			 -1, it_opts, 0);
+    }
+}
+
+void
 mi_cmd_thread_hit_lanes_mask (const char *command, const char *const *argv,
 			      int argc)
 {

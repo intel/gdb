@@ -766,6 +766,27 @@ using inferior_ref
 /* Create an empty thread list, or empty the existing one.  */
 extern void init_thread_list (void);
 
+/* A structure to store the input options and the filtered list of
+thread ids for the "thread filter" command.  */
+
+struct thread_filter_parameters
+{
+  /* Filter threads where location is matching this line number.  */
+  unsigned int lineno = -1;
+
+  /* Filter threads where location is matching this file name.  */
+  std::string filename;
+
+  /* Filter threads where this expression evaluates to true.  */
+  std::string expression;
+
+  /* The list of filtered thread ids for the output.  */
+  std::string tid_list;
+
+  /* These flags are used to control the output.  */
+  qcs_flags flags;
+};
+
 /* Add a thread to the thread list, print a message
    that a new thread is found, and return the pointer to
    the new thread.  Caller my use this pointer to 
@@ -996,6 +1017,64 @@ extern void set_executing (process_stratum_target *targ,
    executing.  */
 extern bool threads_are_executing (process_stratum_target *targ);
 
+/* Common function for the "thread apply all" and the "thread filter all"
+commands.
+"thread apply": Apply a GDB command to a list of threads and SIMD lanes.
+"thread filter": Prints the list of filtered thread ids using the
+location option of the command.
+
+List syntax is a whitespace separated list of numbers, or ranges, or the
+keyword `all', or the keyword `all-lanes'.  Ranges consist of two numbers
+separated by a hyphen.  Examples:
+
+   thread apply 1 2 7 4 backtrace       Apply backtrace cmd to threads 1,2,7,4
+thread apply 2-7 9 p foo (1)  Apply p foo (1) cmd to threads 2->7 & 9
+     thread apply all x/i $pc   Apply x/i $pc cmd to all threads, the default
+SIMD lane.
+   thread apply all-lanes p foo (1)    Apply p foo (1) cmd to all active SIMD
+lanes of all threads
+
+thread filter 1 2 7 -location file.c:10 $_thread>2	Print the list of
+thread ids from threads 1->7 having file name file.c, line number equals to
+10 and thread id is greater than 2.  The input list in the form of range
+is similar to the thread apply example above.
+
+If IS_FILTER is "true", this function processes the "thread filter"
+command, otherwise it handles the "thread apply" command.  For
+"thread filter" command input and output parameters, pass FILTER_PARAMS.
+
+With SIMD syntax ranges are parsed as follows:
+   Item     Expanded items
+   1.2:3    1.2:3
+   :4       1.2:4
+   1:5-7    1.1:5 1.1:6 1.1:7
+   2-3      1.2:<default lane> 1.3:<default lane>
+2-3:4-6  1.2:2 1.2:3 1.2:4 1.3:2 1.3:3 1.3:4
+   2.3:*    2.3:<all active lanes>
+   3.4-6    3.4:<default lane> 3.5:<default lane> 3.6:<default lane>
+3.4-5:*  3.4:<all active lanes> 3.5:<all active lanes>
+
+Where the default lane is the currently selected lane within
+the SIMD thread if it is active, or the first active lane.  */
+extern void thread_apply_and_filter_all_cmd_1 (const char *cmd, int from_tty,
+					       simd_lane_kind lane_kind,
+					       bool is_filter,
+					       thread_filter_parameters
+					       *filter_params);
+
+
+/* The implementation of the "thread apply[ID list]" and the "thread filter
+[ID list] command.  If the IS_FILTER flag is true then this function
+handles the "thread filter" command, otherwise it handles the
+"thread apply" command.  The FILTER_PARAMS is used to store the input
+arguments of the "thread filter" command and also the filtered list of
+thread ids for the output.  If GLOBAL_IDS is set to 1, TIDLIST is treated
+as a list of global thread IDs.  */
+extern void thread_apply_and_filter_cmd (const char *tidlist, int from_tty,
+					 bool is_filter,
+					 thread_filter_parameters
+					 *filter_params, int global_ids = 0);
+
 /* Merge the executing property of thread PTID of TARG over to its
    thread state property (frontend running/stopped view).
 
@@ -1029,15 +1108,19 @@ extern void thread_command (const char *tidstr, int from_tty);
 extern bool print_thread_events;
 
 /* Prints the list of threads and their details on UIOUT.  If
-   REQUESTED_THREADS, a list of GDB ids/ranges, is not NULL, only
-   print threads whose ID is included in the list.  If PID is not -1,
-   only print threads from the process PID.  Otherwise, threads from
-   all attached PIDs are printed.  If both REQUESTED_THREADS is not
-   NULL and PID is not -1, then the thread is printed if it belongs to
-   the specified process.  Otherwise, an error is raised.  */
+REQUESTED_THREADS, a list of GDB ids/ranges, is not NULL, only
+print threads whose ID is included in the list.  If PID is not -1,
+only print threads from the process PID.  Otherwise, threads from
+all attached PIDs are printed.  If both REQUESTED_THREADS is not
+NULL and PID is not -1, then the thread is printed if it belongs to
+the specified process.  Otherwise, an error is raised.  GLOBAL_IDS indicates
+whether REQUESTED_THREADS is a list of global or per-inferior thread IDs.
+If set to 1, REQUESTED_THREADS is treated as a list of global thread IDs.
+If set to 0, it is treated as a list of per-inferior thread IDs.  */
 extern void print_thread_info (struct ui_out *uiout,
 			       const char *requested_threads,
-			       int pid, info_threads_opts opts);
+			       int pid, info_threads_opts opts,
+			       int global_ids = 1);
 
 /* Save/restore current inferior/thread/frame.  */
 

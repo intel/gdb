@@ -163,6 +163,14 @@ info threads [-gid] [-stopped] [ID]...
      'hit-lanes-mask' to its output.  The mask encodes for which lanes
      the breakpoint condition was evaluated to true.
 
+  ** '-thread-filter thread-list|--all-lanes|--selected-lanes [--unavailable]
+							      [--q/--s/--c]
+							      [EXPRESSION]'
+
+    Added a new MI command '-thread-filter' which is equivalent to CLI command
+    'thread filter'.  The command is used to print the info of filtered
+    threads from the selected range of threads.
+
   ** '-device-info'
 
      Added new MI command '-device-info' which is equivalent to CLI command

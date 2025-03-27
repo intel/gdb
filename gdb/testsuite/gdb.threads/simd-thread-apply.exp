@@ -374,6 +374,8 @@ foreach device $sycl_device_list {
 	    thread_apply "${prefix}${t_1}" "$inf.$t_1:2" $msg
 	    thread_apply "${prefix}${t_1}:3" "$inf.$t_1:3" $msg
 	    thread_apply "${prefix}${t_1}:3-5" [lanes_of "$inf.$t_1" "3 4 5"] $msg
+	    thread_apply "${prefix}${t_1}:\[3-5\]" [lanes_of "$inf.$t_1" "3 4 5"] "$msg with brackets "
+	    thread_apply "${prefix}${t_1}:\[3 5 7\]" [lanes_of "$inf.$t_1" "3 5 7"] "$msg individual lanes "
 	    thread_apply "${prefix}${t_1}:*" "$all_lanes_1" $msg
 
 	    # Thread range.
@@ -381,6 +383,10 @@ foreach device $sycl_device_list {
 	    set range_to_ignore_2_3 "[range_re $t_2 $t_3]"
 	    thread_apply "${prefix}${t_1}-${t_2}" "$inf.$t_1:2 $inf.$t_2:3" \
 		$msg "$inf\.($range_to_ignore_1_2)"
+	    thread_apply "${prefix}\[${t_1}-${t_2}\]" "$inf.$t_1:2 $inf.$t_2:3" \
+		"$msg as range with brackets " "$inf\.($range_to_ignore_1_2)"
+	    thread_apply "${prefix}\[${t_1} ${t_2}\]" "$inf.$t_1:2 $inf.$t_2:3" \
+		"$msg as set " "$inf\.($range_to_ignore_1_2)"
 	    thread_apply "${prefix}${t_1}-${t_3}" \
 		"$inf.$t_1:2 $inf.$t_2:3 $inf.$t_3:4" \
 		$msg "$inf\.($range_to_ignore_1_2|$range_to_ignore_2_3)"

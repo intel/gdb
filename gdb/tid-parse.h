@@ -165,10 +165,10 @@ private:
   tid_range_parser (const tid_range_parser &);
   tid_range_parser &operator= (const tid_range_parser &);
 
-  /* Process the inferior state.  */
-  bool process_inferior_state (const char *space);
-  /* Process the thread state.  */
-  bool process_thread_state (const char *space);
+  /* Process the inferior state for input NEXT.  */
+  bool process_inferior_state (const char *next);
+  /* Process the thread state for input NEXT.  */
+  bool process_thread_state (const char *next);
   /* Process the SIMD lane state.  */
   bool process_simd_lane_state ();
   bool get_tid_or_range (int *inf_num, int *thr_start, int *thr_end,

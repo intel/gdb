@@ -214,10 +214,13 @@ proc range_from_threads {threads {prefix ""} {suffix ""}} {
 	if {$start == -1} {
 	    set start [lindex $threads $i]
 	} elseif {abs ([expr $thread - $prev]) > 1} {
+	    set stop [expr max ($start, $prev)]
+	    set start [expr min ($start, $prev)]
+
 	    set thread_range "${thread_range} ${prefix}${start}"
 
-	    if {[expr $start < $prev]} {
-		set thread_range "${thread_range}-$prev"
+	    if {[expr $start < $stop]} {
+		set thread_range "${thread_range}-$stop"
 	    }
 
 	    set thread_range "${thread_range}${suffix}"
@@ -228,10 +231,12 @@ proc range_from_threads {threads {prefix ""} {suffix ""}} {
     }
 
     # Parse last list element.
+    set stop [expr max ($start, $prev)]
+    set start [expr min ($start, $prev)]
     set thread_range "${thread_range} ${prefix}${start}"
 
-    if {[expr $start < $prev]} {
-	set thread_range "${thread_range}\-$prev"
+    if {[expr $start < $stop]} {
+	set thread_range "${thread_range}\-$stop"
     }
 
     set thread_range "${thread_range}${suffix}"

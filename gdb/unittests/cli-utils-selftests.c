@@ -103,6 +103,42 @@ test_number_or_range_parser ()
     SELF_CHECK (nan.finished ());
     SELF_CHECK (strcmp (nan.cur_tok (), "-whatever") == 0);
   }
+
+  /* Test parsing a set of individual numbers encapsulated
+     into square brackets.  */
+  {
+    number_or_range_parser two_four_six ("[2 4 6]");
+    int num = 0;
+
+    SELF_CHECK (two_four_six.get_number (&num) && num == 2);
+    SELF_CHECK (two_four_six.get_number (&num) && num == 4);
+    SELF_CHECK (two_four_six.get_number (&num) && num == 6);
+    SELF_CHECK (two_four_six.finished ());
+  }
+
+  /* Test parsing a set of individual numbers encapsulated
+     into square brackets.  */
+  {
+    number_or_range_parser one_three_range ("[2-4]");
+    int num = 0;
+
+    SELF_CHECK (one_three_range.get_number (&num) && num == 2);
+    SELF_CHECK (one_three_range.get_number (&num) && num == 3);
+    SELF_CHECK (one_three_range.get_number (&num) && num == 4);
+    SELF_CHECK (one_three_range.finished ());
+  }
+
+  /* Test parsing a set of individual numbers encapsulated
+     into square brackets including extra spaces.  */
+  {
+    number_or_range_parser one_three_range ("[1 - 3]");
+    int num = 0;
+
+    SELF_CHECK (one_three_range.get_number (&num) && num == 1);
+    SELF_CHECK (one_three_range.get_number (&num) && num == 2);
+    SELF_CHECK (one_three_range.get_number (&num) && num == 3);
+    SELF_CHECK (one_three_range.finished ());
+  }
 }
 
 static void

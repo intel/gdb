@@ -273,6 +273,7 @@ number_or_range_parser::init (const char *string, int end_trailer)
   m_end_value = 0;
   m_end_ptr = NULL;
   m_in_range = false;
+  m_in_set = false;
   m_end_trailer = end_trailer;
 }
 
@@ -305,25 +306,54 @@ number_or_range_parser::get_number_overflow (int *num)
 	  /* End of range reached; advance token pointer.  */
 	  m_cur_tok = m_end_ptr;
 	  m_in_range = false;
+
+	  /* Reset state->m_in_set if range is enclosed in
+	     square brackets.  */
+	  if (m_cur_tok[-1] == ']')
+	    m_in_set = false;
 	}
     }
   else if (*m_cur_tok != '-')
     {
+      if (*m_cur_tok == '[')
+	{
+	  /* Return error if multiple opening brackets are used.  */
+	  if (m_in_set)
+	    return retval;
+
+	  m_in_set = true;
+	  m_cur_tok++;
+	}
+
       const char *restore_tok = m_cur_tok;
       /* Default case: state->m_cur_tok is pointing either to a solo
 	 number, or to the first number of a range.  */
       retval = ::get_number_trailer_overflow (&m_cur_tok, &m_last_retval, '-');
       if (NUMBER_OK != retval)
 	{
-	  /* Make another attempt only if there is a custom end trailer.  */
-	  if (m_end_trailer == 0)
-	    return retval;
 
-	  m_cur_tok = restore_tok;
-	  retval = ::get_number_trailer_overflow (&m_cur_tok, &m_last_retval,
-					 m_end_trailer);
+	  /* Make another attempt to check for the last number of a set.  */
+	  if (m_in_set)
+	    {
+	      m_cur_tok = restore_tok;
+	      retval = ::get_number_trailer_overflow (&m_cur_tok,
+						      &m_last_retval, ']');
+	    }
+
 	  if (NUMBER_OK != retval)
-	    return retval;
+	    {
+	      /* Make another attempt only if there is a custom end trailer.  */
+	      if (m_end_trailer == 0)
+		return retval;
+
+	      m_cur_tok = restore_tok;
+	      retval = ::get_number_trailer_overflow (&m_cur_tok,
+						      &m_last_retval,
+						      m_end_trailer);
+
+	      if (NUMBER_OK != retval)
+		return retval;
+	    }
 	}
 
       /* If get_number_trailer_overflow has found a '-' preceded by a space, it
@@ -348,8 +378,13 @@ number_or_range_parser::get_number_overflow (int *num)
 	  temp = &m_end_ptr;
 	  m_end_ptr = skip_spaces (m_cur_tok + 1);
 
-	  retval = ::get_number_trailer_overflow (temp, &m_end_value,
-						  m_end_trailer);
+	  if (m_in_set)
+	    retval = ::get_number_trailer_overflow (temp, &m_end_value,
+						    ']');
+	  else
+	    retval = ::get_number_trailer_overflow (temp, &m_end_value,
+						    m_end_trailer);
+
 	  if (NUMBER_OK != retval)
 	    {
 	      /* Advance the token pointer behind the failed range.  */
@@ -388,6 +423,19 @@ number_or_range_parser::get_number_overflow (int *num)
 	    error (_("negative value"));
 	}
     }
+
+  /* Advance token pointer if the last element of a set is processed.  */
+  if (*m_cur_tok == ']')
+    {
+      if (!m_in_set)
+	return NUMBER_CONVERSION_ERROR;
+      else
+	m_in_set = false;
+
+      m_cur_tok++;
+      m_cur_tok = skip_spaces (m_cur_tok);
+    }
+
   if (num != nullptr)
     *num = m_last_retval;
 
@@ -422,11 +470,15 @@ number_or_range_parser::finished () const
   /* Parsing is finished when at end of string or null string,
      or we are not in a range and not in front of an integer, negative
      integer, convenience var or negative convenience var.  */
-  return (m_cur_tok == NULL || *m_cur_tok == '\0'
-	  || (!m_in_range
-	      && !(isdigit (*m_cur_tok) || *m_cur_tok == '$')
-	      && !(*m_cur_tok == '-'
-		   && (isdigit (m_cur_tok[1]) || m_cur_tok[1] == '$'))));
+
+  if (m_cur_tok == nullptr || *m_cur_tok == '\0')
+    return true;
+
+  bool is_digit = isdigit (*m_cur_tok) || *m_cur_tok == '$';
+  bool is_range = *m_cur_tok == '-' && (isdigit (m_cur_tok[1])
+					|| m_cur_tok[1] == '$');
+
+  return !m_in_set && !m_in_range && !is_digit && !is_range;
 }
 
 /* Accept a number and a string-form list of numbers such as is 
@@ -470,6 +522,31 @@ remove_trailing_whitespace (const char *start, const char *s)
     --s;
 
   return s;
+}
+
+/* See documentation in cli-utils.h.  */
+
+const char*
+skip_to_next (const char *chp)
+{
+  if (chp == nullptr)
+    return nullptr;
+
+  bool opening_bracket = false;
+
+  while (*chp)
+    {
+      if (*chp == '[')
+	opening_bracket = true;
+      else if (isspace (*chp) && !opening_bracket)
+	break;
+      else if (*chp == ']')
+	opening_bracket = false;
+
+      chp++;
+    }
+
+  return skip_spaces (chp);
 }
 
 /* See documentation in cli-utils.h.  */

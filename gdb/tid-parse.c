@@ -303,7 +303,8 @@ tid_range_parser::finished () const
 	      || !(isdigit (*m_cur_tok)
 		   || (*m_cur_tok == '$' && !is_filter_expression (m_cur_tok))
 		   || *m_cur_tok == '*'
-		   || *m_cur_tok == ':'));
+		   || *m_cur_tok == ':'
+		   || *m_cur_tok == '['));
     case STATE_THREAD_RANGE:
       return m_range_parser.finished ();
     case STATE_SIMD_LANE_RANGE:
@@ -359,7 +360,9 @@ tid_range_parser::skip_range ()
   if (m_simd_lane_range_parser.in_range ())
     m_simd_lane_range_parser.skip_range ();
 
-  const char *cur_tok = m_range_parser.cur_tok ();
+  /* Advance to next item, either a command or the next tid.  Step over
+     spaces inside square brackets.  */
+  const char *cur_tok = skip_to_next (m_cur_tok);
 
   init (cur_tok, m_default_inferior, m_default_thr_num);
 }
@@ -370,7 +373,11 @@ void
 tid_range_parser::skip_simd_lane_range ()
 {
   gdb_assert (in_simd_lane_state ());
-  m_simd_lane_range_parser.skip_range ();
+  if (m_simd_lane_range_parser.in_range ())
+    m_simd_lane_range_parser.skip_range ();
+  else if (m_simd_lane_range_parser.in_set ())
+    m_simd_lane_range_parser.skip_set ();
+
   if (m_range_parser.in_range ())
     {
       /* The thread range was not finished yet.  */
@@ -405,14 +412,14 @@ tid_range_parser::tid_is_qualified () const
 /* See tid-parse.h.  */
 
 bool
-tid_range_parser::process_inferior_state (const char *space)
+tid_range_parser::process_inferior_state (const char *next)
 {
   const char *p = m_cur_tok;
 
-  while (p < space && *p != '.')
+  while (p < next && *p != '.')
     p++;
 
-  if (p < space)
+  if (p < next)
     {
       const char *dot = p;
 
@@ -456,7 +463,7 @@ tid_range_parser::process_inferior_state (const char *space)
 /* See tid-parse.h.  */
 
 bool
-tid_range_parser::process_thread_state (const char *space)
+tid_range_parser::process_thread_state (const char *next)
 {
   get_number_status thread_parse_error
     = m_range_parser.get_number_overflow (&m_thr_num);
@@ -473,13 +480,13 @@ tid_range_parser::process_thread_state (const char *space)
 
   const char *colon = strchr (m_cur_tok, ':');
 
-  if (colon != nullptr && colon < space)
+  if (colon != nullptr && colon < next)
     {
-      /* A colon is presented in a current token before the space.
+      /* A colon is presented in a current token before the expression.
 	 That means, that for the current thread range, a SIMD lane
 	 range is specified.  */
 
-      m_range_parser.set_end_ptr (skip_spaces (space));
+      m_range_parser.set_end_ptr (colon);
 
       /* When thread ID is skipped, thread parser returns false.
 	 In that case, return the default thread.  */
@@ -533,6 +540,11 @@ tid_range_parser::process_simd_lane_state ()
     }
 
   m_simd_lane_num = simd_lane_num;
+
+  /* If parsing the SIMD lanes is finished, go back to parsing threads.  */
+  if (m_simd_lane_range_parser.finished ())
+    m_state = STATE_THREAD_RANGE;
+
   return true;
 }
 
@@ -548,13 +560,11 @@ tid_range_parser::get_tid_or_range (int *inf_num,
   /* Only one out of thr_end and simd_lane is allowed to be specified.  */
   gdb_assert (simd_lane_num == nullptr || thr_end == nullptr);
 
-  const char *space;
-
-  space = skip_to_space (m_cur_tok);
+  const char *next = skip_to_next (m_cur_tok);
 
   if (m_state == STATE_INFERIOR)
     {
-      if (!process_inferior_state (space))
+      if (!process_inferior_state (next))
 	return false;
     }
 
@@ -563,7 +573,7 @@ tid_range_parser::get_tid_or_range (int *inf_num,
   bool thread_is_parsed = false;
 
   if (in_thread_state ())
-      thread_is_parsed = process_thread_state (space);
+      thread_is_parsed = process_thread_state (next);
 
   if (in_thread_state () && !thread_is_parsed)
     {
@@ -580,7 +590,6 @@ tid_range_parser::get_tid_or_range (int *inf_num,
 	  m_state = STATE_INFERIOR;
 	  return false;
 	}
-
     }
   else
     m_simd_lane_num = -1;
@@ -592,19 +601,20 @@ tid_range_parser::get_tid_or_range (int *inf_num,
     *simd_lane_num = m_simd_lane_num;
 
   /* If SIMD lane range is finished,  check if thread range is finished.  */
-  if (!in_simd_lane_state () || !m_simd_lane_range_parser.in_range ())
+  if (!in_simd_lane_state () || (!m_simd_lane_range_parser.in_range ()
+      && !m_simd_lane_range_parser.in_set ()))
     {
       /* If we successfully parsed a thread number or finished parsing a
 	 thread range, switch back to assuming the next TID is
 	 inferior-qualified.  */
-      if (!m_range_parser.in_range ())
+      if (!m_range_parser.in_range () && !m_range_parser.in_set ())
 	{
-	  if (in_thread_state ())
+	  if (m_simd_lane_num == -1)
 	    {
 	      /* SIMD range was not specified.  */
 	      m_cur_tok = m_range_parser.cur_tok ();
 	    }
-	  else if (in_simd_lane_state ())
+	  else
 	    {
 	      /* SIMD range was specified.  */
 	      m_cur_tok = m_simd_lane_range_parser.cur_tok ();
@@ -629,7 +639,10 @@ tid_range_parser::get_tid_or_range (int *inf_num,
      value, return it and skip to the end of the range.  */
   if (thr_end != nullptr && (in_thread_state () || in_simd_lane_state ()))
     {
-      *thr_end = m_range_parser.end_value ();
+      if (m_range_parser.in_range ())
+	*thr_end = m_range_parser.end_value ();
+      else
+	*thr_end = *thr_start;
 
       skip_range ();
     }
@@ -697,4 +710,282 @@ tid_is_in_list (const char *list, int default_inferior,
 	return 1;
     }
   return 0;
+}
+
+#if GDB_SELF_TEST
+#include "gdbsupport/selftest.h"
+
+namespace selftests {
+
+/* Test 'tid_parser::get_tid ()'.  */
+
+static void
+test_get_tid ()
+{
+  /* Test parsing a SIMD lane range.  */
+  {
+    tid_range_parser parser {"1.3:1-3", 3, 5};
+    int inf_num, thr_num, simd_lane_num;
+
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 3 && simd_lane_num == 1);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 3 && simd_lane_num == 2);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 3 && simd_lane_num == 3);
+    SELF_CHECK (parser.finished ());
+  }
+
+  /* Test parsing a SIMD lane range put into brackets.  */
+  {
+    tid_range_parser parser {"1.3:[1-3]", 3, 5};
+    int inf_num, thr_num, simd_lane_num;
+
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 3 && simd_lane_num == 1);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 3 && simd_lane_num == 2);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 3 && simd_lane_num == 3);
+    SELF_CHECK (parser.finished ());
+  }
+
+  /* Test parsing a set of individual SIMD lanes.  */
+  {
+    tid_range_parser parser {"1.3:[2 4 6]", 3, 5};
+    int inf_num, thr_num, simd_lane_num;
+
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 3 && simd_lane_num == 2);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 3 && simd_lane_num == 4);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 3 && simd_lane_num == 6);
+    SELF_CHECK (parser.finished ());
+  }
+
+  /* Test parsing a thread range.  */
+  {
+	tid_range_parser parser {"1.1-3:1", 3, 5};
+	int inf_num, thr_num, simd_lane_num;
+
+	SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		    && inf_num == 1 && thr_num == 1 && simd_lane_num == 1);
+	SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		    && inf_num == 1 && thr_num == 2 && simd_lane_num == 1);
+	SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		    && inf_num == 1 && thr_num == 3 && simd_lane_num == 1);
+	SELF_CHECK (parser.finished ());
+  }
+
+  /* Test parsing a thread range encapsulated into square brackets.  */
+  {
+    tid_range_parser parser {"1.[1-3]:1", 3, 5};
+    int inf_num, thr_num, simd_lane_num;
+
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 1 && simd_lane_num == 1);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 2 && simd_lane_num == 1);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 3 && simd_lane_num == 1);
+    SELF_CHECK (parser.finished ());
+  }
+
+
+  /* Test parsing a individual threads.  */
+  {
+    tid_range_parser parser {"1.[1 3 5]:1", 3, 5};
+    int inf_num, thr_num, simd_lane_num;
+
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 1 && simd_lane_num == 1);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 3 && simd_lane_num == 1);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 5 && simd_lane_num == 1);
+    SELF_CHECK (parser.finished ());
+  }
+
+
+  /* Test parsing a individual threads.  */
+  {
+    tid_range_parser parser {"1.[4 7]:3-4", 3, 5};
+    int inf_num, thr_num, simd_lane_num;
+
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 4 && simd_lane_num == 3);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 4 && simd_lane_num == 4);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 7 && simd_lane_num == 3);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 7 && simd_lane_num == 4);
+    SELF_CHECK (parser.finished ());
+  }
+
+
+  /* Test parsing a individual threads.  */
+  {
+    tid_range_parser parser {"1.[4 7]:3-4 2.2-3:[7 8]", 3, 5};
+    int inf_num, thr_num, simd_lane_num;
+
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 4 && simd_lane_num == 3);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 4 && simd_lane_num == 4);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 7 && simd_lane_num == 3);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 1 && thr_num == 7 && simd_lane_num == 4);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 2 && thr_num == 2 && simd_lane_num == 7);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 2 && thr_num == 2 && simd_lane_num == 8);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 2 && thr_num == 3 && simd_lane_num == 7);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 2 && thr_num == 3 && simd_lane_num == 8);
+    SELF_CHECK (parser.finished ());
+  }
+
+  /* Unqualified inferior.  */
+  {
+    tid_range_parser parser {"[2-3]:3-4 7.5-7 <command>", 3, 5};
+    const char *cmd = "<command>";
+    int inf_num, thr_num, simd_lane_num;
+
+    /* First TID.  */
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 3 && thr_num == 2 && simd_lane_num == 3);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 3 && thr_num == 2 && simd_lane_num == 4);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 3 && thr_num == 3 && simd_lane_num == 3);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 3 && thr_num == 3 && simd_lane_num == 4);
+
+    /* Second TID.  */
+    simd_lane_num = 0;
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 7 && thr_num == 5 && simd_lane_num == -1);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 7 && thr_num == 6 && simd_lane_num == -1);
+    SELF_CHECK (parser.get_tid (&inf_num, &thr_num, &simd_lane_num)
+		&& inf_num == 7 && thr_num == 7 && simd_lane_num == -1);
+
+    SELF_CHECK (parser.finished ());
+    SELF_CHECK (strcmp (parser.cur_tok (), cmd) == 0);
+  }
+}
+
+/* Test 'tid_parser::get_tid ()'.  */
+
+static void
+test_get_tid_range ()
+{
+  const char *cmd = "<command>";
+
+  /* Thread range.  */
+  {
+    tid_range_parser parser {"1.4-7:3-4 <command>", 3, 5};
+    int inf_num, thr_start, thr_end;
+
+    SELF_CHECK (parser.get_tid_range (&inf_num, &thr_start, &thr_end)
+		&& inf_num == 1 && thr_start == 4 && thr_end == 7);
+    SELF_CHECK (parser.finished ());
+    SELF_CHECK (strcmp (parser.cur_tok (), cmd) == 0);
+  }
+
+  /* Thread range in square brackets.  */
+  {
+    tid_range_parser parser {"1.[4-7]:3-4 <command>", 3, 5};
+    int inf_num, thr_start, thr_end;
+
+    SELF_CHECK (parser.get_tid_range (&inf_num, &thr_start, &thr_end)
+		&& inf_num == 1 && thr_start == 4 && thr_end == 7);
+    SELF_CHECK (parser.finished ());
+    SELF_CHECK (strcmp (parser.cur_tok (), cmd) == 0);
+  }
+
+  /* Thread range with start == end.  */
+  {
+    tid_range_parser parser {"1.4-4:3-4 <command>", 3, 5};
+    int inf_num, thr_start, thr_end;
+
+    SELF_CHECK (parser.get_tid_range (&inf_num, &thr_start, &thr_end)
+		&& inf_num == 1 && thr_start == 4 && thr_end == 4);
+    SELF_CHECK (parser.finished ());
+    SELF_CHECK (strcmp (parser.cur_tok (), cmd) == 0);
+  }
+
+  /* Thread range with start == end, in square brackets.  */
+  {
+    tid_range_parser parser {"1.4-4:3-4 <command>", 3, 5};
+    int inf_num, thr_start, thr_end;
+
+    SELF_CHECK (parser.get_tid_range (&inf_num, &thr_start, &thr_end)
+		&& inf_num == 1 && thr_start == 4 && thr_end == 4);
+    SELF_CHECK (parser.finished ());
+    SELF_CHECK (strcmp (parser.cur_tok (), cmd) == 0);
+  }
+
+  /* Two individual threads.  */
+  {
+    tid_range_parser parser {"1.[2 4]:3-4 <command>", 3, 5};
+    int inf_num, thr_start, thr_end;
+
+    SELF_CHECK (parser.get_tid_range (&inf_num, &thr_start, &thr_end)
+		&& inf_num == 1 && thr_start == 2 && thr_end == 2);
+    SELF_CHECK (parser.finished ());
+    SELF_CHECK (strcmp (parser.cur_tok (), cmd) == 0);
+  }
+
+  /* Two tid expressions.  */
+  {
+    tid_range_parser parser {"1.[2-4]:3-4 3.[5-9] <command>", 3, 5};
+    const char *expr = "3.[5-9] <command>";
+    int inf_num, thr_start, thr_end;
+
+    SELF_CHECK (parser.get_tid_range (&inf_num, &thr_start, &thr_end)
+		&& inf_num == 1 && thr_start == 2 && thr_end == 4);
+    SELF_CHECK (strcmp (parser.cur_tok (), expr) == 0);
+    SELF_CHECK (parser.get_tid_range (&inf_num, &thr_start, &thr_end)
+		&& inf_num == 3 && thr_start == 5 && thr_end == 9);
+    SELF_CHECK (parser.finished ());
+    SELF_CHECK (strcmp (parser.cur_tok (), cmd) == 0);
+  }
+
+  /* Unqualified inferior.  */
+  {
+    tid_range_parser parser {"[2-4]:3-4 7.5-9 <command>", 3, 5};
+    const char *expr = "7.5-9 <command>";
+    int inf_num, thr_start, thr_end;
+
+    SELF_CHECK (!parser.finished ());
+    SELF_CHECK (parser.get_tid_range (&inf_num, &thr_start, &thr_end)
+		&& inf_num == 3 && thr_start == 2 && thr_end == 4);
+    SELF_CHECK (!parser.finished ());
+    SELF_CHECK (strcmp (parser.cur_tok (), expr) == 0);
+    SELF_CHECK (parser.get_tid_range (&inf_num, &thr_start, &thr_end)
+		&& inf_num == 7 && thr_start == 5 && thr_end == 9);
+    SELF_CHECK (parser.finished ());
+    SELF_CHECK (strcmp (parser.cur_tok (), cmd) == 0);
+  }
+}
+
+}
+
+#endif
+
+void _initialize_tid_parse ();
+void
+_initialize_tid_parse ()
+{
+#if GDB_SELF_TEST
+  selftests::register_test ("test_get_tid",
+			    selftests::test_get_tid);
+  selftests::register_test ("test_get_tid_range",
+			    selftests::test_get_tid_range);
+#endif
 }

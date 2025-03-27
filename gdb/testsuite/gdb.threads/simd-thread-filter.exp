@@ -214,10 +214,13 @@ proc range_from_threads {threads {prefix ""} {suffix ""}} {
 	if {$start == -1} {
 	    set start [lindex $threads $i]
 	} elseif {abs ([expr $thread - $prev]) > 1} {
+	    set stop [expr max ($start, $prev)]
+	    set start [expr min ($start, $prev)]
+
 	    set thread_range "${thread_range} ${prefix}${start}"
 
-	    if {[expr $start < $prev]} {
-		set thread_range "${thread_range}-$prev"
+	    if {[expr $start < $stop]} {
+		set thread_range "${thread_range}-$stop"
 	    }
 
 	    set thread_range "${thread_range}${suffix}"
@@ -228,10 +231,12 @@ proc range_from_threads {threads {prefix ""} {suffix ""}} {
     }
 
     # Parse last list element.
+    set stop [expr max ($start, $prev)]
+    set start [expr min ($start, $prev)]
     set thread_range "${thread_range} ${prefix}${start}"
 
-    if {[expr $start < $prev]} {
-	set thread_range "${thread_range}\-$prev"
+    if {[expr $start < $stop]} {
+	set thread_range "${thread_range}\-$stop"
     }
 
     set thread_range "${thread_range}${suffix}"
@@ -325,6 +330,7 @@ foreach device $sycl_device_list {
 	check_one_warning "$unav_t:*" "One warning for wildcard lane"
 	check_one_warning "$unav_t:1" "One warning for specific lane"
 	check_one_warning "$unav_t:3-7" "One warning for lane range"
+	check_one_warning "$unav_t:\[3 7\]" "One warning for set of lanes"
 	check_one_warning "$unav_t:$num_lanes" \
 	    "One warning for outside lane mask range"
 
@@ -334,6 +340,7 @@ foreach device $sycl_device_list {
 	# Default thread and lange range input
 	thread_filter ":3" "$cur_thread:3"
 	thread_filter "$cur_thread" "$cur_thread:6"
+	thread_filter "$cur_thread:\[1-2 4 5 6\]" "$cur_thread\\\:\\\[1-2 4-6\\\]"
 	thread_filter ":3-5" "$cur_thread\\\:\\\[3-5\\\]"
 	set last_lane [expr {$num_lanes - 1}]
 	thread_filter ":*" "$cur_thread\\\:\\\[0-$last_lane\\\]"

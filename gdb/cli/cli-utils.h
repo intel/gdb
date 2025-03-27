@@ -22,6 +22,7 @@
 
 #include "completer.h"
 #include <set>
+#include <cstring>
 
 struct cmd_list_element;
 
@@ -150,6 +151,10 @@ public:
   const char *cur_tok () const
   { return m_cur_tok; }
 
+  /* True when parsing a set of numbers encapsulated into '[..]'.  */
+  bool in_set () const
+  { return m_in_set; };
+
   /* True when parsing a range.  */
   bool in_range () const
   { return m_in_range; }
@@ -164,6 +169,23 @@ public:
     gdb_assert (m_in_range);
     m_cur_tok = m_end_ptr;
     m_in_range = false;
+  }
+
+  /* When parsing a set of numbers and/or ranges enclosed in square
+     brackets (e.g., '[2 4-6 8]'), skip to the closing square bracket.  */
+  void skip_set ()
+  {
+    gdb_assert (m_in_set);
+    if (m_end_ptr != nullptr)
+      m_cur_tok = m_end_ptr;
+    else
+      {
+	const char* bracket = strchr (m_cur_tok, ']');
+	if (bracket != nullptr)
+	  m_cur_tok = bracket + 1;
+      }
+
+    m_in_set = false;
   }
 
   /* Setup the END_PTR, where the string is advanced to when get_next()
@@ -186,12 +208,15 @@ private:
   int m_end_value;
   int m_end_trailer;
 
-  /* When parsing a range, a pointer past the final token in the
-     range.  */
+  /* When parsing a range or set, a pointer past the final token
+     in the range/set.  */
   const char *m_end_ptr;
 
   /* True when parsing a range.  */
   bool m_in_range;
+
+  /* True when parsing a set of numbers encapsulated into square brackets.  */
+  bool m_in_set;
 };
 
 /* Accept a number and a string-form list of numbers such as is 
@@ -217,6 +242,10 @@ remove_trailing_whitespace (const char *start, char *s)
 {
   return (char *) remove_trailing_whitespace (start, (const char *) s);
 }
+
+/* Same as 'skip_to_space' if CHP does not contain square brackets.
+   If CHP contains square brackets, skip to closing bracket.  */
+extern const char *skip_to_next (const char *chp);
 
 /* A helper function to extract an argument from *ARG.  An argument is
    delimited by whitespace.  The return value is empty if no argument

@@ -2921,6 +2921,54 @@ thread_apply_and_filter_cmd (const char *tidlist,
   if (tidlist == NULL || *tidlist == '\000')
     error (_("Please specify a thread ID list"));
 
+  const char *p = tidlist;
+  std::string parsed_tid_list;
+
+  /* TIDLIST starts with a convenience variable.  */
+  if (*tidlist == '$')
+    {
+      struct value *val = value_from_history_ref (p, &p);
+
+      value_print_options print_opts;
+      get_user_print_options (&print_opts);
+      print_opts.raw = 1;
+
+      /* Value not a history reference.  */
+      if (val == nullptr)
+	{
+	  /* Make a copy of the name, so we can null-terminate it to
+	     pass to lookup_internalvar ().  */
+	  const char *start = ++p;
+	  while (isalnum (*p) || *p == '_')
+	    p++;
+
+	  std::string varname (start, p - start);
+
+	  internalvar *var = lookup_internalvar (varname.c_str ());
+	  val = value_of_internalvar (current_inferior ()->arch (), var);
+	}
+
+      /* Evaluate and replace convenience variable in case of text
+	 input only.  */
+      if (val != nullptr && val->type ()->code () == TYPE_CODE_ARRAY)
+	{
+	  struct string_file stream;
+	  current_language->value_print (val, &stream, &print_opts);
+
+	  parsed_tid_list = stream.string ();
+	  /* Remove leading / trailing double quotes..  */
+	  parsed_tid_list.erase (
+	    std::remove (parsed_tid_list.begin (),
+			 parsed_tid_list.end (), '"'),
+			 parsed_tid_list.end ());
+	  /* ..and add command.  */
+	  parsed_tid_list.append (p);
+
+	  /* Set TIDLIST to parsed string.  */
+	  tidlist = parsed_tid_list.c_str ();
+	}
+    }
+
   tid_range_parser parser {tidlist, current_inferior ()->num,
 			   inferior_thread ()->per_inf_num};
   while (!parser.finished ())
@@ -4123,7 +4171,9 @@ Apply a command to a list of threads.\n\
 Usage: thread apply ID[:LANE]... [OPTION]... COMMAND\n\
 ID is a space-separated list of IDs of threads to apply COMMAND on.\n\
 For threads with SIMD lanes use additional :LANE specifier to\n\
-apply COMMAND to a lane range of thread ID.\n"
+apply COMMAND to a lane range of thread ID.\n\
+Convenience variables and GDB's value history can be used to specify\n\
+thread-id list.\n"
 THREAD_APPLY_OPTION_HELP),
 			       thread_apply_opts);
 

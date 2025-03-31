@@ -361,12 +361,31 @@ foreach device $sycl_device_list {
 
 	# Define an internal variable.
 	gdb_test "p \$thread_3 = $t_3" " = $t_3"
+	gdb_test "p \$thread_1_all_lanes = \"$inf.$t_1:*\""
+	gdb_test "p \$thread_1_three_to_five = \"$inf.$t_1:\[3 5 7\]\""
 
 	# Prepare some long contexts for reuse.
 	set all_lanes_1 [all_lanes_of $num_lanes "$inf.$t_1"]
 	set all_lanes_2 [all_lanes_of $num_lanes "$inf.$t_2"]
 	set all_lanes_3 [all_lanes_of $num_lanes "$inf.$t_3"]
 	set all_lanes_4 [all_lanes_of $num_lanes "$inf.$t_4"]
+
+	# Apply the 'thread filter' command on thread 't_1' and capture
+	# the history index so that we can pass that to the 'thread apply'
+	# command.
+	set hist ""
+	gdb_test_multiple "thread filter $inf.$t_1:*" "" {
+	    -re "Filtered Threads:" {
+		exp_continue
+	    }
+	    -re "\\\$(${decimal}) = .*" {
+		set hist $expect_out(1,string)
+	    }
+	}
+
+	# Now test the 'thread apply' command using the history convenience
+	# variable.
+	thread_apply "\$${hist}" "$all_lanes_1" "History convenience variable"
 
 	set msg " before branch "
 	foreach prefix [list "" "${inf}."] {
@@ -419,6 +438,10 @@ foreach device $sycl_device_list {
 		"$all_lanes_1 $all_lanes_2 $all_lanes_3 $all_lanes_4" \
 		$msg "$inf\.${decimal}(:$decimal)?" "none"
 	}
+
+	# Check convenience variables.
+	thread_apply "\$thread_1_all_lanes" "$all_lanes_1"
+	thread_apply "\$thread_1_three_to_five" [lanes_of "$inf.$t_1" "3 5 7"]
 
 	check_lanes "after first apply group" $inf $t_1 $t_2 $t_3 $t_4
 

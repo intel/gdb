@@ -2493,6 +2493,12 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 
   do
     {
+#ifdef USE_WIN32API
+      /* On Windows, checking for an interrupt request from the user side is
+	 not done by the server, we need to do this here in the target.  */
+      check_remote_input_interrupt_request ();
+#endif
+
       /* We start by fetching all events.
 
 	 This will mark threads stopped and also process solist updates.  We may

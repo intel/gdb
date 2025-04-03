@@ -274,25 +274,22 @@ struct qcs_flags
    message.  */
 extern void validate_flags_qcs (const char *which_command, qcs_flags *flags);
 
-/* A helper function to create a string of ranges out of sorted set
-   of integers NUMBERS.  Duplicated values are ignored. If the result contains
-   more than one number, it is enclosed in square brackets.  If CURRENT
-   is used and matches one of the numbers in the set, it will be prepended
-   by a * and not be part of any range.
-   Example:
-   For the set {} the result is "".
-   For the set {1} the result is "1".
-   For the set {0,1,2,4,6,7,8} the result is "[0-2 4 6-8]".
-   For the set {0,1,2,3} with current lane 0 the result is "[*0 1-3]".
-   For the set {0,1,2,3} with current lane 1 the result is "[0 *1 2-3]".
-   For the set {0,1,2,3} with current lane 2 the result is "[0-1 *2 3]".
-   For the set {0,1,2,3} with current lane 3 the result is "[0-2 *3]".  */
-extern std::string
-make_ranges_from_set (const std::set<int> &numbers, int current = -1);
+/* Create a string of ranges out of MASK.  If the result contains more than
+   one number, it is enclosed in square brackets.  If CURRENT is used and
+   matches one of the bits set in MASK, it will be prepended by a '*' and not
+   be part of any range.
 
-/* Helper to directly create number ranges from a mask.  Uses
-   make_ranges_from_set for now but could be implemented more
-   efficiently.  CURRENT is used as in make_ranges_from_set.  */
-extern std::string make_ranges_from_mask (unsigned long mask, int current = -1);
+   Example:
+
+   For the mask '0' the result is "".
+   For the mask '1' the result is "1".
+   For the mask '0b1 1101 0111' the result is "[0-2 4 6-8]".
+   For the mask '15' with current lane 0 the result is "[*0 1-3]".
+   For the mask '15' with current lane 1 the result is "[0 *1 2-3]".
+   For the mask '15' with current lane 2 the result is "[0-1 *2 3]".
+   For the mask '15' with current lane 3 the result is "[0-2 *3]".  */
+
+extern std::string make_ranges_from_mask (unsigned long mask,
+					  int current = -1);
 
 #endif /* CLI_CLI_UTILS_H */

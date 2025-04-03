@@ -537,74 +537,74 @@ validate_flags_qcs (const char *which_command, qcs_flags *flags)
 /* See documentation in cli-utils.h.  */
 
 std::string
-make_ranges_from_set (const std::set<int> &numbers,
-		      int current)
+make_ranges_from_mask (unsigned long mask, int current)
 {
   std::string result;
 
-  if (numbers.empty ())
-    return result;
-
-  std::set<int>::const_iterator start = numbers.begin ();
-  if (*start == current && numbers.size () > 1)
-    result = "*";
-  result += std::to_string (*start);
-
-  if (*start == current)
-    {
-      start++;
-      if (start == numbers.end ())
-	return result;
-      result += " " + std::to_string (*start);
-    }
-
-  int previous_value = *start;
+  /* Pre-allocate memory for the resulting output.  In worst case,
+     we have a mask with alternating bits set, e.g., 0xAAAA AAAA.  */
+  result.reserve (64);
   bool has_brackets = false;
 
-  for (auto it = std::next (start, 1); it != numbers.end (); it++)
+  auto print_range = ([&] (const int start, const int end)
     {
-      if ((previous_value + 1) < *it || current == *it)
+      if (!result.empty ())
 	{
-	  /* The range ends.  */
+	  result += " ";
 	  has_brackets = true;
-
-	  if (*start != previous_value)
-	    {
-	      /* The previous value is the end of a range.  */
-	      result += "-" + std::to_string (previous_value);
-	    }
-	  else
-	    {
-	      /* The range consists of only the starting number, which is
-		 already included in the result.  */
-	    }
-
-	  /* The value is the beginning of a new range.  */
-	  start = it;
-	  if (*start == current)
-	    {
-	      result += " *" + std::to_string (*start);
-	      it++;
-	      if (it == numbers.end ())
-		break;
-	      start = it;
-	    }
-	  result += " " + std::to_string (*start);
 	}
 
-      previous_value = *it;
+      result += std::to_string (start);
+      if (start < end)
+	{
+	  result += "-" + std::to_string (end);
+	  has_brackets = true;
+	}
+    });
+
+  int start = -1;
+  int prev = -1;
+  for (int bitnum = 0; mask != 0; mask >>= 1, bitnum++)
+    {
+      if ((mask & 0x1) == 0x0)
+	continue;
+
+      if (start == -1)
+	{
+	  /* The active lane is the current lane.  */
+	  if (bitnum == current)
+	    {
+	      if (!result.empty ())
+		result += " ";
+	      result += "*" + std::to_string (bitnum);
+	    }
+	  else
+	    start = bitnum;
+	}
+      else if (bitnum == current)
+	{
+	  print_range (start, prev);
+	  result += " *" + std::to_string (bitnum);
+
+	  /* 'print_range' may not update 'has_brackets' if 'start == prev'
+	     and 'lane_mask' does not contain any output yet.  */
+	  has_brackets = true;
+
+	  /* Reset to start a new range.  */
+	  start = -1;
+	}
+      else if ((bitnum - prev) > 1)
+	{
+	  print_range (start, prev);
+	  start = bitnum;
+	}
+
+      prev = bitnum;
     }
 
-  if (*start < previous_value)
-    {
-      /* Close the last range.  */
-      if (*start != current)
-	result += "-";
-      else
-	result += " ";
-      result += std::to_string (previous_value);
-      has_brackets = true;
-    }
+  /* Print last lane.  */
+  if (start != -1)
+    print_range (start, prev);
 
   if (has_brackets)
     result = "[" + result + "]";
@@ -612,16 +612,74 @@ make_ranges_from_set (const std::set<int> &numbers,
   return result;
 }
 
-/* See documentation in cli-utils.h.  */
+#if GDB_SELF_TEST
+#include "gdbsupport/selftest.h"
 
-std::string
-make_ranges_from_mask (unsigned long mask, int current)
+namespace selftests {
+
+/* Test 'make_ranges_from_mask'.  */
+
+static void
+test_make_ranges_from_mask ()
 {
-  std::set<int> s;
-  for (int bitnum = 0; mask != 0; mask >>= 1, bitnum++)
-    {
-      if ((mask & 0x1) != 0x0)
-	s.insert (bitnum);
-    }
-  return make_ranges_from_set (s, current);
+  /* Test with empty mask.  */
+  SELF_CHECK (make_ranges_from_mask (0) == "");
+  SELF_CHECK (make_ranges_from_mask (0, 1) == "");
+
+  /* Test with one bit set in mask.  */
+  SELF_CHECK (make_ranges_from_mask (1, -1) == "0");
+  SELF_CHECK (make_ranges_from_mask (1, 0) == "*0");
+  SELF_CHECK (make_ranges_from_mask (1, 1) == "0");
+  SELF_CHECK (make_ranges_from_mask (2, -1) == "1");
+  SELF_CHECK (make_ranges_from_mask (2, 1) == "*1");
+
+  /* Test with two bits set in mask.  */
+  SELF_CHECK (make_ranges_from_mask (3, -1) == "[0-1]");
+  SELF_CHECK (make_ranges_from_mask (3, 0) == "[*0 1]");
+  SELF_CHECK (make_ranges_from_mask (3, 1) == "[0 *1]");
+  SELF_CHECK (make_ranges_from_mask (3, 2) == "[0-1]");
+
+  /* Test with four alternating bits set.  */
+  SELF_CHECK (make_ranges_from_mask (0xAA) == "[1 3 5 7]");
+  SELF_CHECK (make_ranges_from_mask (0xAA, 0) == "[1 3 5 7]");
+
+  /* Tests with odd bits set.  */
+  SELF_CHECK (make_ranges_from_mask (0xAA, 1) == "[*1 3 5 7]");
+  SELF_CHECK (make_ranges_from_mask (0xAA, 3) == "[1 *3 5 7]");
+  SELF_CHECK (make_ranges_from_mask (0xAA, 7) == "[1 3 5 *7]");
+
+  /* Tests with consecutive blocks of bits set.  */
+  SELF_CHECK (make_ranges_from_mask (0xF0F0) == "[4-7 12-15]");
+  SELF_CHECK (make_ranges_from_mask (0xF0F0, 0) == "[4-7 12-15]");
+  SELF_CHECK (make_ranges_from_mask (0xF0F0, 3) == "[4-7 12-15]");
+  SELF_CHECK (make_ranges_from_mask (0xF0F0, 4) == "[*4 5-7 12-15]");
+  SELF_CHECK (make_ranges_from_mask (0xF0F0, 6) == "[4-5 *6 7 12-15]");
+  SELF_CHECK (make_ranges_from_mask (0xF0F0, 12) == "[4-7 *12 13-15]");
+  SELF_CHECK (make_ranges_from_mask (0xF0F0, 15) == "[4-7 12-14 *15]");
+
+  /* Test some more complicated patterns.  */
+  SELF_CHECK (make_ranges_from_mask (0x3DB3) == "[0-1 4-5 7-8 10-13]");
+  SELF_CHECK (make_ranges_from_mask (0x3DB3, 11)
+	      == "[0-1 4-5 7-8 10 *11 12-13]");
+  SELF_CHECK (make_ranges_from_mask (0x3DB3, 12)
+	      == "[0-1 4-5 7-8 10-11 *12 13]");
+  SELF_CHECK (make_ranges_from_mask (0x3DB3, 7) == "[0-1 4-5 *7 8 10-13]");
+  SELF_CHECK (make_ranges_from_mask (0x3DB3, 2) == "[0-1 4-5 7-8 10-13]");
+  SELF_CHECK (make_ranges_from_mask (0x3DB3, 3) == "[0-1 4-5 7-8 10-13]");
+  SELF_CHECK (make_ranges_from_mask (0x3DB3, 9) == "[0-1 4-5 7-8 10-13]");
+  SELF_CHECK (make_ranges_from_mask (0x3DB3, 20) == "[0-1 4-5 7-8 10-13]");
+}
+
+}
+
+#endif
+
+void _initialize_cli_utils ();
+void
+_initialize_cli_utils ()
+{
+#if GDB_SELF_TEST
+  selftests::register_test ("make_ranges_from_mask",
+			    selftests::test_make_ranges_from_mask);
+#endif
 }

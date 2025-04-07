@@ -56,5 +56,5 @@ if {[prepare_for_testing "failed to prepare" ${testfile} \
     return -1
 }
 
-gdb_test "break *$main_start" ".*Breakpoint $decimal at $hex" \
+gdb_test "break *$main_start" ".*Breakpoint $decimal at $hex\\." \
     "set breakpoint at main address"

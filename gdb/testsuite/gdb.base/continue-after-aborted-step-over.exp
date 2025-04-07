@@ -67,7 +67,7 @@ proc do_test {displaced breakpoint_always_inserted} {
     if { $breakpoint_always_inserted == "on" } {
 	gdb_test "b *0" "Breakpoint $decimal at 0x0.*"
     } else {
-	gdb_test "b *0" "Breakpoint $decimal at 0x0"
+	gdb_test "b *0" "Breakpoint $decimal at 0x0\\."
     }
 
     gdb_test "continue" \

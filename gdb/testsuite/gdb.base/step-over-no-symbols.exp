@@ -68,7 +68,7 @@ proc test_step_over { displaced } {
 
     set before_addr [get_pc "get before PC"]
 
-    gdb_test "break *\$pc" "Breakpoint .* at $hex"
+    gdb_test "break *\$pc" "Breakpoint .* at $hex\\."
 
     gdb_test_no_output "set displaced-stepping $displaced"
 

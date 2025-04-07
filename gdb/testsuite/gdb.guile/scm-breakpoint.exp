@@ -545,7 +545,7 @@ proc_with_prefix test_bkpt_probe {} {
 
     gdb_test \
 	"guile (register-breakpoint! bp1)" \
-	"Breakpoint $decimal at $hex" \
+	"Breakpoint $decimal at $hex\\." \
 	"register probe breakpoint"
 }
 

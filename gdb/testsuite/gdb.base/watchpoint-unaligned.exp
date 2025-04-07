@@ -28,7 +28,7 @@ if ![runto_main] {
     return -1
 }
 
-gdb_breakpoint [gdb_get_line_number "start_again"] "Breakpoint $decimal at $hex" "start_again"
+gdb_breakpoint [gdb_get_line_number "start_again"] "Breakpoint $decimal at $hex\\." "start_again"
 
 set sizes {1 2 4 8}
 array set alignedend {1 1  2 2  3 4  4 4  5 8  6 8  7 8  8 8}

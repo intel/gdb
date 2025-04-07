@@ -28,7 +28,7 @@ if { [prepare_for_testing "failed to prepare" $testfile $srcfile] } {
 proc goto_probe { name } {
     global decimal hex
 
-    gdb_test "break -pstap $name" "Breakpoint $decimal at $hex"
+    gdb_test "break -pstap $name" "Breakpoint $decimal at $hex\\."
     gdb_test "continue" "Breakpoint $decimal, main \\(\\) at .*\r\n.*STAP_PROBE1.*${name},.*\\)"
 }
 

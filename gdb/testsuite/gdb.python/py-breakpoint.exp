@@ -851,7 +851,7 @@ proc_with_prefix test_bkpt_probe {} {
 
     gdb_test \
 	"python gdb.Breakpoint(\"-probe test:result_updated\")" \
-	"Breakpoint $decimal at $hex" \
+	"Breakpoint $decimal at $hex\\." \
 	"-probe in spec string"
 }
 

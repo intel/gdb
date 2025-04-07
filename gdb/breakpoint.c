@@ -12100,7 +12100,7 @@ code_breakpoint::say_where () const
 	    {
 	      const char *filename
 		= symtab_to_filename_for_display (bl.symtab);
-	      gdb_printf (": file %ps, line %ps.",
+	      gdb_printf (": file %ps, line %ps",
 			  styled_string (file_name_style.style (),
 					 filename),
 			  styled_string (line_number_style.style (),
@@ -12110,8 +12110,9 @@ code_breakpoint::say_where () const
 	    /* This is not ideal, but each location may have a
 	       different file name, and this at least reflects the
 	       real situation somewhat.  */
-	    gdb_printf (": %s.", locspec->to_string ());
+	    gdb_printf (": %s", locspec->to_string ());
 	}
+      gdb_printf (".");
 
       if (this->has_multiple_locations ())
 	{

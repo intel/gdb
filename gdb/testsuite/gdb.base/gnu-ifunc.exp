@@ -128,7 +128,7 @@ proc_with_prefix set-break {resolver_attr resolver_debug final_debug} {
     with_test_prefix "before resolving" {
 	delete_breakpoints
 	gdb_test "break gnu_ifunc" \
-	    "Breakpoint $decimal at gnu-indirect-function resolver at $hex"
+	    "Breakpoint $decimal at gnu-indirect-function resolver at $hex\\."
 	gdb_test "info breakpoints" \
 	    "$decimal${ws}STT_GNU_IFUNC resolver${ws}keep${ws}y${ws}$hex <${gnu_ifunc_resolver}>"
 
@@ -157,14 +157,14 @@ proc_with_prefix set-break {resolver_attr resolver_debug final_debug} {
 	    # (like "0x0000ADDR").
 	    set hex_number {[0-9a-fA-F][0-9a-fA-F]*}
 	    gdb_test_multiple $test $test {
-		-re "Breakpoint .* at 0x($hex_number)\r\n$gdb_prompt $" {
+		-re -wrap "Breakpoint .* at 0x($hex_number)\\." {
 		    set addr $expect_out(1,string)
 		    pass $test
 		}
 	    }
 
 	    # Now set a break at the ifunc.
-	    gdb_test "break gnu_ifunc" "Breakpoint .* at 0x$addr"
+	    gdb_test "break gnu_ifunc" "Breakpoint .* at 0x$addr\\."
 	    set location "$decimal${ws}breakpoint${ws}keep${ws}y${ws}0x0*$addr${ws}<${final}\\+.*>"
 	} else {
 	    set lineno -1

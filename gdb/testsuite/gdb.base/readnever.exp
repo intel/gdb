@@ -36,7 +36,7 @@ if {![runto_main]} {
 }
 
 gdb_test "break fun_three" \
-         "Breakpoint $decimal at $hex"
+	 "Breakpoint $decimal at $hex\\."
 
 gdb_test "continue" \
          "Breakpoint $decimal, $hex in fun_three \\(\\)"

@@ -30,7 +30,7 @@ if ![runto_main] {
 }
 
 gdb_breakpoint "[gdb_get_line_number "ldxr"]" \
-  "Breakpoint $decimal at $hex" \
+  "Breakpoint $decimal at $hex\\." \
   "Set the breakpoint at the start of the sequence"
 
 gdb_test "continue" "Continuing.*Breakpoint $decimal.*" \

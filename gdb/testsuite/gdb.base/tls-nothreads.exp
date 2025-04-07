@@ -121,7 +121,7 @@ proc do_tests {force_internal_tls {do_kfail_tls_access 0}} {
 	    # breakpoint in use_it and continue to it.  Continuing
 	    # twice should put us past the assignments, at which point
 	    # we can see if the TLS variables are still accessible.
-	    gdb_test "break use_it" "Breakpoint 2 at $::hex"
+	    gdb_test "break use_it" "Breakpoint 2 at $::hex\."
 	    gdb_test "continue" "Breakpoint 2, $::hex in use_it.*"
 	    gdb_test "continue" "Breakpoint 2, $::hex in use_it.*" "continue 2"
 

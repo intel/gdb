@@ -204,7 +204,7 @@ proc watch_command {cmd base offset width hw_wp_p} {
 
     if {$cmd == "hbreak"} {
 	set expr "*(buf.byte + $base + $offset)"
-	gdb_test "hbreak $expr" "Hardware assisted breakpoint \[0-9\]+ at $hex"
+	gdb_test "hbreak $expr" "Hardware assisted breakpoint \[0-9\]+ at $hex\\."
     } elseif {$cmd == "watch"} {
 	set expr "*(buf.byte + $base + $offset)@$width"
 

@@ -6781,8 +6781,11 @@ proc gdb_compile_openmp {source dest type options} {
 # gdb_compile, above, for discussion of the parameters to this proc.
 
 proc gdb_compile_sycl {source dest type options} {
-    set new_options {additional_flags=-fsycl}
-    lappend new_options {additional_flags=-fsycl-unnamed-lambda}
+    set new_options ""
+    if {[test_compiler_info {icx-*}]} {
+	lappend new_options {additional_flags=-fsycl}
+    }
+
     lappend new_options {c++}
     lappend new_options {optimize=-O0}
     if {[lsearch -exact $options impi] != -1} {

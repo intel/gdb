@@ -216,11 +216,6 @@ gdb_caching_proc init_sycl_devices_list {} {
 	set exe "$objdir/sycl-devices"
 	clean_restart $exe
     } else {
-	if {![test_compiler_info {icx-*} c++]} {
-	    unsupported "SYCL tests supported only for the icpx compiler"
-	    return $sycl_device_list
-	}
-
 	set exe [standard_output_file sycl-devices]
 	if {[prepare_for_testing "failed to compile $src" \
 		$exe $src {sycl debug}]} {

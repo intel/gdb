@@ -199,7 +199,7 @@ gdb_caching_proc omp_get_device_list {} {
     set device_list {}
 
     if {![is_omp_offload_supported_compiler]} {
-	unsupported "OpenMP tests supported only for dpcpp and icpx compilers."
+	verbose -log "OpenMP tests supported only for dpcpp and icpx compilers."
 	return $device_list
     }
 

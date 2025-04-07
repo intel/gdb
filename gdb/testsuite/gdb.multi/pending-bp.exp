@@ -101,7 +101,7 @@ proc do_create_pending_foo_breakpoint { {thread "1.1"} } {
 # Returns the number for the newly created breakpoint.
 proc do_create_foo_breakpoint { {thread "1.1"} } {
     gdb_test "break foo thread $thread" \
-	"Breakpoint $::decimal at $::hex" \
+	"Breakpoint $::decimal at $::hex\\." \
 	"set thread-specific breakpoint"
     set bpnum [get_integer_valueof "\$bpnum" "*INVALID*" \
 		   "get number for thread-specific breakpoint on foo"]

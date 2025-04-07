@@ -43,7 +43,7 @@ proc do_test { displaced } {
 
     gdb_test_no_output "set displaced-stepping $displaced"
 
-    gdb_breakpoint "test_atomic_sequences" "Breakpoint $decimal at $hex" \
+    gdb_breakpoint "test_atomic_sequences" "Breakpoint $decimal at $hex\\." \
 	"set the breakpoint at the start of the test function"
 
     gdb_test_multiple "continue" "Continue until lbarx/stbcx start breakpoint" {
@@ -57,15 +57,15 @@ proc do_test { displaced } {
     }
 
     set bp1 [gdb_get_line_number "lbarx" "$srcfile2"]
-    gdb_breakpoint "$bp1" "Breakpoint $decimal at $hex" \
+    gdb_breakpoint "$bp1" "Breakpoint $decimal at $hex\\." \
 	"set the breakpoint at the start of the lbarx/stbcx sequence"
 
     set bp2 [gdb_get_line_number "lharx" "$srcfile2"]
-    gdb_breakpoint "$bp2" "Breakpoint $decimal at $hex" \
+    gdb_breakpoint "$bp2" "Breakpoint $decimal at $hex\\." \
 	"set the breakpoint at the start of the lharx/sthcx sequence"
 
     set bp3 [gdb_get_line_number "lqarx" "$srcfile2"]
-    gdb_breakpoint "$bp3" "Breakpoint $decimal at $hex" \
+    gdb_breakpoint "$bp3" "Breakpoint $decimal at $hex\\." \
 	"set the breakpoint at the start of the lqarx/stqcx sequence"
 
     gdb_test continue "Continuing.*Breakpoint $decimal.*" \

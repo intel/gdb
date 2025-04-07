@@ -81,7 +81,7 @@ gdb_test "info frame" \
 # Testcase from breakpoints/2080 (when %ecx is used)
 
 gdb_test "break *(stack_align_ecx + 7)" \
-	"Breakpoint \[0-9\]* at $hex"
+	"Breakpoint \[0-9\]* at $hex\\."
 
 gdb_test "continue" \
 	"Breakpoint \[0-9\]*.*stack_align_ecx.*" \
@@ -109,7 +109,7 @@ gdb_test "info frame" \
 # Testcase from breakpoints/2080 (when %edx is used)
 
 gdb_test "break *(stack_align_edx + 7)" \
-	"Breakpoint \[0-9\]* at $hex"
+	"Breakpoint \[0-9\]* at $hex\\."
 
 gdb_test "continue" \
 	"Breakpoint \[0-9\]*.*stack_align_edx.*" \
@@ -137,7 +137,7 @@ gdb_test "info frame" \
 # Testcase from breakpoints/2080 (when %eax is used)
 
 gdb_test "break *(stack_align_eax + 7)" \
-	"Breakpoint \[0-9\]* at $hex"
+	"Breakpoint \[0-9\]* at $hex\\."
 
 gdb_test "continue" \
 	"Breakpoint \[0-9\]*.*stack_align_eax.*" \

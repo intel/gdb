@@ -90,7 +90,7 @@ proc check_breakpoint { func start end } {
     with_test_prefix "func=$func" {
 	set addr "*unknown*"
 	gdb_test_multiple "break $func" "place breakpoint" {
-	    -re -wrap "Breakpoint $::decimal at ($::hex)(?:: \[^\r\n\]+)?" {
+	    -re -wrap "Breakpoint $::decimal at ($::hex)(?:: \[^\r\n\]+)?\\." {
 		set addr $expect_out(1,string)
 		pass $gdb_test_name
 	    }

@@ -73,7 +73,7 @@ gdb_test "break <MixedCaseFunc>" \
 
 # Same, but this time on the function with no debug info.
 gdb_test "break <NoDebugMixedCaseFunc>" \
-         "Breakpoint $decimal at $hex"
+	 "Breakpoint $decimal at $hex\\."
 
 # Resume the program's execution, verifying that it lands at the expected
 # location.

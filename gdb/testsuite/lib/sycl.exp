@@ -483,7 +483,7 @@ proc get_stopped_threads {srcfile line {msg "get stopped threads"}} {
 
     set stopped_threads {}
     gdb_test_multiple "${wpfa}info threads -stopped" $msg -lbl {
-	-re "\r\n. ($decimal\(\.$decimal\)?)\[^\r\n\]* at $srcfile:$line" {
+	-re "\r\n. ($decimal\(\\\.$decimal\)?)\[^\r\n\]* at $srcfile:$line" {
 	    lappend stopped_threads $expect_out(1,string)
 	    exp_continue
 	}

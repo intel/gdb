@@ -376,7 +376,7 @@ proc get_current_thread {location} {
     global gdb_prompt decimal
 
     gdb_test_multiple "thread" "get current thread at $location" {
-	-re -wrap "Current thread is ($decimal|$decimal\.$decimal).*" {
+	-re -wrap "Current thread is ($decimal\(\\\.$decimal\)?).*" {
 	    pass $gdb_test_name
 	    return $expect_out(1,string)
 	}

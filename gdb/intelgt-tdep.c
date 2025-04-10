@@ -277,6 +277,9 @@ intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
 {
   gdb_assert (!tp->executing ());
 
+  if (tp->is_unavailable ())
+    return 0x0u;
+
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
   regcache *thread_regcache = get_thread_regcache (tp);
 

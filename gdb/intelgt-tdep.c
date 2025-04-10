@@ -278,6 +278,9 @@ intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp,
 {
   gdb_assert (!tp->executing ());
 
+  if (tp->is_unavailable ())
+    return 0x0u;
+
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
 
   /* Default to zero if the CE register is not available.  This may

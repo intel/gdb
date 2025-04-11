@@ -129,13 +129,31 @@ foreach device $sycl_device_list {
 	set outer_desc "${fill}operator\\(\\)${fill} at ${fill}$srcfile:$outer_loc"
 
 	# Check that we can step into a function.
+	if {[istarget "*-*-mingw*"]} {
+	    setup_kfail "JIRA GSD/11024" "*-*-*"
+	}
 	gdb_test "step" "int result = .*" "step into 'first'"
+
+	if {[istarget "*-*-mingw*"]} {
+	    setup_kfail "JIRA GSD/11024" "*-*-*"
+	}
 	gdb_test "step" "return third .*" "step into 'second'"
+
+	if {[istarget "*-*-mingw*"]} {
+	    setup_kfail "JIRA GSD/11024" "*-*-*"
+	}
 	gdb_test "step" "return fourth .*" "step into 'third'"
+
+	if {[istarget "*-*-mingw*"]} {
+	    setup_kfail "JIRA GSD/11024" "*-*-*"
+	}
 	gdb_test "step" "return x4 \\\+ y4.*" "step into 'fourth'"
 
 	# Limit the backtrace to 5 frames because frame #5
 	# and beyond are implementation-specific to the SYCL runtime.
+	if {[istarget "*-*-mingw*"]} {
+	    setup_kfail "JIRA GSD/11024" "*-*-*"
+	}
 	gdb_test "backtrace 5" [multi_line \
 				"#0${fill} $fourth_desc" \
 				"#1${fill} $third_desc" \
@@ -158,7 +176,19 @@ foreach device $sycl_device_list {
 	gdb_test_no_output "set scheduler-locking on" \
 	    "first set scheduler-locking on"
 
-	for {set i 0} {$i < 4} {incr i} {
+	if {[istarget "*-*-mingw*"]} {
+	    # On MinGW, the prologue-end is on the opening bracket.  A single
+	    # step does not step into the next function, see GSD/11024.
+	    # If we call 'finish' too many times, we end up in the frames
+	    # specific to the SYCL runtime and a subsequent call to 'finish'
+	    # or 'continue' causes the thread to be in unavailable state as
+	    # 'scheduler-locking' is set to 'on'.
+	    set num_finish 2
+	} else {
+	    set num_finish 4
+	}
+
+	for {set i 0} {$i < $num_finish} {incr i} {
 	    with_test_prefix "finish  #$i" {
 		set val_exp [lindex $return_values $i]
 
@@ -169,6 +199,9 @@ foreach device $sycl_device_list {
 		set desc_from [lindex $list_desc $i]
 		set desc_to [lindex $list_desc [expr $i + 1]]
 
+		if {[istarget "*-*-mingw*"]} {
+		    setup_kfail "JIRA GSD/11024" "*-*-*"
+		}
 		gdb_test "finish" [multi_line \
 				   "Run till exit from #0$fill$desc_from" \
 				   "$fill$desc_to" \
@@ -196,7 +229,14 @@ foreach device $sycl_device_list {
 	gdb_test_no_output "set scheduler-locking off" \
 	    "second set scheduler-locking off"
 
-	continue_sycl_program_to_termination
+	# Continuing in MinGW may cause a device reset.
+	if {![istarget "*-*-mingw*"]} {
+	    continue_sycl_program_to_termination "" "JIRA GSD/10047"
+	}
+
+	# gdbserver may hang when detaching using a single inferior only,
+	# see GSD-10047.  Manually kill the server instead.
+	kill_wait_spawned_process $server_spawn_id
 
 	kill_wait_spawned_process $test_spawn_id
     }

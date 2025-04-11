@@ -754,11 +754,15 @@ Connection name '{connection}' not recognized.""")
                 else:
                     self.handle_error(host_inf, details=str(ex))
                     IntelgtErrorReport.exit_intelgt_session(exception=ex)
+            finally:
+                # Ensure the 'suppress-cli-notifications' is reset on errors.
+                # Otherwise. GDB may not behave as expected if the user decides
+                # not to quit the session.
+                self.set_suppress_notifications("on" if cli_suppressed else "off")
 
             if not is_nonstop:
                 gdb.execute("set schedule-multiple on")
 
-            self.set_suppress_notifications("on" if cli_suppressed else "off")
             self.gt_inferior_init_pending = False
             return
 

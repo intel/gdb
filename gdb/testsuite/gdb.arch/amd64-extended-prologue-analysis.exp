@@ -1,0 +1,85 @@
+# Copyright 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# This test verifies that when placing a breakpoint on a function with a frame
+# pointer, instructions that push callee-saved registers in the prologue are
+# skipped, without debug info.  When stopped on such breakpoint, the pushed
+# registers should be able to be immediately unwound.  With debug info present,
+# GDB would try to use prologue-end markers found in the line table to
+# determine where the prologue ends.
+#
+# It is also tested both with and without .eh_frame's .cfi directives - with
+# them, GDB can only unwind a register once stopped after .cfi directive for
+# that register's push.
+
+require is_x86_64_m64_target
+standard_testfile .c
+
+proc test_run {} {
+    gdb_breakpoint "foo"
+    gdb_continue_to_breakpoint "Continue to foo"
+
+    gdb_test "backtrace" "#0  $::hex in foo\[^s\]+#1  $::hex in main\[^s\]+" \
+	"Verify backtrace output in foo"
+
+    set main_r12 [get_integer_valueof "\$r12" "null"]
+    gdb_assert { $main_r12 ne "null" }
+
+    set foo_r12 [expr "$main_r12 + 2"]
+    gdb_test "print \$r12=$foo_r12" "$foo_r12" "Set foo's %r12=$foo_r12"
+    gdb_test "up" ".*main.*" "Go up a frame from foo"
+    gdb_test "print \$r12" "$main_r12" "foo's %r12 unwound"
+    gdb_test "down" ".*foo.*" "Go back down a frame to foo"
+    gdb_test "print \$r12" "$foo_r12" "foo's %r12 unwound back"
+}
+
+with_test_prefix "w/o .cfi directives" {
+    # -fno-asynchronous-unwind-tables is needed to get rid of .cfi directives in
+    # .eh_frame section.
+    if { [gdb_can_simple_compile fno-asynchronous-unwind-tables \
+	{ void foo () { } } object -fno-asynchronous-unwind-tables] != 0 } {
+
+	# For at least gcc 11.4/clang 14.0.0 and later, -O1 makes them more
+	# eager to use registers in the prologue.
+	#
+	# At least gcc 11.4 and later by default does not generate full debug
+	# info, "nodebug" is there for other compilers.
+	if { [prepare_for_testing "failed to prepare" $testfile $srcfile \
+	    { optimize=-O1 nodebug
+	    additional_flags=-fno-asynchronous-unwind-tables
+	    additional_flags=-fno-omit-frame-pointer}] } {
+	    return -1
+	}
+
+	if { ![runto_main] } {
+	    return -1
+	}
+
+	test_run
+    }
+}
+
+with_test_prefix "with .cfi directives" {
+    if { [prepare_for_testing "failed to prepare" $testfile $srcfile \
+	{ optimize=-O1 nodebug additional_flags=-fno-omit-frame-pointer}] } {
+	return -1
+    }
+
+    if { ![runto_main] } {
+	return -1
+    }
+
+    test_run
+}

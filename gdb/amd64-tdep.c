@@ -2694,6 +2694,56 @@ amd64_analyze_frame_setup (gdbarch *gdbarch, CORE_ADDR pc,
   return pc;
 }
 
+/* Check whether PC points at code pushing registers onto the stack.  If so,
+   update CACHE and return pc after those pushes or CURRENT_PC, whichever is
+   smaller.  Otherwise, return PC passed to this function.  */
+
+static CORE_ADDR
+amd64_analyze_register_saves (CORE_ADDR pc, CORE_ADDR current_pc,
+			      amd64_frame_cache *cache)
+{
+  gdb_byte op;
+  int offset = 0;
+
+  /* There are at most 16 registers that would be pushed in the prologue.  */
+  for (int i = 0; i < 16 && pc < current_pc; i++)
+    {
+      int reg = 0;
+      int pc_offset = 0;
+
+      if (target_read_code (pc, &op, 1) == -1)
+	return pc;
+
+      /* %r8 - %r15 prefix.  */
+      if (op == 0x41)
+	{
+	  reg += 8;
+	  pc_offset = 1;
+
+	  if (target_read_code (pc + 1, &op, 1) == -1)
+	    return pc;
+	}
+
+      /* push %rax|%rcx|%rdx|%rbx|%rsp|%rbp|%rsi|%rdi
+
+	 or with 0x41 prefix:
+	 push %r8|%r9|%r10|%r11|%r12|%r13|%r14|%r15.  */
+      if (op < 0x50 || op > 0x57)
+	break;
+
+      reg += op - 0x50;
+      offset -= 8;
+
+      int regnum = amd64_arch_reg_to_regnum (reg);
+      cache->saved_regs[regnum] = offset;
+      cache->sp_offset += 8;
+
+      pc += 1 + pc_offset;
+    }
+
+  return pc;
+}
+
 /* Do a limited analysis of the prologue at PC and update CACHE
    accordingly.  Bail out early if CURRENT_PC is reached.  Return the
    address where the analysis stopped.
@@ -2731,7 +2781,8 @@ amd64_analyze_prologue (gdbarch *gdbarch, CORE_ADDR pc, CORE_ADDR current_pc,
   if (current_pc <= pc)
     return current_pc;
 
-  return amd64_analyze_frame_setup (gdbarch, pc, current_pc, cache);
+  pc = amd64_analyze_frame_setup (gdbarch, pc, current_pc, cache);
+  return amd64_analyze_register_saves (pc, current_pc, cache);
 }
 
 /* Work around false termination of prologue - GCC PR debug/48827.

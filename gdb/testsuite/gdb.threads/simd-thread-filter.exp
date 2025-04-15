@@ -57,8 +57,6 @@ if {[build_executable "failed to compile $srcfile" \
 
 proc thread_filter_raw {context match_ctxs total_matches \
 			expr_value options message} {
-    global decimal
-
     verbose -log "context: \"$context\""
     verbose -log "match_ctxs: \"$match_ctxs\""
     verbose -log "total_matches: \"$total_matches\""

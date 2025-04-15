@@ -1,0 +1,9 @@
+---
+Language:     Cpp
+BasedOnStyle: GNU
+UseTab:       Always
+SortIncludes: Never
+ColumnLimit:  79
+ContinuationIndentWidth: 2
+AllowShortFunctionsOnASingleLine: None
+Standard: Latest

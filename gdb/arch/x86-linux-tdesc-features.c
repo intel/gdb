@@ -65,6 +65,7 @@ struct x86_xstate_feature {
 
 static constexpr x86_xstate_feature x86_linux_all_xstate_features[] = {
   /* Feature,           i386,	amd64,	x32.  */
+  { X86_XSTATE_AMX,	false,	true, 	true },
   { X86_XSTATE_CET_U,	false,	true, 	true },
   { X86_XSTATE_PKRU,	true,	true, 	true },
   { X86_XSTATE_AVX512,	true,	true, 	true },
@@ -154,7 +155,7 @@ x86_linux_xstate_bv_to_tdesc_idx (uint64_t xstate_bv)
      represents the bit order within the generated index number.
 
      i386  | x87 sse avx avx512 pkru
-     amd64 |         avx avx512 pkru
+     amd64 |         avx avx512 pkru amx
      i32   |         avx avx512 pkru
 
      The features are ordered so that for each mode (i386, amd64, i32) the

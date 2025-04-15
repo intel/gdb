@@ -22,6 +22,7 @@
 
 #include "../features/i386/64bit-avx.c"
 #include "../features/i386/64bit-avx512.c"
+#include "../features/i386/64bit-amx.c"
 #include "../features/i386/64bit-core.c"
 #include "../features/i386/64bit-linux.c"
 #include "../features/i386/64bit-segments.c"
@@ -77,6 +78,9 @@ amd64_create_target_description (uint64_t xstate_bv, bool is_x32,
       else
 	regnum = create_feature_i386_32bit_ssp (tdesc.get (), regnum);
     }
+
+  if (xstate_bv & X86_XSTATE_AMX)
+    regnum = create_feature_i386_64bit_amx (tdesc.get (), regnum);
 
   return tdesc.release ();
 }

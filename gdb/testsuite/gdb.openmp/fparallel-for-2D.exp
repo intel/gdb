@@ -52,7 +52,13 @@ foreach device_info ${device_list} {
 	    ".*${srcfile}:${last_line}.*"
 	gdb_test "ptype in_arr" "type \\\= INTEGER\\\*4 \\\(128,64\\\)"
 	gdb_test "ptype out_arr" "type \\\= INTEGER\\\*4 \\\(64,128\\\)"
+	if {[require_openmp_device "GPU"]} {
+	    setup_kfail "JIRA CMPLRLLVM/67138" "*-*-*"
+	}
 	gdb_test "print in_arr(1,1)" "123"
+	if {[require_openmp_device "GPU"]} {
+	    setup_kfail "JIRA CMPLRLLVM/67138" "*-*-*"
+	}
 	gdb_test "print in_arr(1,2)" "124"
     }
 }

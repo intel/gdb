@@ -83,11 +83,13 @@ proc run_tests {lang exe} {
 	    if {[require_openmp_device "GPU"]} {
 		setup_kfail "JIRA GSD/9774" "*-*-*"
 	    }
+	    setup_kfail "JIRA IGDB/6442" "*-*-*"
 	    gdb_test_no_output "set language ${lang}"
 	}
 
 	set to_end "\[^\r\n\]+"
 
+	setup_kfail "JIRA IGDB/6442" "*-*-*"
 	with_test_prefix "fortran(host/target)->cpp(target)" {
 	    gdb_test "bt -frame-arguments all 7" [multi_line \
 		    "#0\\s+breakpt \\(\\) at $to_end" \
@@ -145,6 +147,7 @@ proc run_tests {lang exe} {
 	    if {[require_openmp_device "GPU"]} {
 		setup_kfail "JIRA GSD/9775" "*-*-*"
 	    }
+	    setup_kfail "JIRA IGDB/6442" "*-*-*"
 	    gdb_test "print obj" "${obj_pattern}"
 	}
     }

@@ -2671,154 +2671,29 @@ amd64_analyze_frame_setup (gdbarch *gdbarch, CORE_ADDR pc,
       /* Check for `movq %rsp, %rbp'.  */
       if (memcmp (buf, mov_rsp_rbp_1, 3) == 0
 	  || memcmp (buf, mov_rsp_rbp_2, 3) == 0)
-	pc += 4;
+	{
+	  /* OK, we actually have a frame.  */
+	  cache->frameless_p = 0;
+	  pc += 4;
+	}
       /* For X32, also check for `movl %esp, %ebp'.  */
       else if (gdbarch_ptr_bit (gdbarch) == 32)
 	{
 	  if (memcmp (buf, mov_esp_ebp_1, 2) == 0
 	      || memcmp (buf, mov_esp_ebp_2, 2) == 0)
-	    pc += 3;
+	    {
+	      /* OK, we actually have a frame.  */
+	      cache->frameless_p = 0;
+	      pc += 3;
+	    }
 	}
       else
 	pc++;
-
-      /* At this point, a function's frame is already either stack pointer
-	 based or base pointer based.  */
-      cache->frameless_p = 0;
     }
 
   if (current_pc <= pc)
     return current_pc;
 
-  return pc;
-}
-
-/* Check whether PC points at code pushing callee-saved registers onto the
-   stack.  If so, update CACHE and return pc after those pushes or CURRENT_PC,
-   whichever is smaller.  Otherwise, return PC passed to this function.  */
-
-static CORE_ADDR
-amd64_analyze_register_saves (CORE_ADDR pc, CORE_ADDR current_pc,
-			      amd64_frame_cache *cache)
-{
-  if (current_pc <= pc)
-    return current_pc;
-
-  gdb_byte op;
-  int offset = 0;
-
-  /* There are at most 16 callee-saved registers that would be pushed in the
-     prologue.  */
-  for (int i = 0; i < 16 && pc < current_pc; i++)
-    {
-      int reg = 0;
-      int pc_offset = 0;
-
-      if (target_read_code (pc, &op, 1))
-	return pc;
-
-      /* %r8 - %r15 prefix.  */
-      if (op == 0x41)
-	{
-	  reg += 8;
-	  pc_offset = 1;
-
-	  if (target_read_code (pc + 1, &op, 1))
-	    return pc;
-	}
-
-      /* push %rax|%rcx|%rdx|%rbx|%rsp|%rbp|%rsi|%rdi.  */
-      if (op < 0x50 || op > 0x57)
-	break;
-
-      reg += op - 0x50;
-      offset -= 8;
-
-      int regnum = amd64_arch_reg_to_regnum (reg);
-      cache->saved_regs[regnum] = offset;
-      cache->sp_offset += 8;
-
-      /* frameless_p is reset before if this is a base pointer based frame,
-	 but it's also reset here in case this is a stack pointer based
-	 frame.  */
-      cache->frameless_p = 0;
-      pc += 1 + pc_offset;
-    }
-
-  return pc;
-}
-
-/* Check whether PC points at code allocating space on the stack.
-   If so, update CACHE and return pc past it or CURRENT_PC, whichever is
-   smaller.  Otherwise, return PC passed to this function.  */
-
-static CORE_ADDR
-amd64_analyze_prologue_stack_alloc (gdbarch *arch, CORE_ADDR pc,
-				    CORE_ADDR current_pc,
-				    amd64_frame_cache *cache)
-{
-  if (current_pc <= pc)
-    return current_pc;
-
-  static const gdb_byte sub_imm8_rsp[]  = { 0x83, 0xec };
-  static const gdb_byte sub_imm32_rsp[] = { 0x81, 0xec };
-  static const gdb_byte lea_disp_rsp[]  = { 0x8D, 0x64 };
-
-  bfd_endian byte_order = gdbarch_byte_order (arch);
-  const CORE_ADDR start_pc = pc;
-
-  gdb_byte op;
-  if (target_read_code (pc, &op, 1))
-    return pc;
-
-  /* Check for REX.W.  */
-  if (op == 0x48)
-    pc++;
-
-  if (current_pc <= pc)
-    return current_pc;
-
-  gdb_byte buf[2];
-  read_code (pc, buf, 2);
-
-  /* Check for instruction allocating space on the stack, which looks like
-       sub imm8/32, %rsp
-     or
-       lea -imm (%rsp), %rsp
-
-     and forward pc past it + update cache.  */
-
-  /* sub imm8, %rsp.  */
-  if (memcmp (buf, sub_imm8_rsp, 2) == 0)
-    {
-      /* Instruction is 3 bytes long.  The imm8 arg is the 3rd, single
-	 byte.  */
-      cache->sp_offset += read_code_integer (pc + 2, 1, byte_order);
-      pc += 3;
-    }
-  /* sub imm32, %rsp.  */
-  else if (memcmp (buf, sub_imm32_rsp, 2) == 0)
-    {
-      /* Instruction is 6 bytes long.  The imm32 arg is stored in 4 bytes,
-	 starting from 3rd one.  */
-      cache->sp_offset += read_code_integer (pc + 2, 4, byte_order);
-      pc += 6;
-    }
-  /* lea -imm (%rsp), %rsp.  */
-  else if (memcmp (buf, lea_disp_rsp, 2) == 0)
-    {
-      /* Instruction is 4 bytes long.  The imm arg is the 4th, single
-	 byte.  */
-      cache->sp_offset += -1 * read_code_integer (pc + 3, 1, byte_order);
-      pc += 4;
-    }
-  else
-    return start_pc;
-
-  /* frameless_p should be reset before, but it's also done here in case the
-     assembly is optimized/hand-written in a way that the only frame related
-     operation is allocating space on the stack.  */
-  cache->frameless_p = 0;
   return pc;
 }
 
@@ -2859,9 +2734,7 @@ amd64_analyze_prologue (struct gdbarch *gdbarch,
     pc = amd64_analyze_stack_align (pc, current_pc, cache);
 
   pc = amd64_skip_endbr64 (pc);
-  pc = amd64_analyze_frame_setup (gdbarch, pc, current_pc, cache);
-  pc = amd64_analyze_register_saves (pc, current_pc, cache);
-  return amd64_analyze_prologue_stack_alloc (gdbarch, pc, current_pc, cache);
+  return amd64_analyze_frame_setup (gdbarch, pc, current_pc, cache);
 }
 
 /* Work around false termination of prologue - GCC PR debug/48827.

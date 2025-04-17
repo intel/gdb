@@ -149,9 +149,8 @@ main:
 .globl breakpt
         .type   breakpt, @function
 breakpt:
-.Ltext4a:
+.Ltext4:
         sub    $0x8,%rsp
-.Ltext4b:
         add    $0x8, %rsp
         retq
 .Ltext5a:
@@ -248,8 +247,8 @@ int_param_two_reg_pieces:
 	.long	.LEFDE0-.LASFDE0        /* length */
 .LASFDE0:
 	.long	.Lframe0                /* CIE reference */
-	.quad	.Ltext4a                /* start */
-	.quad	.Ltext5a-.Ltext4a       /* length */
+	.quad	.Ltext4                 /* start */
+	.quad	.Ltext5a-.Ltext4        /* length */
         /* Instructions */
         .byte   0x7                     /* DW_CFA_undefined */
         .uleb128 0x2                    /* reg# */
@@ -257,10 +256,6 @@ int_param_two_reg_pieces:
         .uleb128 0x4                    /* reg# */
         .byte   0x7                     /* DW_CFA_undefined */
         .uleb128 0x5                    /* reg# */
-        .byte   0x4                     /* DW_CFA_advance_loc_4 */
-        .long   .Ltext4b-.Ltext4a       /* delta */
-        .byte   0xe                     /* DW_CFA_def_cfa_offset */
-        .uleb128 0x10                   /* offset */
 	.align 8
 .LEFDE0:
 
@@ -361,7 +356,7 @@ int_param_two_reg_pieces:
 	.byte	0x1                     /* DW_AT_external */
 	.string	"breakpt"               /* DW_AT_name */
 	.byte	0x1                     /* DW_AT_prototyped */
-	.quad	.Ltext4a                /* DW_AT_low_pc */
+	.quad	.Ltext4                 /* DW_AT_low_pc */
 	.quad	.Ltext5a                /* DW_AT_high_pc */
 
 .LDI2:

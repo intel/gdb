@@ -384,6 +384,7 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
             return
 
         if ('libze_intel_gpu.so' in event.new_objfile.filename or
+            'libur_adapter_level_zero.so' in event.new_objfile.filename or
             'ze_intel_gpu64.dll' in event.new_objfile.filename):
             DebugLogger.log(
                 f"received {event.new_objfile.filename} loaded event.")
@@ -400,6 +401,7 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
             return
 
         if ('libze_loader.so' in event.new_objfile.filename or
+            'libur_adapter_level_zero.so' in event.new_objfile.filename or
             'ze_loader.dll' in event.new_objfile.filename):
             DebugLogger.log(
                 f"received {event.new_objfile.filename} loaded event. "
@@ -779,5 +781,10 @@ Connection name '{connection}' not recognized.""")
 
 AUTO_ATTACH_DISABLED = IntelgtAutoAttach.get_env_variable(
         "INTELGT_AUTO_ATTACH_DISABLE", "0")
-if AUTO_ATTACH_DISABLED != "1":
+# The 'libur_adapter_level_zero.so' is loaded for all IMPI application
+# and 'I_MPI_OFFLOAD = 0' is pre-requisite for such CPU only offload
+# cases.  This additional check is for such cases.
+IMPI_DEBUG_ENABLED = IntelgtAutoAttach.get_env_variable(
+        "I_MPI_OFFLOAD", "1")
+if AUTO_ATTACH_DISABLED != "1" and IMPI_DEBUG_ENABLED != "0":
     INTELGT_AUTO_ATTACH = IntelgtAutoAttach()

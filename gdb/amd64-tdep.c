@@ -2273,26 +2273,6 @@ amd64_alloc_frame_cache (void)
   return cache;
 }
 
-/* With -fcf-protection compiler flag set (which is the default), compilers can
-   put 'endbr64' instruction at the beginning of a function.  If PC points at
-   that instruction, return pc pointing to an instruction after that or
-   CURRENT_PC, whichever is smaller.  If 'endbr64' is not there, return PC.  */
-
-static CORE_ADDR
-amd64_skip_endbr64 (CORE_ADDR pc)
-{
-  static const gdb_byte endbr64[4] = { 0xf3, 0x0f, 0x1e, 0xfa };
-  gdb_byte buf[4];
-
-  if (target_read_code (pc, buf, 4))
-    return pc;
-
-  if (memcmp (buf, endbr64, 4) == 0)
-    pc += 4;
-
-  return pc;
-}
-
 /* GCC 4.4 and later, can put code in the prologue to realign the
    stack pointer.  Check whether PC points to such code, and update
    CACHE accordingly.  Return the first instruction after the code
@@ -2630,18 +2610,35 @@ amd64_x32_analyze_stack_align (CORE_ADDR pc, CORE_ADDR current_pc,
   return std::min (pc + offset + 2, current_pc);
 }
 
-/* Check whether PC points at a code setting up a base pointer based frame.
-   If so, update CACHE and return pc past the sequence that sets up the frame
-   or CURRENT_PC, whichever is smaller.  If there's no frame setup, return
-   PC.  */
+/* Do a limited analysis of the prologue at PC and update CACHE
+   accordingly.  Bail out early if CURRENT_PC is reached.  Return the
+   address where the analysis stopped.
+
+   We will handle only functions beginning with:
+
+      pushq %rbp        0x55
+      movq %rsp, %rbp   0x48 0x89 0xe5 (or 0x48 0x8b 0xec)
+
+   or (for the X32 ABI):
+
+      pushq %rbp        0x55
+      movl %esp, %ebp   0x89 0xe5 (or 0x8b 0xec)
+
+   The `endbr64` instruction can be found before these sequences, and will be
+   skipped if found.
+
+   Any function that doesn't start with one of these sequences will be
+   assumed to have no prologue and thus no valid frame pointer in
+   %rbp.  */
 
 static CORE_ADDR
-amd64_analyze_frame_setup (gdbarch *gdbarch, CORE_ADDR pc,
-			   CORE_ADDR current_pc, amd64_frame_cache *cache)
+amd64_analyze_prologue (struct gdbarch *gdbarch,
+			CORE_ADDR pc, CORE_ADDR current_pc,
+			struct amd64_frame_cache *cache)
 {
-  if (current_pc <= pc)
-    return current_pc;
-
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  /* The `endbr64` instruction.  */
+  static const gdb_byte endbr64[4] = { 0xf3, 0x0f, 0x1e, 0xfa };
   /* There are two variations of movq %rsp, %rbp.  */
   static const gdb_byte mov_rsp_rbp_1[3] = { 0x48, 0x89, 0xe5 };
   static const gdb_byte mov_rsp_rbp_2[3] = { 0x48, 0x8b, 0xec };
@@ -2652,10 +2649,31 @@ amd64_analyze_frame_setup (gdbarch *gdbarch, CORE_ADDR pc,
   gdb_byte buf[3];
   gdb_byte op;
 
-  if (target_read_code (pc, &op, 1))
-    return pc;
+  if (current_pc <= pc)
+    return current_pc;
 
-  if (op == 0x55) /* pushq %rbp.  */
+  if (gdbarch_ptr_bit (gdbarch) == 32)
+    pc = amd64_x32_analyze_stack_align (pc, current_pc, cache);
+  else
+    pc = amd64_analyze_stack_align (pc, current_pc, cache);
+
+  op = read_code_unsigned_integer (pc, 1, byte_order);
+
+  /* Check for the `endbr64` instruction, skip it if found.  */
+  if (op == endbr64[0])
+    {
+      read_code (pc + 1, buf, 3);
+
+      if (memcmp (buf, &endbr64[1], 3) == 0)
+	pc += 4;
+
+      op = read_code_unsigned_integer (pc, 1, byte_order);
+    }
+
+  if (current_pc <= pc)
+    return current_pc;
+
+  if (op == 0x55)		/* pushq %rbp */
     {
       /* Take into account that we've executed the `pushq %rbp' that
 	 starts this instruction sequence.  */
@@ -2674,67 +2692,25 @@ amd64_analyze_frame_setup (gdbarch *gdbarch, CORE_ADDR pc,
 	{
 	  /* OK, we actually have a frame.  */
 	  cache->frameless_p = 0;
-	  pc += 4;
+	  return pc + 4;
 	}
+
       /* For X32, also check for `movl %esp, %ebp'.  */
-      else if (gdbarch_ptr_bit (gdbarch) == 32)
+      if (gdbarch_ptr_bit (gdbarch) == 32)
 	{
 	  if (memcmp (buf, mov_esp_ebp_1, 2) == 0
 	      || memcmp (buf, mov_esp_ebp_2, 2) == 0)
 	    {
 	      /* OK, we actually have a frame.  */
 	      cache->frameless_p = 0;
-	      pc += 3;
+	      return pc + 3;
 	    }
 	}
-      else
-	pc++;
+
+      return pc + 1;
     }
 
-  if (current_pc <= pc)
-    return current_pc;
-
   return pc;
-}
-
-/* Do a limited analysis of the prologue at PC and update CACHE
-   accordingly.  Bail out early if CURRENT_PC is reached.  Return the
-   address where the analysis stopped.
-
-   We will handle only functions beginning with:
-
-      pushq %rbp	0x55
-      movq %rsp, %rbp   0x48 0x89 0xe5 (or 0x48 0x8b 0xec)
-
-   or (for the X32 ABI):
-
-      pushq %rbp	0x55
-      movl %esp, %ebp   0x89 0xe5 (or 0x8b 0xec)
-
-   The `endbr64` instruction can be found before these sequences, and will be
-   skipped if found.
-
-   Any function that doesn't start with one of these sequences will be
-   assumed to have no prologue and thus no valid frame pointer in
-   %rbp.  */
-
-static CORE_ADDR
-amd64_analyze_prologue (struct gdbarch *gdbarch,
-			CORE_ADDR pc, CORE_ADDR current_pc,
-			struct amd64_frame_cache *cache)
-{
-  if (current_pc <= pc)
-    return current_pc;
-
-  /* When a function is an entry point, it can align the stack so it's
-     16 bytes aligned.  */
-  if (gdbarch_ptr_bit (gdbarch) == 32)
-    pc = amd64_x32_analyze_stack_align (pc, current_pc, cache);
-  else
-    pc = amd64_analyze_stack_align (pc, current_pc, cache);
-
-  pc = amd64_skip_endbr64 (pc);
-  return amd64_analyze_frame_setup (gdbarch, pc, current_pc, cache);
 }
 
 /* Work around false termination of prologue - GCC PR debug/48827.

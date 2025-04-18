@@ -41,6 +41,9 @@ proc test_per_rank {rank device} {
 
     set fill "\[^\r\n\]*"
 
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	setup_kfail "JIRA IGDB/6446" "*-*-*"
+    }
     # Activate the given rank.
     if {[gdb_test -prompt $::impi_gdb_prompt "z $rank" \
 	    "mpigdb: set active processes to $rank.*" \
@@ -57,11 +60,20 @@ proc test_per_rank {rank device} {
     array set bp_locations_kernel {}
     set num_kernel_locations 4
 
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	setup_kfail "JIRA IGDB/6446" "*-*-*"
+    }
     set line_after_kernel [gdb_get_line_number "line-after-kernel"]
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	setup_kfail "JIRA IGDB/6446" "*-*-*"
+    }
     impi_gdb_breakpoint "$srcfile:$line_after_kernel" {message}
 
     for {set i 1} {$i <= $num_kernel_locations} {incr i} {
 	set bp_locations_kernel($i) [gdb_get_line_number "kernel-line-$i"]
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    setup_kfail "JIRA IGDB/6446" "*-*-*"
+	}
 	impi_gdb_breakpoint "$srcfile:$bp_locations_kernel($i)" {message}
     }
 
@@ -69,6 +81,9 @@ proc test_per_rank {rank device} {
     for {set i 1} {$i <= $num_kernel_locations} {incr i} {
 	if {[is_dg2 $device]} {
 	    setup_kfail "JIRA IGDB/5448" "*-*-*"
+	}
+	if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	    setup_kfail "JIRA IGDB/6446" "*-*-*"
 	}
 	if {[gdb_test -prompt $::impi_gdb_prompt "continue" \
 		"\\\[$rank\\\]$fill$srcfile:$bp_locations_kernel($i).*" \
@@ -79,9 +94,15 @@ proc test_per_rank {rank device} {
 	}
     }
 
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	setup_kfail "JIRA IGDB/6446" "*-*-*"
+    }
     impi_gdb_continue_to_breakpoint 1 "line after kernel" \
 	"$srcfile:$line_after_kernel.*"
 
+    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+	setup_kfail "JIRA IGDB/6446" "*-*-*"
+    }
     # Set breakpoint at the end of the main-function.
     impi_gdb_breakpoint "$srcfile:${::line_at_end}" {message}
 
@@ -122,6 +143,9 @@ save_vars { env(ZE_FLAT_DEVICE_HIERARCHY) } {
 		if {[is_dg2 $device]} {
 		    setup_kfail "JIRA IGDB/5448" "*-*-*"
 		}
+		if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+		    setup_kfail "JIRA IGDB/6446" "*-*-*"
+		}
 		if {[gdb_test -prompt $::impi_gdb_prompt "z all" ""] != 0} {
 		    # If activating the ranks fails, there is no point to
 		    # continue the test on this device.
@@ -130,6 +154,9 @@ save_vars { env(ZE_FLAT_DEVICE_HIERARCHY) } {
 
 		# Run all ranks to the last breakpoint.
 		global line_at_end
+		if {[require_sycl_device "$device" "gpu" "Intel*"]} {
+		    setup_kfail "JIRA IGDB/6446" "*-*-*"
+		}
 		impi_gdb_continue_to_breakpoint $ranks "last breakpoint" \
 		    "$srcfile:$line_at_end"
 

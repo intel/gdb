@@ -4160,7 +4160,9 @@ Apply a command to a list of threads.\n\
 Usage: thread apply ID[:LANE]... [OPTION]... COMMAND\n\
 ID is a space-separated list of IDs of threads to apply COMMAND on.\n\
 For threads with SIMD lanes use additional :LANE specifier to\n\
-apply COMMAND to a lane range of thread ID.\n"
+apply COMMAND to a lane range of thread ID.\n\
+Convenience variables and GDB's value history can be used to specify\n\
+thread-id list.\n"
 THREAD_APPLY_OPTION_HELP),
 			       thread_apply_opts);
 

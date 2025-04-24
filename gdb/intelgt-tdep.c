@@ -895,6 +895,9 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
     [intelgt::regset_mme] = { 320, 336 },
   };
 
+  /* DWARF GRF extension for 512-grf mode.  */
+  constexpr regnum_range dwarf_nums_grf_ext = { 350, 606 };
+
   /* Number of SBA registers.  */
   constexpr size_t sba_dwarf_len = dwarf_nums[intelgt::regset_sba].end
     - dwarf_nums[intelgt::regset_sba].start;
@@ -940,6 +943,26 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
 	      return candidate;
 	  }
       }
+
+  if (num >= dwarf_nums_grf_ext.start && num < dwarf_nums_grf_ext.end)
+    {
+      /* Handle the DWARF GRF extension register numbers.
+
+	 In 512-GRF mode, DWARF registers are organized into two distinct
+	 sets, whereas actual registers are received from target in a
+	 single batch (r0..r511).  This section maps DWARF registers in
+	 the extended GRF range starting from r256 onward, complementing
+	 the initial set of DWARF GRFs processed earlier.  */
+
+      int candidate = (num
+		       - dwarf_nums_grf_ext.start
+		       + dwarf_nums[intelgt::regset_grf].end
+		       - dwarf_nums[intelgt::regset_grf].start
+		       + data->regset_ranges[intelgt::regset_grf].start);
+
+      if (candidate < data->regset_ranges[intelgt::regset_grf].end)
+	return candidate;
+    }
 
   return -1;
 }

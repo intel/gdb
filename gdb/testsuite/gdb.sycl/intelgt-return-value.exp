@@ -42,8 +42,7 @@ set fill "\[^\r\n\]*"
 proc test_finish {function_name function_args expected_value expected_outer_frame} {
     with_test_prefix "$function_name" {
 	global fill valnum_re
-	set value_returned "(\r\nValue returned is $valnum_re = $expected_value)"
-	append value_returned "?"
+	set value_returned "\r\nValue returned is $valnum_re = $expected_value"
 
 	gdb_test "finish" [multi_line \
 			       "Run till exit from #0 ${fill}${function_name}$fill\\($function_args\\) $fill" \
@@ -120,7 +119,7 @@ proc test_call_stack {} {
     # we are at the correct location.  Afterwards, we check which BPs were
     # hit.
     while {$i < 11 && $should_continue} {
-        with_test_prefix "iteration $i" {
+	with_test_prefix "iteration $i" {
 	    gdb_test_multiple "continue" "iteration $i" {
 		-re -wrap ".*$srcfile:$return_int4_loc.*" {
 		    set hit_return_int4 true

@@ -36,8 +36,8 @@ if {[build_executable "failed to compile ${srcfile}" \
 foreach device_info ${device_list} {
     openmp_with_intelgt_lock $device_info "cpp" {
 	array set bp_strings {
-    	    "line-before-kernel" 0
-    	    "intentionally-empty-line" 1
+	    "line-before-kernel" 0
+	    "intentionally-empty-line" 1
 	}
 	foreach {bp_line offset} [array get bp_strings] {
 	    clean_restart ${binfile}

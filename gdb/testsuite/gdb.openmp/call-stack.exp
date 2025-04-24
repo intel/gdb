@@ -102,10 +102,8 @@ foreach device_info ${device_list} {
 	gdb_test "print x" "= 20" "print x at first bp"
 	gdb_test "print y" "= 9" "print y at first bp"
 
-	# Finish the function calls.  Normally we expect to see a "Value
-	# returned is ..." line.  However, some OpenMP device compilers may
-	# inline the kernel functions.  In that case we won't get that line.
-	set value_returned "(\r\nValue returned is $valnum_re = 180)?"
+	# Finish the function calls.
+	set value_returned "\r\nValue returned is $valnum_re = 180"
 
 	if {[require_openmp_device "GPU"]} {
 	    setup_kfail "JIRA GSD/4271" "*-*-*"
@@ -129,7 +127,7 @@ foreach device_info ${device_list} {
 	    "#$decimal.* ${outer_desc}.*"] \
 	    "backtrace, test 2"
 
-	set value_returned "(\r\nValue returned is $valnum_re = 210)?"
+	set value_returned "\r\nValue returned is $valnum_re = 210"
 
 	# Currently failing due to wrapper calls in call stack.
 	if {[require_openmp_device "GPU"]} {

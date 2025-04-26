@@ -210,6 +210,7 @@ foreach device $sycl_device_list {
 
 	    # Continue to termination.
 	    if {$non_stop == "on"} {
+		setup_kfail "JIRA IGDB/6440" "*-*-*"
 		gdb_test_multiple "continue -a" "" {
 		    -re -wrap "" {
 			gdb_test_multiple "" $gdb_test_name {

@@ -54,7 +54,7 @@ extern "C"
 {
   /* Entry point to be called from Fortran. */
   void
-  mixed_func_1e ()
+  mixed_func_1e (_Complex float cf)
   {
     mixed_func_1f ();
   }

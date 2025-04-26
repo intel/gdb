@@ -73,7 +73,7 @@ proc run_tests { lang } {
 		 "#1\\s+$hex in mixed_func_1h \\(\\) at \[^\r\n\]+" \
 		 "#2\\s+$hex in mixed_func_1g \\($1g_args\\) at \[^\r\n\]+" \
 		 "#3\\s+$hex in mixed_func_1f \\(\\) at \[^\r\n\]+" \
-		 "#4\\s+$hex in mixed_func_1e \\(\\) at \[^\r\n\]+" \
+		 "#4\\s+$hex in mixed_func_1e \\(cf=.*\\) at \[^\r\n\]+" \
 		 "#5\\s+$hex in mixed_func_1d \\(\[^\r\n\]+\\) at \[^\r\n\]+" \
 		 "#6\\s+$hex in mixed_func_1c \\(\[^\r\n\]+\\) at \[^\r\n\]+" \
 		 "#7\\s+$hex in mixed_func_1b \\($1b_args\\) at \[^\r\n\]+" \

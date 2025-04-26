@@ -97,17 +97,20 @@ subroutine mixed_func_1d(a, b, c, d, str)
   real(c_double) :: c
   complex(c_float_complex) :: d
   character(len=*) :: str
+  complex(kind=4) :: cf = 0
 
   interface
-     subroutine mixed_func_1e () bind(C)
+     subroutine mixed_func_1e (cf) bind(C)
+       use, intrinsic :: iso_c_binding, only: c_float_complex
        implicit none
+       complex(c_float_complex), value, intent(in) :: cf
      end subroutine mixed_func_1e
   end interface
 
-  write(*,*) a, b, c, d, str
+  write(*,*) a, b, c, d, cf, str
 
   ! Call a C++ function (via an extern "C" wrapper).
-  call mixed_func_1e
+  call mixed_func_1e (cf)
 end subroutine mixed_func_1d
 
 ! This is called from C++ code.

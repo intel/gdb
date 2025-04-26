@@ -1882,6 +1882,11 @@ yylex (YYSTYPE *lvalp, cpname_state *state)
       HANDLE_SPECIAL ("virtual thunk to ", DEMANGLE_COMPONENT_VIRTUAL_THUNK);
       if (startswith (tokstart, "wchar_t"))
 	return WCHAR_T;
+      if (startswith (tokstart, "complex float"))
+	{
+	  namelen = 13;
+	  state->lexptr = tokstart + 13;
+	}
       break;
     case 6:
       if (startswith (tokstart, "global constructors keyed to "))

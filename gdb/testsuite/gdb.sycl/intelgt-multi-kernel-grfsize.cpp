@@ -32,18 +32,20 @@ main (int argc, char *argv[])
   sycl::queue q {get_sycl_queue (argc, argv)};
   sycl::buffer<int, 1> bufa (&a, sycl::range<1> {1});
   sycl::buffer<int, 1> bufb (&b, sycl::range<1> {1});
+  sycl::range<1> ndRange = {1};
 
   q.submit ([&] (sycl::handler &cgh)
     {
       auto acc = bufa.get_access<sycl::access::mode::write> (cgh);
 
       syclex::properties kernel_properties {intelex::grf_size<128>};
+      syclex::launch_config kernel_config (ndRange, kernel_properties);
 
-      cgh.parallel_for (sycl::range<1> {1}, kernel_properties,
-			[=] (sycl::id<1> wiID)
-			{
-			  acc[wiID] = wiID; /* kernel-1-line */
-			});
+      syclex::parallel_for (cgh, kernel_config,
+			    [=] (sycl::id<1> wiID)
+			    {
+			      acc[wiID] = wiID; /* kernel-1-line */
+			    });
     });
 
   q.wait ();
@@ -53,12 +55,13 @@ main (int argc, char *argv[])
       auto acc = bufb.get_access<sycl::access::mode::write> (cgh);
 
       syclex::properties kernel_properties {intelex::grf_size<256>};
+      syclex::launch_config kernel_config (ndRange, kernel_properties);
 
-      cgh.parallel_for (sycl::range<1> {1}, kernel_properties,
-			[=] (sycl::id<1> wiID)
-			{
-			  acc[wiID] = wiID + 1; /* kernel-2-line */
-			});
+      syclex::parallel_for (cgh, kernel_config,
+			    [=] (sycl::id<1> wiID)
+			    {
+			      acc[wiID] = wiID + 1; /* kernel-2-line */
+			    });
     });
 
   q.wait ();

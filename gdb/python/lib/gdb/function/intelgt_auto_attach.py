@@ -384,7 +384,6 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
             return
 
         if ('libze_intel_gpu.so' in event.new_objfile.filename or
-            'libur_adapter_level_zero.so' in event.new_objfile.filename or
             'ze_intel_gpu64.dll' in event.new_objfile.filename):
             DebugLogger.log(
                 f"received {event.new_objfile.filename} loaded event.")

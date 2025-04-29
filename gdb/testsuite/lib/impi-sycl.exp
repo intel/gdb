@@ -345,7 +345,6 @@ proc impi_get_gdb_output { cmd name } {
 	}
     }
 
-    setup_kfail "JIRA IGDB/6446" "*-*-*"
     # Didn't get the prompt, failed with a timeout.
     fail "$full_name - No prompt (timeout)"
     return -1

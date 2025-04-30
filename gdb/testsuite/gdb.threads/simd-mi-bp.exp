@@ -69,7 +69,8 @@ foreach device $sycl_device_list {
 	    "\\^done,bkpt=\{number=\".*\",type=\"breakpoint\",disp=\"del\",enabled=\"y\",addr=\"<MULTIPLE>\",thread=\"$second_thread_id\",lane=\"1\".*" \
 	    "Insert breakpoint to thread $second_thread_id, lane 1"
 
-	# Breakpoint to even branch line with odd lane (should not hit).
+	# Breakpoint to even branch line with odd lane.  Should be hit with an
+	# inactive lane.
 	mi_gdb_test "-break-insert -t -p $third_thread_id -l 3 $even_branch_line" \
 	    "\\^done,bkpt=\{number=\".*\",type=\"breakpoint\",disp=\"del\",enabled=\"y\",addr=\"<MULTIPLE>\",thread=\"$third_thread_id\",lane=\"3\".*" \
 	    "Insert breakpoint to even line with odd lane"
@@ -87,9 +88,22 @@ foreach device $sycl_device_list {
 	mi_send_resuming_command "exec-continue" "continuing to second bp"
 	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $condition_line [list ",execution-mask=\"$hex\",simd-width=\"$decimal\"" "disp=\"del\",hit-lanes-mask=\"$hex\"" {locno="[0-9]+"}] "expect bp hit at line $condition_line"
 
-	# Continue, but will not hit third breakpoint, instead hit fourth breakpoint.
-	mi_send_resuming_command "exec-continue" "continuing to third bp"
-	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $odd_branch_line [list ",execution-mask=\"$hex\",simd-width=\"$decimal\"" "disp=\"del\",hit-lanes-mask=\"$hex\"" {locno="[0-9]+"}] "expect bp hit at line $odd_branch_line"
+	# mi_send_resuming_command "exec-continue" "continuing to third bp"
+	# mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" $odd_branch_line [list ",execution-mask=\"$hex\",simd-width=\"$decimal\"" "disp=\"del\",hit-lanes-mask=\"$hex\"" {locno="[0-9]+"}] "expect bp hit at line $odd_branch_line"
+
+
+	# Continue.  Third and fourth breakpoints are expected to be hit (at
+	# thread branches).
+	set hit_branch 0
+	foreach_with_prefix itr {1 2} {
+	    mi_send_resuming_command "exec-continue" "continuing to thread branch"
+	    mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" \
+		"($odd_branch_line|$even_branch_line)" \
+		[list ",execution-mask=\"$hex\",simd-width=\"$decimal\"" "disp=\"del\",hit-lanes-mask=\"$hex\"" {locno="[0-9]+"}] \
+		"expect bp hit at thread branches (lines $odd_branch_line and $even_branch_line)"
+	    incr hit_branch
+	}
+	gdb_assert {$hit_branch == 2} "both thread branches are hit"
 
 	# Continue to end.
 	mi_send_resuming_command "exec-continue" "continuing to inferior exit"

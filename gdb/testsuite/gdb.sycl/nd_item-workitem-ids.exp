@@ -105,8 +105,8 @@ proc check_ids {wg_dim_size {kfail ""}} {
 	foreach lane $lanes {
 	    with_test_prefix "Thread $tid:$lane" {
 		gdb_test_multiple "thread $tid:$lane" "switch to $tid:$lane" {
-		    -re -wrap "Switching to thread $tid:$lane.*" {}
-		    -re -wrap "inactive.*" {
+		    -re -wrap "Switching to thread $tid:$lane \\(.*\\)\\].*" {}
+		    -re -wrap "Switching to thread $tid:$lane \\(.*\\) <lane inactive>\\].*" {
 			break
 		    }
 		}

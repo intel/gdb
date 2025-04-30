@@ -79,11 +79,27 @@ proc test {device location dim0val {condition ""}} {
 
     # Switch to the stopped thread, check the condition variable, and
     # resume.  The program should come to termination.
-    gdb_test "thread $stopped_thread_id" \
-	".Switching to thread ${stopped_thread_id}.*" \
-	"switch to the stopped thread"
+ #    gdb_test "thread $stopped_thread_id" \
+	# ".Switching to thread ${stopped_thread_id}.*" \
+	# "switch to the stopped thread"
 
-    gdb_test "print dim0" " = $dim0val"
+    # Make sure that DIM0 has a correct value for an active SIMD lane.
+    set valid_value 0
+    set fill "\[^\r\n\]*"
+    gdb_test_multiple "thread apply $stopped_thread_id:* -q print dim0" \
+	"Check dim0 value" {
+	-re "= <lane inactive>${fill}" {
+	    exp_continue
+	}
+	-re "= $dim0val${fill}" {
+	    set valid_value 1
+	    exp_continue
+	}
+	-re -wrap "" {
+	    pass "$gdb_test_name"
+	}
+    }
+    gdb_assert { $valid_value == 1 }
 
     gdb_test_multiple "continue -a" "continue to end" {
 	-re "$inferior_exited_re normally].*$gdb_prompt.*" {

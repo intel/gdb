@@ -31,6 +31,7 @@ if {[build_executable "failed to compile $srcfile" \
 }
 
 foreach device $sycl_device_list {
+    global decimal
 
     sycl_with_intelgt_lock $device {
 
@@ -103,24 +104,20 @@ foreach device $sycl_device_list {
 	# Check that the higher bits of $ce register are 0x0.
 	# We have only 16 SIMD lanes.
 	gdb_test "print\/x \$ce & 0xffff" "= 0x0" \
-	    "print \$ce of an inactive thread"
-	gdb_test "thread" "Current thread.*\\(inactive\\).*" \
-	    "Current thread is marked as inactive"
+	    "print \$ce"
+	gdb_test "thread" "Current thread.*<lane inactive>.*" \
+	    "Current SIMD lane is marked as inactive"
+
+	# Check that all lanes are inactive.
 	set current_thread [get_current_thread "inactive stop"]
-	gdb_test "info threads -stopped $current_thread" \
-	    "$current_thread \[^\r\n\]+$srcfile.*" \
-	    "info threads for inactive thread"
+	gdb_test "info threads -lanes $current_thread" \
+	    [multi_line "${fill}Id${fill}State${fill}Target Id${fill}Frame${fill}" \
+			"(${fill}${current_thread}:${decimal}${fill}I${fill}(\r\n)?)+"] \
+	    "all lanes should be marked as inactive"
+	gdb_test "info threads -active-lanes $current_thread" \
+	    "No active lanes.*"
 
-	set inactive_error "SIMD lane $decimal is inactive in thread $current_thread"
-	# Printing a local variable should give an error.
-	gdb_test "print dim0" "$inactive_error"
-
-	gdb_test "thread $current_thread" \
-	    "Switching to thread $current_thread \[^\r\n\]+ inactive.*"
-
-	# An inactive thread still has the frame displayed, but args cannot
-	# be read.
-	gdb_test "info threads $current_thread" \
-	    "$current_thread${fill}wiID=<error reading variable: $inactive_error>$fill$srcfile:$decimal"
+	# Printing a local variable should give <lane inactive>.
+	gdb_test "print dim0" "= <lane inactive>"
     }
 }

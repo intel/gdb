@@ -183,15 +183,6 @@ proc all_lanes_of {num_lanes thread} {
     return [lanes_of "$thread" "$lanes"]
 }
 
-proc all_even_lanes_of {num_lanes thread} {
-    set lanes ""
-    for {set i 0} {$i < $num_lanes} {incr i} {
-	append lanes "$i "
-	incr i
-    }
-    return [lanes_of "$thread" "$lanes"]
-}
-
 # Convenience procedure to build a regexp that matches numbers between
 # FROM and TO, both exclusive.  Returns "none" if the range is empty.
 proc range_re {from to} {
@@ -514,15 +505,14 @@ foreach device $sycl_device_list {
 	    ".*$srcfile:$even_branch.*"
 	set cur_thread [get_current_thread "after second BP hit"]
 
-	# Only even lanes are active.
-	thread_apply_error ":1" \
-	    "warning: SIMD lane 1 is inactive in thread $cur_thread"
-	thread_apply_error ":3" \
-	    "warning: SIMD lane 3 is inactive in thread $cur_thread"
+	# Make sure we are able to print for inactive lanes.
+	set msg " at even branch - lane inactive "
+	thread_apply ":1" "$cur_thread:1" $msg
+	thread_apply ":3" "$cur_thread:3" $msg
 
 	set msg " at even branch "
 	thread_apply ":4" "$cur_thread:4" $msg
-	thread_apply ":*" [all_even_lanes_of $num_lanes $cur_thread] $msg
+	thread_apply ":*" [all_lanes_of $num_lanes $cur_thread] $msg
 
 	# Set thread t_2 to active lane.
 	gdb_test "thread $inf.$t_2:2" "Switching to thread $inf\.$t_2:2.*" \
@@ -535,7 +525,7 @@ foreach device $sycl_device_list {
 	    # Thread ID
 	    thread_apply "${prefix}$t_1" "$inf.$t_1:2" $msg
 	    thread_apply "${prefix}$t_1:4" "$inf.$t_1:4" $msg
-	    thread_apply "${prefix}$t_1:*" [all_even_lanes_of $num_lanes "$inf.$t_1"] $msg
+	    thread_apply "${prefix}$t_1:*" [all_lanes_of $num_lanes "$inf.$t_1"] $msg
 
 	    # Thread range
 	    thread_apply "${prefix}$t_1-$t_2" "$inf.$t_1:2 $inf.$t_2:2" \
@@ -544,23 +534,23 @@ foreach device $sycl_device_list {
 		$msg "none" "$inf\.($range_to_ignore_1_2):4"
 	    thread_apply "${prefix}$t_1-$t_2:*" \
 		[string cat \
-		    [all_even_lanes_of $num_lanes "$inf.$t_1"] " " \
-		    [all_even_lanes_of $num_lanes "$inf.$t_2"]] \
+		    [all_lanes_of $num_lanes "$inf.$t_1"] " " \
+		    [all_lanes_of $num_lanes "$inf.$t_2"]] \
 		$msg "none" "none"
 
 	    # Wildcard thread range
 	    thread_apply "${prefix}*" \
-		"$inf.$t_1:2 $inf.$t_2:2 $inf.$t_3:4 $inf.$t_4:0" \
+		"$inf.$t_1:2 $inf.$t_2:2 $inf.$t_3:4 $inf.$t_4:5" \
 		$msg "$inf\.$decimal" "$inf\.$decimal:0"
 	    thread_apply "${prefix}*:4" \
 		"$inf.$t_1:4 $inf.$t_2:4 $inf.$t_3:4 $inf.$t_4:4" \
 		$msg "$inf\.$decimal:4" "$inf\.$decimal:4"
 	    thread_apply "${prefix}*:*" \
 		[string cat \
-		    [all_even_lanes_of $num_lanes "$inf.$t_1"] " " \
-		    [all_even_lanes_of $num_lanes "$inf.$t_2"] " " \
-		    [all_even_lanes_of $num_lanes "$inf.$t_3"] " " \
-		    [all_even_lanes_of $num_lanes "$inf.$t_4"]] \
+		    [all_lanes_of $num_lanes "$inf.$t_1"] " " \
+		    [all_lanes_of $num_lanes "$inf.$t_2"] " " \
+		    [all_lanes_of $num_lanes "$inf.$t_3"] " " \
+		    [all_lanes_of $num_lanes "$inf.$t_4"]] \
 	    $msg "$inf\.$decimal:$decimal" "none"
 	}
 
@@ -628,8 +618,7 @@ foreach device $sycl_device_list {
 		exp_continue
 	    }
 	    -re "^$gdb_prompt $" {
-		set num_even_lanes [expr $num_lanes / 2]
-		gdb_assert {$thread_switches == $num_even_lanes} $gdb_test_name
+		gdb_assert {$thread_switches == $num_lanes} $gdb_test_name
 	    }
 	    -re "^$any\r\n" {
 		exp_continue

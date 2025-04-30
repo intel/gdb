@@ -65,7 +65,7 @@ foreach device $sycl_device_list {
 
 	# Test SIMD switch output message after BP hit with the same thread but
 	# different lane.
-	gdb_test "continue" "Switching to SIMD lane 3.*$srcfile:$second_line.*"\
+	gdb_test "continue" "Switching to thread $first_thread:3 .*$srcfile:$second_line.*"\
 	    "SIMD lane switch within a thread after BP"
 
 	gdb_test "thread :5" "\[Switching to thread $first_thread:5.*\].*"\
@@ -85,14 +85,14 @@ foreach device $sycl_device_list {
 	    "next preserves lane"
 	gdb_test "print \$_simd_lane" "= 5" "\$_simd_lane preserved by next"
 
-	# Test SIMD switch after stepping into the even branch.
-	gdb_test "next" "\\\[Switching to SIMD lane 0\\\].*"\
-	    "SIMD lane switch after stepping into even branch"
+	# Test SIMD becoming inactive after stepping into the even branch.
+	gdb_test "next" "\\\[SIMD lane 5 became inactive.*"\
+	    "SIMD lane becoming inactive after stepping into even branch"
 
-	# Test SIMD switch after stepping out of the odd branch.
-	gdb_test "next 2" "\\\[Switching to SIMD lane 1\\\].*"\
-	    "SIMD lane switch after stepping into odd branch after even"
-	gdb_test "print \$_simd_lane" "= 1" "check \$_simd_lane after next"
+	# Test SIMD active after stepping out of the odd branch.
+	gdb_test "next 2" "\\\[SIMD lane 5 became active.*"\
+	    "SIMD lane becoming active after stepping into odd branch after even"
+	gdb_test "print \$_simd_lane" "= 5" "check \$_simd_lane after next"
 
 	gdb_test_no_output "set scheduler-locking off" \
 	    "scheduler locking off for the first thread $first_thread"
@@ -142,7 +142,8 @@ foreach device $sycl_device_list {
 	    "until preserves lane"
 
 	# until switches to the default lane in odd branch.
-	gdb_test "until $odd_branch" "\\\[Switching to SIMD lane 1\\\].*" \
+	gdb_test "until $odd_branch" \
+	    "\\\[SIMD lane 4 became inactive in thread $third_thread\\\].*" \
 	    "lane switches after until to odd branch"
     }
 }

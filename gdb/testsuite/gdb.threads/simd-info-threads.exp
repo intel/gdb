@@ -64,7 +64,7 @@ foreach device $sycl_device_list {
 
 	# Current thread should be presented with 1 line but in [*0 1-7]
 	# notation.
-	set cur_thread_out "\\\*.*$cur_thread:\\\[\\\*0 1-$decimal\\\].* at $srcfile:$first_line"
+	set cur_thread_out "\\\*.*$cur_thread:$decimal.* at $srcfile:$first_line"
 	gdb_test "info thread $cur_thread" "$cur_thread_out" \
 	    "info about current thread"
 	gdb_test "info thread \$_thread" "$cur_thread_out" \

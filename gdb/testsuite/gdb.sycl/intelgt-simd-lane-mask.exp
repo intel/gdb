@@ -63,7 +63,8 @@ foreach device $sycl_device_list {
 		    "Switching to thread ${fill}:$lane ${fill}\\\].*"
 	    }
 	    for {set lane 1} {$lane < 16} {incr lane 2} {
-		gdb_test "thread :$lane" "SIMD lane $lane is inactive in thread.*"
+		gdb_test "thread :$lane" \
+		    "Switching to thread ${fill}:$lane ${fill} <lane inactive>.*"
 	    }
 	}
 
@@ -82,7 +83,8 @@ foreach device $sycl_device_list {
 		    "Switching to thread ${fill}:$lane ${fill}\\\].*"
 	    }
 	    for {set lane 0} {$lane < 32} {incr lane 2} {
-		gdb_test "thread :$lane" "SIMD lane $lane is inactive in thread.*"
+		gdb_test "thread :$lane" \
+		    "Switching to thread ${fill}:$lane ${fill} <lane inactive>.*"
 	    }
 	}
     }

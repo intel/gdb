@@ -239,9 +239,12 @@ foreach device $sycl_device_list {
 
 	gdb_test_no_output "set scheduler-locking step"
 	set branches_step 0
+	set fill "\[^\r\n\]*"
 	foreach_with_prefix step {1 2} {
 	    gdb_test_multiple "next" "step over thread branching" {
 		-re -wrap "$then_branch.*" {
+		    gdb_test "thread :0" "Switching ${fill}:0 ${fill}.*" \
+			"then_branch - switch to an active lane"
 		    incr branches_step
 		    pass "stepped into then-branch"
 		    set real_ce [get_hexadecimal_valueof "\$ce" "invalid" \
@@ -251,6 +254,8 @@ foreach device $sycl_device_list {
 		    gdb_test "p/x \$ce" "$real_ce" "unchanged CE at then-branch"
 		}
 		-re -wrap "$else_branch.*" {
+		    gdb_test "thread :1" "Switching ${fill}:1 ${fill}.*" \
+			"else_branch - switch to an active lane"
 		    incr branches_step
 		    pass "stepped into else-branch"
 		    set real_ce [get_hexadecimal_valueof "\$ce" "invalid" \

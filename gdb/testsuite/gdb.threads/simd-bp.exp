@@ -92,7 +92,7 @@ foreach device $sycl_device_list {
 	gdb_breakpoint "$odd_branch if dim0 == 6"
 
 	# Should not stop here, since only even SIMD lanes are active.
-	set test_even "no stop if thread clause includes inactive SIMD lane"
+	set test_even "stop if thread clause includes inactive SIMD lane"
 	set hit_lane_clause_for_inactive_lane false
 	gdb_breakpoint "$even_branch thread $first_thread:3"
 
@@ -151,7 +151,7 @@ foreach device $sycl_device_list {
 		-re "$srcfile:$even_branch.*$gdb_prompt" {
 		    set hit_lane_clause_for_inactive_lane true
 		    gdb_test "p/t \$ce" "= \[01\]+" "even branch channels"
-		    fail $test_even
+		    pass $test_even
 		}
 		-re "$srcfile:$condition_line.*$gdb_prompt" {
 		    set hit_condition_lane_mismatch true

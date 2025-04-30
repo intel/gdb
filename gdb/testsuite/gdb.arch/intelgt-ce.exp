@@ -32,6 +32,22 @@ if {[build_executable "failed to compile $srcfile" \
 }
 
 proc test_ce {expected {check_dmask "false"}} {
+    global decimal
+
+    # Switch to an active lane.
+    gdb_test_multiple "with print frame-arguments none -- info threads -active-lanes \$_thread" \
+	"Switching to an active lane" {
+	-re -wrap ":($decimal) \[^\r\n\]* A .*" {
+	    set active_lane $expect_out(1,string)
+	    verbose -log "Lane $active_lane is active"
+	    gdb_test "thread :$active_lane" "Switching to .*:$active_lane.*" \
+		"$gdb_test_name"
+	}
+	-re -wrap "" {
+	    fail "$gdb_test_name"
+	}
+    }
+
     set dim0 [get_integer_valueof "dim0" "-1"]
     gdb_assert {$dim0 != -1} "dim0 is valid"
 

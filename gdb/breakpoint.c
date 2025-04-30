@@ -20,6 +20,7 @@
 #include "arch-utils.h"
 #include <ctype.h>
 #include "event-top.h"
+#include "gdbsupport/common-exceptions.h"
 #include "hashtab.h"
 #include "symtab.h"
 #include "frame.h"
@@ -5746,9 +5747,7 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
       return;
     }
 
-  unsigned int lanes_mask
-    = thread->active_simd_lanes_mask (frame_find_by_id (b->frame_id));
-
+  unsigned int lanes_mask = thread->dispatch_simd_lanes_mask ();
   if (lanes_mask != 0x0)
     {
       if (b->thread != -1
@@ -5857,12 +5856,18 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
 	      for_simd_lanes (lanes_mask, [&] (int lane)
 		{
 		  thread->set_current_simd_lane (lane);
-		  if (breakpoint_cond_eval (cond))
+		  try
 		    {
 		      /* Unmask the lane if the condition is true.  */
-		      condition_mask = condition_mask | (0x1 << lane);
+		      if (breakpoint_cond_eval (cond))
+			condition_mask = condition_mask | (0x1 << lane);
 		    }
-
+		  catch (const gdb_exception_error &ex)
+		    {
+		      /* Keep looping if it is a LANE_INACTIVE_ERROR.  */
+		      if (ex.error != LANE_INACTIVE_ERROR)
+			throw;
+		    }
 		  return true;
 		});
 

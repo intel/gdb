@@ -67,6 +67,12 @@ struct info_threads_opts
   bool show_qualified_ids = false;
   /* For MI only "--lid".  */
   bool show_local_ids = false;
+  /* For "-lanes".  */
+  bool show_all_lanes = false;
+  /* For "-active-lanes".  */
+  bool show_active_lanes = false;
+  /* For "inactive-lanes".  */
+  bool show_inactive_lanes = false;
 };
 
 /* Frontend view of the thread state.  Possible extensions: stepping,
@@ -868,17 +874,14 @@ extern int show_inferior_qualified_tids (void);
    circular static buffer, NUMCELLS deep.  If LANES mask is specified
    then also append its beautified content to the end.  CURRENT_LANE
    indicates that an asterisk shall be prepended to that lane.  */
-const char *print_thread_id (struct thread_info *thr,
-			     unsigned long lane_mask = 0,
-			     int current_lane = -1);
+const char *print_thread_id (thread_info *thr, bool print_simd_lane = false);
 
 /* Like print_thread_id, but always prints the inferior-qualified form,
    even when there is only a single inferior.  If LANES vector is specified
    then also append its beautified content to the end.
    LANES should be sorted.  */
 const char *print_full_thread_id (struct thread_info *thr,
-				  unsigned long lane_mask = 0,
-				  int current_lane = -1);
+				  bool print_simd_lane = false);
 
 /* Boolean test for an already-known ptid.  */
 extern bool in_thread_list (process_stratum_target *targ, ptid_t ptid);

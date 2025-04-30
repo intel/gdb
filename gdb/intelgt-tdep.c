@@ -778,7 +778,7 @@ intelgt_dwarf_reg_to_regnum (gdbarch *gdbarch, int num)
 /* Return the dispatch mask of the thread TP.  */
 
 static unsigned int
-intelgt_dispatch_mask (gdbarch *gdbarch, thread_info *tp)
+intelgt_dispatch_lanes_mask (gdbarch *gdbarch, thread_info *tp)
 {
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
   regcache *regcache = get_thread_regcache (tp);
@@ -847,7 +847,7 @@ intelgt_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp,
   uint32_t dispatch_mask = ~0u;
   try
     {
-      dispatch_mask = intelgt_dispatch_mask (gdbarch, tp);
+      dispatch_mask = intelgt_dispatch_lanes_mask (gdbarch, tp);
     }
   catch (const gdb_exception_error &e)
     {
@@ -3896,7 +3896,7 @@ intelgt_all_workitem_local_ids (gdbarch *gdbarch, thread_info *tp)
   const unsigned int tid_offset = tid * id_len;
   const unsigned int coord_len = id_len / 3;
 
-  const unsigned int dispatch_mask = intelgt_dispatch_mask (gdbarch, tp);
+  const unsigned int dispatch_mask = intelgt_dispatch_lanes_mask (gdbarch, tp);
   std::vector<std::array<uint32_t, 3>> lids;
 
   /* Collect ids for existing lanes.  We use the dispatch mask here so we do
@@ -4635,6 +4635,7 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
   set_gdbarch_print_insn (gdbarch, intelgt_print_insn);
 
   set_gdbarch_active_lanes_mask (gdbarch, &intelgt_active_lanes_mask);
+  set_gdbarch_dispatch_lanes_mask (gdbarch, intelgt_dispatch_lanes_mask);
 
   /* Core file support.  */
   set_gdbarch_gcore_bfd_target (gdbarch, "elf64-intelgt");

@@ -441,6 +441,12 @@ val_print_invalid_address (struct ui_file *stream)
   fprintf_styled (stream, metadata_style.style (), _("<invalid address>"));
 }
 
+void
+val_print_lane_inactive (struct ui_file *stream)
+{
+  fprintf_styled (stream, metadata_style.style (), _("<lane inactive>"));
+}
+
 /* Print a pointer based on the type of its target.
 
    Arguments to this functions are roughly the same as those in
@@ -1240,6 +1246,15 @@ value_check_printable (struct value *val, struct ui_file *stream,
       return 0;
     }
 
+  if (val->lane_inactive ())
+    {
+      if (options->summary && !val_print_scalar_type_p (val->type ()))
+	gdb_printf (stream, "...");
+      else
+	val_print_lane_inactive (stream);
+      return 0;
+    }
+
   if (val->entirely_optimized_out ())
     {
       if (options->summary && !val_print_scalar_type_p (val->type ()))
@@ -1412,6 +1427,8 @@ value_print_scalar_formatted (struct value *val,
     val_print_optimized_out (val, stream);
   else if (!val->bytes_available (0, type->length ()))
     val_print_unavailable (stream);
+  else if (val->lane_inactive ())
+    val_print_lane_inactive (stream);
   else
     print_scalar_formatted (valaddr, type, options, size, stream);
 }

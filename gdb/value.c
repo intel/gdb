@@ -1115,6 +1115,13 @@ error_value_optimized_out (void)
 }
 
 void
+value::require_active_simd_lane () const
+{
+  if (m_lane_inactive)
+    throw_error (LANE_INACTIVE_ERROR, _("selected lane is inactive"));
+}
+
+void
 value::require_not_optimized_out () const
 {
   if (!m_optimized_out.empty ())
@@ -1157,6 +1164,7 @@ gdb::array_view<const gdb_byte>
 value::contents_all ()
 {
   gdb::array_view<const gdb_byte> result = contents_for_printing ();
+  require_active_simd_lane ();
   require_not_optimized_out ();
   require_available ();
   return result;
@@ -1303,6 +1311,7 @@ gdb::array_view<const gdb_byte>
 value::contents ()
 {
   gdb::array_view<const gdb_byte> result = contents_writeable ();
+  require_active_simd_lane ();
   require_not_optimized_out ();
   require_available ();
   return result;
@@ -1539,6 +1548,7 @@ value::copy () const
   val->m_initialized = m_initialized;
   val->m_unavailable = m_unavailable;
   val->m_optimized_out = m_optimized_out;
+  val->m_lane_inactive = m_lane_inactive;
   val->m_parent = m_parent;
   val->m_limited_length = m_limited_length;
 

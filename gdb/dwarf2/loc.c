@@ -1542,6 +1542,13 @@ dwarf2_evaluate_loc_desc_full (struct type *type, const frame_info_ptr &frame,
 	  free_values.free_to_mark ();
 	  return value::allocate_optimized_out (subobj_type);
 	}
+      else if (ex.error == LANE_INACTIVE_ERROR)
+	{
+	  free_values.free_to_mark ();
+	  retval = value::allocate (subobj_type);
+	  retval->set_lane_inactive (true);
+	  return retval;
+	}
       else
 	throw;
     }

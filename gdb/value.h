@@ -536,6 +536,12 @@ public:
   bool entirely_unavailable ()
   { return entirely_covered_by_range_vector (m_unavailable); }
 
+  bool lane_inactive () const
+  { return m_lane_inactive; }
+
+  void set_lane_inactive (bool lane_inactive)
+  { m_lane_inactive = lane_inactive; }
+
   /* Mark this value's content bytes starting at OFFSET and extending
      for LENGTH bytes as unavailable.  */
   void mark_bytes_unavailable (LONGEST offset, ULONGEST length);
@@ -803,6 +809,8 @@ private:
      program, so it can't be marked unavailable either.  */
   std::vector<range> m_unavailable;
 
+  bool m_lane_inactive = false;
+
   /* Likewise, but for optimized out contents (a chunk of the value of
      a variable that does not actually exist in the program).  If LVAL
      is lval_register, this is a register ($pc, $sp, etc., never a
@@ -853,6 +861,7 @@ private:
   bool contents_bits_eq (int offset1, const struct value *val2, int offset2,
 			 int length) const;
 
+  void require_active_simd_lane () const;
   void require_not_optimized_out () const;
   void require_available () const;
 

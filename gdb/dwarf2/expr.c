@@ -957,8 +957,9 @@ dwarf_expr_context::get_simd_lane ()
   gdb_assert (lane >= 0);
 
   if (!tp->is_simd_lane_active (lane))
-    error (_("SIMD lane %d is inactive in thread %s"), lane,
-	   print_thread_id (tp));
+    throw_error (LANE_INACTIVE_ERROR,
+		 _("Lane %d is inactive in thread %s"), lane,
+		 print_thread_id (tp));
 
   return (ULONGEST) lane;
 }

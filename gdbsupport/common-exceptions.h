@@ -112,6 +112,9 @@ enum errors {
      "_ERROR" is appended to the name.  */
   MAX_COMPLETIONS_REACHED_ERROR,
 
+  /* Value not available when the selected SIMD lane is inactive.  */
+  LANE_INACTIVE_ERROR,
+
   /* Add more errors here.  */
   NR_ERRORS
 };

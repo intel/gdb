@@ -884,6 +884,9 @@ extern bool in_thread_list (process_stratum_target *targ, ptid_t ptid);
    global id, not the system's).  */
 extern int valid_global_thread_id (int global_id);
 
+/* Check if SIMD_LANE is valid for the thread with global id GLOBAL_ID.  */
+extern bool valid_thread_simd_lane (int global_id, int simd_lane);
+
 /* Find thread by GDB global thread ID.  */
 struct thread_info *find_thread_global_id (int global_id);
 

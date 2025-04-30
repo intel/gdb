@@ -721,6 +721,9 @@ public:
      currently executing, returns zero.  */
   unsigned int active_simd_lanes_mask (frame_info_ptr frame = nullptr);
 
+  /* Return SIMD lanes mask that this thread has been dispatched with.  */
+  unsigned int dispatch_simd_lanes_mask ();
+
   /* Return true if thread has active SIMD lanes.  */
   bool is_active ();
 

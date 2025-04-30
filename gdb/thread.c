@@ -203,6 +203,30 @@ thread_info::active_simd_lanes_mask (frame_info_ptr frame)
 
 /* See gdbthread.h.  */
 
+unsigned int
+thread_info::dispatch_simd_lanes_mask ()
+{
+  gdb_assert (this->inf != nullptr);
+
+  /* Default: only one simd lane is used.  */
+  if (!has_simd_lanes ())
+    return 0x1;
+
+  /* If the thread is unavailable/executing, we cannot determine
+     the dispatched lanes mask.  */
+  if (is_unavailable () || executing ())
+    return 0x0;
+
+  gdbarch *arch = inf->arch ();
+  if (gdbarch_dispatch_lanes_mask_p (arch))
+    return gdbarch_dispatch_lanes_mask (arch, this);
+
+  /* Deduce dispatched SIMD lanes mask based on current SIMD width.  */
+  return (1 << get_simd_width ()) - 1;
+}
+
+/* See gdbthread.h.  */
+
 bool
 thread_info::is_active ()
 {

@@ -349,6 +349,14 @@ typedef value * (gdbarch_value_arg_coerce_ftype) (struct gdbarch *gdbarch, value
 extern value * gdbarch_value_arg_coerce (struct gdbarch *gdbarch, value *arg, type *param_type, int is_prototyped);
 extern void set_gdbarch_value_arg_coerce (struct gdbarch *gdbarch, gdbarch_value_arg_coerce_ftype *value_arg_coerce);
 
+/* Return dispatch SIMD lanes mask for a thread TP. */
+
+extern bool gdbarch_dispatch_lanes_mask_p (struct gdbarch *gdbarch);
+
+typedef unsigned int (gdbarch_dispatch_lanes_mask_ftype) (struct gdbarch *gdbarch, thread_info *tp);
+extern unsigned int gdbarch_dispatch_lanes_mask (struct gdbarch *gdbarch, thread_info *tp);
+extern void set_gdbarch_dispatch_lanes_mask (struct gdbarch *gdbarch, gdbarch_dispatch_lanes_mask_ftype *dispatch_lanes_mask);
+
 /* Return the active SIMD lanes mask for a thread TP at FRAME. */
 
 extern bool gdbarch_active_lanes_mask_p (struct gdbarch *gdbarch);

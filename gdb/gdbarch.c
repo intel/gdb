@@ -94,6 +94,7 @@ struct gdbarch
   gdbarch_register_type_ftype *register_type = nullptr;
   gdbarch_dummy_id_ftype *dummy_id = default_dummy_id;
   gdbarch_value_arg_coerce_ftype *value_arg_coerce = default_value_arg_coerce;
+  gdbarch_dispatch_lanes_mask_ftype *dispatch_lanes_mask = nullptr;
   gdbarch_active_lanes_mask_ftype *active_lanes_mask = nullptr;
   int deprecated_fp_regnum = -1;
   gdbarch_push_dummy_call_ftype *push_dummy_call = nullptr;
@@ -381,6 +382,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
     log.puts ("\n\tregister_type");
   /* Skip verify of dummy_id, invalid_p == 0.  */
   /* Skip verify of value_arg_coerce, invalid_p == 0.  */
+  /* Skip verify of dispatch_lanes_mask, has predicate.  */
   /* Skip verify of active_lanes_mask, has predicate.  */
   /* Skip verify of deprecated_fp_regnum, invalid_p == 0.  */
   /* Skip verify of push_dummy_call, has predicate.  */
@@ -780,6 +782,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: value_arg_coerce = <%s>\n",
 	      host_address_to_string (gdbarch->value_arg_coerce));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_dispatch_lanes_mask_p() = %d\n",
+	      gdbarch_dispatch_lanes_mask_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: dispatch_lanes_mask = <%s>\n",
+	      host_address_to_string (gdbarch->dispatch_lanes_mask));
   gdb_printf (file,
 	      "gdbarch_dump: gdbarch_active_lanes_mask_p() = %d\n",
 	      gdbarch_active_lanes_mask_p (gdbarch));
@@ -2462,6 +2470,30 @@ set_gdbarch_value_arg_coerce (struct gdbarch *gdbarch,
 			      gdbarch_value_arg_coerce_ftype value_arg_coerce)
 {
   gdbarch->value_arg_coerce = value_arg_coerce;
+}
+
+bool
+gdbarch_dispatch_lanes_mask_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->dispatch_lanes_mask != NULL;
+}
+
+unsigned int
+gdbarch_dispatch_lanes_mask (struct gdbarch *gdbarch, thread_info *tp)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->dispatch_lanes_mask != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_dispatch_lanes_mask called\n");
+  return gdbarch->dispatch_lanes_mask (gdbarch, tp);
+}
+
+void
+set_gdbarch_dispatch_lanes_mask (struct gdbarch *gdbarch,
+				 gdbarch_dispatch_lanes_mask_ftype dispatch_lanes_mask)
+{
+  gdbarch->dispatch_lanes_mask = dispatch_lanes_mask;
 }
 
 bool

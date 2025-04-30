@@ -2758,7 +2758,7 @@ thread_apply_and_filter_all_cmd_1 (const char *cmd, int from_tty,
 
       for (thread_info *tp : all_non_exited_threads ())
 	tp_emask_list_cpy.push_back ({thread_info_ref::new_reference (tp),
-				      tp->active_simd_lanes_mask ()});
+				      tp->dispatch_simd_lanes_mask ()});
 
       gdb_assert (tp_emask_list_cpy.size () == tc);
 
@@ -2792,15 +2792,11 @@ thread_apply_and_filter_all_cmd_1 (const char *cmd, int from_tty,
 		{
 		  switch_to_thread (tp);
 
-		  if (tp->is_simd_lane_active (lane))
-		    {
-		      tp->set_current_simd_lane (lane);
-
-		      if (is_filter)
-			thread_filter_append_thread_info (tp, filter_params);
-		      else
-			thread_try_catch_cmd (tp, {}, cmd, from_tty, flags);
-		    }
+		  tp->set_current_simd_lane (lane);
+		  if (is_filter)
+		    thread_filter_append_thread_info (tp, filter_params);
+		  else
+		    thread_try_catch_cmd (tp, {}, cmd, from_tty, flags);
 
 		  return true;
 		}, lane_order);
@@ -2809,15 +2805,6 @@ thread_apply_and_filter_all_cmd_1 (const char *cmd, int from_tty,
 	    {
 	      /* thread apply all.  Apply the command to all threads,
 		 the default lane.  */
-
-	      /* switch_to_thread does not change the selected SIMD
-		 lane, and it could become inactive since the 'thread apply'
-		 call.  Setting the lane to the default ensures, that we
-		 are at the same lane as we would be if a user switched
-		 to the thread TP manually.  However, we do not want to
-		 switch the lane permanently, so the previous SIMD lane
-		 will be scope-restored.  */
-	      tp->set_default_simd_lane ();
 
 	      if (is_filter)
 		thread_filter_append_thread_info (tp, filter_params);
@@ -3191,7 +3178,8 @@ thread_apply_and_filter_cmd (const char *tidlist,
 
       scoped_restore_current_simd_lane restore_simd_lane {tp};
 
-      /* If SIMD lane was specified.  */
+      /* If SIMD lane was specified, select it.  Otherwise, the selected
+	 lane will be used.  */
       if (simd_lane_num >= 0)
 	{
 	  if (tp->executing ())
@@ -3223,82 +3211,67 @@ thread_apply_and_filter_cmd (const char *tidlist,
 	      continue;
 	    }
 
-	  /* If thread has SIMD lanes, check that the specified one is
-	       currently active.  */
-	  if (tp->is_simd_lane_active (simd_lane_num))
+	  /* Skip unavailable threads.  */
+	  if (tp->is_unavailable ())
 	    {
-	      tp->set_current_simd_lane (simd_lane_num);
-	      if (is_filter)
-		thread_filter_append_thread_info (tp, filter_params);
-	    }
-	  else
-	    {
-	      if (!is_simd_from_star)
-		{
-		  /* If the range is not just one lane long warn for
-		     the entire range.  Warn for a single lane
-		     otherwise.  */
-		  auto warn_simd_width = [tp] (int start, int end)
-		    {
-		      if (end > start)
-			warning (_("SIMD lanes [%d-%d] are outside of SIMD"
-		 		   " width range %d in thread %s"),
-				 start, end, tp->get_simd_width (),
-				 print_thread_id (tp));
-		      else
-			warning (_("SIMD lane %d is outside of SIMD width"
-				   " range %d in thread %s"),
-				 start, tp->get_simd_width (),
-				 print_thread_id (tp));
-		    };
-
-		  /* User included unavailable threads but of course we have
-		     no thread information like registers for an unavailable
-		     thread, so warn.  */
-		  if (unavailable && tp->is_unavailable ())
-		    {
-		      warning (_("SIMD lane %d is unavailable in thread %s"),
-			       simd_lane_num, print_thread_id (tp));
-		      continue;
-		    }
-
-		  /* If SIMD lane is outside the meaningful range...  */
-		  if (simd_lane_num >= tp->get_simd_width ())
-		    {
-		      /* In SIMD lane range state we need to check if all
-			 lanes in the full range are valid to produce a
-			 range warning output.  */
-		      if (parser.in_simd_lane_state ())
-			{
-			  unsigned int range_end
-			    = parser.simd_lane_range_end ();
-
-			  warn_simd_width (simd_lane_num, range_end);
-
-			  parser.skip_simd_lane_range ();
-			}
-		      else
-			warn_simd_width (simd_lane_num, simd_lane_num);
-		    }
-		  else
-		    warning (_("SIMD lane %d is inactive in thread %s"),
-			     simd_lane_num, print_thread_id (tp));
-		}
-
+	      if (parser.in_simd_lane_state ())
+		parser.skip_simd_lane_range ();
 	      continue;
 	    }
-	}
-      else
-	{
-	  /* If the lane was not specified, switch to the default lane.  */
-	  tp->set_default_simd_lane ();
 
 	  if (is_filter)
 	    thread_filter_append_thread_info (tp, filter_params);
 
-	  /* Note, we allow running the command for an inactive thread,
-	     as user can manually switch to this thread and execute
-	     the command.  */
+	  /* Skip SIMD range if comming from SIMD star and the selected lane
+	     is outside of the dispached SIMD mask.  */
+	  unsigned int dmask = tp->dispatch_simd_lanes_mask ();
+	  bool is_lane_dispatched = (dmask & (1 << simd_lane_num)) != 0;
+	  if (is_simd_from_star && !is_lane_dispatched)
+	    {
+	      if (parser.in_simd_lane_state ())
+		parser.skip_simd_lane_range ();
+	      continue;
+	    }
+
+	  tp->set_current_simd_lane (simd_lane_num);
+	  if (!is_simd_from_star)
+	    {
+	      /* If the range is not just one lane long warn for
+		 the entire range.  Warn for a single lane
+		 otherwise.  */
+	      auto warn_simd_width = [tp, dmask] (int start, int end)
+		{
+		  if (end > start)
+		    warning (_("Lanes [%d-%d] are outside of dispatched mask"
+			       " 0x%x in thread %s"),
+			     start, end, dmask, print_thread_id (tp));
+		  else
+		    warning (_("Lane %d is outside of dispatched mask 0x%x"
+			       " in thread %s"), start, dmask,
+			     print_thread_id (tp));
+		};
+
+	      /* If SIMD lane is outside the meaningful range...  */
+	      if (!is_lane_dispatched)
+		{
+		  /* In SIMD lane range state we need to check if all
+		     lanes in the full range are valid to produce a
+		     range warning output.  */
+		  if (parser.in_simd_lane_state ())
+		    {
+		      unsigned int range_end
+			= parser.simd_lane_range_end ();
+
+		      warn_simd_width (simd_lane_num, range_end);
+
+		      parser.skip_simd_lane_range ();
+		    }
+		  else
+		    warn_simd_width (simd_lane_num, simd_lane_num);
+
+		  continue;
+		}
+	    }
 	}
 
       if (!is_filter)

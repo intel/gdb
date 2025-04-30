@@ -4988,7 +4988,19 @@ bpstat_do_actions_1 (bpstat **bsp)
 		     into the consideration.  */
 		  thread->set_current_simd_lane (lane);
 
-		  execute_control_command (cmd);
+		  try
+		    {
+		      execute_control_command (cmd);
+		    }
+		  catch (const gdb_exception_error &ex)
+		    {
+		      /* Warn and keep looping if it is a
+			 LANE_INACTIVE_ERROR.  */
+		      if (ex.error != LANE_INACTIVE_ERROR)
+			throw;
+
+		      warning (_("%s"), ex.what ());
+		    }
 
 		  return !bp_commands_context.breakpoint_proceeded;
 		});

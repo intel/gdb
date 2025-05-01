@@ -202,7 +202,7 @@ ze_process_device (const process_info *process)
 
 /* Return the device for THREAD.  */
 
-static ze_device_info *
+ze_device_info *
 ze_thread_device (const thread_info *thread)
 {
   if (thread == nullptr)

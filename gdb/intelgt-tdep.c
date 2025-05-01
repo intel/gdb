@@ -1126,7 +1126,8 @@ intelgt_memory_insert_breakpoint (gdbarch *gdbarch, struct bp_target_info *bp)
     }
 
   bp->placed_address = bp->reqstd_address;
-  bp->shadow_len = intelgt::inst_length (inst);
+  uint32_t device_id = get_device_id (current_inferior ());
+  bp->shadow_len = intelgt::inst_length (inst, device_id);
 
   /* Make a copy before we set the breakpoint so we can restore the
      original instruction when removing the breakpoint again.
@@ -1134,7 +1135,7 @@ intelgt_memory_insert_breakpoint (gdbarch *gdbarch, struct bp_target_info *bp)
      This isn't strictly necessary but it saves one target access.  */
   memcpy (bp->shadow_contents, inst, bp->shadow_len);
 
-  const bool already = intelgt::set_breakpoint (inst);
+  const bool already = intelgt::set_breakpoint (inst, device_id);
   if (already)
     {
       /* Warn if the breakpoint bit is already set.
@@ -1167,7 +1168,8 @@ intelgt_memory_remove_breakpoint (gdbarch *gdbarch, struct bp_target_info *bp)
 	   paddress (gdbarch, bp->placed_address));
 
   /* Warn if we're inserting a permanent breakpoint.  */
-  if (intelgt::has_breakpoint (bp->shadow_contents))
+  uint32_t device_id = get_device_id (current_inferior ());
+  if (intelgt::has_breakpoint (bp->shadow_contents, device_id))
     warning (_("Re-inserting permanent breakpoint at %s."),
 	     paddress (gdbarch, bp->placed_address));
 
@@ -1200,7 +1202,8 @@ intelgt_program_breakpoint_here_p (gdbarch *gdbarch, CORE_ADDR pc)
       return err;
     }
 
-  const bool is_bkpt = intelgt::has_breakpoint (inst);
+  uint32_t device_id = get_device_id (current_inferior ());
+  const bool is_bkpt = intelgt::has_breakpoint (inst, device_id);
 
   dprintf ("%sbreakpoint found.", is_bkpt ? "" : "no ");
 
@@ -1263,7 +1266,8 @@ intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
       (*info->memory_error_func) (status, memaddr, info);
       return -1;
     }
-  if (intelgt::inst_length ((gdb_byte *) insn.get ())
+  uint32_t device_id = get_device_id (current_inferior ());
+  if (intelgt::inst_length ((gdb_byte *) insn.get (), device_id)
       == intelgt::inst_length_full ())
     {
       status = (*info->read_memory_func) (memaddr, insn.get (),
@@ -1294,7 +1298,7 @@ intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
 
   (*info->fprintf_func) (info->stream, "%s", dbuf);
 
-  return intelgt::inst_length ((gdb_byte *) insn.get ());
+  return intelgt::inst_length ((gdb_byte *) insn.get (), device_id);
 #else
   gdb_printf (_("\nDisassemble feature not available: libiga64 "
 		"is missing.\n"));
@@ -2209,17 +2213,33 @@ intelgt_run_ret_inst (gdbarch *gdbarch)
   value *val = value::allocate (func_void_type);
   val->force_lval (ret_inst_addr);
 
-  constexpr gdb_byte ret_opcode = 0x2d;
   std::array<gdb_byte, intelgt::MAX_INST_LENGTH> buff {};
-  buff[0] = ret_opcode;
 
-  intelgt_gdbarch_data *arch_data = get_intelgt_gdbarch_data (gdbarch);
-  /* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
-     sub-register 0.  */
-  buff[8] = 0x04;
-  /* Destination register number for the RET instruction.  */
-  gdb_byte dst_reg = arch_data->framedesc_base_regnum ();
-  buff[9] = dst_reg;
+  uint32_t device_id = get_device_id (current_inferior ());
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* Assign ret opcode.  */
+	buff[0] = 0x2d;
+
+	intelgt_gdbarch_data *arch_data = get_intelgt_gdbarch_data (gdbarch);
+	/* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
+	   sub-register 0.  */
+	buff[8] = 0x04;
+	/* Destination register number for the RET instruction.  */
+	buff[9] = arch_data->framedesc_base_regnum ();
+	break;
+      }
+
+    default:
+      error (_("Unsupported device id 0x%" PRIx32), device_id);
+    }
 
   thread_info *tp = inferior_thread ();
   const uint32_t simd_width = tp->get_simd_width ();
@@ -2229,8 +2249,6 @@ intelgt_run_ret_inst (gdbarch *gdbarch)
   /* Make sure that 2^EXEC_SIZE = SIMD_WIDTH.  */
   gdb_assert (1 << exec_size == simd_width);
 
-  uint32_t device_id = get_device_id (current_inferior ());
-  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
   switch (device_version)
     {
     case intelgt::XE_HP:
@@ -2242,8 +2260,9 @@ intelgt_run_ret_inst (gdbarch *gdbarch)
     case intelgt::XE3:
       buff[2] = exec_size << 2;
       break;
+
     default:
-      error (_("Unsupported device id 0x%x"), device_id);
+      error (_("Unsupported device id 0x%" PRIx32), device_id);
     }
 
   /* Inject the dummy RET instruction in the reserved space.  */
@@ -2396,16 +2415,28 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
   /* Construct the dummy CALLA instruction.  */
   gdb_byte *calla_inst = buff;
 
-  constexpr uint32_t calla_opcode = 0x2b;
-  calla_inst[0] = calla_opcode;
+  uint32_t device_id = get_device_id (current_inferior ());
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      /* Assign calla opcode.  */
+      calla_inst[0] = 0x2b;
+      break;
+
+    default:
+      error (_("Unsupported device id 0x%" PRIx32), device_id);
+    }
 
   thread_info *current_thread = inferior_thread ();
 
   /* Compute the DEVICE_GEN from the DEVICE_ID, so that we can determine
      the correct encoding for some fields of the instruction.  */
   int predication_bit = 0;
-  uint32_t device_id = get_device_id (current_thread->inf);
-  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
   switch (device_version)
     {
     case intelgt::XE_HP:
@@ -2419,8 +2450,9 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
       predication_bit = 26;
       calla_inst[2] = exec_size << 2;
       break;
+
     default:
-      error (_("Unsupported device id 0x%x"), device_id);
+      error (_("Unsupported device id 0x%" PRIx32), device_id);
     }
 
   /* Enable predication to run the inferior call with a single lane.  */
@@ -2444,19 +2476,35 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
       regcache->cooked_write (f0_regnum, (gdb_byte *)&f0);
     }
 
-  /* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
-     sub-register 0.  */
-  calla_inst[6] = 0x04;
-  /* Destination register number for the CALLA instruction.  Since we enumerate
-     GRF's starting at GDB reg number 0, it is safe to use GDB numbering.  */
-  uint32_t dst_reg = data->framedesc_base_regnum ();
-  calla_inst[7] = dst_reg;
+  uint32_t src_regnum;
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
+	   sub-register 0.  */
+	calla_inst[6] = 0x04;
+	/* Destination register number for the CALLA instruction.  Since we
+	   enumerate GRF's starting at GDB reg number 0, it is safe to use GDB
+	   numbering.  */
+	uint32_t dst_reg = data->framedesc_base_regnum ();
+	calla_inst[7] = dst_reg;
 
-  /* Set the source register to be (framedesc-regnum - 1), we use this register
-     to store the JIP address.  */
-  uint32_t src_regnum = dst_reg - 1;
-  calla_inst[8] = 0x4;
-  calla_inst[9] = src_regnum;
+	/* Set the source register to be (framedesc-regnum - 1), we use this
+	   register to store the JIP address.  */
+	src_regnum = dst_reg - 1;
+	calla_inst[8] = 0x4;
+	calla_inst[9] = src_regnum;
+	break;
+      }
+
+    default:
+      error (_("Unsupported device id 0x%" PRIx32), device_id);
+    }
 
   /* Determine the jump IP from function address.
      FUNADDR = JIP + $isabase.  */
@@ -2466,10 +2514,24 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
   regcache->cooked_write_part (src_regnum, 0, sizeof (uint32_t),
 			       (gdb_byte *) &jump_ip);
 
-  /* Use the NOP instruction for the return breakpoint.  */
-  constexpr uint32_t nop_opcode = 0x60;
-  gdb_byte *nop_inst = buff + intelgt::MAX_INST_LENGTH;
-  nop_inst[0] = nop_opcode;
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* Use the NOP instruction for the return breakpoint.  */
+	constexpr uint32_t nop_opcode = 0x60;
+	gdb_byte *nop_inst = buff + intelgt::MAX_INST_LENGTH;
+	nop_inst[0] = nop_opcode;
+	break;
+      }
+
+    default:
+      error (_("Unsupported device id 0x%" PRIx32), device_id);
+    }
 
   /* Inject the dummy CALLA instruction and the breakpoint in the
      reserved space.  */
@@ -4096,7 +4158,7 @@ is_branch (const gdb_byte inst[], uint32_t device_id)
 	  }
       }
     }
-  error (_("Unsupported device id 0x%x"), device_id);
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
 }
 
 /* Return true if the instruction is atomic.  */
@@ -4147,7 +4209,7 @@ is_atomic (const gdb_byte inst[], uint32_t device_id)
 	  }
       }
     }
-  error (_("Unsupported device id 0x%x"), device_id);
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
 }
 
 /* If we are setting a breakpoint within an atomic sequence, we are required to
@@ -4202,7 +4264,7 @@ intelgt_adjust_breakpoint_address (gdbarch *gdbarch, CORE_ADDR bpaddr)
   CORE_ADDR addr = start;
   bool inside_atomic_region = false;
   uint32_t device_id = get_device_id (current_inferior ());
-  for (; addr <= end; addr += intelgt::inst_length (&inst_block[addr - start]))
+  while (addr <= end)
     {
       if ((bpaddr <= addr) && !inside_atomic_region)
 	return addr;
@@ -4213,6 +4275,8 @@ intelgt_adjust_breakpoint_address (gdbarch *gdbarch, CORE_ADDR bpaddr)
 
       /* The AtomicCtrl affects the next instruction.  */
       inside_atomic_region = is_atomic (inst, device_id);
+
+      addr += intelgt::inst_length (&inst_block[addr - start], device_id);
     }
 
   error (_("Couldn't adjust breakpoint to skip atomic region at %s"),
@@ -4289,13 +4353,13 @@ intelgt_displaced_step_copy_insn (gdbarch *gdbarch, CORE_ADDR from,
   if (target_read_memory (from, inst.data (), inst.size ()) != 0)
     error (_("Cannot read instruction at %s"), paddress (gdbarch, from));
 
-  uint32_t inst_len = intelgt::inst_length (inst.data ());
+  uint32_t device_id = get_device_id (current_inferior ());
+  uint32_t inst_len = intelgt::inst_length (inst.data (), device_id);
   /* Copy the original instruction.  */
   std::unique_ptr<intelgt_displaced_step_copy_insn_closure>
     closure (new intelgt_displaced_step_copy_insn_closure (inst_len));
   memcpy (closure->inst_buf.data (), inst.data (), inst_len);
 
-  uint32_t device_id = get_device_id (current_inferior ());
   intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
   switch (device_version)
     {
@@ -4381,12 +4445,14 @@ intelgt_displaced_step_copy_insn (gdbarch *gdbarch, CORE_ADDR from,
 	    break;
 
 	  default:
-	    gdb_assert_not_reached ("unexpected device id 0x%x", device_id);
+	    gdb_assert_not_reached ("unexpected device id 0x%" PRIx32,
+				    device_id);
 	  }
 	break;
       }
+
     default:
-      error (_("Unsupported device id 0x%x"), device_id);
+      error (_("Unsupported device id 0x%" PRIx32), device_id);
     }
 
   /* Write the modified instruction to the TO address.  */
@@ -4469,7 +4535,7 @@ intelgt_software_single_step (regcache *regcache)
     error (_("Abort stepping: Unexpected branch instruction at %s"),
 	   paddress (gdbarch, pc));
 
-  CORE_ADDR next_pc = pc + intelgt::inst_length (inst.data ());
+  CORE_ADDR next_pc = pc + intelgt::inst_length (inst.data (), device_id);
 
   /* Skip the atomic sequence.  */
   CORE_ADDR bpaddr = intelgt_adjust_breakpoint_address (gdbarch, next_pc);

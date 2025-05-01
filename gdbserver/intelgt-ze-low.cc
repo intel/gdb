@@ -237,6 +237,13 @@ device_uuid_str (const uint8_t uuid[], size_t size)
   return sstream.str ();
 }
 
+static uint32_t
+get_device_id (ze_device_info *device)
+{
+  gdb_assert (device != nullptr);
+  return device->properties.deviceId;
+}
+
 /* Target op definitions for Intel GT target based on level-zero.  */
 
 class intelgt_ze_target : public ze_target
@@ -659,7 +666,8 @@ intelgt_ze_target::read_inst (thread_info *tp, CORE_ADDR pc,
   if (status > 0)
     return status;
 
-  if (intelgt::inst_length (buffer) == intelgt::inst_length_full ())
+  uint32_t device_id = get_device_id (ze_thread_device (tp));
+  if (intelgt::inst_length (buffer, device_id) == intelgt::inst_length_full ())
     return -EIO;
 
   memset (buffer + intelgt::COMPACT_INST_LENGTH, 0,
@@ -679,7 +687,8 @@ intelgt_ze_target::is_at_breakpoint (thread_info *tp)
   if (status < 0)
     return false;
 
-  return intelgt::has_breakpoint (inst);
+  uint32_t device_id = get_device_id (ze_thread_device (tp));
+  return intelgt::has_breakpoint (inst, device_id);
 }
 
 bool
@@ -700,7 +709,23 @@ intelgt_ze_target::is_at_eot (thread_info *tp)
       return false;
     }
 
-  uint8_t opc = inst[0] & intelgt::opc_mask;
+  uint8_t opc;
+  uint32_t device_id = get_device_id (ze_thread_device (tp));
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      opc = inst[0] & intelgt::opc_mask;
+      break;
+
+    default:
+      error (_("Unsupported device id 0x%" PRIx32), device_id);
+    }
+
   switch (opc)
     {
     case intelgt::opc_send:
@@ -717,22 +742,9 @@ intelgt_ze_target::is_at_eot (thread_info *tp)
 bool
 intelgt_ze_target::erratum_18020355813 (thread_info *tp)
 {
-  const process_info *process = get_thread_process (tp);
-  if (process == nullptr)
-    {
-      ze_device_thread_t zeid = ze_thread_id (tp);
-
-      warning (_("error getting process for thread %s (%s)"),
-	       tp->id.to_string ().c_str (),
-	       ze_thread_id_str (zeid).c_str ());
-      return false;
-    }
-
-  process_info_private *zeinfo = process->priv;
-  gdb_assert (zeinfo != nullptr);
+  ze_device_info *device = ze_thread_device (tp);
 
   /* We may not have a device if we got detached.  */
-  ze_device_info *device = zeinfo->device;
   if (device == nullptr)
     return false;
 
@@ -740,8 +752,10 @@ intelgt_ze_target::erratum_18020355813 (thread_info *tp)
   if (device->properties.vendorId != 0x8086)
     return false;
 
+  uint32_t device_id = get_device_id (device);
+
   /* The erratum only applies to a range of devices.  */
-  switch (intelgt::get_xe_version (device->properties.deviceId))
+  switch (intelgt::get_xe_version (device_id))
     {
       case intelgt::XE_HPG:
       case intelgt::XE_HPC:
@@ -767,7 +781,7 @@ intelgt_ze_target::erratum_18020355813 (thread_info *tp)
     }
 
   /* The erratum applies to instructions without breakpoint control.  */
-  return !intelgt::has_breakpoint (inst);
+  return !intelgt::has_breakpoint (inst, device_id);
 }
 
 void

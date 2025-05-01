@@ -113,6 +113,13 @@ enum
   intelgt_cr0_1_pagefault_status = 16,
 };
 
+static uint32_t
+get_device_id (const ze_device_info *device)
+{
+  gdb_assert (device != nullptr);
+  return device->properties.deviceId;
+}
+
 /* Read DST.size () bytes from register REGNUM at OFFSET in REGCACHE and write
    to DST.  */
 
@@ -677,8 +684,8 @@ intelgt_ze_target::read_inst (thread_info *tp, CORE_ADDR pc,
   if (status > 0)
     return status;
 
-  /* Check the CmptCtrl flag (bit 29).  */
-  if ((buffer[3] & 0x20) == 0)
+  uint32_t device_id = get_device_id (ze_thread_device (tp));
+  if (intelgt::inst_length (buffer, device_id) == intelgt::MAX_INST_LENGTH)
     return -EIO;
 
   memset (buffer + intelgt::COMPACT_INST_LENGTH, 0,
@@ -698,7 +705,8 @@ intelgt_ze_target::is_at_breakpoint (thread_info *tp)
   if (status < 0)
     return false;
 
-  return intelgt::has_breakpoint (inst);
+  uint32_t device_id = get_device_id (ze_thread_device (tp));
+  return intelgt::has_breakpoint (inst, device_id);
 }
 
 bool
@@ -719,22 +727,39 @@ intelgt_ze_target::is_at_eot (thread_info *tp)
       return false;
     }
 
-  /* The opcode mask for bits 6:0.  */
-  constexpr uint8_t OPC_MASK = 0x7f;
-  switch (inst[0] & OPC_MASK)
+  uint32_t device_id = get_device_id (ze_thread_device (tp));
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  switch (device_version)
     {
-    case 0x31: /* send */
-    case 0x32: /* sendc */
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
       {
-	/* The End Of Thread control.  Only used for SEND and
-	   SENDC.  */
-	constexpr uint8_t CTRL_EOT_SEND = 34;
-	return intelgt::get_inst_bit (inst, CTRL_EOT_SEND);
+	/* The opcode mask for bits 6:0.  */
+	constexpr uint8_t OPC_MASK = 0x7f;
+	switch (inst[0] & OPC_MASK)
+	  {
+	  case 0x31: /* send */
+	  case 0x32: /* sendc */
+	    {
+	      /* The End Of Thread control.  Only used for SEND and
+		 SENDC.  */
+	      constexpr uint8_t CTRL_EOT_SEND = 34;
+	      return intelgt::get_inst_bit (inst, CTRL_EOT_SEND);
+	    }
+
+	  default:
+	    return false;
+	  }
       }
 
-    default:
-      return false;
+    case intelgt::XE_INVALID:
+      break;
     }
+
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
 }
 
 /* Return whether erratum #18020355813 applies.  */
@@ -742,22 +767,9 @@ intelgt_ze_target::is_at_eot (thread_info *tp)
 bool
 intelgt_ze_target::erratum_18020355813 (thread_info *tp)
 {
-  const process_info *process = tp->process ();
-  if (process == nullptr)
-    {
-      ze_device_thread_t zeid = ze_thread_id (tp);
-
-      warning (_("error getting process for thread %s (%s)"),
-	       tp->id.to_string ().c_str (),
-	       ze_thread_id_str (zeid).c_str ());
-      return false;
-    }
-
-  process_info_private *zeinfo = process->priv;
-  gdb_assert (zeinfo != nullptr);
+  ze_device_info *device = ze_thread_device (tp);
 
   /* We may not have a device if we got detached.  */
-  ze_device_info *device = zeinfo->device;
   if (device == nullptr)
     return false;
 
@@ -765,8 +777,10 @@ intelgt_ze_target::erratum_18020355813 (thread_info *tp)
   if (device->properties.vendorId != 0x8086)
     return false;
 
+  uint32_t device_id = get_device_id (device);
+
   /* The erratum only applies to a range of devices.  */
-  switch (intelgt::get_xe_version (device->properties.deviceId))
+  switch (intelgt::get_xe_version (device_id))
     {
       case intelgt::XE_HPG:
       case intelgt::XE_HPC:
@@ -792,7 +806,7 @@ intelgt_ze_target::erratum_18020355813 (thread_info *tp)
     }
 
   /* The erratum applies to instructions without breakpoint control.  */
-  return !intelgt::has_breakpoint (inst);
+  return !intelgt::has_breakpoint (inst, device_id);
 }
 
 void
@@ -907,20 +921,38 @@ intelgt_ze_target::add_regset (target_desc *tdesc, const ze_device_info &dinfo,
     {
     case ZET_DEBUG_REGSET_TYPE_GRF_INTEL_GPU:
       {
-	feature = tdesc_create_feature (tdesc, intelgt::feature_grf);
+	intelgt::xe_version device_version
+	  = intelgt::get_xe_version (device.deviceId);
 
-	expedite.push_back ("r0");
-	std::string rname (std::string ("r")
-			   + std::to_string (regprop.count - 1));
-	expedite.push_back (rname.c_str ());
+	switch (device_version)
+	  {
+	  case intelgt::XE_HP:
+	  case intelgt::XE_HPG:
+	  case intelgt::XE_HPC:
+	  case intelgt::XE2:
+	  case intelgt::XE3:
+	    {
+	      feature = tdesc_create_feature (tdesc, intelgt::feature_grf);
 
-	intelgt_add_regset (feature, regnum, "r", regprop.count, "grf",
-			    regprop.bitSize, regset.is_writeable,
-			    intelgt_uint_reg_type (feature, regprop.bitSize,
-						   32u),
-			    expedite);
+	      expedite.push_back ("r0");
+	      std::string rname (std::string ("r")
+				 + std::to_string (regprop.count - 1));
+	      expedite.push_back (rname.c_str ());
+
+	      intelgt_add_regset (feature, regnum, "r", regprop.count, "grf",
+				  regprop.bitSize, regset.is_writeable,
+				  intelgt_uint_reg_type (feature,
+							 regprop.bitSize, 32u),
+				  expedite);
+	    }
+	    break;
+
+	  default:
+	    gdb_assert_not_reached ("Unexpected device id 0x%" PRIx32,
+				    device.deviceId);
+	  }
+	break;
       }
-      break;
 
     case ZET_DEBUG_REGSET_TYPE_ADDR_INTEL_GPU:
       feature = tdesc_create_feature (tdesc, intelgt::feature_addr);

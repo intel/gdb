@@ -622,8 +622,23 @@ struct intelgt_gdbarch_data
       error (_("Cannot determine framedesc base regnum: "
 	       "Unsupported GRF register count %d"), grf_count);
 
-    /* For EM_INTELGT frame descriptors are stored at MAX_GRF - 1.  */
-    return regset_ranges[intelgt::regset_grf].end - 1;
+    uint32_t device_id = get_device_id (current_inferior ());
+    intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+
+    switch (device_version)
+      {
+      case intelgt::XE_HP:
+      case intelgt::XE_HPG:
+      case intelgt::XE_HPC:
+      case intelgt::XE2:
+      case intelgt::XE3:
+	return grf_count - 1;
+
+      case intelgt::XE_INVALID:
+	break;
+      }
+
+    error (_("Unexpected device id 0x%" PRIx32), device_id);
   }
 
   /* Return a structured type of the 'framedesc' register.
@@ -1057,19 +1072,38 @@ intelgt_get_isabase (readable_regcache *regcache)
 static CORE_ADDR
 intelgt_unwind_pc (gdbarch *gdbarch, const frame_info_ptr &next_frame)
 {
-  /* Use ip register here, as IGC uses 32bit values (pc is 64bit).  */
-  int ip_regnum = intelgt_pseudo_register_num (gdbarch, "ip");
-  CORE_ADDR prev_ip = frame_unwind_register_unsigned (next_frame,
-                                                      ip_regnum);
-  dprintf ("prev_ip: %lx", prev_ip);
+  uint32_t device_id = get_device_id (gdbarch);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
 
-  /* Program counter is $ip + $isabase.  */
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
-  gdb_assert (data->isabase_regnum != -1);
-  CORE_ADDR isabase
-    = frame_unwind_register_unsigned (next_frame, data->isabase_regnum);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* Use ip register here, as IGC uses 32bit values (pc is 64bit).  */
+	int ip_regnum = intelgt_pseudo_register_num (gdbarch, "ip");
+	CORE_ADDR prev_ip = frame_unwind_register_unsigned (next_frame,
+							    ip_regnum);
+	dprintf ("prev_ip: %lx", prev_ip);
 
-  return isabase + prev_ip;
+	/* Program counter is $ip + $isabase.  */
+	intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+	gdb_assert (data->isabase_regnum != -1);
+	CORE_ADDR isabase
+	  = frame_unwind_register_unsigned (next_frame,
+					    data->isabase_regnum);
+
+	return isabase + prev_ip;
+      }
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+
+  error (_("Unexpected device id 0x%" PRIx32), device_id);
 }
 
 /* Frame unwinding.  */
@@ -1122,7 +1156,8 @@ intelgt_memory_insert_breakpoint (gdbarch *gdbarch, struct bp_target_info *bp)
     }
 
   bp->placed_address = bp->reqstd_address;
-  bp->shadow_len = intelgt::inst_length (inst);
+  uint32_t device_id = get_device_id (current_inferior ());
+  bp->shadow_len = intelgt::inst_length (inst, device_id);
 
   /* Make a copy before we set the breakpoint so we can restore the
      original instruction when removing the breakpoint again.
@@ -1130,7 +1165,7 @@ intelgt_memory_insert_breakpoint (gdbarch *gdbarch, struct bp_target_info *bp)
      This isn't strictly necessary but it saves one target access.  */
   memcpy (bp->shadow_contents, inst, bp->shadow_len);
 
-  const bool already = intelgt::set_breakpoint (inst);
+  const bool already = intelgt::set_breakpoint (inst, device_id);
   if (already)
     {
       /* Warn if the breakpoint bit is already set.
@@ -1163,7 +1198,8 @@ intelgt_memory_remove_breakpoint (gdbarch *gdbarch, struct bp_target_info *bp)
 	   paddress (gdbarch, bp->placed_address));
 
   /* Warn if we're inserting a permanent breakpoint.  */
-  if (intelgt::has_breakpoint (bp->shadow_contents))
+  uint32_t device_id = get_device_id (current_inferior ());
+  if (intelgt::has_breakpoint (bp->shadow_contents, device_id))
     warning (_("Re-inserting permanent breakpoint at %s."),
 	     paddress (gdbarch, bp->placed_address));
 
@@ -1196,7 +1232,8 @@ intelgt_program_breakpoint_here_p (gdbarch *gdbarch, CORE_ADDR pc)
       return err;
     }
 
-  const bool is_bkpt = intelgt::has_breakpoint (inst);
+  uint32_t device_id = get_device_id (current_inferior ());
+  const bool is_bkpt = intelgt::has_breakpoint (inst, device_id);
 
   dprintf ("%sbreakpoint found.", is_bkpt ? "" : "no ");
 
@@ -1274,7 +1311,8 @@ intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
       (*info->memory_error_func) (status, memaddr, info);
       return -1;
     }
-  unsigned int length = intelgt::inst_length (insn);
+  uint32_t device_id = get_device_id (current_inferior ());
+  unsigned int length = intelgt::inst_length (insn, device_id);
   if (length == intelgt::MAX_INST_LENGTH)
     {
       status = (*info->read_memory_func) (memaddr, insn,
@@ -1298,7 +1336,7 @@ intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
 
   (*info->fprintf_func) (info->stream, "%s", dbuf);
 
-  return intelgt::inst_length (insn);
+  return length;
 #endif /* defined (HAVE_LIBIGA64)  */
 }
 
@@ -1380,36 +1418,73 @@ intelgt_read_pc (readable_regcache *regcache)
   gdbarch *arch = regcache->arch ();
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
 
-  /* Instruction pointer is stored in CR0.2.  */
-  uint32_t ip;
-  intelgt_read_register_part (regcache, data->cr0_regnum,
-			      sizeof (uint32_t) * 2, sizeof (uint32_t),
-			      (gdb_byte *) &ip, _("Cannot compute PC."));
+  uint32_t device_id = get_device_id (arch);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
 
-  /* Program counter is $ip + $isabase.  */
-  CORE_ADDR isabase = intelgt_get_isabase (regcache);
-  return isabase + ip;
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* Instruction pointer is stored in CR0.2.  */
+	uint32_t ip;
+	intelgt_read_register_part (regcache, data->cr0_regnum,
+				    sizeof (uint32_t) * 2, sizeof (uint32_t),
+				    (gdb_byte *) &ip, _("Cannot compute PC."));
+
+	/* Program counter is $ip + $isabase.  */
+	CORE_ADDR isabase = intelgt_get_isabase (regcache);
+	return isabase + ip;
+      }
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+
+  error (_("Unexpected device id 0x%" PRIx32), device_id);
 }
 
 static void
 intelgt_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
   gdbarch *arch = regcache->arch ();
-  /* Program counter is $ip + $isabase, can only modify $ip.  Need
-     to ensure that the new value fits within $ip modification range
-     and propagate the write accordingly.  */
-  CORE_ADDR isabase = intelgt_get_isabase (regcache);
-  if (pc < isabase || pc > isabase + UINT32_MAX)
-    error ("Can't update $pc to value 0x%lx, out of range", pc);
+  uint32_t device_id = get_device_id (arch);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
 
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
 
-  /* Instruction pointer is stored in CR0.2.  */
-  uint32_t ip = pc - isabase;
-  intelgt_write_register_part (regcache, data->cr0_regnum,
-			       sizeof (uint32_t) * 2,
-			       sizeof (uint32_t), (gdb_byte *) &ip,
-			       _("Cannot write IP into CR0."));
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* Program counter is $ip + $isabase, can only modify $ip.  Need
+	   to ensure that the new value fits within $ip modification range
+	   and propagate the write accordingly.  */
+	CORE_ADDR isabase = intelgt_get_isabase (regcache);
+	if (pc < isabase || pc > isabase + UINT32_MAX)
+	  error (_("Can't update $pc to value %s, out of range"),
+		 paddress (arch, pc));
+	/* Instruction pointer is stored in CR0.2.  */
+	uint32_t ip = pc - isabase;
+	intelgt_write_register_part (regcache, data->cr0_regnum,
+				     sizeof (uint32_t) * 2,
+				     sizeof (uint32_t), (gdb_byte *) &ip,
+				     _("Cannot write IP into CR0."));
+	return;
+      }
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+
+  error (_("Unexpected device id 0x%" PRIx32), device_id);
 }
 
 /* Return the name of pseudo-register REGNUM.  */
@@ -1431,6 +1506,9 @@ intelgt_pseudo_register_name (gdbarch *arch, int regnum)
 static type *
 intelgt_pseudo_register_type (gdbarch *arch, int regnum)
 {
+  uint32_t device_id = get_device_id (arch);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+
   const char *name = intelgt_pseudo_register_name (arch, regnum);
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
 
@@ -1441,10 +1519,23 @@ intelgt_pseudo_register_type (gdbarch *arch, int regnum)
 
   const struct builtin_type *bt = builtin_type (arch);
 
-  if (strcmp (name, "ip") == 0)
-    return bt->builtin_uint32;
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      if (strcmp (name, "ip") == 0)
+	return bt->builtin_uint32;
 
-  return nullptr;
+      return nullptr;
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+
+  error (_("Unexpected device id 0x%" PRIx32), device_id);
 }
 
 /* Read the value of a pseudo-register REGNUM.  */
@@ -1457,12 +1548,7 @@ intelgt_pseudo_register_read_value (gdbarch *arch,
   const char *name = intelgt_pseudo_register_name (arch, pseudo_regnum);
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
 
-  if (strcmp (name, "framedesc") == 0)
-    {
-      int grf_num = data->framedesc_base_regnum ();
-      return pseudo_from_raw_part (next_frame, pseudo_regnum, grf_num, 0);
-    }
-  else if (strcmp (name, "ip") == 0)
+  if (strcmp (name, "ip") == 0)
     {
       int regsize = register_size (arch, pseudo_regnum);
       /* Instruction pointer is stored in CR0.2.  */
@@ -1488,15 +1574,7 @@ intelgt_pseudo_register_write (gdbarch *arch,
   const char *name = intelgt_pseudo_register_name (arch, pseudo_regnum);
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
 
-  if (strcmp (name, "framedesc") == 0)
-    {
-      int grf_num = data->framedesc_base_regnum ();
-      int grf_size = register_size (arch, grf_num);
-      int desc_size = register_size (arch, pseudo_regnum);
-      gdb_assert (grf_size >= desc_size);
-      pseudo_to_raw_part (next_frame, buf, grf_num, 0);
-    }
-  else if (strcmp (name, "ip") == 0)
+  if (strcmp (name, "ip") == 0)
     {
       /* Instruction pointer is stored in CR0.2.  */
       gdb_assert (data->cr0_regnum != -1);
@@ -1506,9 +1584,10 @@ intelgt_pseudo_register_write (gdbarch *arch,
       int reg_size = register_size (arch, pseudo_regnum);
       gdb_assert (reg_size + 8 <= cr0_size);
       pseudo_to_raw_part (next_frame, buf, data->cr0_regnum, 8);
+      return;
     }
-  else
-    error (_("Pseudo-register %s is read-only"), name);
+
+  error (_("Pseudo-register %s is read-only"), name);
 }
 
 /* Called by tdesc_use_registers each time a new regnum
@@ -1538,7 +1617,6 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
 
   /* Second, check if it is any specific individual register that
      needs to be tracked.  */
-
   if (strcmp ("r0", reg_name) == 0)
     data->r0_regnum = possible_regnum;
   else if (strcmp ("r26", reg_name) == 0)
@@ -2214,17 +2292,33 @@ intelgt_run_ret_inst (gdbarch *gdbarch)
   value *val = value::allocate (func_void_type);
   val->force_lval (ret_inst_addr);
 
-  constexpr gdb_byte ret_opcode = 0x2d;
   std::array<gdb_byte, intelgt::MAX_INST_LENGTH> buff {};
-  buff[0] = ret_opcode;
 
-  intelgt_gdbarch_data *arch_data = get_intelgt_gdbarch_data (gdbarch);
-  /* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
-     sub-register 0.  */
-  buff[8] = 0x04;
-  /* Destination register number for the RET instruction.  */
-  gdb_byte dst_reg = arch_data->framedesc_base_regnum ();
-  buff[9] = dst_reg;
+  uint32_t device_id = get_device_id (current_inferior ());
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* Assign ret opcode.  */
+	buff[0] = 0x2d;
+
+	intelgt_gdbarch_data *arch_data = get_intelgt_gdbarch_data (gdbarch);
+	/* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
+	   sub-register 0.  */
+	buff[8] = 0x04;
+	/* Destination register number for the RET instruction.  */
+	buff[9] = arch_data->framedesc_base_regnum ();
+	break;
+      }
+
+    default:
+      error (_("Unsupported device id 0x%" PRIx32), device_id);
+    }
 
   thread_info *tp = inferior_thread ();
   const uint32_t simd_width = tp->get_simd_width ();
@@ -2234,8 +2328,6 @@ intelgt_run_ret_inst (gdbarch *gdbarch)
   /* Make sure that 2^EXEC_SIZE = SIMD_WIDTH.  */
   gdb_assert (1 << exec_size == simd_width);
 
-  uint32_t device_id = get_device_id (current_inferior ());
-  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
   switch (device_version)
     {
     case intelgt::XE_HP:
@@ -2247,8 +2339,9 @@ intelgt_run_ret_inst (gdbarch *gdbarch)
     case intelgt::XE3:
       buff[2] = exec_size << 2;
       break;
+
     default:
-      error (_("Unsupported device id 0x%x"), device_id);
+      error (_("Unsupported device id 0x%" PRIx32), device_id);
     }
 
   /* Inject the dummy RET instruction in the reserved space.  */
@@ -2409,16 +2502,28 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
   /* Construct the dummy CALLA instruction.  */
   gdb_byte *calla_inst = buff;
 
-  constexpr uint32_t calla_opcode = 0x2b;
-  calla_inst[0] = calla_opcode;
+  uint32_t device_id = get_device_id (current_inferior ());
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      /* Assign calla opcode.  */
+      calla_inst[0] = 0x2b;
+      break;
+
+    default:
+      error (_("Unsupported device id 0x%" PRIx32), device_id);
+    }
 
   thread_info *current_thread = inferior_thread ();
 
   /* Compute the DEVICE_GEN from the DEVICE_ID, so that we can determine
      the correct encoding for some fields of the instruction.  */
   int predication_bit = 0;
-  uint32_t device_id = get_device_id (current_thread->inf);
-  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
   switch (device_version)
     {
     case intelgt::XE_HP:
@@ -2432,8 +2537,9 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
       predication_bit = 26;
       calla_inst[2] = exec_size << 2;
       break;
+
     default:
-      error (_("Unsupported device id 0x%x"), device_id);
+      error (_("Unsupported device id 0x%" PRIx32), device_id);
     }
 
   /* Enable predication to run the inferior call with a single lane.  */
@@ -2457,19 +2563,35 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
       regcache->cooked_write (f0_regnum, (gdb_byte *)&f0);
     }
 
-  /* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
-     sub-register 0.  */
-  calla_inst[6] = 0x04;
-  /* Destination register number for the CALLA instruction.  Since we enumerate
-     GRF's starting at GDB reg number 0, it is safe to use GDB numbering.  */
-  uint32_t dst_reg = data->framedesc_base_regnum ();
-  calla_inst[7] = dst_reg;
+  uint32_t src_regnum;
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
+	   sub-register 0.  */
+	calla_inst[6] = 0x04;
+	/* Destination register number for the CALLA instruction.  Since we
+	   enumerate GRF's starting at GDB reg number 0, it is safe to use GDB
+	   numbering.  */
+	uint32_t dst_reg = data->framedesc_base_regnum ();
+	calla_inst[7] = dst_reg;
 
-  /* Set the source register to be (framedesc-regnum - 1), we use this register
-     to store the JIP address.  */
-  uint32_t src_regnum = dst_reg - 1;
-  calla_inst[8] = 0x4;
-  calla_inst[9] = src_regnum;
+	/* Set the source register to be (framedesc-regnum - 1), we use this
+	   register to store the JIP address.  */
+	src_regnum = dst_reg - 1;
+	calla_inst[8] = 0x4;
+	calla_inst[9] = src_regnum;
+	break;
+      }
+
+    default:
+      error (_("Unsupported device id 0x%" PRIx32), device_id);
+    }
 
   /* Determine the jump IP from function address.
      FUNADDR = JIP + $isabase.  */
@@ -2479,10 +2601,24 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
   regcache->cooked_write_part (src_regnum, 0, sizeof (uint32_t),
 			       (gdb_byte *) &jump_ip);
 
-  /* Use the NOP instruction for the return breakpoint.  */
-  constexpr uint32_t nop_opcode = 0x60;
-  gdb_byte *nop_inst = buff + intelgt::MAX_INST_LENGTH;
-  nop_inst[0] = nop_opcode;
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* Use the NOP instruction for the return breakpoint.  */
+	constexpr uint32_t nop_opcode = 0x60;
+	gdb_byte *nop_inst = buff + intelgt::MAX_INST_LENGTH;
+	nop_inst[0] = nop_opcode;
+	break;
+      }
+
+    default:
+      error (_("Unsupported device id 0x%" PRIx32), device_id);
+    }
 
   /* Inject the dummy CALLA instruction and the breakpoint in the
      reserved space.  */
@@ -4192,7 +4328,7 @@ is_branch (const gdb_byte inst[], uint32_t device_id)
 	  }
       }
     }
-  error (_("Unsupported device id 0x%x"), device_id);
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
 }
 
 /* Return true if the instruction is atomic.  */
@@ -4243,7 +4379,7 @@ is_atomic (const gdb_byte inst[], uint32_t device_id)
 	  }
       }
     }
-  error (_("Unsupported device id 0x%x"), device_id);
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
 }
 
 /* If we are setting a breakpoint within an atomic sequence, we are required to
@@ -4298,7 +4434,7 @@ intelgt_adjust_breakpoint_address (gdbarch *gdbarch, CORE_ADDR bpaddr)
   CORE_ADDR addr = start;
   bool inside_atomic_region = false;
   uint32_t device_id = get_device_id (current_inferior ());
-  for (; addr <= end; addr += intelgt::inst_length (&inst_block[addr - start]))
+  while (addr <= end)
     {
       if ((bpaddr <= addr) && !inside_atomic_region)
 	return addr;
@@ -4309,6 +4445,8 @@ intelgt_adjust_breakpoint_address (gdbarch *gdbarch, CORE_ADDR bpaddr)
 
       /* The AtomicCtrl affects the next instruction.  */
       inside_atomic_region = is_atomic (inst, device_id);
+
+      addr += intelgt::inst_length (&inst_block[addr - start], device_id);
     }
 
   error (_("Couldn't adjust breakpoint to skip atomic region at %s"),
@@ -4385,13 +4523,13 @@ intelgt_displaced_step_copy_insn (gdbarch *gdbarch, CORE_ADDR from,
   if (target_read_memory (from, inst.data (), inst.size ()) != 0)
     error (_("Cannot read instruction at %s"), paddress (gdbarch, from));
 
-  uint32_t inst_len = intelgt::inst_length (inst.data ());
+  uint32_t device_id = get_device_id (current_inferior ());
+  uint32_t inst_len = intelgt::inst_length (inst.data (), device_id);
   /* Copy the original instruction.  */
   std::unique_ptr<intelgt_displaced_step_copy_insn_closure>
     closure (new intelgt_displaced_step_copy_insn_closure (inst_len));
   memcpy (closure->inst_buf.data (), inst.data (), inst_len);
 
-  uint32_t device_id = get_device_id (current_inferior ());
   intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
   switch (device_version)
     {
@@ -4569,7 +4707,7 @@ intelgt_get_next_pcs (regcache *regcache)
     error (_("Abort stepping: Unexpected branch instruction at %s"),
 	   paddress (gdbarch, pc));
 
-  CORE_ADDR next_pc = pc + intelgt::inst_length (inst.data ());
+  CORE_ADDR next_pc = pc + intelgt::inst_length (inst.data (), device_id);
 
   /* Skip the atomic sequence.  */
   CORE_ADDR bpaddr = intelgt_adjust_breakpoint_address (gdbarch, next_pc);
@@ -4683,6 +4821,9 @@ Device vendor id and target id not found in intelgt target description."));
 
   if (tdesc_has_registers (tdesc))
     {
+      uint32_t device_id = get_device_id (gdbarch);
+      intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+
       tdesc_arch_data_up tdesc_data = tdesc_data_alloc ();
 
       /* First assign register numbers to all registers.  The
@@ -4693,27 +4834,39 @@ Device vendor id and target id not found in intelgt target description."));
       tdesc_use_registers (gdbarch, tdesc, std::move (tdesc_data),
 			   intelgt_unknown_register_cb);
 
-      /* Now check the collected metadata to ensure that all
-	 mandatory pieces are in place.  */
+      switch (device_version)
+	{
+	case intelgt::XE_HP:
+	case intelgt::XE_HPG:
+	case intelgt::XE_HPC:
+	case intelgt::XE2:
+	case intelgt::XE3:
+	  /* Now check the collected metadata to ensure that all
+	     mandatory pieces are in place.  */
 
-      if (data->ce_regnum == -1)
-	error (_("Debugging requires $ce provided by the target"));
-      if (data->retval_regnum == -1)
-	error (_("Debugging requires return value register to be provided "
-		 "by the target"));
-      if (data->cr0_regnum == -1)
-	error (_("Debugging requires control register to be provided by "
-		 "the target"));
-      if (data->sr0_regnum == -1)
-	error (_("Debugging requires state register to be provided by "
-		 "the target"));
+	  if (data->ce_regnum == -1)
+	    error (_("Debugging requires $ce provided by the target"));
+	  if (data->retval_regnum == -1)
+	    error (_("Debugging requires return value register to be provided "
+		     "by the target"));
+	  if (data->cr0_regnum == -1)
+	    error (_("Debugging requires control register to be provided by "
+		     "the target"));
+	  if (data->sr0_regnum == -1)
+	    error (_("Debugging requires state register to be provided by "
+		     "the target"));
 
-      /* Add the 'framedesc' register as a structured user register.  */
-      user_reg_add (gdbarch, "framedesc",
-		    intelgt_value_of_framedesc_user_reg, nullptr);
+	  /* Add the 'framedesc' register as a structured user register.  */
+	  user_reg_add (gdbarch, "framedesc",
+			intelgt_value_of_framedesc_user_reg, nullptr);
 
-      /* Unconditionally enabled pseudo-registers:  */
-      data->enabled_pseudo_regs.push_back ("ip");
+	  /* Unconditionally enabled pseudo-registers:  */
+	  data->enabled_pseudo_regs.push_back ("ip");
+	  break;
+
+	default:
+	  error (_("Unexpected device id 0x%" PRIx32), device_id);
+	}
 
       set_gdbarch_num_pseudo_regs (gdbarch, data->enabled_pseudo_regs.size ());
       set_gdbarch_pseudo_register_read_value (

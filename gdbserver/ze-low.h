@@ -354,6 +354,10 @@ ze_thread_id (const thread_info *thread)
 
 extern std::string ze_thread_id_str (const ze_device_thread_t &thread);
 
+/* Return the device for THREAD.  */
+
+extern ze_device_info *ze_thread_device (const thread_info *thread);
+
 /* The state of a process.  */
 
 enum ze_process_state

@@ -124,37 +124,63 @@ bool set_inst_bit (gdb_byte inst[], int pos);
 bool clear_inst_bit (gdb_byte inst[], int pos);
 
 static inline int
-breakpoint_bit_offset (const gdb_byte inst[])
+breakpoint_bit_offset (const gdb_byte inst[], uint32_t device_id)
 {
-  /* Check the CmptCtrl flag (bit 29).  */
-  return (((inst[3] & 0x20) != 0) ? 7 : 30);
+  xe_version device_version = get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      /* Check the CmptCtrl flag (bit 29).  */
+      return (((inst[3] & 0x20) != 0) ? 7 : 30);
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
 }
 
 static inline bool
-set_breakpoint (gdb_byte inst[])
+set_breakpoint (gdb_byte inst[], uint32_t device_id)
 {
-  return set_inst_bit (inst, breakpoint_bit_offset (inst));
+  return set_inst_bit (inst, breakpoint_bit_offset (inst, device_id));
 }
 
 static inline bool
-clear_breakpoint (gdb_byte inst[])
+clear_breakpoint (gdb_byte inst[], uint32_t device_id)
 {
-  return clear_inst_bit (inst, breakpoint_bit_offset (inst));
+  return clear_inst_bit (inst, breakpoint_bit_offset (inst, device_id));
 }
 
 static inline bool
-has_breakpoint (const gdb_byte inst[])
+has_breakpoint (const gdb_byte inst[], uint32_t device_id)
 {
-  return get_inst_bit (inst, breakpoint_bit_offset (inst));
+  return get_inst_bit (inst, breakpoint_bit_offset (inst, device_id));
 }
 
 static inline unsigned int
-inst_length (const gdb_byte inst[])
+inst_length (const gdb_byte inst[], uint32_t device_id)
 {
-  /* Check the CmptCtrl flag (bit 29).  */
-  return (((inst[3] & 0x20) != 0)
-	  ? COMPACT_INST_LENGTH
-	  : MAX_INST_LENGTH);
+  xe_version device_version = get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      /* Check the CmptCtrl flag (bit 29).  */
+      return (((inst[3] & 0x20) != 0)
+	      ? COMPACT_INST_LENGTH
+	      : MAX_INST_LENGTH);
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
 }
 
 } /* namespace intelgt */

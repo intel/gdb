@@ -89,9 +89,16 @@ foreach device $sycl_device_list {
 	gdb_test "next" "\\\[Switching to SIMD lane 0\\\].*"\
 	    "SIMD lane switch after stepping into even branch"
 
+	if {[is_xe3 $device]} {
+	    setup_kfail "JIRA GSD/11093" "*-*-*"
+	}
 	# Test SIMD switch after stepping out of the odd branch.
 	gdb_test "next 2" "\\\[Switching to SIMD lane 1\\\].*"\
 	    "SIMD lane switch after stepping into odd branch after even"
+	if {[is_xe3 $device]} {
+	    verbose -log "Skipping the test to avoid timeouts due to hang."
+	    return
+	}
 	gdb_test "print \$_simd_lane" "= 1" "check \$_simd_lane after next"
 
 	gdb_test_no_output "set scheduler-locking off" \

@@ -50,9 +50,14 @@ foreach device $sycl_device_list {
 	set odd_branch_line [gdb_get_line_number "kernel-odd-branch"]
 	mi_tbreak "$srcfile:$odd_branch_line" "define temp bp on odd branch"
 	mi_send_resuming_command "exec-continue" "-exec-continue to odd branch"
-	mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" "$decimal" \
+	setup_kfail "JIRA GSD/11093" "*-*-*"
+	if {[mi_expect_stop "breakpoint-hit" ".*" ".*" ".*" "$decimal" \
 	    [list ".*" ".*" {locno="[0-9]+"}] \
-	    "expect bp hit at odd branch"
+	    "expect bp hit at odd branch"] == -1} {
+	    kfail "JIRA GSD/11093" \
+		"Skipping test to avoid hang while hitting bp in odd branch"
+	    return
+	}
 
 	# Get global ID of the current thread.
 	set current_thread [mi_get_integer_valueof "\$_gthread" 0]

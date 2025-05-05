@@ -101,7 +101,12 @@ foreach device $sycl_device_list {
 	}
 
 	with_test_prefix "guarded stmt" {
-	    test "$device" "kernel-condition" "37"
+	    if {[is_xe3 $device]} {
+		kfail "JIRA GSD/11093" \
+		    "Skip test due to hang in odd branch while hitting bp"
+	    } else {
+		test "$device" "kernel-condition" "37"
+	    }
 	}
 	with_test_prefix "conditional BP" {
 	    test "$device" "kernel-last-line" "16" "if dim0 == 16"

@@ -202,6 +202,11 @@ foreach device $sycl_device_list {
 			pass $gdb_test_name
 		    }
 		}
+		timeout {
+		    kfail "JIRA GSD/11093" \
+			"End test due to hang in odd branch while hitting bp"
+		    return
+		}
 	    }
 	}
 

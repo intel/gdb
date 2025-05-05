@@ -68,8 +68,14 @@ foreach device $sycl_device_list {
 	}
 
 	gdb_breakpoint $line_2 {temporary}
+	if {[is_xe3 $device]} { setup_kfail "JIRA GSD/11093" "*-*-*" }
 	gdb_continue_to_breakpoint "simd.2" ".*$srcfile:$line_2.*"
 
+	if {[is_xe3 $device]} {
+	    kfail "JIRA GSD/11093" \
+		"Skip test due to hang in odd branch while hitting bp"
+	    exp_continue
+	}
 	with_test_prefix "simd_width_32" {
 	    gdb_assert {[current_thread_has_simd_lanes]}
 	    gdb_test "print \$_simd_width" " = 32"

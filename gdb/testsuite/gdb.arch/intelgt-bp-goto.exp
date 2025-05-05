@@ -52,7 +52,7 @@ foreach device $sycl_device_list {
 
 	set test_name "find goto's next instruction address"
 	set goto_next_instr_addr "invalid"
-	gdb_test_multiple "disassemble" $test_name -lbl {
+	gdb_test_multiple "disassemble" $test_name {
 	    -re "\r\n\[^\r\n\]+ $hex \[^\r\n\]+ goto\[^\r\n\]+\r\n   ($hex) \[^\r\n\]+" {
 		set goto_next_instr_addr $expect_out(1,string)
 		exp_continue

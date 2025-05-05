@@ -378,7 +378,7 @@ foreach device $sycl_device_list {
 	    -re "Filtered Threads:" {
 		exp_continue
 	    }
-	    -re "\\\$(${decimal}) = .*" {
+	    -re -wrap "\\\$(${decimal}) = .*" {
 		set hist $expect_out(1,string)
 	    }
 	}

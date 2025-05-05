@@ -4599,12 +4599,14 @@ intelgt_software_single_step (regcache *regcache)
 static void
 intelgt_report_signal_info (gdbarch *gdbarch, ui_out *uiout, gdb_signal sig)
 {
-  if (sig != GDB_SIGNAL_SEGV)
-    return;
-
-  uiout->text (_("\n"));
-  uiout->text (_("Warning: The location reported for the signal may be "
-		 "inaccurate"));
+  switch (sig)
+    {
+    case GDB_SIGNAL_SEGV:
+      uiout->text (_("\n"));
+      uiout->text (_("Warning: The location reported for the signal may be "
+		     "inaccurate"));
+      break;
+    }
 }
 
 /* Architecture initialization.  */

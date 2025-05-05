@@ -28,6 +28,8 @@ if {[llength $sycl_device_list] == 0} {
 foreach device $sycl_device_list {
     if {[is_xe2 $device]} {
 	set aot_device "xe2"
+    } elseif {[is_xe3 $device]} {
+	set aot_device "xe3"
     } else {
 	set aot_device "xe-hpg,xe-hpc"
     }
@@ -56,7 +58,7 @@ foreach device $sycl_device_list {
 		    } elseif {[is_pvc $device]} {
 			lappend flags additional_flags=-DSG_SIZE=16
 			set aot_device "xe-hpc"
-		    } elseif {[is_xe2 $device]} {
+		    } elseif {[is_xe2 $device] || [is_xe3 $device]} {
 			lappend flags additional_flags=-DSG_SIZE=16
 		    } else {
 			unsupported "Unsupported device: $device"

@@ -1360,7 +1360,9 @@ prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
 void
 output_expedite_registers (char *buf)
 {
-  regcache *regcache = get_thread_regcache (current_thread);
+  /* We are being asked to return only the expedite regs.  Do not
+     fetch the registers alltogether.  */
+  regcache *regcache = get_thread_regcache (current_thread, false);
 
   for (const std::string &expedited_reg : regcache->tdesc->expedite_regs)
     buf = outreg (regcache, find_regno (regcache->tdesc,

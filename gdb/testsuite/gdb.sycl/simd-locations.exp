@@ -133,7 +133,8 @@ foreach device $sycl_device_list {
 	set l2 [gdb_get_line_number "bp\.2"]
 
 	gdb_breakpoint $l1
-	if {[require_sycl_device "$device" "gpu" "Intel*"] && [is_pvc $device]} {
+	if {[require_sycl_device "$device" "gpu" "Intel*"]
+	    && ([is_pvc $device] || [is_xe2 $device] || [is_xe3 $device])} {
 	    setup_kfail "JIRA CMPLRLLVM/67035" "*-*-*"
 	}
 	gdb_continue_to_breakpoint "bp.1" ".*$srcfile:$l1.*"
@@ -155,7 +156,8 @@ foreach device $sycl_device_list {
 	# Make sure we're not stuck on bp.1.
 	delete_breakpoints
 	gdb_breakpoint $l2
-	if {[require_sycl_device "$device" "gpu" "Intel*"] && [is_pvc $device]} {
+	if {[require_sycl_device "$device" "gpu" "Intel*"]
+	    && ([is_pvc $device]|| [is_xe2 $device] || [is_xe3 $device])} {
 	    setup_kfail "JIRA CMPLRLLVM/67035" "*-*-*"
 	}
 	gdb_continue_to_breakpoint "bp.2" ".*$srcfile:$l2.*"

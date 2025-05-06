@@ -54,9 +54,12 @@ proc test_bp_1 {device} {
     }
     gdb_assert {$v1 eq $v2} "pgid.operator() (wi) == gid"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6465" "*-*-*" }
     gdb_test_expr_eq "ain\[gid\]" "in"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6465" "*-*-*" }
     gdb_test_expr_eq "acs\[lid\].c" "cs"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6465" "*-*-*" }
     # LCS should be a reference here, as the lambda capture is by reference.
     gdb_test "print lcs" " = \\(uint16_t &\\) @$hex: 4"
 }
@@ -108,6 +111,7 @@ proc test_bp_2 {device {lane 0} } {
     }
     gdb_assert {$v1 eq $v2} "atmp\[gid\].a == in"
 
+    if {[is_xe3 $device]} { set kfail "JIRA IGDB/6465"}
     if { $kfail ne "" } { setup_kfail $kfail "*-*-*" }
     gdb_test_expr_eq "aout\[gid\]" "out"
 
@@ -161,7 +165,8 @@ foreach device $sycl_device_list {
 		for {set i 0} {$i < 8} {set i [expr $i+4]} {
 		    with_test_prefix "lane $i" {
 			if {[require_sycl_device "$device" "gpu" "Intel*"]
-			    && [is_pvc $device]} {
+			    && ([is_pvc $device]|| [is_xe2 $device]
+				|| [is_xe3 $device])} {
 			    setup_kfail "JIRA CMPLRLLVM/67035" "*-*-*"
 			}
 			gdb_test "thread :$i" "Switching to thread .*:$i.*"

@@ -74,6 +74,12 @@ struct regcache : public reg_buffer_common
   /* Set the status of register REGNUM to STATUS.  */
   void set_register_status (int regnum, enum register_status status);
 
+  /* Shift the register status "one level" towards REG_DIRTY.
+     REG_UNKNOWN becomes REG_VALID;
+     REG_VALID becomes REG_DIRTY;
+     REG_DIRTY and REG_UNAVAILABLE stay the same.  */
+  void bump_register_status (int regnum);
+
   /* See gdbsupport/common-regcache.h.  */
   int register_size (int regnum) const override;
 

@@ -56,8 +56,11 @@ foreach device $sycl_device_list {
 	gdb_continue_to_breakpoint "slm BP1" ".*$srcfile:$line1.*"
 
 	with_test_prefix "via variable in parallel_for_work_group" {
+	    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6465" "*-*-*" }
 	    gdb_test "print local_var" "= 32"
+	    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6465" "*-*-*" }
 	    gdb_test_no_output "set local_var = 42"
+	    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6465" "*-*-*" }
 	    gdb_test "print local_var" "= 42" "test write"
 	    # These tests need to run on the intelgt target to use @slm.
 	    if {[is_level_zero_debug_api]
@@ -67,8 +70,11 @@ foreach device $sycl_device_list {
 	}
 
 	with_test_prefix "via pointer in parallel_for_work_group" {
+	    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6465" "*-*-*" }
 	    gdb_test "print *local_ptr" "= 42"
+	    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6465" "*-*-*" }
 	    gdb_test_no_output "set *local_ptr = 32"
+	    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6465" "*-*-*" }
 	    gdb_test "print *local_ptr" "= 32" "test write"
 	    # Note that local_ptr is a generic pointer in SLM, which is why
 	    # this is not "@slm int * @slm".
@@ -79,8 +85,11 @@ foreach device $sycl_device_list {
 	}
 
 	with_test_prefix "via reference in parallel_for_work_group" {
+	    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6465" "*-*-*" }
 	    gdb_test "print local_ref" "= \\(int &\\) \\\@$hex\\\: 32"
+	    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6465" "*-*-*" }
 	    gdb_test_no_output "set local_ref = 31"
+	    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6465" "*-*-*" }
 	    gdb_test "print local_ref" "= \\(int &\\) \\\@$hex\\\: 31" "test write"
 	    gdb_test "ptype local_ref" "type = int &"
 	}

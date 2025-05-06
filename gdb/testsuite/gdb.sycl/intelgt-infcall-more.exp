@@ -31,7 +31,7 @@ if {[build_executable "failed to compile $srcfile" \
     return -1
 }
 
-proc test_infcall_abort {inside_kernel} {
+proc test_infcall_abort {inside_kernel device} {
     global hex
     set pc_before [get_hexadecimal_valueof "\$pc" "invalid" "PC before infcall abort"]
     set ce_before [get_hexadecimal_valueof "\$ce" "invalid" "CE before infcall abort"]
@@ -45,6 +45,7 @@ proc test_infcall_abort {inside_kernel} {
     gdb_test_no_output "set ((char *)${func_pc})\[3\] |= 0x40"
     gdb_test_no_output "set unwindonsignal on"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "call no_args ()" [multi_line \
 				"The program being debugged received signal.*" \
 				"while in a function called from GDB\\.  GDB has restored the context" \
@@ -63,96 +64,128 @@ proc test_infcall_abort {inside_kernel} {
     # Now run the same inferior call but with "unwindonsignal off".  We should
     # stop inside the callee.
     gdb_test_no_output "set unwindonsignal off"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "call no_args ()" [multi_line \
 				"The program being debugged was signaled while in a function called from GDB\\." \
 				"GDB remains in the frame where the signal was received.*"] \
 	"infcall is being signaled: unwindonsignal off."
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "p/x \$pc" "$func_pc" "Signaled PC inside the callee"
     # Clear the breakpoint control bit.
     gdb_test_no_output "set ((char *)${func_pc})\[3\] = $saved_val"
     # GDB should silently stop when hitting continue.
     gdb_test "continue" "Continuing\\."
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "p/x \$pc" "$pc_before" "Unchanged PC after infcall signal"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "p/x \$ce" "$ce_before" "Unchanged CE after infcall signal"
 }
 
 # The main test sequence for GPU inferior calls.
-proc test_inferior_calls {simd_lane inside_kernel} {
+proc test_inferior_calls {simd_lane inside_kernel device} {
     global srcfile
     set real_f0_0 [get_hexadecimal_valueof \
 		   "\$f0\[0\]" "invalid" "F0\[0\] before infcalls"]
     set real_f0_1 [get_hexadecimal_valueof \
 		   "\$f0\[1\]" "invalid" "F0\[1\] before infcalls"]
     set real_ce [get_hexadecimal_valueof "\$ce" "invalid" "CE before infcalls"]
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "thread :$simd_lane" "Switching to thread .*:$simd_lane .*"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print no_args()" "= 20" \
 	"Inferior call of a function without arguments"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print integer_grf_args(3, 4, 5)" "= 60" \
 	"Arguments are passed on GRFs: 1"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print integer_grf_args(6, 7, 8)" "= 336" \
 	"Arguments are passed on GRFs: 2"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print bool_i8_i16_grf(true, 2, 3)" "= 16" \
 	"Arguments less than 4 bytes: 1"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print bool_i8_i16_grf(false, 11, 21)" "= 231" \
 	"Arguments less than 4 bytes: 2"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print vector_grf_args(arr1_uchar10, arr1_uint2)" "= 265" \
 	"The two vectors are being passed on GRFs: 1"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print vector_grf_args(arr2_uchar10, arr2_uint2)" "= 405" \
 	"The two vectors are being passed on GRFs: 2"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print struct_stack_grf_args(c_s1, 5)" "= 765" \
 	"The struct is pushed to the stack, its reference is passed on GRF: 1 "
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print struct_stack_grf_args(c_s2, 8)" "= 1296" \
 	"The struct is pushed to the stack, its reference is passed on GRF: 2 "
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print struct_int_stack_args(1, 2, 3, 4, 5, 6, c_s1, 5)" "= 16065" \
 	"The first 6 long integers are passed on GRFs, the rest is pushed to the stack: 1"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print struct_int_stack_args(7, 8, 9, 10, 11, 12, c_s2, 8)" "= 73872" \
 	"The first 6 long integers are passed on GRFs, the rest is pushed to the stack: 2"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print promote_struct_grf(7, s_s1, 8)" "= 84" \
 	"Small struct promotion on GRFs: 1"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print promote_struct_grf(5, s_s2, 6)" "= 180" \
 	"Small struct promotion on GRFs: 2"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print promote_struct128_grf(s_128)" "= 154" \
 	"128-bit struct promotion on GRFs"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
     gdb_test "print promote_struct_stack(1, 2, 3, 4, 5, 6, s_s1, 77)" "= 36" \
 	"Small struct promotion on the stack: 1"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "print promote_struct_stack(1, 2, 3, 4, 5, 6, s_s2, 88)" "= 183" \
 	"Small struct promotion on the stack: 2"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "print promote_struct128_stack(1, 2, 3, 4, 5, 6, s_128)" "= 175" \
 	"128-bit struct promotion on the stack"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "print vector_on_stack (1, 2, 3, 4, 5, 6, arr1_uchar10)" "= 76" \
 	"Vector is passed on the stack with the SoA layout: 1"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "print vector_on_stack (1, 2, 3, 4, 5, 6, arr2_uchar10)" "= 176" \
 	"Vector is passed on the stack with the SoA layout: 2"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "print small_vector_return_1()" "= \\{1, 2, 3, 4, 5\\}" \
 	"Small vectors are returned on GRFs: 1"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "print small_vector_return_2()" "= \\{1, 2, 3, 4, 5, 6, 7, 8, 9, 10\\}" \
 	"Small vectors are returned on GRFs: 2"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "print long_vector_return_1(2)" "= \\{2, 3, 4, 5, 6, 7, 8, 9, 10\\}" \
 	"Long vectors are returned on the stack: 1"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "print long_vector_return_2(2)" "= \\{0, 2, 4, 6, 8, 10, 12, 14, 16, 18\\}" \
 	"Long vectors are returned on the stack: 2"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "print complex_struct_return(1, 2, 3, 4)" "= \\{x = 1, y = 2, vec = \\{3, 4\\}\\}" \
 	"The struct value is returned on the stack: 1"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "print complex_struct_return(5, 6, 7, 8)" "= \\{x = 5, y = 6, vec = \\{7, 8\\}\\}" \
 	"The struct value is returned on the stack: 2"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "print mixed_types(s_s1, 12, c_s1, c_s2, 13, arr1_uchar10, arr2_uchar10, s_s2)" "= 4656" \
 	"Mixed types to be passed on GRFs: 1"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "print mixed_types(s_s2, 22, c_s2, c_s1, 23, arr2_uchar10, arr1_uchar10, s_s1)" "= 8259" \
 	"Mixed types to be passed on GRFs: 2"
 
@@ -162,9 +195,11 @@ proc test_inferior_calls {simd_lane inside_kernel} {
 
     gdb_breakpoint "$srcfile:$inside_function" {temporary}
     gdb_test_no_output "set scheduler-locking on"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "print integer_grf_args(6, 7, 8)" ".*$callee_function.*" \
 	"Break point inside the callee function"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     # Limit the backtrace to 3 frames to get only caller/callee frames.
     gdb_test "backtrace 3" [multi_line \
 				"#0  $callee_function" \
@@ -174,8 +209,10 @@ proc test_inferior_calls {simd_lane inside_kernel} {
 
     set callee_ce "0x[format %x [expr 1 << $simd_lane]]"
     set dmask "0xff"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "p/x \$ce & $dmask" "$callee_ce" "CE within infcall"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "finish" [multi_line \
 			   "Run till exit from #0  $callee_function" \
 			   "$caller_function" \
@@ -184,8 +221,11 @@ proc test_inferior_calls {simd_lane inside_kernel} {
 	"Finish the inferior call and get the returned result"
     gdb_test_no_output "set scheduler-locking off"
 
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "p/x \$f0\[0\]" "$real_f0_0" "F0\[0\] after infcall"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "p/x \$f0\[1\]" "$real_f0_1" "F0\[1\] after infcall"
+    if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*"}
     gdb_test "p/x \$ce" "$real_ce" "CE after infcall"
 }
 
@@ -224,10 +264,10 @@ foreach device $sycl_device_list {
 
 	# Loop over the lanes to be tested and performe all the inferior calls tests.
 	foreach_with_prefix lane $lanes {
-	    test_inferior_calls $lane $inside_kernel
+	    test_inferior_calls $lane $inside_kernel $device
 	}
 
-	test_infcall_abort $inside_kernel
+	test_infcall_abort $inside_kernel $device
 
 	set then_branch [gdb_get_line_number "then-branch"]
 	set else_branch [gdb_get_line_number "else-branch"]
@@ -261,6 +301,7 @@ foreach device $sycl_device_list {
 		}
 	    }
 	}
+	if {[is_xe3 $device]} { setup_kfail "JIRA IGDB/6467" "*-*-*" }
 	gdb_assert {$branches_step == 2} "stepped into both branches"
     }
 }

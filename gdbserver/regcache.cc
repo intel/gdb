@@ -51,8 +51,21 @@ get_thread_regcache (thread_info *thread, bool fetch)
       scoped_restore_current_thread restore_thread;
 
       switch_to_thread (thread);
+
+      /* If there are individually-fetched dirty registers, first
+	 store them, then fetch all.  We prefer this to doing
+	 individual fetch for each registers, if needed, because it is
+	 more likely that very few registers are individually-fetched
+	 at this moment and that fetching all in one go is more
+	 efficient than fetching each reg one by one.  */
+      for (int i = 0; i < regcache->tdesc->reg_defs.size (); ++i)
+	{
+	  if (regcache->get_register_status (i) == REG_DIRTY)
+	    store_inferior_registers (regcache, i);
+	}
+
       /* Invalidate all registers, to prevent stale left-overs.  */
-      regcache->reset (REG_UNKNOWN);
+      regcache->reset (REG_UNAVAILABLE);
       fetch_inferior_registers (regcache, -1);
       regcache->registers_fetched = true;
     }
@@ -76,15 +89,20 @@ regcache_invalidate_thread (thread_info *thread)
   if (regcache == NULL)
     return;
 
-  if (regcache->registers_fetched)
-    {
-      scoped_restore_current_thread restore_thread;
+  scoped_restore_current_thread restore_thread;
+  switch_to_thread (thread);
 
-      switch_to_thread (thread);
-      store_inferior_registers (regcache, -1);
+  /* Store dirty registers individually.  We prefer this to a
+     store-all, because it is more likely that a small number of
+     registers have changed.  */
+  for (int i = 0; i < regcache->tdesc->reg_defs.size (); ++i)
+    {
+      if (regcache->get_register_status (i) == REG_DIRTY)
+	store_inferior_registers (regcache, i);
     }
 
   regcache->registers_fetched = false;
+  regcache->reset (REG_UNKNOWN);
 }
 
 /* See regcache.h.  */
@@ -201,7 +219,6 @@ void
 registers_from_string (struct regcache *regcache, char *buf)
 {
   int len = strlen (buf);
-  unsigned char *registers = regcache->registers;
   const struct target_desc *tdesc = regcache->tdesc;
 
   if (len != tdesc->registers_size * 2)
@@ -211,7 +228,11 @@ registers_from_string (struct regcache *regcache, char *buf)
       if (len > tdesc->registers_size * 2)
 	len = tdesc->registers_size * 2;
     }
-  hex2bin (buf, registers, len / 2);
+
+  unsigned char *new_regs
+    = (unsigned char *) alloca (tdesc->registers_size);
+  hex2bin (buf, new_regs, len / 2);
+  supply_regblock (regcache, new_regs);
 }
 
 /* See regcache.h */
@@ -332,7 +353,7 @@ void regcache::raw_supply_part (int regnum, int offset,
     {
       copy (src, dst);
 #ifndef IN_PROCESS_AGENT
-      set_register_status (regnum, REG_VALID);
+      bump_register_status (regnum);
 #endif
     }
   else
@@ -352,7 +373,7 @@ supply_register_zeroed (struct regcache *regcache, int n)
   auto dst = register_data (regcache, n);
   memset (dst.data (), 0, dst.size ());
 #ifndef IN_PROCESS_AGENT
-  regcache->set_register_status (n, REG_VALID);
+  regcache->bump_register_status (n);
 #endif
 }
 
@@ -362,7 +383,7 @@ regcache::raw_supply_part_zeroed (int regnum, int offset, size_t size)
   auto dst = register_data (this, regnum).slice (offset, size);
   memset (dst.data (), 0, dst.size ());
 #ifndef IN_PROCESS_AGENT
-  set_register_status (regnum, REG_VALID);
+  bump_register_status (regnum);
 #endif
 }
 
@@ -388,11 +409,26 @@ supply_regblock (struct regcache *regcache, const void *buf)
   gdb_assert (buf != nullptr);
   const struct target_desc *tdesc = regcache->tdesc;
 
-  memcpy (regcache->registers, buf, tdesc->registers_size);
 #ifndef IN_PROCESS_AGENT
-  for (int i = 0; i < tdesc->reg_defs.size (); i++)
-    regcache->set_register_status (i, REG_VALID);
+  /* First, update the statuses.  Mark dirty only those that have
+     changed.  */
+  unsigned char *regs = regcache->registers;
+  unsigned char *new_regs = (unsigned char *) buf;
+  for (int i = 0; i < tdesc->reg_defs.size (); ++i)
+    {
+      int size = register_size (tdesc, i);
+      bool stays_same
+	= (regcache->get_register_status (i) == REG_VALID
+	   && memcmp (new_regs, regs, size) == 0);
+
+      if (!stays_same)
+	regcache->bump_register_status (i);
+
+      regs += size;
+      new_regs += size;
+    }
 #endif
+  memcpy (regcache->registers, buf, tdesc->registers_size);
 }
 
 #ifndef IN_PROCESS_AGENT
@@ -486,9 +522,19 @@ regcache_raw_get_unsigned_by_name (struct regcache *regcache,
 void
 collect_register_as_string (struct regcache *regcache, int n, char *buf)
 {
+#ifndef IN_PROCESS_AGENT
+  if (regcache->get_register_status (n) == REG_UNKNOWN)
+    {
+      /* This register has not been fetched from the target, yet.
+	 Do it now.  */
+      fetch_inferior_registers (regcache, n);
+    }
+#endif
+
   int reg_size = register_size (regcache->tdesc, n);
 
-  if (regcache->get_register_status (n) == REG_VALID)
+  if (regcache->get_register_status (n) == REG_VALID
+      || regcache->get_register_status (n) == REG_DIRTY)
     bin2hex (register_data (regcache, n), buf);
   else
     memset (buf, 'x', reg_size * 2);
@@ -545,6 +591,30 @@ regcache::set_register_status (int regnum, enum register_status status)
   if (m_register_status != nullptr)
     m_register_status[regnum] = status;
 #endif
+}
+
+void
+regcache::bump_register_status (int regnum)
+{
+#ifndef IN_PROCESS_AGENT
+  if (m_register_status == nullptr)
+    return;
+#endif
+
+  switch (get_register_status (regnum))
+    {
+    case REG_UNAVAILABLE:
+    case REG_UNKNOWN:
+      set_register_status (regnum, REG_VALID);
+      break;
+
+    case REG_VALID:
+      set_register_status (regnum, REG_DIRTY);
+      break;
+
+    default:
+      break;
+    }
 }
 
 /* See gdbsupport/common-regcache.h.  */

@@ -1206,7 +1206,7 @@ ze_target::is_range_stepping (thread_info *tp)
       && (zetp->resume_state == ze_thread_resume_step)
       && (zetp->stop_reason == TARGET_STOPPED_BY_SINGLE_STEP))
     {
-      regcache *regcache = get_thread_regcache (tp);
+      regcache *regcache = get_thread_regcache (tp, /* fetch = */ false);
       CORE_ADDR pc = read_pc (regcache);
 
       return ((pc >= zetp->step_range_start)

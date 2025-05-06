@@ -130,6 +130,7 @@ intelgt_read_register_part (regcache *regcache, int regnum, int offset,
   switch (status)
     {
     case REG_VALID:
+    case REG_DIRTY:
       return;
 
     case REG_UNKNOWN:
@@ -162,6 +163,7 @@ intelgt_write_register_part (regcache *regcache, int regnum, int offset,
   switch (status)
     {
     case REG_VALID:
+    case REG_DIRTY:
       supply_register_part (regcache, regnum, offset, src);
       return;
 
@@ -687,7 +689,7 @@ intelgt_ze_target::read_inst (thread_info *tp, CORE_ADDR pc,
 bool
 intelgt_ze_target::is_at_breakpoint (thread_info *tp)
 {
-  regcache *regcache = get_thread_regcache (tp);
+  regcache *regcache = get_thread_regcache (tp, /* fetch = */ false);
   CORE_ADDR pc = read_pc (regcache);
 
   gdb_byte inst[intelgt::MAX_INST_LENGTH];
@@ -701,7 +703,7 @@ intelgt_ze_target::is_at_breakpoint (thread_info *tp)
 bool
 intelgt_ze_target::is_at_eot (thread_info *tp)
 {
-  regcache *regcache = get_thread_regcache (tp);
+  regcache *regcache = get_thread_regcache (tp, /* fetch = */ false);
   CORE_ADDR pc = read_pc (regcache);
 
   gdb_byte inst[intelgt::MAX_INST_LENGTH];
@@ -773,7 +775,7 @@ intelgt_ze_target::erratum_18020355813 (thread_info *tp)
 	return false;
     }
 
-  regcache *regcache = get_thread_regcache (tp);
+  regcache *regcache = get_thread_regcache (tp, /* fetch = */ false);
   CORE_ADDR pc = read_pc (regcache);
 
   gdb_byte inst[intelgt::MAX_INST_LENGTH];
@@ -798,7 +800,7 @@ intelgt_ze_target::prepare_thread_resume (thread_info *tp)
   ze_thread_info *zetp = ze_thread (tp);
   gdb_assert (zetp != nullptr);
 
-  regcache *regcache = get_thread_regcache (tp);
+  regcache *regcache = get_thread_regcache (tp, /* fetch = */ false);
   uint32_t cr0[3] = {
     intelgt_read_cr0 (regcache, 0),
     intelgt_read_cr0 (regcache, 1),

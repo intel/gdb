@@ -97,6 +97,17 @@ ze_ptid_from_node_index (const ze_device_info &device, uint32_t node_idx)
   return ptid;
 }
 
+/* Returns the node index for thread TP.  */
+
+static uint32_t
+ze_node_index_from_thread (const thread_info *tp)
+{
+  const ze_thread_info *zetp = ze_thread (tp);
+  gdb_assert (zetp != nullptr);
+
+  return zetp->node_index;
+}
+
 /* Return whether we're in async mode.  */
 
 static bool
@@ -276,6 +287,28 @@ ze_device_thread_in (ze_device_thread_t id, ze_device_thread_t set)
     return false;
 
   return true;
+}
+
+/* Sort the list of resume requests w.r.t. the thread's lwp using the bubble
+   sort algorithm.  If the list is already sorted, the algorithm's runtime
+   complexity is linear.  */
+
+static void
+ze_sort_resume_requests (thread_resume *resume_info, size_t n)
+{
+  bool swapped;
+
+  do
+    {
+      swapped = false;
+      for (size_t j = 0; j < n - 1; j++)
+	if (resume_info[j].thread.lwp () > resume_info[j+1].thread.lwp ())
+	  {
+	    swapped = true;
+	    std::swap (resume_info[j], resume_info[j+1]);
+	  }
+      n--;
+    } while (swapped);
 }
 
 /* Call FUNC for each thread on DEVICE matching ID.  */
@@ -2249,57 +2282,6 @@ normalize_resume_info (thread_resume &rinfo)
     }
 }
 
-/* Resuming threads of a device all at once with a single API call
-   is preferable to resuming threads individually.  Therefore, we
-   want to combine individual resume requests with wildcard resumes,
-   if possible.
-
-   For instance, if we receive "vCont;s:1;s:2;c", we would like to
-   make a single ze_resume call with the 'all.all.all.all' thread id
-   after preparing threads 1 and 2 for stepping and the others for
-   continuing.
-
-   We preprocess the resume requests to find for which devices we
-   shall combine the requests.  We attempt a merge in all-stop mode
-   when the requests contain continue/step requests only.  */
-
-static std::set<ze_device_info *>
-find_wildcard_devices (thread_resume *resume_info, size_t n,
-		       const std::list<ze_device_info *> &devices)
-{
-  std::set<ze_device_info *> wildcard_devices;
-
-  if (non_stop)
-    return wildcard_devices;
-
-  for (size_t i = 0; i < n; ++i)
-    {
-      if (resume_info[i].kind == resume_stop)
-	{
-	  wildcard_devices.clear ();
-	  break;
-	}
-
-      ptid_t rptid = resume_info[i].thread;
-      if (rptid == minus_one_ptid)
-	{
-	  for (ze_device_info *device : devices)
-	    wildcard_devices.insert (device);
-	  break;
-	}
-
-      if (rptid.is_pid ())
-	{
-	  process_info *proc = find_process_pid (rptid.pid ());
-	  ze_device_info *device = ze_process_device (proc);
-	  if (device != nullptr)
-	    wildcard_devices.insert (device);
-	}
-    }
-
-  return wildcard_devices;
-}
-
 ze_device_tree::ze_device_tree (const ze_device_properties_t &properties)
 {
   /* Initialize the number of children per node level.  */
@@ -2414,6 +2396,154 @@ ze_device_tree::ze_device_tree (const ze_device_properties_t &properties)
     }
 }
 
+/* Updates all nodes on the path to the tree's root to the not-resumable
+   state starting with the node at NODE_IDX.  */
+
+static void
+ze_invalidate_path_in_device_tree (ze_device_tree &tree, uint32_t node_idx)
+{
+  tree[node_idx].state = ze_node_state_t::not_resumable;
+
+  /* Go up in the tree until the root is reached.  */
+  do {
+    /* The node's parent stores an unsigned offset.  Subtract the offset
+       to calculate the parent's index.  This makes use of the pre-order
+       layout.  */
+    uint32_t parent = node_idx - tree[node_idx].parent;
+    tree[parent].state = ze_node_state_t::not_resumable;
+    node_idx = parent;
+  } while (node_idx > 0);
+}
+
+/* Tests if the node at NODE_IDX can be resumed in the context of the
+   device-tree of DEVICE.  */
+
+static bool
+ze_is_node_resumable (ze_device_info &device, uint32_t node_idx)
+{
+  ze_device_tree &tree = device.tree;
+  const ze_node_level_t level = tree[node_idx].level;
+
+  /* Iterate over all child nodes.  Also process the input node.  */
+  const uint32_t last_node_index = node_idx + 1 + tree.num_children[level];
+  for (uint32_t child_idx = node_idx; child_idx < last_node_index; child_idx++)
+    {
+      const ze_node_level_t child_level = tree[child_idx].level;
+
+      switch (tree[child_idx].state)
+	{
+	case ze_node_state_t::resumable:
+	  /* Node is already set to resumable.  Skip child nodes.  */
+	  child_idx += tree.num_children[child_level];
+	  break;
+
+	case ze_node_state_t::not_resumable:
+	  /* There is at least one node that is not resumed.  We don't need
+	     to invalidate the parent nodes, this is already done if we hit
+	     a thread that cannot be resumed.  */
+	  return false;
+
+	case ze_node_state_t::unknown:
+	  /* Unconditionally set the node to resumable.  Threads nodes
+	     are subsequently tested.  If a node cannot be resumed,  the
+	     node's state is updated later on.  */
+	  tree[child_idx].state = ze_node_state_t::resumable;
+
+	  if (child_level == ze_node_level_thread)
+	    {
+	      ptid_t ptid = ze_ptid_from_node_index (device, child_idx);
+	      thread_info *tp = find_thread_ptid (ptid);
+	      const ze_thread_info *zetp = ze_thread (tp);
+	      gdb_assert (zetp != nullptr);
+	      ze_thread_exec_state_t state = zetp->exec_state;
+
+	      /* A thread is resumable as part of a enclosing cluster if it
+		 is either unavailable or running.  */
+	      if ((state != ze_thread_state_unavailable)
+		  && (state != ze_thread_state_running))
+		{
+		  ze_invalidate_path_in_device_tree (tree, child_idx);
+		  return false;
+		}
+	    }
+	  break;
+
+	default:
+	  gdb_assert_not_reached ("Invalid node state in device-tree.");
+	}
+    }
+
+  return true;
+}
+
+/* Resume the current cluster root node.  */
+
+static void
+ze_resume_current_cluster (const ze_device_info &device)
+{
+  const ze_device_tree &tree = device.tree;
+
+  /* Skip empty clusters.  */
+  if (!tree.current_cluster.has_value ())
+    return;
+
+  ze_device_thread_t tid
+    = ze_thread_id_from_node_index (tree, tree.current_cluster.value ());
+  ze_resume (device, tid);
+}
+
+/* Find the common ancestor between the current_cluster root node of TREE
+   and node at index NODE_IDX.  */
+
+static uint32_t
+ze_find_common_root (const ze_device_tree &tree, uint32_t node_idx)
+{
+  if (!tree.current_cluster.has_value ())
+    return node_idx;
+
+  uint32_t node_a_idx = tree.current_cluster.value ();
+  uint32_t node_b_idx = node_idx;
+
+  while (node_a_idx != node_b_idx)
+    {
+      /* Make use of the pre-order layout, i.e., a smaller index implies
+	 the node is on the same or higher level.  Always go one level up for
+	 the node on the lower level until both nodes point to the same common
+	 ancestor node.  */
+      if (node_a_idx < node_b_idx)
+	node_b_idx -= tree[node_b_idx].parent;
+      else
+	node_a_idx -= tree[node_a_idx].parent;
+    }
+
+  return node_a_idx;
+}
+
+/* The device-tree merging algorithm.  */
+
+static void
+ze_merge (ze_device_info &device, uint32_t node_idx)
+{
+  ze_device_tree &tree = device.tree;
+
+  /* Threads with a pending priority event are set to not-resumable and shall
+     not be resumed.  */
+  if (tree[node_idx].state == ze_node_state_t::not_resumable)
+    return;
+
+  uint32_t common_ancestor = ze_find_common_root (tree, node_idx);
+
+  /* Update the current cluster if all children are resumable.  */
+  if (ze_is_node_resumable (device, common_ancestor))
+    tree.current_cluster = common_ancestor;
+  else
+    {
+      /* Otherwise, resume the current cluster and start over again.  */
+      ze_resume_current_cluster (device);
+      tree.current_cluster = node_idx;
+    }
+}
+
 void
 ze_target::resume (thread_resume *resume_info, size_t n)
 {
@@ -2439,6 +2569,10 @@ ze_target::resume (thread_resume *resume_info, size_t n)
 	ze_clear_resume_state (tp);
       });
 
+  /* Reset the device-tree.  */
+  for (ze_device_info *device : devices)
+    device->tree.reset ();
+
   /* Check if there is a thread with a pending event for any of the
      resume requests.  In all-stop mode, we would omit actually
      resuming the target if there is such a thread.  In non-stop mode,
@@ -2459,117 +2593,172 @@ ze_target::resume (thread_resume *resume_info, size_t n)
 	continue;
 
       num_eventing += mark_eventing_threads (rptid, rkind);
+
+      if (rptid == minus_one_ptid)
+	{
+	  for (ze_device_info *device : devices)
+	    device->tree.wildcard = true;
+	}
+      else if (rptid.is_pid ())
+	{
+	  process_info *process = find_process_pid (rptid.pid ());
+	  ze_device_info *device = ze_process_device (process);
+
+	  /* We may not have a device for this process if we get forcefully
+	     detached.  Ignore the wildcard resume request in this case.  */
+	  if (device != nullptr)
+	    device->tree.wildcard = true;
+	}
     }
 
   if ((num_eventing > 0) && !non_stop)
     return;
 
-  std::set<ze_device_info *> wildcard_devices
-    = find_wildcard_devices (resume_info, n, devices);
-
-  std::set<ze_device_info *> devices_to_resume;
-
-  /* Lambda for applying a resume info on a single thread.  */
-  auto apply_resume_info = ([&] (const thread_resume &rinfo,
-				 thread_info *tp)
+  bool sorting_needed = false;
+  for (size_t i = 0; i < n; ++i)
     {
-      if (ze_has_priority_waitstatus (tp))
-	return;
+      thread_resume &rinfo = resume_info[i];
+      gdb_assert (rinfo.sig == 0);
 
-      ze_set_resume_state (tp, rinfo.kind);
-      ze_device_info *device = ze_thread_device (tp);
-      ze_device_thread_t tid = ze_thread_id (tp);
+      /* Check if the list of resume requests is already sorted.
+	 This is a prerequisite for the merging algorithm.  Typically,
+	 the resume requests list is already sorted; we can skip the
+	 sorting in this case.  */
+      if (!sorting_needed && i > 0)
+	if (rinfo.thread.lwp () < resume_info[i-1].thread.lwp ())
+	  sorting_needed = true;
 
-      switch (rinfo.kind)
+      for_each_thread (rinfo.thread, [&] (thread_info *tp)
 	{
-	case resume_stop:
-	  if (ze_prepare_for_stopping (tp))
-	    ze_interrupt (*device, tid);
-	  break;
+	  ze_device_info *device = ze_thread_device (tp);
+	  ze_device_tree &tree = device->tree;
+	  uint32_t node_idx = ze_node_index_from_thread (tp);
 
-	case resume_step:
-	  {
-	    ze_thread_info *zetp = ze_thread (tp);
-	    gdb_assert (zetp != nullptr);
+	  /* We may receive multiple requests that apply to a thread.  E.g.
+	     "vCont;r0xff10,0xffa0:p1.9;c" could be sent to make thread 1.9 do
+	     range-stepping from 0xff10 to 0xffa0, while continuing others.
+	     According to the Remote Protocol Section E.2 (Packets),
+	     "For each inferior thread, the leftmost action with a matching
+	     thread-id is applied."  For this reason, we keep track of which
+	     threads have been resumed individually so that we can skip them
+	     when processing wildcard requests.  */
+	  if (tree[node_idx].state != ze_node_state_t::unknown)
+	    return;
 
-	    zetp->step_range_start = rinfo.step_range_start;
-	    zetp->step_range_end = rinfo.step_range_end;
-	  }
-	  [[fallthrough]];
-
-	case resume_continue:
-	  if (ze_prepare_for_resuming (tp))
+	  if (ze_has_priority_waitstatus (tp))
 	    {
-	      prepare_thread_resume (tp);
-	      regcache_invalidate_thread (tp);
-
-	      /* If the device can be resumed as a whole,
-		 omit resuming the thread individually.  */
-	      if (wildcard_devices.count (device) == 0)
-		ze_resume (*device, tid);
-	      else
-		devices_to_resume.insert (device);
+	      ze_invalidate_path_in_device_tree (tree, node_idx);
+	      return;
 	    }
-	  break;
-	}
-    });
 
-  /* We may receive multiple requests that apply to a thread.  E.g.
-     "vCont;r0xff10,0xffa0:p1.9;c" could be sent to make thread 1.9 do
-     range-stepping from 0xff10 to 0xffa0, while continuing others.
-     According to the Remote Protocol Section E.2 (Packets),
-     "For each inferior thread, the leftmost action with a matching
-     thread-id is applied."  For this reason, we keep track of which
-     threads have been resumed individually so that we can skip them
-     when processing wildcard requests.
+	  ze_set_resume_state (tp, rinfo.kind);
+	  ze_device_thread_t tid = ze_thread_id (tp);
 
-     Alternatively, we could have the outer loop iterate over threads
-     and the inner loop iterate over resume infos to find the first
-     matching resume info for each thread.  There may, however, be a
-     large number of threads and a handful of resume infos that apply
-     to a few threads only.  For performance reasons, we prefer to
-     iterate over resume infos in the outer loop.  */
-  std::set<thread_info *> individually_resumed_threads;
+	  tree[node_idx].state = ze_node_state_t::resumable;
+
+	  switch (rinfo.kind)
+	    {
+	    case resume_stop:
+	      if (ze_prepare_for_stopping (tp))
+		ze_interrupt (*device, tid);
+	      break;
+
+	    case resume_step:
+	      {
+		ze_thread_info *zetp = ze_thread (tp);
+		gdb_assert (zetp != nullptr);
+
+		zetp->step_range_start = rinfo.step_range_start;
+		zetp->step_range_end = rinfo.step_range_end;
+	      }
+	      [[fallthrough]];
+
+	    case resume_continue:
+	      if (ze_prepare_for_resuming (tp))
+		{
+		  prepare_thread_resume (tp);
+		  regcache_invalidate_thread (tp);
+		  tree.num_pending_resumes++;
+		}
+	      break;
+	    }
+	});
+    }
+
+  if (sorting_needed)
+    ze_sort_resume_requests (resume_info, n);
+
+  /* Call the merge algorithm on all non-wildcard resume requests.  */
   for (size_t i = 0; i < n; ++i)
     {
       const thread_resume &rinfo = resume_info[i];
-      gdb_assert (rinfo.sig == 0);
       ptid_t rptid = rinfo.thread;
-      int rpid = rptid.pid ();
-      if ((rptid == minus_one_ptid)
-	  || rptid.is_pid ()
-	  || (rptid.lwp () == -1))
-	{
-	  for (ze_device_info *device : devices)
-	    {
-	      gdb_assert (device != nullptr);
 
-	      int pid = ze_device_pid (*device);
-	      if ((rpid != -1) && (rpid != pid))
-		continue;
+      /* Wildcard resume requests are processed later on: either
+	 resume the whole device (if there is no non-resumable thread)
+	 or apply the merging algorithm on all device threads to form
+	 clusters of resumable threads.  */
+      if ((rptid == minus_one_ptid) || rptid.is_pid ())
+	continue;
 
-	      device->process->for_each_thread ([&] (thread_info *tp)
-		{
-		  /* We trust that GDB will not send us wildcard resume
-		     requests with overlapping pids.  Hence, we track
-		     only individually-resumed threads.  */
-		  if (individually_resumed_threads.count (tp) == 0)
-		    apply_resume_info (rinfo, tp);
-		});
-	    }
-	}
-      else
-	{
-	  thread_info *tp = find_thread_ptid (rptid);
-	  apply_resume_info (rinfo, tp);
-	  individually_resumed_threads.insert (tp);
-	}
+      thread_info *tp = find_thread_ptid (rptid);
+      ze_device_info *device = ze_thread_device (tp);
+
+      /* Ignore individual resume requests if there is a wildcard resume
+	 request for the associated device.  If possible, resume the whole
+	 device or apply the merging algorithm on all device threads
+	 otherwise.  */
+      if (device->tree.wildcard)
+	continue;
+
+      const uint32_t node_idx = ze_node_index_from_thread (tp);
+
+      /* 'resume_stop' requests are already sent to the
+	 Level Zero debug API.  */
+      if (rinfo.kind == resume_stop)
+	continue;
+
+      ze_merge (*device, node_idx);
     }
 
-  /* Finally, resume the whole devices.  */
   ze_device_thread_t all = ze_thread_id_all ();
-  for (ze_device_info *device : devices_to_resume)
-    ze_resume (*device, all);
+  for (ze_device_info *device : devices)
+    {
+      const ze_device_tree &tree = device->tree;
+
+      /* Ignore device if there is no pending resume request.  */
+      if (tree.num_pending_resumes == 0)
+	continue;
+
+      /* No wildcard resume request, we applied merging before.  Resume the
+	 final cluster.  */
+      if (!tree.wildcard)
+	{
+	  ze_resume_current_cluster (*device);
+	  continue;
+	}
+
+      /* There is a wildcard resume request and there is no thread that
+	 cannot be resumed.  Resume the device as a whole.  */
+      if (tree[0].state != ze_node_state_t::not_resumable)
+	{
+	  ze_resume (*device, all);
+	  continue;
+	}
+
+      /* There is a wildcard resume request but there is a non-resumable thread.
+	 Apply merging on all threads to form clusters that can be resumed as a
+	 whole.  */
+      for (uint32_t node_idx = 1; node_idx < tree.nodes.size (); node_idx++)
+	{
+	  const ze_device_tree_node &node = tree[node_idx];
+	  if (node.level == ze_node_level_thread)
+	    ze_merge (*device, node_idx);
+	}
+
+      /* Resume the final cluster.  */
+      ze_resume_current_cluster (*device);
+    }
 }
 
 /* Look for a thread preferably with a priority stop

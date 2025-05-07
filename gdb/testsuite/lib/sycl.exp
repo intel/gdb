@@ -319,35 +319,32 @@ proc is_level_zero_zebinary {} {
     }
 }
 
-# Return non-zero if the device is DG2.
+# Return hardware IP version of a given device.
+# DEVICE contains ";" separated fields (see 'init_sycl_devices_list' for more
+# details).
 
-proc is_dg2 {device} {
+proc get_device_version {device} {
+    set items [split $device ";"]
+    set device_version [lindex $items 3]
+    return $device_version
+}
 
-    if {[string match "*Intel* Arc* A* Graphics*" $device]} {
+# Return non-zero if the device is XE_HPG.
+
+proc is_xe_hpg {device} {
+    set device_version [get_device_version $device]
+    if {[string match "12.5*" $device_version]} {
 	return 1;
     }
 
     return 0;
 }
 
-# Return non-zero if the device is ATSM.
+# Return non-zero if the device is XE_HPC.
 
-proc is_atsm {device} {
-
-    if {[string match "*Intel* Data Center GPU Flex* 1*" $device]} {
-	return 1;
-    }
-
-    return 0;
-}
-
-# Return non-zero if the device is PVC.
-
-proc is_pvc {device} {
-
-    if {[string match "*Intel* Data Center GPU Max* 1100*" $device]
-	|| [string match "*Intel* Data Center GPU Max* 1550*" $device]
-	|| [string match "*Intel* Data Center GPU Max* 1350*" $device]} {
+proc is_xe_hpc {device} {
+    set device_version [get_device_version $device]
+    if {[string match "12.6*" $device_version]} {
 	return 1;
     }
 

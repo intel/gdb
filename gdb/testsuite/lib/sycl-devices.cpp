@@ -86,11 +86,14 @@ main ()
       const std::string type
 	= get_device_type (device.get_info<sycl::info::device::device_type> ());
 
+      const std::string device_version
+	= device.get_info<sycl::info::device::version> ();
+
       if (backend_name == "")
 	continue;
 
-      std::string dev_key {dev_name + ";" + backend_name + ";" + version
-			   + ";" + type};
+      std::string dev_key {dev_name + ";" + backend_name + ";" + type
+			   + ";" + device_version};
       device_types[dev_key]++;
     }
 

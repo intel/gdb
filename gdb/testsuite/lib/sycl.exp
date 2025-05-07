@@ -46,9 +46,8 @@ verbose -log "OFFLOAD_PERF_AOT_TESTING is '$OFFLOAD_PERF_AOT_TESTING'"
 
 # Return true if the SYCL device selected via the board file
 # matches the arguments.  Otherwise return false.
-# Input arg DEVICE contains ";" separated following information:
-# Device name;Backend Type;Backend Platform version.
-# See an example in init_sycl_devices_list.
+# DEVICE contains ";" separated fields (see 'init_sycl_devices_list' for more
+# details).
 
 proc require_sycl_device {device type name} {
     set args_list [sycl_get_device_args $device]
@@ -195,9 +194,9 @@ proc sycl_start {device} {
 # Get list of devices and return 0 if device list is non-empty else
 # return 1.  Each device entry of this list contains ";" separated
 # following information:
-# Device name;Backend Type;Backend Platform version.
+# Device name;Backend Type;Device Type;Device version;count.
 # e.g.
-# Intel(R) Iris(R) Plus Graphics 655 [0x3ea5];ext_oneapi_level_zero;1.3.24347
+# Intel(R) Data Center GPU Flex 140;ext_oneapi_level_zero;gpu;12.56.5;1
 
 gdb_caching_proc init_sycl_devices_list {} {
     global srcdir objdir subdir gdb_prompt
@@ -271,18 +270,16 @@ gdb_caching_proc init_sycl_devices_list {} {
 }
 
 # Return non-zero, if we are runing at Level-Zero.
-# device contains ";" separated following information:
-# Device name;Backend Type;Backend Platform version.
-# See an example in init_sycl_devices_list.
+# DEVICE contains ";" separated fields (see 'init_sycl_devices_list' for more
+# details).
 
 proc is_level_zero {device} {
     return [regexp {.*(Level-Zero)} $device]
 }
 
 # Return non-zero, if we are runing on OpenCL.
-# device contains ";" separated following information:
-# Device name;Backend Type;Backend Platform version.
-# See an example in init_sycl_devices_list.
+# DEVICE contains ";" separated fields (see 'init_sycl_devices_list' for more
+# details).
 
 proc is_opencl {device} {
     return [regexp {.*(OpenCL)} $device]
@@ -598,9 +595,8 @@ proc get_one_unavailable_thread {{msg ""}} {
 
 # Returns 1 if the target device is selected via OFFLOAD_DEVICE_GROUP
 # and 0 otherwise.
-# device contains ";" separated following information:
-# Device name;Backend Type;Backend Platform version.
-# See an example in init_sycl_devices_list.
+# DEVICE contains ";" separated fields (see 'init_sycl_devices_list' for more
+# details).
 
 proc is_sycl_device_filtered {device} {
     global OFFLOAD_DEVICE_GROUP
@@ -608,7 +604,7 @@ proc is_sycl_device_filtered {device} {
     # Filter according to OFFLOAD_DEVICE_GROUP.
     set device_info [split "$device" ";"]
     set backend [lindex $device_info 1]
-    set device_type [lindex $device_info 3]
+    set device_type [lindex $device_info 2]
 
     if {[lsearch -nocase [split $OFFLOAD_DEVICE_GROUP ","] $device_type] < 0} {
 	verbose -log "SYCL: device type $device_type is unwanted, skipping '$device'"
@@ -633,17 +629,15 @@ proc sycl_get_device_count {device} {
 }
 
 # Gets the list of args required for running the SYCL tests, where input device
-# contains ";" separated following information:
-# Device name;Backend Type;Backend Platform version;Device Type;count.
-# See an example in init_sycl_devices_list.
+# contains ";" separated fields (see 'init_sycl_devices_list' for more details).
 
 proc sycl_get_device_args {device} {
     global hex
 
     set device_info [split "$device" ";"]
     set sycl_driver_platform [lindex $device_info 1]
-    set sycl_driver_version [lindex $device_info 2]
-    set device_type [lindex $device_info 3]
+    set device_type [lindex $device_info 2]
+    set device_version [lindex $device_info 3]
     set device_index [lindex $device_info 4]
     set device_name ""
     set args_list {}
@@ -665,16 +659,14 @@ proc sycl_get_device_args {device} {
 	verbose "SYCL: Unexpected device type: ${device_type}" 0
     }
     lappend args_list $sycl_driver_platform
-    lappend args_list $sycl_driver_version
+    lappend args_list $device_version
     lappend args_list $device_index
     return $args_list
 }
 
 # Gets the prefix string required for the SYCL tests.
-# DEVICE contains ";" separated following information:
-# Device name;Backend Type;Backend Platform version;Device type;Device ID.
-# e.g.
-# Intel(R) Data Center GPU Max 1550;ext_oneapi_level_zero;1.3.29138;gpu;1
+# DEVICE contains ";" separated fields (see 'init_sycl_devices_list' for more
+# details).
 # Function returns ":" separated test prefix which has following info:
 # In case of non GPU device: Device type:Backend type:cpp
 # and in case of GPU: Device type GPU: Backend type: Graphics device ID

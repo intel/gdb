@@ -12159,6 +12159,12 @@ code_breakpoint::say_where () const
 	       real situation somewhat.  */
 	    gdb_printf (": %s", locspec->to_string ());
 	}
+
+      if (all_inferiors ().size () > 1)
+	{
+	  gdb_printf (",");
+	  print_breakpoint_inferiors (&bl, true);
+	}
       gdb_printf (".");
 
       if (this->has_multiple_locations ())

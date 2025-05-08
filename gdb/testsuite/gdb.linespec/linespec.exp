@@ -217,5 +217,5 @@ gdb_test "file $binfile" \
     "set the new inferior file for linespec tests"
 
 gdb_test "break -q main" \
-    "Breakpoint \[0-9\]+ at $hex: -qualified main. .2 locations." \
+    "Breakpoint $decimal at $hex: -qualified main, inf $decimal\\. .2 locations." \
     "set breakpoint at main in both inferiors"

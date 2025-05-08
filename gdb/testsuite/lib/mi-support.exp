@@ -1199,7 +1199,7 @@ proc mi_detect_async {} {
 # programmatically.
 #
 # Do not pass .* for any argument if you are expecting more than one stop.
-proc mi_expect_stop { reason func args file line extra test {known_fail ""}} {
+proc mi_expect_stop { reason func args file line extra test } {
 
     global mi_gdb_prompt
     global hex
@@ -1328,7 +1328,6 @@ proc mi_expect_stop { reason func args file line extra test {known_fail ""}} {
 
     verbose -log "mi_expect_stop: expecting: \\*stopped,${ebn}${r}${a}${bn}frame=\{addr=\"$hex\",func=\"$func\",args=$args,(?:file=\"$any$file\",fullname=\"${fullname_syntax}$file\",line=\"$line\",arch=\"$any\"|from=\"$file\")\}$after_stopped,thread-id=\"$decimal\",stopped-threads=$any\r\n($thread_selected_re|$breakpoint_re)*$prompt_re"
 
-    if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
     gdb_expect {
 	-re "\\*stopped,${ebn}${r}${a}${bn}frame=\{addr=\"$hex\",func=\"$func\",args=$args,(?:file=\"$any$file\",fullname=\"${fullname_syntax}$file\",line=\"($line)\",arch=\"$any\"|from=\"$file\")\}$after_stopped,thread-id=\"$decimal\",stopped-threads=$any\r\n($thread_selected_re|$breakpoint_re)*$prompt_re" {
 	    pass "$test"
@@ -1894,7 +1893,7 @@ proc mi_send_resuming_command {command test} {
 # be determined.
 # Does not check that the line is the same as requested.
 # The caller can check itself if required.
-proc_with_prefix mi_continue_to_line {location test {kfail ""}} {
+proc_with_prefix mi_continue_to_line {location test} {
     # Add srcfile info for pre-built packages testing.  Otherwise packages
     # built on other system are not able to set kernel breakpoints.
     if {$::OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"} {
@@ -1908,7 +1907,7 @@ proc_with_prefix mi_continue_to_line {location test {kfail ""}} {
     with_test_prefix $test {
 	mi_tbreak $location "set temporary breakpoint"
 	mi_send_resuming_command "exec-continue" "continue to breakpoint"
-	return [mi_get_stop_line $kfail]
+	return [mi_get_stop_line]
     }
 }
 
@@ -1941,7 +1940,6 @@ proc mi_get_stop_line {{known_fail ""}} {
       timeout {
 	  if { $known_fail ne "" } { setup_kfail $known_fail "*-*-*" }
 	  fail "wait for stop (timeout)"
-	  return -1
       }
   }
 

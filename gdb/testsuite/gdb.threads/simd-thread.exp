@@ -56,15 +56,8 @@ foreach device $sycl_device_list {
 	set odd_branch [gdb_get_line_number "kernel-odd-branch"]
 	gdb_breakpoint "$odd_branch" {temporary}
 
-	if {[is_xe3 $device]} {
-	    setup_kfail "JIRA GSD/11093" "*-*-*"
-	}
 	gdb_test "continue" ".*\\\[1 3 5 7.*\\\].*$srcfile:$odd_branch.*" \
 	    "hit the BP in odd branch"
-	if {[is_xe3 $device]} {
-	    verbose -log "Skipping the test to avoid timeouts due to hang."
-	    return
-	}
 
 	set first_thread [get_current_thread "odd branch"]
 	set second_thread [get_another_stopped_thread $srcfile $odd_branch $first_thread]

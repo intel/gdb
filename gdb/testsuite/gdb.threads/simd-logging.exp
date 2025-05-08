@@ -140,9 +140,6 @@ foreach device $sycl_device_list {
 	set odd_branch_thread "invalid"
 	set odd_branch_other_thread "invalid"
 	set num_hits 0
-	if {[is_xe3 $device]} {
-	    setup_kfail "JIRA GSD/11093" "*-*-*"
-	}
 	gdb_test_multiple "continue -a" "continue to kernel-odd-branch" {
 	    -re "Thread ($decimal).($decimal)$fill hit Breakpoint $bkptno_numopt_re, with SIMD lanes \\\[1 3 5 7${fill}\\\],${fill}$srcfile:$bp_odd_branch\r\n" {
 		set odd_branch_inf $expect_out(1,string)
@@ -161,21 +158,9 @@ foreach device $sycl_device_list {
 	    }
 	}
 
-	if {[is_xe3 $device]} {
-	    setup_kfail "JIRA GSD/11093" "*-*-*"
-	}
 	gdb_assert {$num_hits == $num_threads} "all threads stopped"
-	if {[is_xe3 $device]} {
-	    setup_kfail "JIRA GSD/11093" "*-*-*"
-	}
 	gdb_assert {$odd_branch_inf ne "invalid"} "bp inf found"
-	if {[is_xe3 $device]} {
-	    setup_kfail "JIRA GSD/11093" "*-*-*"
-	}
 	gdb_assert {$odd_branch_thread ne "invalid"} "bp thread found"
-	if {[is_xe3 $device]} {
-	    setup_kfail "JIRA GSD/11093" "*-*-*"
-	}
 	gdb_assert {$odd_branch_other_thread ne "invalid"} \
 	    "other bp thread found"
 

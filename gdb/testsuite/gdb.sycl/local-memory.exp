@@ -94,11 +94,6 @@ foreach device $sycl_device_list {
 	    gdb_test "ptype local_ref" "type = int &"
 	}
 
-	if {[is_xe3 $device]} {
-	    kfail "JIRA GSD/11093" \
-		"Skip test due to hang in odd branch while hitting bp"
-	    exp_continue
-	}
 	gdb_continue_to_breakpoint "slm BP2" ".*$srcfile:$line2.*"
 
 	with_test_prefix "access private memory via generic pointer" {

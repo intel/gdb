@@ -184,7 +184,7 @@ proc_with_prefix test_follow_fork { follow-fork-mode detach-on-fork cmd } {
     if {${detach-on-fork} == "off" || ${follow-fork-mode} == "child"} {
 	set bpnum "<unset>"
 	gdb_test_multiple "break callee" "break callee" {
-	    -re -wrap "Breakpoint ($::decimal) at $::hex: callee\\. \\(2 locations\\)" {
+	    -re -wrap "Breakpoint ($::decimal) at $::hex: callee, inf $::decimal\\. \\(2 locations\\)" {
 		set bpnum $expect_out(1,string)
 		pass $gdb_test_name
 	    }

@@ -1,0 +1,56 @@
+# Copyright 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This test sets a breakpoint that affects multiple inferiors and expects
+# the message to print the IDs of these inferiors, similarly to the output
+# of the `info break` command.  Example:
+# (gdb) break 40
+# Breakpoint 2 at 0x5555555551bc: file vfork-multi-inferior.c, line 40, inf 1, 2.
+#
+# A breakpoint location is mapped to multiple inferiors when the inferiors
+# share the same address space.  Therefore use vfork in this test.
+
+standard_testfile
+
+save_vars { ::GDBFLAGS } {
+    # Use the target-non-stop mode for vfork to work smoothly with
+    # a remote target.
+    append ::GDBFLAGS " -ex \"maintenance set target-non-stop on\""
+
+    if { [prepare_for_testing "failed to prepare" $testfile $srcfile] } {
+	return -1
+    }
+}
+
+gdb_test_no_output "set detach-on-fork off"
+
+if { ![runto_main] } {
+    return -1
+}
+
+gdb_breakpoint [gdb_get_line_number "Forked"]
+
+gdb_test "continue" \
+    "Can not resume the parent process over vfork.*Try .* schedule-multiple.*"
+gdb_test_no_output "set schedule-multiple on"
+
+gdb_continue_to_breakpoint "stop at breakpoint"
+
+# Test multiple inferior breakpoint prints inferiors during setting.
+gdb_test "break should_break_here" \
+    "Breakpoint $decimal at $hex: file .*, inf 1, 2\\." \
+    "breakpoint defined for multiple inferiors"
+
+gdb_test "info break" "should_break_here \[^\r\n\]+ inf 1, 2"

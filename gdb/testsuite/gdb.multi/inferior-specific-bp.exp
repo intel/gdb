@@ -173,7 +173,7 @@ proc check_info_breakpoints { testname bp_number expected_loc_count } {
 # gdb_breakpoint here as we want to check the breakpoint was placed in
 # multiple locations.
 gdb_test "break foo inferior 1" \
-    "Breakpoint $decimal at $hex: foo\\. \\(2 locations\\)"
+    "Breakpoint $decimal at $hex: foo, inf $decimal\\. \\(2 locations\\)"
 set bp_number [get_integer_valueof "\$bpnum" "INVALID" \
 		  "get b/p number for inferior specific breakpoint"]
 

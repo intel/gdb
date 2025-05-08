@@ -74,7 +74,7 @@ gdb_test "info threads" \
 # locations ('foo' in both inferiors) even though only one of those
 # locations will ever trigger ('foo' in inferior 2).
 gdb_test "break foo thread 2.1" \
-    "Breakpoint $decimal at $hex: file \[^\r\n\]+$srcfile, line $decimal\\."
+    "Breakpoint $decimal at $hex: file \[^\r\n\]+$srcfile, line $decimal\\, inf $decimal\\."
 
 set bpnum [get_integer_valueof "\$bpnum" "INVALID"]
 
@@ -82,7 +82,7 @@ set bpnum [get_integer_valueof "\$bpnum" "INVALID"]
 # earlier breakpoint.  Check that the thread-id used when describing
 # the earlier breakpoints is correct.
 gdb_test "break foo thread 1.1" \
-    "Breakpoint $decimal at $hex: file \[^\r\n\]+$srcfile, line $decimal\\."
+    "Breakpoint $decimal at $hex: file \[^\r\n\]+$srcfile, line $decimal\\, inf $decimal\\."
 
 # Save the breakpoints into a file.
 if {[is_remote host]} {

@@ -185,7 +185,7 @@ proc read_corefile {corefile} {
 
 foreach device $sycl_device_list {
     if {![require_sycl_device "$device" "gpu" "Intel*"]
-	|| ![is_pvc $device]} {
+	|| ![is_xe_hpc $device]} {
 	continue
     }
 

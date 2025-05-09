@@ -154,7 +154,7 @@ foreach device $sycl_device_list {
 	}
 
 	set kfail ""
-	if {![is_pvc $device]} {
+	if {![is_xe_hpc $device]} {
 	    set kfail "JIRA GSD/10235"
 	}
 	set last_line_1 [gdb_get_line_number "kernel-1-last-line"]
@@ -165,7 +165,7 @@ foreach device $sycl_device_list {
 	with_test_prefix "kernel 1, simd16" {
 	    check_ids 4
 	}
-	if {![is_pvc $device]} {
+	if {![is_xe_hpc $device]} {
 	    setup_kfail "JIRA GSD/10235" "*-*-*"
 	}
 	gdb_continue_to_breakpoint "kernel 2" ".*$srcfile:$last_line_2.*"

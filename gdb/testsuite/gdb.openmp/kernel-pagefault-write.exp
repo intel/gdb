@@ -50,8 +50,7 @@ foreach device_info "${device_list}" {
 	}
 
 	if {![require_openmp_device "GPU"]
-	    || !([omp_is_pvc $gpu_device_name]
-		 || [omp_is_xe2 $gpu_device_name])} {
+	    || [is_xe_hpg $gpu_device_name]} {
 	    unsupported "target does not support pagefault"
 	    continue
 	}

@@ -16,6 +16,7 @@
 # Support library for testing OpenMP debugging in GDB.
 
 load_lib intelgt-utils.exp
+load_lib sycl.exp
 
 # Return compiler flags for OpenMP.
 load_lib fortran.exp
@@ -276,7 +277,6 @@ gdb_caching_proc is_omp_offload_supported_compiler {} {
 # in the OpenMP library API.
 
 gdb_caching_proc get_gpu_device_name {} {
-    load_lib sycl.exp
 
     set sycl_device_list [init_sycl_devices_list]
     foreach device "${sycl_device_list}" {
@@ -285,19 +285,6 @@ gdb_caching_proc get_gpu_device_name {} {
 	}
     }
     return ""
-}
-
-# Return non-zero if the device is PVC.
-
-proc omp_is_pvc {device} {
-
-    if {[string match "*Intel* Data Center GPU Max* 1100*" $device]
-	|| [string match "*Intel* Data Center GPU Max* 1550*" $device]
-	|| [string match "*Intel* Data Center GPU Max* 1350*" $device]} {
-	return 1;
-    }
-
-    return 0;
 }
 
 # Return non-zero if the device is DG2.

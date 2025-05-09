@@ -354,12 +354,8 @@ proc is_xe_hpc {device} {
 # Return non-zero if the device is XE2.
 
 proc is_xe2 {device} {
-    if {[is_dg2 $device]} {
-	return 0
-    }
-
-    if {[string match "*Intel* Arc* Graphics*" $device]
-	|| [string match -nocase "*Intel*Graphics*E20*" $device]} {
+    set hw_ipversion [get_device_version $device]
+    if {[string match "20.*" $hw_ipversion]} {
 	return 1
     }
 

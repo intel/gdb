@@ -365,7 +365,8 @@ proc is_xe2 {device} {
 # Return non-zero if the device is XE3.
 
 proc is_xe3 {device} {
-    if {[string match -nocase "*Intel*Graphics*0xB0*" $device]} {
+    set hw_ipversion [get_device_version $device]
+    if {[string match "30.*" $hw_ipversion]} {
 	return 1
     }
 

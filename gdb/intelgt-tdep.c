@@ -2196,6 +2196,65 @@ get_scratch_area (gdbarch *gdbarch)
   return data->scratch_area;
 }
 
+/* Create dummy ret instruction on the buffer provided as a first argument.
+   The instruction buffer BUFF needs to be filled with zeros.  */
+
+static void
+encode_ret (gdb_byte buff[], gdbarch *gdbarch, uint32_t device_id)
+{
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* Assign ret opcode.  */
+	buff[0] = 0x2d;
+
+	intelgt_gdbarch_data *arch_data = get_intelgt_gdbarch_data (gdbarch);
+	/* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
+	   sub-register 0.  */
+	buff[8] = 0x04;
+	/* Destination register number for the RET instruction.  */
+	buff[9] = arch_data->framedesc_base_regnum ();
+
+	thread_info *tp = inferior_thread ();
+	const uint32_t simd_width = tp->get_simd_width ();
+	gdb_byte exec_size = 0;
+	while ((simd_width >> exec_size) > 1)
+	  exec_size++;
+	/* Make sure that 2^EXEC_SIZE = SIMD_WIDTH.  */
+	gdb_assert (1 << exec_size == simd_width);
+
+	switch (device_version)
+	  {
+	  case intelgt::XE_HP:
+	  case intelgt::XE_HPG:
+	    buff[2] = exec_size;
+	    break;
+
+	  case intelgt::XE_HPC:
+	  case intelgt::XE2:
+	  case intelgt::XE3:
+	    buff[2] = exec_size << 2;
+	    break;
+
+	  default:
+	    gdb_assert_not_reached ("Unexpected device id 0x%" PRIx32,
+				    device_id);
+	  }
+	return;
+      }
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
+}
+
 /* Make the current thread execute a dummy RET instruction.  */
 
 static void
@@ -2218,54 +2277,9 @@ intelgt_run_ret_inst (gdbarch *gdbarch)
   std::array<gdb_byte, intelgt::MAX_INST_LENGTH> buff {};
 
   uint32_t device_id = get_device_id (current_inferior ());
-  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
-  switch (device_version)
-    {
-    case intelgt::XE_HP:
-    case intelgt::XE_HPG:
-    case intelgt::XE_HPC:
-    case intelgt::XE2:
-    case intelgt::XE3:
-      {
-	/* Assign ret opcode.  */
-	buff[0] = 0x2d;
+  gdb_byte *ret_inst = buff.data ();
 
-	intelgt_gdbarch_data *arch_data = get_intelgt_gdbarch_data (gdbarch);
-	/* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
-	   sub-register 0.  */
-	buff[8] = 0x04;
-	/* Destination register number for the RET instruction.  */
-	buff[9] = arch_data->framedesc_base_regnum ();
-	break;
-      }
-
-    default:
-      error (_("Unsupported device id 0x%" PRIx32), device_id);
-    }
-
-  thread_info *tp = inferior_thread ();
-  const uint32_t simd_width = tp->get_simd_width ();
-  gdb_byte exec_size = 0;
-  while ((simd_width >> exec_size) > 1)
-    exec_size++;
-  /* Make sure that 2^EXEC_SIZE = SIMD_WIDTH.  */
-  gdb_assert (1 << exec_size == simd_width);
-
-  switch (device_version)
-    {
-    case intelgt::XE_HP:
-    case intelgt::XE_HPG:
-      buff[2] = exec_size;
-      break;
-    case intelgt::XE_HPC:
-    case intelgt::XE2:
-    case intelgt::XE3:
-      buff[2] = exec_size << 2;
-      break;
-
-    default:
-      error (_("Unsupported device id 0x%" PRIx32), device_id);
-    }
+  encode_ret (ret_inst, gdbarch, device_id);
 
   /* Inject the dummy RET instruction in the reserved space.  */
   if (target_write_memory (ret_inst_addr, buff.data (), buff.size ()) != 0)
@@ -2347,6 +2361,151 @@ intelgt_infcall_dummy_dtor (void *data, int unused)
     }
 }
 
+
+/* Create dummy calla instruction on the buffer provided as a first argument.
+   The instruction buffer BUFF needs to be filled with zeros.  */
+
+static void
+encode_calla (gdb_byte buff[], CORE_ADDR funaddr, regcache *regcache,
+	      uint32_t device_id)
+{
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* Assign calla opcode.  */
+	buff[0] = 0x2b;
+
+	thread_info *current_thread = inferior_thread ();
+	int predication_bit = 0;
+
+	/* Compute the execution size from SIMD_WIDTH, below is the EXEC_SIZE
+	   encoding according to the spec.
+	   000b = 1 Channels
+	   001b = 2 Channels
+	   010b = 4 Channels
+	   011b = 8 Channels
+	   100b = 16 Channels
+	   101b = 32 Channels.  */
+	const uint32_t simd_width = get_simd_width_for_pc (funaddr);
+	uint32_t exec_size = 0;
+	while ((simd_width >> exec_size) > 1)
+	  exec_size++;
+
+	/* Make sure that 2^EXEC_SIZE = SIMD_WIDTH.  */
+	gdb_assert (1 << exec_size == simd_width);
+
+	switch (device_version)
+	  {
+	  case intelgt::XE_HP:
+	  case intelgt::XE_HPG:
+	    predication_bit = 24;
+	    buff[2] = exec_size;
+	    break;
+
+	  case intelgt::XE_HPC:
+	  case intelgt::XE2:
+	  case intelgt::XE3:
+	    predication_bit = 26;
+	    buff[2] = exec_size << 2;
+	    break;
+
+	  default:
+	    gdb_assert_not_reached ("Unexpected device id 0x%" PRIx32,
+				    device_id);
+	  }
+
+	gdbarch *arch = regcache->arch ();
+	intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+
+	/* Enable predication to run the inferior call with a single lane.  */
+	if (current_thread->has_simd_lanes ())
+	  {
+	    /* Enable $F0 predication.  */
+	    intelgt::set_inst_bit (buff, predication_bit);
+
+	    /* Update the predication flag register $F0 using the current
+	       lane.  */
+	    const int current_lane = current_thread->current_simd_lane ();
+	    if (!current_thread->is_simd_lane_active (current_lane))
+	      error (_("Cannot run inferior calls for inactive lanes: lane %d"),
+		     current_lane);
+
+	    const int f0_regnum
+	      = data->regset_ranges[intelgt::regset_flag].start;
+	    if (f0_regnum == -1)
+	      error (_("F0 register is needed for this operation but could "
+		       "not be found."));
+
+	    uint32_t f0 = 1u << current_lane;
+	    regcache->cooked_write (f0_regnum, (gdb_byte *)&f0);
+	  }
+
+	/* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
+	   sub-register 0.  */
+	buff[6] = 0x04;
+	/* Destination register number for the CALLA instruction.  Since we
+	   enumerate GRF's starting at GDB reg number 0, it is safe to use GDB
+	   numbering.  */
+	uint32_t dst_reg = data->framedesc_base_regnum ();
+	buff[7] = dst_reg;
+
+	/* Set the source register to be (framedesc-regnum - 1), we use this
+	   register to store the JIP address.  */
+	uint32_t src_regnum = dst_reg - 1;
+	buff[8] = 0x4;
+	buff[9] = src_regnum;
+
+	CORE_ADDR isabase = intelgt_get_isabase (regcache);
+
+	/* Determine the jump IP from function address.
+	   FUNADDR = JIP + $isabase.  */
+	CORE_ADDR jump_ip = funaddr - isabase;
+
+	/* Store the JIP in the source register.  */
+	regcache->cooked_write_part (src_regnum, 0, sizeof (uint32_t),
+				     (gdb_byte *) &jump_ip);
+	return;
+      }
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
+}
+
+
+/* Create dummy nop instruction on the buffer provided as a first argument.
+   The instruction buffer BUFF needs to be filled with zeros.  */
+
+static void
+encode_nop (gdb_byte buff[], uint16_t device_id)
+{
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* Assign NOP opcode.  */
+	buff[0] = 0x60;
+	return;
+      }
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
+}
+
 /* Intelgt implementation of the "push_dummy_code" method.
 
    In this function, we are injecting a CALLA instruction in the debug area.
@@ -2393,151 +2552,20 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
   *arch_dummy_dtor = intelgt_infcall_dummy_dtor;
   *dtor_data = infcall_cleanup_data;
 
-  /* Compute the execution size from SIMD_WIDTH, below is the EXEC_SIZE
-     encoding according to the spec.
-     000b = 1 Channels
-     001b = 2 Channels
-     010b = 4 Channels
-     011b = 8 Channels
-     100b = 16 Channels
-     101b = 32 Channels.  */
-  const uint32_t simd_width = get_simd_width_for_pc (funaddr);
-  uint32_t exec_size = 0;
-  while ((simd_width >> exec_size) > 1)
-    exec_size++;
-
-  /* Make sure that 2^EXEC_SIZE = SIMD_WIDTH.  */
-  gdb_assert (1 << exec_size == simd_width);
-
-  /* Make sure to have a cleared buffer for the CALLA instruction
-     and the return breakpoint.  */
-  gdb_byte buff[2 * intelgt::MAX_INST_LENGTH];
-  memset (buff, 0, sizeof (buff));
-
-  /* Construct the dummy CALLA instruction.  */
-  gdb_byte *calla_inst = buff;
+  /* Construct the dummy CALLA + NOP instructions.  */
+  std::array<gdb_byte, 2 * intelgt::MAX_INST_LENGTH> buff {};
 
   uint32_t device_id = get_device_id (current_inferior ());
-  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
-  switch (device_version)
-    {
-    case intelgt::XE_HP:
-    case intelgt::XE_HPG:
-    case intelgt::XE_HPC:
-    case intelgt::XE2:
-    case intelgt::XE3:
-      /* Assign calla opcode.  */
-      calla_inst[0] = 0x2b;
-      break;
+  gdb_byte *calla_inst = buff.data ();
 
-    default:
-      error (_("Unsupported device id 0x%" PRIx32), device_id);
-    }
+  encode_calla (calla_inst, funaddr, regcache, device_id);
+  int nop_offset = intelgt::inst_length (calla_inst, device_id);
 
-  thread_info *current_thread = inferior_thread ();
-
-  /* Compute the DEVICE_GEN from the DEVICE_ID, so that we can determine
-     the correct encoding for some fields of the instruction.  */
-  int predication_bit = 0;
-  switch (device_version)
-    {
-    case intelgt::XE_HP:
-    case intelgt::XE_HPG:
-      predication_bit = 24;
-      calla_inst[2] = exec_size;
-      break;
-    case intelgt::XE_HPC:
-    case intelgt::XE2:
-    case intelgt::XE3:
-      predication_bit = 26;
-      calla_inst[2] = exec_size << 2;
-      break;
-
-    default:
-      error (_("Unsupported device id 0x%" PRIx32), device_id);
-    }
-
-  /* Enable predication to run the inferior call with a single lane.  */
-  if (current_thread->has_simd_lanes ())
-    {
-      /* Enable $F0 predication.  */
-      intelgt::set_inst_bit (calla_inst, predication_bit);
-
-      /* Update the predication flag register $F0 using the current lane.  */
-      const int current_lane = current_thread->current_simd_lane ();
-      if (!current_thread->is_simd_lane_active (current_lane))
-	error (_("Cannot run inferior calls for inactive lanes: lane %d"),
-	       current_lane);
-
-      const int f0_regnum = data->regset_ranges[intelgt::regset_flag].start;
-      if (f0_regnum == -1)
-	error (_("F0 register is needed for this operation but could "
-		 "not be found."));
-
-      uint32_t f0 = 1u << current_lane;
-      regcache->cooked_write (f0_regnum, (gdb_byte *)&f0);
-    }
-
-  uint32_t src_regnum;
-  switch (device_version)
-    {
-    case intelgt::XE_HP:
-    case intelgt::XE_HPG:
-    case intelgt::XE_HPC:
-    case intelgt::XE2:
-    case intelgt::XE3:
-      {
-	/* We are building r<framedesc-regnum>.0, set RegFile to GRF, and use
-	   sub-register 0.  */
-	calla_inst[6] = 0x04;
-	/* Destination register number for the CALLA instruction.  Since we
-	   enumerate GRF's starting at GDB reg number 0, it is safe to use GDB
-	   numbering.  */
-	uint32_t dst_reg = data->framedesc_base_regnum ();
-	calla_inst[7] = dst_reg;
-
-	/* Set the source register to be (framedesc-regnum - 1), we use this
-	   register to store the JIP address.  */
-	src_regnum = dst_reg - 1;
-	calla_inst[8] = 0x4;
-	calla_inst[9] = src_regnum;
-	break;
-      }
-
-    default:
-      error (_("Unsupported device id 0x%" PRIx32), device_id);
-    }
-
-  /* Determine the jump IP from function address.
-     FUNADDR = JIP + $isabase.  */
-  CORE_ADDR jump_ip = funaddr - isabase;
-
-  /* Store the JIP in the source register.  */
-  regcache->cooked_write_part (src_regnum, 0, sizeof (uint32_t),
-			       (gdb_byte *) &jump_ip);
-
-  switch (device_version)
-    {
-    case intelgt::XE_HP:
-    case intelgt::XE_HPG:
-    case intelgt::XE_HPC:
-    case intelgt::XE2:
-    case intelgt::XE3:
-      {
-	/* Use the NOP instruction for the return breakpoint.  */
-	constexpr uint32_t nop_opcode = 0x60;
-	gdb_byte *nop_inst = buff + intelgt::MAX_INST_LENGTH;
-	nop_inst[0] = nop_opcode;
-	break;
-      }
-
-    default:
-      error (_("Unsupported device id 0x%" PRIx32), device_id);
-    }
+  encode_nop (&buff[nop_offset], device_id);
 
   /* Inject the dummy CALLA instruction and the breakpoint in the
      reserved space.  */
-  int err = target_write_memory (calla_addr, buff, sizeof (buff));
+  int err = target_write_memory (calla_addr, buff.data (), buff.size ());
   if (err != 0)
     error ("Target failed to inject a dummy calla instruction at 0x%lx",
 	   calla_addr);
@@ -2545,7 +2573,7 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
   /* Update the REAL_PC to execute the CALLA, which would make the function
      return to the next address.  Use that address as the BP_ADDR.  */
   *real_pc = calla_addr;
-  *bp_addr = calla_addr + intelgt::MAX_INST_LENGTH;
+  *bp_addr = calla_addr + nop_offset;
 
   return sp;
 }

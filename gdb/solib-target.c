@@ -1,6 +1,7 @@
 /* Definitions for targets which report shared library events.
 
    Copyright (C) 2007-2025 Free Software Foundation, Inc.
+   Copyright (C) 2024-2025 Intel Corporation
 
    This file is part of GDB.
 

@@ -1,6 +1,7 @@
 /* Python interface to finish breakpoints
 
    Copyright (C) 2011-2025 Free Software Foundation, Inc.
+   Copyright (C) 2021-2025 Intel Corporation
 
    This file is part of GDB.
 

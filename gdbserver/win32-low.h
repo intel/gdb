@@ -1,5 +1,6 @@
 /* Internal interfaces for the Win32 specific target code for gdbserver.
    Copyright (C) 2007-2025 Free Software Foundation, Inc.
+   Copyright (C) 2020-2025 Intel Corporation
 
    This file is part of GDB.
 

@@ -1,6 +1,7 @@
 /* Target description support for GDB.
 
    Copyright (C) 2006-2025 Free Software Foundation, Inc.
+   Copyright (C) 2023-2025 Intel Corporation
 
    Contributed by CodeSourcery.
 

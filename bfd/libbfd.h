@@ -8,6 +8,7 @@
    (This include file is not for users of the library.)
 
    Copyright (C) 1990-2024 Free Software Foundation, Inc.
+   Copyright (C) 2022 Intel Corporation
 
    Written by Cygnus Support.
 

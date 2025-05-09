@@ -2,6 +2,7 @@
 /* Internal type definitions for GDB.
 
    Copyright (C) 1992-2025 Free Software Foundation, Inc.
+   Copyright (C) 2013-2025 Intel Corporation
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
 

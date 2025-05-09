@@ -1,6 +1,7 @@
 /* Obtain a series of random bytes.
 
    Copyright 2020-2022 Free Software Foundation, Inc.
+   Copyright (C) 2022 Intel Corporation
 
    This file is free software: you can redistribute it and/or modify
    it under the terms of the GNU Lesser General Public License as

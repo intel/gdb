@@ -1,6 +1,7 @@
 /* Target dependent code for CRIS, for GDB, the GNU debugger.
 
    Copyright (C) 2001-2025 Free Software Foundation, Inc.
+   Copyright (C) 2014-2025 Intel Corporation
 
    Contributed by Axis Communications AB.
    Written by Hendrik Ruijter, Stefan Andersson, and Orjan Friberg.

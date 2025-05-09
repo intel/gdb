@@ -1,6 +1,7 @@
 /* Disassembly display.
 
    Copyright (C) 1998-2025 Free Software Foundation, Inc.
+   Copyright (C) 2024-2025 Intel Corporation
 
    Contributed by Hewlett-Packard Company.
 

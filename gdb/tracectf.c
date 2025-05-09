@@ -1,6 +1,7 @@
 /* CTF format support.
 
    Copyright (C) 2012-2025 Free Software Foundation, Inc.
+   Copyright (C) 2021-2025 Intel Corporation
    Contributed by Hui Zhu <hui_zhu@mentor.com>
    Contributed by Yao Qi <yao@codesourcery.com>
 

@@ -1,6 +1,7 @@
 /* Fork a Unix child process, and set up to debug it, for GDB.
 
    Copyright (C) 1990-2025 Free Software Foundation, Inc.
+   Copyright (C) 2024-2025 Intel Corporation
 
    Contributed by Cygnus Support.
 

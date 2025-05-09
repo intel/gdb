@@ -1,6 +1,7 @@
 /* Handle JIT code generation in the inferior for GDB, the GNU Debugger.
 
    Copyright (C) 2009-2025 Free Software Foundation, Inc.
+   Copyright (C) 2019-2025 Intel Corporation
 
    This file is part of GDB.
 

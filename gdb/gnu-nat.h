@@ -1,5 +1,6 @@
 /* Common things used by the various *gnu-nat.c files
    Copyright (C) 1995-2025 Free Software Foundation, Inc.
+   Copyright (C) 2021-2025 Intel Corporation
 
    Written by Miles Bader <miles@gnu.ai.mit.edu>
 

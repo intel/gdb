@@ -1,6 +1,7 @@
 /* Serial interface for local (hardwired) serial ports on Windows systems
 
    Copyright (C) 2006-2025 Free Software Foundation, Inc.
+   Copyright (C) 2022-2025 Intel Corporation
 
    This file is part of GDB.
 

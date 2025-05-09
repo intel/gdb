@@ -1,6 +1,7 @@
 /* Cache and manage the values of registers
 
    Copyright (C) 2014-2025 Free Software Foundation, Inc.
+   Copyright (C) 2020-2025 Intel Corporation
 
    This file is part of GDB.
 

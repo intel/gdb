@@ -1,6 +1,7 @@
 /* Native-dependent code for NetBSD.
 
    Copyright (C) 2006-2025 Free Software Foundation, Inc.
+   Copyright (C) 2020-2025 Intel Corporation
 
    This file is part of GDB.
 

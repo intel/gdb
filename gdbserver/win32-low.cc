@@ -1,5 +1,6 @@
 /* Low level interface to Windows debugging, for gdbserver.
    Copyright (C) 2006-2025 Free Software Foundation, Inc.
+   Copyright (C) 2020-2025 Intel Corporation
 
    Contributed by Leo Zayas.  Based on "win32-nat.c" from GDB.
 

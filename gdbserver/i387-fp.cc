@@ -1,5 +1,6 @@
 /* i387-specific utility functions, for the remote server for GDB.
    Copyright (C) 2000-2025 Free Software Foundation, Inc.
+   Copyright (C) 2023-2025 Intel Corporation
 
    This file is part of GDB.
 

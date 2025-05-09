@@ -2,6 +2,7 @@
    for GDB.  Written by Colin Burgess at QNX Software Systems Limited.
 
    Copyright (C) 2003-2025 Free Software Foundation, Inc.
+   Copyright (C) 2014-2025 Intel Corporation
 
    Contributed by QNX Software Systems Ltd.
 

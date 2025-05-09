@@ -1,6 +1,7 @@
 /* Scheme interface to breakpoints.
 
    Copyright (C) 2008-2025 Free Software Foundation, Inc.
+   Copyright (C) 2020-2025 Intel Corporation
 
    This file is part of GDB.
 

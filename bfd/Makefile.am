@@ -1,6 +1,7 @@
 ## Process this file with automake to generate Makefile.in
 #
 #   Copyright (C) 2012-2024 Free Software Foundation, Inc.
+#   Copyright (C) 2019 Intel Corporation
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by

@@ -68,7 +68,7 @@ proc test_bp_2 {device {lane 0} } {
     global decimal hex
 
     set kfail ""
-    if {[require_sycl_device "$device" "gpu" "Intel*"] && [is_pvc $device]} {
+    if {[require_sycl_device "$device" "gpu" "Intel*"] && [is_xe_hpc $device]} {
 	set kfail "JIRA CMPLRLLVM/67035"
     }
 
@@ -134,7 +134,7 @@ foreach device $sycl_device_list {
 
 	gdb_breakpoint $l1
 	if {[require_sycl_device "$device" "gpu" "Intel*"]
-	    && ([is_pvc $device] || [is_xe2 $device] || [is_xe3 $device])} {
+	    && ([is_xe_hpc $device] || [is_xe2 $device] || [is_xe3 $device])} {
 	    setup_kfail "JIRA CMPLRLLVM/67035" "*-*-*"
 	}
 	gdb_continue_to_breakpoint "bp.1" ".*$srcfile:$l1.*"
@@ -157,7 +157,7 @@ foreach device $sycl_device_list {
 	delete_breakpoints
 	gdb_breakpoint $l2
 	if {[require_sycl_device "$device" "gpu" "Intel*"]
-	    && ([is_pvc $device]|| [is_xe2 $device] || [is_xe3 $device])} {
+	    && ([is_xe_hpc $device]|| [is_xe2 $device] || [is_xe3 $device])} {
 	    setup_kfail "JIRA CMPLRLLVM/67035" "*-*-*"
 	}
 	gdb_continue_to_breakpoint "bp.2" ".*$srcfile:$l2.*"
@@ -167,7 +167,7 @@ foreach device $sycl_device_list {
 		for {set i 0} {$i < 8} {set i [expr $i+4]} {
 		    with_test_prefix "lane $i" {
 			if {[require_sycl_device "$device" "gpu" "Intel*"]
-			    && ([is_pvc $device]|| [is_xe2 $device]
+			    && ([is_xe_hpc $device]|| [is_xe2 $device]
 				|| [is_xe3 $device])} {
 			    setup_kfail "JIRA CMPLRLLVM/67035" "*-*-*"
 			}

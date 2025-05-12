@@ -730,6 +730,8 @@ Connection name '{connection}' not recognized.""")
             gdb.execute("add-inferior -hidden -no-connection", False, True)
 
             cli_suppressed = self.set_suppress_notifications("on")
+            original_thread = gdb.selected_thread()
+
             # Attach gdbserver to gt inferior.
             # This represents the first device.
             try:
@@ -740,9 +742,6 @@ Connection name '{connection}' not recognized.""")
                 # For the --attach scenario we use gt_inf; for the
                 # --multi scenario we use gt_inf's connection num.
                 self.inf_dict[host_inf] = (gt_inf, gt_inf.connection_num)
-
-                # Switch to the host inferior.
-                gdb.execute(f"inferior {host_inf.num}", False, True)
             # Fix ctrl-c while attaching to gt inferior.
             except KeyboardInterrupt:
                 self.handle_error(host_inf)
@@ -760,6 +759,8 @@ Connection name '{connection}' not recognized.""")
                 # Otherwise. GDB may not behave as expected if the user decides
                 # not to quit the session.
                 self.set_suppress_notifications("on" if cli_suppressed else "off")
+                # Ensure we restore the current inferior/thread.
+                original_thread.switch()
 
             if not is_nonstop:
                 gdb.execute("set schedule-multiple on")

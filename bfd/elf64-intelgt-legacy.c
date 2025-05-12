@@ -1,4 +1,4 @@
-/* Intel(R) Graphics Technology-specific support for ELF
+/* Intel Graphics Technology-specific support for ELF
    Copyright (C) 2019-2024 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.

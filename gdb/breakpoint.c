@@ -2975,7 +2975,9 @@ insert_bp_location (struct bp_location *bl,
   if (!should_be_inserted (bl) || (bl->inserted && !bl->needs_update))
     return 0;
 
-  breakpoint_debug_printf ("%s", breakpoint_location_address_str (bl).c_str ());
+  breakpoint_debug_printf ("%s inferior %d",
+			   breakpoint_location_address_str (bl).c_str (),
+			   bl->owner->inferior);
 
   /* Note we don't initialize bl->target_info, as that wipes out
      the breakpoint location's shadow_contents if the breakpoint
@@ -3381,6 +3383,15 @@ update_inserted_breakpoint_locations (void)
     }
 }
 
+/* Used when a breakpoint for a specific inferior is
+   created that does not yet exist.  */
+
+static bool
+breakpoint_inferior_pending (const breakpoint *b)
+{
+  return (b->inferior > 0) && (!b->has_locations ());
+}
+
 /* Used when starting or continuing the program.  */
 
 static void
@@ -3427,6 +3438,16 @@ insert_breakpoint_locations (void)
       if (!gdbarch_has_global_breakpoints (current_inferior ()->arch ())
 	  && (inferior_ptid == null_ptid || !target_has_execution ()))
 	continue;
+
+      if (breakpoint_inferior_pending (bl->owner)
+	  && bl->owner->inferior != current_inferior ()->num)
+	{
+	  breakpoint_debug_printf ("not inserting breakpoint pending for "
+				   "inferior %d, current inf is %d.",
+				   bl->owner->inferior,
+				   current_inferior ()->num);
+	  continue;
+	}
 
       val = insert_bp_location (bl, &tmp_error_stream, &disabled_breaks,
 				    &hw_breakpoint_error, &hw_bp_error_explained_already);
@@ -4031,7 +4052,12 @@ create_exception_master_breakpoint (void)
 static bool
 breakpoint_location_spec_empty_p (const struct breakpoint *b)
 {
-  return (b->locspec != nullptr && b->locspec->empty_p ());
+  /* If a non-existing inferior is pending we want to
+     keep the breakpoint alive for future lookups.  Otherwise
+     the breakpoint could get disabled/deleted by the caller.  */
+  return !breakpoint_inferior_pending (b)
+	 && b->locspec != nullptr
+	 && b->locspec->empty_p ();
 }
 
 void
@@ -9398,9 +9424,10 @@ find_program_space_for_breakpoint (int thread, int inferior)
       gdb_assert (thread == -1);
 
       struct inferior *inf = find_inferior_id (inferior);
-      gdb_assert (inf != nullptr);
+      if (inf != nullptr)
+	return inf->pspace;
 
-      return inf->pspace;
+      throw_error (NOT_FOUND_ERROR, _("No inferior number '%d'"), inferior);
     }
 
   return nullptr;
@@ -9478,7 +9505,8 @@ create_breakpoint (struct gdbarch *gdbarch,
 					  &thread, &simd_lane,
 					  &inferior, &task,
 					  &extra_string_copy,
-					  &force_condition);
+					  &force_condition,
+					  pending_break_support);
 
       /* We could check that EXTRA_STRING_COPY is empty at this point -- it
 	 should be, as we only get here for things that are not bp_dprintf,
@@ -9530,7 +9558,10 @@ create_breakpoint (struct gdbarch *gdbarch,
 	  /* If pending breakpoint support is auto query and the user
 	     selects no, then simply return the error code.  */
 	  if (pending_break_support == AUTO_BOOLEAN_AUTO
-	      && !nquery (_("Make %s pending on future shared library load? "),
+	      && !nquery ((inferior <= 0)
+			  ? _("Make %s pending on future shared"
+			      " library load? ")
+			  : _("Make %s pending on future inferior addition? "),
 			  bptype_string (type_wanted)))
 	    return 0;
 
@@ -13518,9 +13549,10 @@ breakpoint_re_set (void)
 	  }
 	catch (const gdb_exception &ex)
 	  {
-	    exception_fprintf (gdb_stderr, ex,
-			       "Error in re-setting breakpoint %d: ",
-			       b.number);
+	    if (b.inferior == -1 || find_inferior_id (b.inferior) != nullptr)
+	      exception_fprintf (gdb_stderr, ex,
+				 "Error in re-setting breakpoint %d: ",
+				 b.number);
 	  }
       }
 
@@ -13573,9 +13605,10 @@ breakpoint_re_set_one (breakpoint *b, program_space *filter_pspace)
       }
     catch (const gdb_exception &ex)
       {
-	exception_fprintf (gdb_stderr, ex,
-			   "Error in re-setting breakpoint %d: ",
-			   b->number);
+	  if (b->inferior == -1 || find_inferior_id (b->inferior) != nullptr)
+	    exception_fprintf (gdb_stderr, ex,
+			       "Error in re-setting breakpoint %d: ",
+			       b->number);
       }
   }
 

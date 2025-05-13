@@ -109,6 +109,10 @@ info threads [-gid] [-stopped] [ID]...
   the stopped threads to be printed.  The flag can be useful to get a
   reduced list when there is a large number of unstopped threads.
 
+break
+  Setting a breakpoint now allows setting a pending breakpoint for an
+  inferior that does not yet exist.
+
 * Add convenience variable `$_simd_lane`.
 
 * MI changes

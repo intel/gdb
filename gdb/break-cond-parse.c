@@ -450,7 +450,8 @@ void
 create_breakpoint_parse_arg_string
   (const char *str, gdb::unique_xmalloc_ptr<char> *cond_string_ptr,
    int *thread_ptr, int *simd_lane_ptr, int *inferior_ptr, int *task_ptr,
-   gdb::unique_xmalloc_ptr<char> *rest_ptr, bool *force_ptr)
+   gdb::unique_xmalloc_ptr<char> *rest_ptr, bool *force_ptr,
+   auto_boolean allow_pending)
 {
   /* Set up the defaults.  */
   cond_string_ptr->reset ();
@@ -511,7 +512,7 @@ create_breakpoint_parse_arg_string
 	      error (_("No inferior number '%ld'"), inferior_id);
 	    inferior = static_cast<int> (inferior_id);
 	    struct inferior *inf = find_inferior_id (inferior);
-	    if (inf == nullptr)
+	    if (allow_pending == AUTO_BOOLEAN_FALSE && inf == nullptr)
 	      error (_("No inferior number '%d'"), inferior);
 	  }
 	  break;
@@ -585,7 +586,7 @@ test (const char *input, const char *condition, int thread = -1,
 					  &extracted_simd_lane,
 					  &extracted_inferior,
 					  &extracted_task, &extracted_rest,
-					  &extracted_force_condition);
+					  &extracted_force_condition, {});
     }
   catch (const gdb_exception_error &ex)
     {

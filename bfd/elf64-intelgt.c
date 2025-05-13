@@ -186,8 +186,11 @@ intelgt_elf_write_core_note (bfd *a __attribute__((unused)),
 static bool
 intelgt_elf_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
 {
+  /* Do not overwrite the core signal if it
+     has already been set by another thread.  */
+  if (elf_tdata (abfd)->core->signal == 0)
+    elf_tdata (abfd)->core->signal = bfd_get_32 (abfd, note->descdata + 8);
   elf_tdata (abfd)->core->lwpid = bfd_get_64 (abfd, note->descdata);
-  elf_tdata (abfd)->core->signal = bfd_get_32 (abfd, note->descdata + 8);
 
   return _bfd_elfcore_make_pseudosection (
       abfd, ".reg", note->descsz - 16,

@@ -659,7 +659,7 @@ intelgt_ze_target::read_inst (thread_info *tp, CORE_ADDR pc,
   if (status > 0)
     return status;
 
-  if (!intelgt::is_compacted_inst (buffer))
+  if (intelgt::inst_length (buffer) == intelgt::inst_length_full ())
     return -EIO;
 
   memset (buffer + intelgt::COMPACT_INST_LENGTH, 0,

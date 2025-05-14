@@ -1263,7 +1263,8 @@ intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
       (*info->memory_error_func) (status, memaddr, info);
       return -1;
     }
-  if (!intelgt::is_compacted_inst ((gdb_byte *) insn.get ()))
+  if (intelgt::inst_length ((gdb_byte *) insn.get ())
+      == intelgt::inst_length_full ())
     {
       status = (*info->read_memory_func) (memaddr, insn.get (),
 					  full_length, info);
@@ -1293,10 +1294,7 @@ intelgt_print_insn (bfd_vma memaddr, struct disassemble_info *info)
 
   (*info->fprintf_func) (info->stream, "%s", dbuf);
 
-  if (intelgt::is_compacted_inst ((gdb_byte *) insn.get ()))
-    return compact_length;
-  else
-    return full_length;
+  return intelgt::inst_length ((gdb_byte *) insn.get ());
 #else
   gdb_printf (_("\nDisassemble feature not available: libiga64 "
 		"is missing.\n"));

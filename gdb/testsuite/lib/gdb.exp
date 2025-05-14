@@ -6782,7 +6782,7 @@ proc gdb_compile_openmp {source dest type options} {
 
 proc gdb_compile_sycl {source dest type options} {
     set new_options ""
-    if {[test_compiler_info {icx-*}]} {
+    if {[test_compiler_info {icx-*} c++]} {
 	lappend new_options {additional_flags=-fsycl}
     }
 

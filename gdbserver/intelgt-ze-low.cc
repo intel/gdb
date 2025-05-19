@@ -114,6 +114,11 @@ enum
   /* The position of the Force Exception Status and Control bit in CR0.1.  */
   intelgt_cr0_1_force_exception_status = 26,
 
+  /* The position of the Shared Function Exception Status bit in CR0.1,
+     also known as Memory Exception Status and Control bit.
+     This is valid only in platforms that provide the feature.  */
+  intelgt_cr0_1_shared_function_exception_status = 23,
+
   /* The position of the Page Fault Status bit in CR0.1.
      This is a software convention using a reserved bit to indicate
      page faults by the user mode driver.  */
@@ -612,6 +617,32 @@ is_oob_exception (uint32_t device_id, uint32_t cr0_1)
   error (_("Unsupported device id 0x%" PRIx32), device_id);
 }
 
+/* Retrieve Shared Function Exception bit proper to the given architecture
+   and corresponding string symbol to be reported.  */
+
+static std::pair<int, const char *>
+intelgt_shared_function_exception_data (uint32_t device_id)
+{
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      return { intelgt_cr0_1_pagefault_status, "pf " };
+
+    case intelgt::XE3P_XPC:
+      return { intelgt_cr0_1_shared_function_exception_status, "me " };
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
+}
+
 target_stop_reason
 intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 {
@@ -628,6 +659,8 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 
   bool is_systolic = is_systolic_exception (device_id, cr0[1]);
   bool is_oob = is_oob_exception (device_id, cr0[1]);
+  const auto [intelgt_shared_function_exception_bit, sfe_symbol]
+    = intelgt_shared_function_exception_data (device_id);
 
   std::string ex_keywords
     = std::string ("[ ")
@@ -643,8 +676,8 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
        ? "eh " : "")
     + (is_systolic ? "se " : "")
     + (is_oob ? "oob " : "")
-    + (((cr0[1] & (1 << intelgt_cr0_1_pagefault_status)) != 0)
-       ? "pf " : "")
+    + (((cr0[1] & (1 << intelgt_shared_function_exception_bit)) != 0)
+       ? sfe_symbol : "")
     + "]";
 
   dprintf ("thread %s (%s) stopped, cr0.0=%" PRIx32 ", .1=%" PRIx32
@@ -653,9 +686,9 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 	   ze_thread_id_str (thread).c_str (), cr0[0], cr0[1],
 	   ex_keywords.c_str (), cr0[2]);
 
-  if ((cr0[1] & (1 << intelgt_cr0_1_pagefault_status)) != 0)
+  if ((cr0[1] & (1 << intelgt_shared_function_exception_bit)) != 0)
     {
-      cr0[1] &= ~(1 << intelgt_cr0_1_pagefault_status);
+      cr0[1] &= ~(1 << intelgt_shared_function_exception_bit);
       intelgt_write_cr0 (regcache, 1, cr0[1]);
 
       signal = GDB_SIGNAL_SEGV;

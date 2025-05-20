@@ -76,7 +76,7 @@ clear_inst_bit (gdb_byte inst[], int pos)
 }
 
 xe_version
-get_xe_version (unsigned int device_id)
+get_xe_version (uint32_t device_id)
 {
   switch (device_id)
     {

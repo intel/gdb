@@ -313,7 +313,11 @@ void
 tid_range_parser::skip_simd_lane_range ()
 {
   gdb_assert (in_simd_lane_state ());
-  m_simd_lane_range_parser.skip_range ();
+  if (m_simd_lane_range_parser.in_range ())
+    m_simd_lane_range_parser.skip_range ();
+  else if (m_simd_lane_range_parser.in_set ())
+    m_simd_lane_range_parser.skip_set ();
+
   if (m_range_parser.in_range ())
     {
       /* The thread range was not finished yet.  */

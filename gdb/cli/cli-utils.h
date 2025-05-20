@@ -20,6 +20,7 @@
 #ifndef CLI_CLI_UTILS_H
 #define CLI_CLI_UTILS_H
 #include <set>
+#include <cstring>
 
 #include "completer.h"
 
@@ -168,6 +169,23 @@ public:
     gdb_assert (m_in_range);
     m_cur_tok = m_end_ptr;
     m_in_range = false;
+  }
+
+  /* When parsing a set of numbers and/or ranges enclosed in square
+     brackets (e.g., '[2 4-6 8]'), skip to the closing square bracket.  */
+  void skip_set ()
+  {
+    gdb_assert (m_in_set);
+    if (m_end_ptr != nullptr)
+      m_cur_tok = m_end_ptr;
+    else
+      {
+	const char* bracket = strchr (m_cur_tok, ']');
+	if (bracket != nullptr)
+	  m_cur_tok = bracket + 1;
+      }
+
+    m_in_set = false;
   }
 
   /* Setup the END_PTR, where the string is advanced to when get_next()

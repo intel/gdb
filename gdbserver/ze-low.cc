@@ -188,7 +188,7 @@ ze_device_pid (const ze_device_info &device)
 /* Return the device for PROCESS.  */
 
 static ze_device_info *
-ze_process_device (process_info *process)
+ze_process_device (const process_info *process)
 {
   if (process == nullptr)
     return nullptr;

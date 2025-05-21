@@ -270,6 +270,14 @@ register_size (const struct target_desc *tdesc, int n)
   return find_register_by_number (tdesc, n).size / 8;
 }
 
+/* See gdbserver/regcache.h.  */
+
+const char *
+register_name (const target_desc *tdesc, int n)
+{
+  return find_register_by_number (tdesc, n).name;
+}
+
 /* See gdbsupport/common-regcache.h.  */
 
 int

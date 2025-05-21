@@ -142,6 +142,10 @@ int register_cache_size (const struct target_desc *tdesc);
 
 int register_size (const struct target_desc *tdesc, int n);
 
+/* Returns the name of register at index N.  */
+
+const char *register_name (const target_desc *tdesc, int n);
+
 /* No throw version of find_regno.  If NAME is not a known register, return
    an empty value.  */
 std::optional<int> find_regno_no_throw (const struct target_desc *tdesc,

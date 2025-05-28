@@ -2610,6 +2610,24 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 	  if (!non_stop)
 	    pause_all (false);
 
+	  /* Pausing may have fetched a module load event, which
+	     should be reported by the process, otherwise the thread
+	     may be resumed silently by GDB.  */
+	  process_info_private *zeproc = thread->process ()->priv;
+	  gdb_assert (zeproc != nullptr);
+	  if (zeproc->waitstatus.kind () != TARGET_WAITKIND_IGNORE)
+	    {
+	      dprintf ("found a process event after pausing all");
+
+	      /* The process event would be picked in the next
+		 iteration of the loop and be reported to GDB.  When
+		 the server is asked to wait on the target again, we
+		 would pick the thread event (or another one with the
+		 same priority) and attempt to pause again, which is
+		 harmless.  */
+	      continue;
+	    }
+
 	  /* Now also clear the thread's event, regardless of its
 	     priority.  */
 	  zetp->waitstatus.set_ignore ();

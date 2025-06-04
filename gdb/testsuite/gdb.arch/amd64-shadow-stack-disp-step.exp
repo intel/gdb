@@ -71,9 +71,15 @@ save_vars { ::env(GLIBC_TUNABLES) } {
 	"Breakpoint $decimal at $hex.*" \
 	"break at the address of the call2 instruction"
 
-    gdb_test "continue" \
-	"Breakpoint $decimal, $call1_addr in main ().*" \
-	"continue until call1 instruction"
+    # We only resume until call1 instruction in case the first instruction
+    # we're stopped at is not yet the call1 instruction.
+    set stop_addr [get_valueof "/x" "\$pc" "" "value of pc after runto_main"]
+    if {[eval expr "$stop_addr < $call1_addr"]} {
+	gdb_test "continue" \
+	    "Breakpoint $decimal, $call1_addr in main ().*" \
+	    "continue until call1 instruction"
+    }
+    gdb_assert {$call1_addr == [get_valueof "/x" "\$pc" ""]}
 
     # Test continue from breakpoint at call1 and call2 instructions.
     gdb_test "continue" \

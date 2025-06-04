@@ -708,7 +708,8 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
         # needs to resume the device explicitly.
 
         async_mode = not self.gt_inferior_init_pending
-        attach_cmd = f"attach {inf.pid}" + (" &" if async_mode else "")
+        attach_cmd = f"with remotetimeout 15 -- \
+			attach {inf.pid}" + (" &" if async_mode else "")
         DebugLogger.log(f"command: {attach_cmd}")
         gdb.execute(f"with print thread-events off -- {attach_cmd}",
                     False, capture_output)

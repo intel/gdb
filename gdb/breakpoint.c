@@ -6732,6 +6732,34 @@ output_thread_groups (struct ui_out *uiout,
 
 bool fix_breakpoint_script_output_globally = false;
 
+/* Print comma-separated IDs of inferiors associated with the given
+   breakpoint location LOC.  */
+
+static void
+print_breakpoint_inferiors (const bp_location *loc, bool allflag)
+{
+  std::vector<int> inf_nums;
+  bool mi_only = true;
+
+  for (inferior *inf : all_inferiors ())
+    {
+      if (inf->pspace == loc->pspace)
+	inf_nums.push_back (inf->num);
+    }
+
+  /* For backward compatibility, don't display inferiors in CLI unless
+     there are several.  Always display for MI.  */
+ if (allflag
+    || (!gdbarch_has_global_breakpoints (current_inferior ()->arch ())
+	&& (program_spaces.size () > 1
+	    || number_of_inferiors () > 1)
+	/* LOC is for existing B, it cannot be in
+	   moribund_locations and thus having NULL OWNER.  */
+	&& loc->owner->type != bp_catchpoint))
+    mi_only = false;
+  output_thread_groups (current_uiout, "thread-groups", inf_nums, mi_only);
+}
+
 /* Print B to gdb_stdout.  If RAW_LOC, print raw breakpoint locations
    instead of going via breakpoint_ops::print_one.  This makes "maint
    info breakpoints" show the software breakpoint locations of
@@ -6871,28 +6899,7 @@ print_one_breakpoint_location (struct breakpoint *b,
     }
 
   if (loc != nullptr && !header_of_multiple && !loc->shlib_disabled)
-    {
-      std::vector<int> inf_nums;
-      int mi_only = 1;
-
-      for (inferior *inf : all_inferiors ())
-	{
-	  if (inf->pspace == loc->pspace)
-	    inf_nums.push_back (inf->num);
-	}
-
-      /* For backward compatibility, don't display inferiors in CLI unless
-	 there are several.  Always display for MI. */
-      if (allflag
-	  || (!gdbarch_has_global_breakpoints (current_inferior ()->arch ())
-	      && (program_spaces.size () > 1
-		  || number_of_inferiors () > 1)
-	      /* LOC is for existing B, it cannot be in
-		 moribund_locations and thus having NULL OWNER.  */
-	      && loc->owner->type != bp_catchpoint))
-	mi_only = 0;
-      output_thread_groups (uiout, "thread-groups", inf_nums, mi_only);
-    }
+    print_breakpoint_inferiors (loc, allflag);
 
   /* In the MI output, each location of a thread or task specific
      breakpoint includes the relevant thread or task ID.  This is done for

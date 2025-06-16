@@ -42,7 +42,6 @@
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
-#include "gdbsupport/eintr.h"
 
 #include <a.out.h>
 #include <sys/file.h>
@@ -868,8 +867,12 @@ rs6000_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
     {
       set_sigint_trap ();
 
-      pid = gdb::waitpid (ptid.pid (), &status, 0);
-      save_errno = errno;
+      do
+	{
+	  pid = waitpid (ptid.pid (), &status, 0);
+	  save_errno = errno;
+	}
+      while (pid == -1 && errno == EINTR);
 
       clear_sigint_trap ();
 

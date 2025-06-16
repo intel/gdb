@@ -2564,7 +2564,7 @@ unconditionally_kill_inferior (procinfo *pi)
 #if 0
       int status, ret;
 
-      ret = gdb::waitpid (pi->pid, &status, 0);
+      ret = waitpid (pi->pid, &status, 0);
 #else
       gdb::wait (NULL);
 #endif

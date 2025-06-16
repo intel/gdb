@@ -74,12 +74,27 @@ foreach device $sycl_device_list {
 	    -re "$fill hit Breakpoint ${fill}$srcfile:$post_kernel\r\n" {
 		pass $gdb_test_name
 	    }
+	    -re -wrap ".*Unexpected vCont reply in non-stop mode: timeout" {
+		if {[is_xe2 $device]} {
+		    setup_kfail "JIRA IGDB/6569" "*-*-*"
+		}
+		fail $gdb_test_name
+	    }
 	}
 
+	if {[is_xe2 $device]} {
+	    setup_kfail "JIRA IGDB/6569" "*-*-*"
+	}
 	gdb_assert {[dict size $instance_id_count] == 3}
 
 	set hit_counts [lsort -integer [dict values $instance_id_count]]
+	if {[is_xe2 $device]} {
+	    setup_kfail "JIRA IGDB/6569" "*-*-*"
+	}
 	gdb_assert {[lindex $hit_counts 0] == 1}
+	if {[is_xe2 $device]} {
+	    setup_kfail "JIRA IGDB/6569" "*-*-*"
+	}
 	gdb_assert {[lindex $hit_counts 1] == [lindex $hit_counts 2]}
     }
 }

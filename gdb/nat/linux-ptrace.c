@@ -22,7 +22,6 @@
 #ifdef HAVE_SYS_PROCFS_H
 #include <sys/procfs.h>
 #endif
-#include "gdbsupport/eintr.h"
 
 /* Stores the ptrace options supported by the running kernel.
    A value of -1 means we did not check for features yet.  A value
@@ -178,7 +177,7 @@ linux_ptrace_test_ret_to_nx (void)
     }
 
   errno = 0;
-  got_pid = gdb::waitpid (child, &status, 0);
+  got_pid = waitpid (child, &status, 0);
   if (got_pid != child)
     {
       warning (_("linux_ptrace_test_ret_to_nx: waitpid returned %ld: %s"),

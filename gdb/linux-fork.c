@@ -32,7 +32,6 @@
 
 #include "nat/gdb_ptrace.h"
 #include "gdbsupport/gdb_wait.h"
-#include "gdbsupport/eintr.h"
 #include "target/waitstatus.h"
 #include <dirent.h>
 #include <ctype.h>
@@ -315,7 +314,7 @@ linux_fork_killall (void)
 	/* Use SIGKILL instead of PTRACE_KILL because the former works even
 	   if the thread is running, while the later doesn't.  */
 	kill (pid, SIGKILL);
-	ret = gdb::waitpid (pid, &status, 0);
+	ret = waitpid (pid, &status, 0);
 	/* We might get a SIGCHLD instead of an exit status.  This is
 	 aggravated by the first kill above - a child has just
 	 died.  MVS comment cut-and-pasted from linux-nat.  */
@@ -340,7 +339,7 @@ linux_fork_mourn_inferior (void)
      Do not check whether this succeeds though, since we may be
      dealing with a process that we attached to.  Such a process will
      only report its exit status to its original parent.  */
-  gdb::waitpid (inferior_ptid.pid (), &status, 0);
+  waitpid (inferior_ptid.pid (), &status, 0);
 
   /* OK, presumably inferior_ptid is the one who has exited.
      We need to delete that one from the fork_list, and switch
@@ -549,7 +548,7 @@ Please switch to another checkpoint before deleting the current one"));
 	 this succeeds though, since we may be dealing with a process that we
 	 attached to.  Such a process will only report its exit status to its
 	 original parent.  */
-      gdb::waitpid (ptid.pid (), &status, 0);
+      waitpid (ptid.pid (), &status, 0);
       return;
     }
 

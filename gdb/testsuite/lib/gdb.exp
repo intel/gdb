@@ -6428,7 +6428,8 @@ proc gdb_compile {source dest type options} {
 
 	} elseif { $opt == "dwarf5" } {
 	    if {[test_compiler_info {gcc-*}] \
-		|| [test_compiler_info {clang-*}]} {
+		|| [test_compiler_info {clang-*}] \
+		|| [test_compiler_info {icx-*}]} {
 		lappend new_options "additional_flags=-gdwarf-5"
 	    } else {
 		error "No idea how to force DWARF-5 in this compiler"

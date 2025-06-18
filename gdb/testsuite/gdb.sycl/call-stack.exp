@@ -205,6 +205,9 @@ proc test_call_stack {device} {
 	with_test_prefix "iteration $i" {
 	    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
 		set fourth_desc "fourth ${fill} at ${fill}$srcfile:$current_line"
+		if {[is_xe3p $device]} {
+		    setup_kfail "JIRA IGDB/6838" "*-*-*"
+		}
 		gdb_test "backtrace 6" [multi_line \
 					    "#0${fill} $fourth_desc" \
 					    "#1${fill} $third_desc" \

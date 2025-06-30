@@ -65,6 +65,7 @@ foreach device_info "${device_list}" {
 	    continue
 	}
 
+	if {[is_xe3 $gpu_device_name]} { setup_kfail "JIRA GSD/10020" "*-*-*" }
 	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*"
     }
 }

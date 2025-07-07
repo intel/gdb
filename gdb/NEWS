@@ -29,6 +29,10 @@ qXfer:features:read:target.xml
   that can be used for passing information when the remote inferior
   represents a device, e.g.  a GPU.
 
+* Python API
+
+  ** Added the new event gdb.post_attach.
+
 *** Changes in GDB 17
 
 * Debugging Linux programs that use x86-64 or x86-64 with 32-bit pointer

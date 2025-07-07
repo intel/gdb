@@ -2561,8 +2561,8 @@ should_be_inserted (struct bp_location *bl)
       && !(bl->owner->type == bp_single_step
 	   && thread_is_stepping_over_breakpoint (bl->owner->thread)))
     {
-      infrun_debug_printf ("skipping breakpoint: stepping past insn at: %s",
-			   paddress (bl->gdbarch, bl->address));
+      breakpoint_debug_printf ("skipping breakpoint: stepping past insn at: %s",
+			       paddress (bl->gdbarch, bl->address));
       return false;
     }
 
@@ -2571,9 +2571,9 @@ should_be_inserted (struct bp_location *bl)
   if ((bl->loc_type == bp_loc_hardware_watchpoint)
       && stepping_past_nonsteppable_watchpoint ())
     {
-      infrun_debug_printf ("stepping past non-steppable watchpoint. "
-			   "skipping watchpoint at %s:%d",
-			   paddress (bl->gdbarch, bl->address), bl->length);
+      breakpoint_debug_printf ("stepping past non-steppable watchpoint. "
+			       "skipping watchpoint at %s:%d",
+			       paddress (bl->gdbarch, bl->address), bl->length);
       return false;
     }
 
@@ -5796,9 +5796,9 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
   b = bs->breakpoint_at;
   gdb_assert (b != NULL);
 
-  infrun_debug_printf ("thread = %s, breakpoint %d.%d",
-		       thread->ptid.to_string ().c_str (),
-		       b->number, find_loc_num_by_location (bl));
+  breakpoint_debug_printf ("thread = %s, breakpoint %d.%d",
+			   thread->ptid.to_string ().c_str (),
+			   b->number, find_loc_num_by_location (bl));
 
   /* Even if the target evaluated the condition on its end and notified GDB, we
      need to do so again since GDB does not know if we stopped due to a
@@ -5807,9 +5807,9 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
   if (frame_id_p (b->frame_id)
       && b->frame_id != get_stack_frame_id (get_current_frame ()))
     {
-      infrun_debug_printf ("incorrect frame %s not %s, not stopping",
-			   get_stack_frame_id (get_current_frame ()).to_string ().c_str (),
-			   b->frame_id.to_string ().c_str ());
+      breakpoint_debug_printf ("incorrect frame %s not %s, not stopping",
+	get_stack_frame_id (get_current_frame ()).to_string ().c_str (),
+	b->frame_id.to_string ().c_str ());
       bs->stop = false;
       return;
     }
@@ -5846,7 +5846,7 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
       || (b->task != -1 && b->task != ada_get_task_number (thread))
       || (lanes_mask == 0))
     {
-      infrun_debug_printf ("incorrect thread or task, not stopping");
+      breakpoint_debug_printf ("incorrect thread or task, not stopping");
       bs->stop = false;
       return;
     }
@@ -5980,14 +5980,14 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
 
   if (cond != nullptr && !condition_result)
     {
-      infrun_debug_printf ("condition_result = false, not stopping");
+      breakpoint_debug_printf ("condition_result = false, not stopping");
       bs->stop = false;
       return;
     }
   else if (b->ignore_count > 0)
     {
-      infrun_debug_printf ("ignore count %d, not stopping",
-			   b->ignore_count);
+      breakpoint_debug_printf ("ignore count %d, not stopping",
+			       b->ignore_count);
       b->ignore_count--;
       bs->stop = false;
       /* Increase the hit count even though we don't stop.  */
@@ -5998,14 +5998,14 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
 
   if (bs->stop)
     {
-      infrun_debug_printf ("stopping at this breakpoint");
+      breakpoint_debug_printf ("stopping at this breakpoint");
 
       /* Set SIMD lane mask, which defines which lanes have hit
 	 the breakpoint.  */
       bs->hit_lane_mask = thread->is_active () ? lanes_mask : 0x0;
     }
   else
-    infrun_debug_printf ("not stopping at this breakpoint");
+    breakpoint_debug_printf ("not stopping at this breakpoint");
 }
 
 /* Returns true if we need to track moribund locations of LOC's type
@@ -6229,7 +6229,7 @@ handle_jit_event (CORE_ADDR address)
 {
   struct gdbarch *gdbarch;
 
-  infrun_debug_printf ("handling bp_jit_event");
+  breakpoint_debug_printf ("handling bp_jit_event");
 
   /* Switch terminal for any messages produced by
      breakpoint_re_set.  */

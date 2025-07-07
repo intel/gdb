@@ -4093,6 +4093,15 @@ If the TUI has just been enabled, this is @code{True}; otherwise it is
 @code{False}.
 @end defvar
 
+@item events.post_attach
+This is emitted each time after @value{GDBN} executes the attach command.
+The event is of type @code{gdb.PostAttachEvent}, and has a single read-only
+attribute:
+
+@defvar PostAttachEvent.inferior
+The inferior, a @code{gdb.Inferior} object.
+@end defvar
+
 @end table
 
 @node Threads In Python

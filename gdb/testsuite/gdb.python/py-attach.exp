@@ -1,0 +1,51 @@
+# Copyright (C) 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This file is part of the GDB testsuite.  It tests the gdb.post_attach
+# event for Python.
+
+load_lib gdb-python.exp
+
+require allow_python_tests can_spawn_for_attach
+
+standard_testfile
+
+if {[prepare_for_testing "failed to prepare" $testfile $srcfile debug]} {
+    return -1
+}
+
+set test_spawn_id [spawn_wait_for_attach $binfile]
+set testpid [spawn_id_get_pid $test_spawn_id]
+if {$testpid == -1} {
+    fail "failed to spawn a proc to test attach event"
+    return
+}
+
+gdb_test_no_output "python import gdb.events"
+set pyfile [gdb_remote_download host ${srcdir}/${subdir}/py-attach.py]
+gdb_test_no_output "source ${pyfile}" "load python file"
+gdb_test "test-attach-events" "Attach events registered."
+
+gdb_test "attach $testpid" \
+    "Attaching to program.*event type: post-attach.*post-attach: Received for inferior $decimal"
+
+sleep 1
+
+gdb_test_no_output "set terminate = 1"
+gdb_test_sequence "continue" "" {
+    "event type: continue"
+}
+
+kill_wait_spawned_process $test_spawn_id

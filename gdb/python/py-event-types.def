@@ -145,3 +145,8 @@ GDB_PY_DEFINE_EVENT_TYPE (tui_enabled,
 			  "TuiEnabledEvent",
 			  "GDB TUI enabled event object",
 			  event_object_type);
+
+GDB_PY_DEFINE_EVENT_TYPE (post_attach,
+			  "PostAttachEvent",
+			  "GDB post attach event object",
+			  event_object_type);

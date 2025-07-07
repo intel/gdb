@@ -2761,6 +2761,8 @@ attach_command (const char *args, int from_tty)
 
   attach_post_wait (from_tty, mode);
   disable_commit_resumed.reset_and_commit ();
+
+  gdb::observers::post_attach.notify (inferior);
 }
 
 /* We had just found out that the target was already attached to an

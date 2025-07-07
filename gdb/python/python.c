@@ -2324,6 +2324,31 @@ gdbpy_gdb_exiting (int exit_code)
     gdbpy_print_stack ();
 }
 
+/* Emits an event after executing the GDB attach command.  */
+
+void
+emit_post_attach_event (inferior *inf)
+{
+  if (!gdb_python_initialized)
+    return;
+
+  gdbpy_enter enter_py;
+
+  if (evregpy_no_listeners_p (gdb_py_events.post_attach))
+    return;
+
+  gdbpy_ref<inferior_object> py_inf = inferior_to_inferior_object (inf);
+  if (py_inf == nullptr)
+    return;
+
+  gdbpy_ref<> event = create_event_object (&post_attach_event_object_type);
+  if (event == nullptr
+      || evpy_add_attribute (event.get (), "inferior",
+			     (PyObject *) py_inf.get ()) < 0
+      || evpy_emit_event (event.get (), gdb_py_events.post_attach) < 0)
+    gdbpy_print_stack ();
+}
+
 #if PY_VERSION_HEX < 0x030a0000
 /* Signal handler to convert a SIGABRT into an exception.  */
 
@@ -2566,6 +2591,8 @@ do_start_initialization ()
     return false;
 
   gdb::observers::gdb_exiting.attach (gdbpy_gdb_exiting, "python");
+
+  gdb::observers::post_attach.attach (emit_post_attach_event, "python");
 
   /* Release the GIL while gdb runs.  */
   PyEval_SaveThread ();

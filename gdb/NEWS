@@ -368,6 +368,8 @@ qXfer:features:read:target.xml
 
   ** Added the gdb.Symbol.is_artificial attribute.
 
+  ** Added the new event gdb.post_attach.
+
 * Debugger Adapter Protocol changes
 
   ** The "scopes" request will now return a scope holding global

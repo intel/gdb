@@ -30,11 +30,12 @@ foreach device $sycl_device_list {
     if {[require_sycl_device "$device" "gpu" "Intel*"]} {
 	set target "gpu"
 	# LD and compile flags setting is needed for AOT testing.
-	# dg2-g10-a0: option creates AOT binary for dg2 and newer targets.
+	# xe-hpg: option creates AOT binary for xe-hpg and newer targets.
+	set target_devices "xe-hpg:"
 	set aot_opts [list \
 	    "additional_flags=-fsycl-targets=spir64_gen" \
 	    "ldflags=-Xsycl-target-backend=spir64_gen \
-		\"-q -device dg2-g10-a0:\""]
+		\"-q -device ${target_devices}\""]
     } elseif {[require_sycl_device "$device" "accelerator" "*"]} {
 	set target "fpga"
 	set aot_opts [list "additional_flags=-fsycl-targets=spir64_fpga"]

@@ -120,12 +120,25 @@ foreach device $sycl_device_list {
 	gdb_breakpoint $line {temporary}
 	gdb_continue_to_breakpoint "line" ".*$srcfile:$line.*"
 
-	# Get ISABASE and build a breakpoint address from it and
-	# IP.
-	set isabase [get_hexadecimal_valueof "\$isabase" invalid]
+	# Get Heap mode.  Heapless: $MF0 & 0x1 == 0x1
+	set heapless 0
+	set mf0 [get_valueof "/x" "\$mf0" "void"]
+	if {$mf0 != "void"} {
+	    set heapless [expr $mf0 & 0x1]
+	}
 
-	# Set bp at ISABASE + IP.
-	set break_addr [format 0x%x [expr {$isabase + $ip_at_fault}]]
+	if {$heapless == 1} {
+	    # Set bp at IP = PC.
+	    set break_addr $ip_at_fault
+	} else {
+	    # Get ISABASE and build a breakpoint address from it and
+	    # IP.
+	    set isabase [get_hexadecimal_valueof "\$isabase" invalid]
+
+	    # Set bp at ISABASE + IP.
+	    set break_addr [format 0x%x [expr {$isabase + $ip_at_fault}]]
+	}
+
 	gdb_breakpoint "*$break_addr"
 
 	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*" \

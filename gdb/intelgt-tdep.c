@@ -530,8 +530,13 @@ intelgt_get_current_machine_code ()
 
   /* If the PC does not belong to any section (e.g. the PC is in the scratch
      area when the infcall returns), we look if all the ELF files
-     agree on the machine code.  */
-  int global_machine_code = EM_NONE;
+     agree on the machine code.  If this is a core target, look also the
+     machine code in core bfd.  */
+  int global_machine_code
+    = (current_program_space->core_bfd () != nullptr)
+	? get_elf_backend_data (current_program_space->core_bfd ())
+	    ->elf_machine_code
+	: EM_NONE;
   for (objfile *obj : current_program_space->objfiles ())
     {
       bfd *abfd = obj->obfd.get ();

@@ -83,6 +83,14 @@ struct regcache : public reg_buffer_common
   /* See gdbsupport/common-regcache.h.  */
   void raw_collect (int regnum, gdb::array_view<gdb_byte> dst) const override;
 
+  /* Read DST.size () bytes from register REGNUM at OFFSET and store in DST.  */
+  void raw_collect_part (int regnum, int offset,
+			 gdb::array_view<gdb_byte> dst) const;
+
+  /* Write SRC.size () bytes from SRC to register REGNUM at OFFSET.  */
+  void raw_supply_part (int regnum, int offset,
+			gdb::array_view<const gdb_byte> src);
+
   /* See gdbsupport/common-regcache.h.  */
   bool raw_compare (int regnum, const void *buf, int offset) const override;
 
@@ -143,6 +151,12 @@ int find_regno (const struct target_desc *tdesc, const char *name);
 
 void supply_register (struct regcache *regcache, int n, const void *buf);
 
+/* Write SRC.size () bytes from SRC to register REGNUM with OFFSET in
+   REGCACHE.  */
+
+void supply_register_part (struct regcache *regcache, int regnum, int offset,
+			   gdb::array_view<const gdb_byte> src);
+
 void supply_register_zeroed (struct regcache *regcache, int n);
 
 void supply_register_by_name (struct regcache *regcache,
@@ -154,6 +168,13 @@ void supply_register_by_name_zeroed (struct regcache *regcache,
 void supply_regblock (struct regcache *regcache, const void *buf);
 
 void collect_register (struct regcache *regcache, int n, void *buf);
+
+
+/* Read DST.size () bytes from register REGNUM with OFFSET in
+   REGCACHE and store in DST.  */
+
+void collect_register_part (struct regcache *regcache, int regnum, int offset,
+			    gdb::array_view<gdb_byte> dst);
 
 void collect_register_as_string (struct regcache *regcache, int n, char *buf);
 

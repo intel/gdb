@@ -291,7 +291,16 @@ supply_register (struct regcache *regcache, int n, const void *vbuf)
 {
   const gdb::reg &reg = find_register_by_number (regcache->tdesc, n);
   const gdb_byte *buf = static_cast<const gdb_byte *> (vbuf);
-  return regcache->raw_supply (n, gdb::make_array_view (buf, reg.size / 8));
+  supply_register_part (regcache, n, 0,
+			gdb::make_array_view (buf, reg.size / 8));
+}
+
+/* See gdbserver/regcache.h.  */
+
+void supply_register_part (struct regcache *regcache, int regnum, int offset,
+			   gdb::array_view<const gdb_byte> src)
+{
+  return regcache->raw_supply_part (regnum, offset, src);
 }
 
 /* See gdbsupport/common-regcache.h.  */
@@ -299,20 +308,28 @@ supply_register (struct regcache *regcache, int n, const void *vbuf)
 void
 regcache::raw_supply (int n, gdb::array_view<const gdb_byte> src)
 {
-  auto dst = register_data (this, n);
+  raw_supply_part (n, 0, src);
+}
+
+/* See gdbserver/regcache.h.  */
+
+void regcache::raw_supply_part (int regnum, int offset,
+				gdb::array_view<const gdb_byte> src)
+{
+  auto dst = register_data (this, regnum).slice (offset, src.size ());
 
   if (src.data () != nullptr)
     {
       copy (src, dst);
 #ifndef IN_PROCESS_AGENT
-      set_register_status (n, REG_VALID);
+      set_register_status (regnum, REG_VALID);
 #endif
     }
   else
     {
       memset (dst.data (), 0, dst.size ());
 #ifndef IN_PROCESS_AGENT
-      set_register_status (n, REG_UNAVAILABLE);
+      set_register_status (regnum, REG_UNAVAILABLE);
 #endif
     }
 }
@@ -384,7 +401,24 @@ collect_register (struct regcache *regcache, int n, void *vbuf)
 {
   const gdb::reg &reg = find_register_by_number (regcache->tdesc, n);
   gdb_byte *buf = static_cast<gdb_byte *> (vbuf);
-  regcache->raw_collect (n, gdb::make_array_view (buf, reg.size / 8));
+  collect_register_part (regcache, n, 0,
+			 gdb::make_array_view (buf, reg.size / 8));
+}
+
+void
+collect_register_part (struct regcache *regcache, int regnum, int offset,
+		       gdb::array_view<gdb_byte> dst)
+{
+#ifndef IN_PROCESS_AGENT
+  if (regcache->get_register_status (regnum) == REG_UNKNOWN)
+    {
+      /* This register has not been fetched from the target, yet.
+	 Do it now.  */
+      fetch_inferior_registers (regcache, regnum);
+    }
+#endif
+
+  regcache->raw_collect_part (regnum, offset, dst);
 }
 
 /* See gdbsupport/common-regcache.h.  */
@@ -392,7 +426,16 @@ collect_register (struct regcache *regcache, int n, void *vbuf)
 void
 regcache::raw_collect (int n, gdb::array_view<gdb_byte> dst) const
 {
-  auto src = register_data (this, n);
+  raw_collect_part (n, 0, dst);
+}
+
+/* See gdbserver/regcache.h.  */
+
+void
+regcache::raw_collect_part (int regnum, int offset,
+			    gdb::array_view<gdb_byte> dst) const
+{
+  auto src = register_data (this, regnum).slice (offset, dst.size ());
   copy (src, dst);
 }
 

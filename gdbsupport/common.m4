@@ -1,5 +1,6 @@
 dnl Autoconf configure snippets for common.
 dnl Copyright (C) 1995-2025 Free Software Foundation, Inc.
+dnl Copyright (C) 2019-2025 Intel Corporation
 dnl
 dnl This file is part of GDB.
 dnl 

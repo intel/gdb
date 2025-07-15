@@ -1,6 +1,7 @@
 /* Perform an inferior function call, for GDB, the GNU debugger.
 
    Copyright (C) 2003-2025 Free Software Foundation, Inc.
+   Copyright (C) 2022-2025 Intel Corporation
 
    This file is part of GDB.
 

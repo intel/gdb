@@ -1,6 +1,7 @@
 /* Reverse execution and reverse debugging.
 
    Copyright (C) 2006-2025 Free Software Foundation, Inc.
+   Copyright (C) 2019-2025 Intel Corporation
 
    This file is part of GDB.
 

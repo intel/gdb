@@ -1,6 +1,7 @@
 /* x86 XSAVE extended state functions.
 
    Copyright (C) 2022-2025 Free Software Foundation, Inc.
+   Copyright (C) 2020-2025 Intel Corporation
 
    This file is part of GDB.
 

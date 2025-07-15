@@ -1,6 +1,7 @@
 /* GNU/Linux/x86-64 specific target description, for the remote server
    for GDB.
    Copyright (C) 2017-2025 Free Software Foundation, Inc.
+   Copyright (C) 2020-2025 Intel Corporation
 
    This file is part of GDB.
 

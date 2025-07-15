@@ -1,6 +1,7 @@
 /* DWARF 2 Expression Evaluator.
 
    Copyright (C) 2001-2025 Free Software Foundation, Inc.
+   Copyright (C) 2020-2025 Intel Corporation
 
    Contributed by Daniel Berlin <dan@dberlin.org>.
 

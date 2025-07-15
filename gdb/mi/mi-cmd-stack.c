@@ -1,5 +1,6 @@
 /* MI Command Set - stack commands.
    Copyright (C) 2000-2025 Free Software Foundation, Inc.
+   Copyright (C) 2024-2025 Intel Corporation
    Contributed by Cygnus Solutions (a Red Hat company).
 
    This file is part of GDB.

@@ -1,6 +1,7 @@
 /* Branch trace support for GDB, the GNU debugger.
 
    Copyright (C) 2013-2025 Free Software Foundation, Inc.
+   Copyright (C) 2013-2025 Intel Corporation
 
    Contributed by Intel Corp. <markus.t.metzger@intel.com>
 

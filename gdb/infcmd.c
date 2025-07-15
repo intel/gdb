@@ -1,6 +1,7 @@
 /* Memory-access and commands for "inferior" process, for GDB.
 
    Copyright (C) 1986-2025 Free Software Foundation, Inc.
+   Copyright (C) 2014-2025 Intel Corporation
 
    This file is part of GDB.
 

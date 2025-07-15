@@ -1,6 +1,7 @@
 /* Native-dependent code for GNU/Linux x86 (i386 and x86-64).
 
    Copyright (C) 1999-2025 Free Software Foundation, Inc.
+   Copyright (C) 2019-2025 Intel Corporation
 
    This file is part of GDB.
 

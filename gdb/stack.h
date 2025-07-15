@@ -1,6 +1,7 @@
 /* Stack manipulation commands, for GDB the GNU Debugger.
 
    Copyright (C) 2003-2025 Free Software Foundation, Inc.
+   Copyright (C) 2021-2025 Intel Corporation
 
    This file is part of GDB.
 

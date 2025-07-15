@@ -1,5 +1,6 @@
 /* objdump.c -- dump information about an object file.
    Copyright (C) 1990-2024 Free Software Foundation, Inc.
+   Copyright (C) 2017-2025 Intel Corporation
 
    This file is part of GNU Binutils.
 

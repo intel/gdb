@@ -1,5 +1,6 @@
 /* Host file transfer support for gdbserver.
    Copyright (C) 2007-2025 Free Software Foundation, Inc.
+   Copyright (C) 2020-2025 Intel Corporation
 
    Contributed by CodeSourcery.
 

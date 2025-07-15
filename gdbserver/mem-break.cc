@@ -1,5 +1,6 @@
 /* Memory breakpoint operations for the remote server for GDB.
    Copyright (C) 2002-2025 Free Software Foundation, Inc.
+   Copyright (C) 2020-2025 Intel Corporation
 
    Contributed by MontaVista Software.
 

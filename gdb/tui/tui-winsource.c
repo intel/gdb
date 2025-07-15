@@ -459,9 +459,12 @@ tui_source_window_base::rerender ()
       frame_info_ptr frame = deprecated_safe_get_selected_frame ();
       struct gdbarch *gdbarch = get_frame_arch (frame);
 
-      struct symtab *s = find_pc_line_symtab (get_frame_pc (frame));
+      CORE_ADDR pc = get_frame_pc (frame);
+      struct symtab *s = find_pc_line_symtab (pc);
       if (this != tui_src_win ())
 	find_line_first_pc (s, cursal.line, &cursal.pc);
+      if (cursal.pc == 0)
+	cursal.pc = pc;
 
       /* This centering code is copied from tui_source_window::maybe_update.
 	 It would be nice to do centering more often, and do it in just one

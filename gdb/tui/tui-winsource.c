@@ -462,7 +462,9 @@ tui_source_window_base::rerender ()
       /* find_frame_sal does not always set SAL.PC, but we want to ensure
 	 that it is available in the SAL before updating the window.  */
       std::optional<CORE_ADDR> tmp_pc = get_frame_pc_if_available (frame);
-      if (tmp_pc.has_value ())
+
+      if (!find_line_first_pc (sal.symtab, sal.line, &sal.pc) &&
+	  tmp_pc.has_value ())
 	sal.pc = *tmp_pc;
 
       maybe_update (get_frame_arch (frame), sal);

@@ -462,9 +462,18 @@ tui_source_window_base::rerender ()
       CORE_ADDR pc = get_frame_pc (frame);
       struct symtab *s = find_pc_line_symtab (pc);
       if (this != tui_src_win ())
-	find_line_first_pc (s, cursal.line, &cursal.pc);
-      if (cursal.pc == 0)
-	cursal.pc = pc;
+	{
+	  find_line_first_pc (s, cursal.line, &cursal.pc);
+	  if (cursal.pc == 0)
+	    {
+	      CORE_ADDR low;
+	      if (find_pc_partial_function_sym (pc, nullptr, &low, nullptr,
+						nullptr))
+		cursal.pc = tui_get_low_disassembly_address (gdbarch, low, pc);
+	      else
+		cursal.pc = pc;
+	    }
+	}
 
       /* This centering code is copied from tui_source_window::maybe_update.
 	 It would be nice to do centering more often, and do it in just one

@@ -821,7 +821,7 @@ proc runto { linespec args } {
 	    }
 	    return 1
 	}
-	-re "(?:Breakpoint|Temporary breakpoint) $bkptno_numopt_re, \[0-9xa-f\]* in .*$gdb_prompt $" {
+	-re "(?:Breakpoint|Temporary breakpoint) $bkptno_numopt_re, .*$::hex.* in .*$gdb_prompt $" {
 	    if { $print_pass } {
 		pass $test_name
 	    }

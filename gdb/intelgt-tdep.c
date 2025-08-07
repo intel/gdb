@@ -1584,6 +1584,18 @@ intelgt_register_reggroup_p (gdbarch *gdbarch, int regnum,
   if (group == save_reggroup)
     return 1;
 
+  /* Enable printing of the GRF vector registers with the 'info registers'
+     command.  */
+  if (group == general_reggroup)
+    {
+      intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+      if (data->regset_ranges[intelgt::regset_grf].start != -1
+	  && data->regset_ranges[intelgt::regset_grf].start <= regnum
+	  && regnum < data->regset_ranges[intelgt::regset_grf].end)
+	return 1;
+    }
+
   int ret = tdesc_register_in_reggroup_p (gdbarch, regnum, group);
   if (ret != -1)
     return ret;

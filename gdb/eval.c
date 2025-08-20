@@ -2285,14 +2285,18 @@ logical_and_operation::evaluate (struct type *expect_type,
     }
   else
     {
+      type *type = language_bool_type (exp->language_defn,
+				       exp->gdbarch);
+      if (noside == EVAL_AVOID_SIDE_EFFECTS)
+	return value::zero (type, not_lval);
+
       bool tem = value_logical_not (arg1);
       if (!tem)
 	{
 	  arg2 = std::get<1> (m_storage)->evaluate (nullptr, exp, noside);
 	  tem = value_logical_not (arg2);
 	}
-      struct type *type = language_bool_type (exp->language_defn,
-					      exp->gdbarch);
+
       return value_from_longest (type, !tem);
     }
 }
@@ -2314,6 +2318,11 @@ logical_or_operation::evaluate (struct type *expect_type,
     }
   else
     {
+      type *type = language_bool_type (exp->language_defn,
+				       exp->gdbarch);
+      if (noside == EVAL_AVOID_SIDE_EFFECTS)
+	return value::zero (type, not_lval);
+
       bool tem = value_logical_not (arg1);
       if (tem)
 	{
@@ -2321,8 +2330,6 @@ logical_or_operation::evaluate (struct type *expect_type,
 	  tem = value_logical_not (arg2);
 	}
 
-      struct type *type = language_bool_type (exp->language_defn,
-					      exp->gdbarch);
       return value_from_longest (type, !tem);
     }
 }

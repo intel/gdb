@@ -1,0 +1,289 @@
+# Copyright 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDB support for workitem IDs in corefile.
+#
+# NOTES
+# Following command gives user a read and write access to error
+# captures at CardN:
+#	$ sudo chmod +rw,o+rw /sys/class/drm/cardN/error
+#
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+# Set path to coregen.
+if {[catch {set coregen_app [exec which coregen]}]} {
+    unsupported "coregen app not found"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "$binfile" $srcfile {sycl debug}]} {
+    return -1
+}
+
+set fill "\[^\r\n\]+"
+set ws "\\s+"
+
+set output_path [standard_output_file ""]
+
+# Clear any previous error captures, and return the number of cards
+# found by coregen.
+proc reset_error_captures {} {
+    set cards ""
+    set cards_line 0
+
+    if {[catch {set output [exec $::coregen_app --log-level=2 \
+			    --output-path=$::output_path]} errmsg] != 0} {
+	verbose -log "Reset error capture:\n$errmsg\n"
+	fail "reset error captures"
+	return 0
+    }
+    verbose -log "Reset error capture:\n$output\n"
+    set lines [split $output "\n"]
+    foreach line $lines {
+	if {[regexp {Error capture copied at '(.*)'} $line -> file]} {
+	    exec rm $file
+	} elseif {[regexp {Found (.*) card\(s\)} $line -> cards]} {
+	    incr cards_line
+	}
+    }
+    if {[gdb_assert {"$cards_line" == "1"} "num cards appeared once"]} {
+	# We come to this proc only if the host has at least one GPU card.
+	# If coregen failed to find any cards, it must be due missing read
+	# permissions to error captures.
+	gdb_assert {"$cards" != "0"} \
+	    "card(s) found, permissions to read error captures"
+	return $cards
+    } else {
+	return 0
+    }
+}
+
+# Copy error capture(s) to errorfile(s) in the output path.
+proc copy_error_captures {} {
+    set error_captures {}
+
+    if {[catch {set output [exec $::coregen_app --output-path=$::output_path]} errmsg]} {
+	verbose -log "Copy error capture:\n$errmsg\n"
+	fail "copy error captures"
+	return {}
+    }
+    verbose -log "Copy error capture:\n$output\n"
+    set lines [split $output "\n"]
+    set errorfiles 0
+    foreach line $lines {
+	if {[regexp {Error capture copied at '(.*)'} $line -> file]} {
+	    incr errorfiles
+	    gdb_assert {[string first "$::output_path" $file] == 0} \
+		"errorfile $errorfiles at output path"
+	    lappend error_captures $file
+	}
+    }
+    return $error_captures
+}
+
+# Translate errorfile to a corefile.
+proc translate_error_capture {errorfile} {
+    set corefile "invalid"
+    set crash_reason_line 0
+    set translated_line 0
+
+    if {[catch {set output [exec $::coregen_app --output-path=$::output_path $errorfile \
+				--all-active-threads=true]} errmsg]} {
+	verbose -log "Translate error capture:\n$errmsg\n"
+	fail "translate error captures"
+	return ""
+    }
+    verbose -log "Translate error capture:\n$output\n"
+    set lines [split $output "\n"]
+    foreach line $lines {
+	if {[regexp {Crash reason\: page fault \@ 0x0000000000000000, ccs[0-9]+ in coregen-nd_item \[.*\]} $line ]} {
+	    incr crash_reason_line
+	} elseif {[regexp {Translated '.*' to '(.*)'} $line -> corefile]} {
+	    incr translated_line
+	}
+    }
+    if {![gdb_assert {"$crash_reason_line" == "1"} "crash reason found"]
+	|| ![gdb_assert {"$translated_line" == "1"} "one corefile generated"]
+	|| ![gdb_assert {[string first "$::output_path" $corefile] == 0} \
+		"corefile at output path"]} {
+	return ""
+    }
+    return $corefile
+}
+
+# Run a set of tests on the given thread and SIMD lane.
+proc get_id {name} {
+    set expected_id "unexpected"
+    set fmt "%d, %d, %d"
+    set expected "\r\n($::decimal, $::decimal, $::decimal)"
+
+    gdb_test_multiple "printf \"$fmt\\n\",${name}2,${name}1,${name}0" "get expected id $name" {
+	-re -wrap $expected {
+	    set expected_id $expect_out(1,string)
+	}
+    }
+
+    return $expected_id
+}
+
+proc compare_id {name} {
+    with_test_prefix "check ${name}" {
+	set expected_val [get_id $name]
+	gdb_test "print \$_$name" "\\$$::decimal = \\{$expected_val\\}" "check $name == {$expected_val}"
+    }
+}
+
+proc check_ids {wg_dim_size} {
+    set threads_to_test {}
+    set workgroups_to_test {}
+    set name "thread_workgroup"
+    gdb_test_multiple "thread apply * -q -s printf \"%d.%d %d, %d, %d\\n\",\$_inferior,\$_thread,${name}2,${name}1,${name}0" "find threads to test" {
+	-re "\r\n($::decimal\.$::decimal) ($::decimal, $::decimal, $::decimal)" {
+	    set workgroup $expect_out(2,string)
+	    # Check if we found a new not-yet met workgroup.
+	    # If we do not yet have two workgroups to test, add it to the list.
+	    if {([lsearch $workgroups_to_test $workgroup] == -1)
+		 && ([llength $workgroups_to_test] < 2)} {
+		lappend workgroups_to_test $workgroup
+	    }
+	    # If workgroup belongs to our list, add the thread to the list of threads to test.
+	    if {[lsearch $workgroups_to_test $workgroup] != -1} {
+		lappend threads_to_test $expect_out(1,string)
+	    }
+	    exp_continue
+	}
+	-re -wrap "" {
+	    pass $gdb_test_name
+	}
+    }
+
+    set simd_width [get_integer_valueof "\$_simd_width" -1]
+    gdb_assert {$simd_width > 0} "read SIMD width"
+
+    # List of lanes for which we check the IDs.
+    set lanes [list \
+	0 \
+	1 \
+	[expr $simd_width / 2 - 2] \
+	[expr $simd_width / 2 - 1] \
+	[expr $simd_width / 2] \
+	[expr $simd_width - 1]]
+
+    set num_threads_checked 0
+    gdb_test "disable pretty-printer global"
+
+    foreach tid $threads_to_test {
+	foreach lane $lanes {
+	    with_test_prefix "Thread $tid:$lane" {
+
+		# tid is in format <inferior>.<thread>.
+		# We need to extract the thread-part.
+		set fields [split $tid "."]
+		set thread [lindex $fields 1]
+
+		gdb_test_multiple "thread $tid:$lane" "switch to $tid:$lane" {
+		    -re -wrap "Switching to thread $thread:$lane.*" {}
+		    -re -wrap "inactive.*" {
+			break
+		    }
+		}
+		compare_id "thread_workgroup"
+		compare_id "workitem_local_id"
+		compare_id "workitem_global_id"
+	    }
+	}
+	incr num_threads_checked
+    }
+
+    # Ensure that we have checked the expected number of threads.
+    # Workgroup size is WG_DIM_SIZE * WG_DIM_SIZE * WG_DIM_SIZE.
+    # If number of threads per workgroup is smaller than expected,
+    # perhaps some threads didn't reach the kernel before pagefault
+    # was triggered.  In such case we should increase the spinning
+    # time in kernel.
+
+    set num_threads_in_workgroup \
+	[expr ($wg_dim_size * $wg_dim_size * $wg_dim_size + $simd_width - 1) / $simd_width]
+
+    set expected_num [expr 2 * $num_threads_in_workgroup]
+    gdb_assert {$num_threads_checked == $expected_num} \
+	"# threads checked = $num_threads_checked, # expected = $expected_num"
+}
+
+# Open the given corefile for testing.
+proc read_corefile {corefile} {
+    # Load the core file into debugger, and try some commands.
+    clean_restart
+    gdb_test "target core $corefile" \
+	     [multi_line \
+		"Core was generated by \\`GPU\\'\\." \
+		"Program terminated with signal SIGSEGV, Segmentation fault.*" \
+		"#0${::fill} main::${::fill} at ${::srcfile}:.*"] \
+	"load corefile"
+
+    gdb_test "print \$_siginfo" \
+	"= \{si_signo = 11, si_errno = 0, si_code = 1, _sigfault = \{si_addr = 0x0, _addr_lsb = 16\}\}"
+
+    check_ids 5
+}
+
+foreach device $sycl_device_list {
+    if {![require_sycl_device "$device" "gpu" "Intel*"]
+	|| ![is_xe_hpc $device]} {
+	continue
+    }
+
+    # Check the version string.
+    set output [exec $::coregen_app --version]
+    verbose -log "CoreGen version: $output"
+    gdb_assert {[string first "Intel(R) corefilegen-gpu 202" $output] != -1} \
+	"CoreGen version"
+
+    # Reset previous error captures (if any).
+    if {[reset_error_captures] == 0} {
+	# Cannot access path or insufficient permissions.
+	return -1
+    }
+
+    sycl_with_intelgt_lock $device {
+	# Trigger a pagefault.
+	catch {exec $binfile gpu Intel level_zero}
+
+	# Copy error captures to local folder.
+	set errorfiles [copy_error_captures]
+	if {[gdb_assert {1 == [llength $errorfiles]} "got one errorfile"]} {
+	    # Translate the error capture to a corefile.
+	    set errorfile [lindex $errorfiles 0]
+	    set corefile [translate_error_capture $errorfile]
+	    if {"$corefile" == ""} {
+		# If corefile was not translated, skip rest of the tests.
+		continue
+	    }
+
+	    # Read the corefile.
+	    read_corefile $corefile
+	}
+    }
+}

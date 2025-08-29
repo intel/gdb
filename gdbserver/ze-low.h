@@ -62,12 +62,6 @@ typedef std::vector<ze_regset_info> ze_regset_info_t;
 /* Unique pointer of regset infos.  */
 typedef std::unique_ptr<ze_regset_info_t> ze_regset_info_up;
 
-/* A vector of expedite register names.
-
-   The names are expected to be string literals.  The vector must be
-   terminated with a single nullptr entry.  */
-typedef std::vector<const char *> expedite_t;
-
 /* A list of debug events.  */
 
 typedef std::list<zet_debug_event_t> events_t;

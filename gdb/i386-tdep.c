@@ -131,31 +131,6 @@ static const char * const i386_mmx_names[] =
   "mm4", "mm5", "mm6", "mm7"
 };
 
-/* Register names for AMX registers.  */
-
-static const char * const i386_tilecfg_raw_names[] =
-{
-  "tilecfg_raw"
-};
-
-static const char * const i386_tiledata_names[] =
-{
-  "tiledata"
-};
-
-/* Register names for AMX pseudo-registers.  */
-
-static const char * const i386_tilecfg_names[] =
-{
-  "tilecfg"
-};
-
-static const char * const i386_tmm_names[] =
-{
-  "tmm0", "tmm1", "tmm2", "tmm3",
-  "tmm4", "tmm5", "tmm6", "tmm7"
-};
-
 /* Register names for byte pseudo-registers.  */
 
 static const char * const i386_byte_names[] =
@@ -492,10 +467,6 @@ i386_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
     return tdep->byte_names[regnum - tdep->al_regnum];
   else if (i386_word_regnum_p (gdbarch, regnum))
     return tdep->word_names[regnum - tdep->ax_regnum];
-  else if (i386_tmm_regnum_p (gdbarch, regnum))
-    return i386_tmm_names[regnum - tdep->tmm_regnum];
-  else if (i386_tilecfg_regnum_p (gdbarch, regnum))
-    return i386_tilecfg_names[regnum - tdep->tilecfg_regnum];
 
   internal_error (_("invalid regnum"));
 }
@@ -8823,29 +8794,19 @@ i386_validate_tdesc_p (i386_gdbarch_tdep *tdep,
 					    tdep->pkeys_register_names[i]);
     }
 
-  if (feature_amx != nullptr)
+  if (feature_amx != nullptr
+      && tdep->tilecfg_raw_regnum != -1
+      && tdep->tilecfg_raw_register_names != nullptr
+      && tdep->tiledata_regnum != -1
+      && tdep->tiledata_register_names != nullptr)
     {
       tdep->xcr0 |= X86_XSTATE_TILECFG;
-
-      if (tdep->tilecfg_raw_regnum < 0)
-	{
-	  tdep->tilecfg_raw_register_names = i386_tilecfg_raw_names;
-	  tdep->tilecfg_raw_regnum = I386_AMX_TILECFG_RAW_REGNUM;
-	  tdep->num_tilecfg_regs = 1;
-	}
 
       valid_p &= tdesc_numbered_register (feature_amx, tdesc_data,
 					  tdep->tilecfg_raw_regnum,
 					  tdep->tilecfg_raw_register_names[0]);
 
       tdep->xcr0 |= X86_XSTATE_TILEDATA;
-
-      if (tdep->tiledata_regnum < 0)
-	{
-	  tdep->tiledata_register_names = i386_tiledata_names;
-	  tdep->tiledata_regnum = I386_AMX_TILEDATA_REGNUM;
-	  tdep->num_tiledata_regs = 1;
-	}
 
       valid_p &= tdesc_numbered_register (feature_amx, tdesc_data,
 					  tdep->tiledata_regnum,
@@ -9131,15 +9092,6 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdep->num_mmx_regs = 8;
   tdep->num_ymm_regs = 0;
 
-  /* No AMX registers.  */
-  tdep->tilecfg_regnum = -1;
-  tdep->num_tilecfg_regs = 0;
-  tdep->tilecfg_raw_regnum = -1;
-  tdep->tmm_regnum = -1;
-  tdep->num_tmm_regs = 0;
-  tdep->tiledata_regnum = -1;
-  tdep->num_tiledata_regs = 0;
-
   /* No shadow stack pointer register.  */
   tdep->ssp_regnum = -1;
 
@@ -9234,8 +9186,6 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       tdep->tmm_regnum = mm0_regnum;
       mm0_regnum += tdep->num_tmm_regs;
     }
-  else
-    tdep->num_tmm_regs = -1;
 
   if (tdep->num_tilecfg_regs != 0)
     {
@@ -9243,8 +9193,6 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       tdep->tilecfg_regnum = mm0_regnum;
       mm0_regnum += tdep->num_tilecfg_regs;
     }
-  else
-    tdep->num_tilecfg_regs = -1;
 
   if (tdep->num_mmx_regs != 0)
     {

@@ -224,26 +224,28 @@ struct i386_gdbarch_tdep : gdbarch_tdep_base
   /* PKEYS register names.  */
   const char * const *pkeys_register_names = nullptr;
 
-  /* Register number for AMX tilecfg register, including pseudo register.  */
-  int tilecfg_regnum = 0;
-  int tilecfg_raw_regnum = 0;
+  /* Register number for AMX tilecfg register, including pseudo register.
+     If supported, set them to a value >= 0.  */
+  int tilecfg_regnum = -1;
+  int tilecfg_raw_regnum = -1;
 
   /* Number of tilecfg registers, including pseudo register.  */
   int num_tilecfg_regs = 0;
 
-  /* Register number for AMX tmm register, including pseudo registers.  */
-  int tmm_regnum = 0;
-  int tiledata_regnum = 0;
+  /* Register number for AMX tildata register, including the first pseudo
+     register from tmm0-tmm7.  If supported, set them to a value >= 0.  */
+  int tmm_regnum = -1;
+  int tiledata_regnum = -1;
 
   /* Number of AMX tmm registers, including pseudo registers.  */
   int num_tmm_regs = 0;
   int num_tiledata_regs = 0;
 
   /* AMX register names.  */
-  const char * const *tilecfg_raw_register_names;
-  const char * const *tilecfg_register_names;
-  const char * const *tmm_register_names;
-  const char * const *tiledata_register_names;
+  const char * const *tilecfg_raw_register_names = nullptr;
+  const char * const *tilecfg_register_names = nullptr;
+  const char * const *tmm_register_names = nullptr;
+  const char * const *tiledata_register_names = nullptr;
 
   /* Shadow stack pointer register.  */
   int ssp_regnum = 0;
@@ -356,8 +358,6 @@ enum i386_regnum
   I386_ZMM0H_REGNUM,		/* %zmm0h */
   I386_ZMM7H_REGNUM = I386_ZMM0H_REGNUM + 7,
   I386_PKRU_REGNUM,
-  I386_AMX_TILECFG_RAW_REGNUM,
-  I386_AMX_TILEDATA_REGNUM,
   I386_PL3_SSP_REGNUM,
   I386_FSBASE_REGNUM,
   I386_GSBASE_REGNUM

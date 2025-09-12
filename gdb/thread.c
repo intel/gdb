@@ -264,7 +264,7 @@ thread_info::set_default_simd_lane ()
 	}
     }
   else
-    simd_lane_num = 0;;
+    simd_lane_num = 0;
 }
 
 /* See gdbthread.h.  */

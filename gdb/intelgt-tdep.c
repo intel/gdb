@@ -2439,6 +2439,7 @@ encode_ret (gdb_byte buff[], gdbarch *gdbarch, uint32_t device_id)
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       {
 	/* Assign ret opcode.  */
 	buff[0] = 0x2d;
@@ -2468,6 +2469,7 @@ encode_ret (gdb_byte buff[], gdbarch *gdbarch, uint32_t device_id)
 	  case intelgt::XE_HPC:
 	  case intelgt::XE2:
 	  case intelgt::XE3:
+	  case intelgt::XE3P_XPC:
 	    buff[2] = exec_size << 2;
 	    break;
 
@@ -2610,6 +2612,7 @@ encode_calla (gdb_byte buff[], CORE_ADDR funaddr, regcache *regcache,
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       {
 	/* Assign calla opcode.  */
 	buff[0] = 0x2b;
@@ -2644,6 +2647,7 @@ encode_calla (gdb_byte buff[], CORE_ADDR funaddr, regcache *regcache,
 	  case intelgt::XE_HPC:
 	  case intelgt::XE2:
 	  case intelgt::XE3:
+	  case intelgt::XE3P_XPC:
 	    predication_bit = 26;
 	    buff[2] = exec_size << 2;
 	    break;
@@ -2730,6 +2734,7 @@ encode_nop (gdb_byte buff[], uint16_t device_id)
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       {
 	/* Assign NOP opcode.  */
 	buff[0] = 0x60;
@@ -2842,6 +2847,7 @@ intelgt_clear_exception_bits (gdbarch *gdbarch, regcache *regcache)
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       {
 	/* Clear any exceptions in CR0.1[16:31].  Otherwise, the function call
 	   will be aborted, and the exception is reported instead.  */
@@ -3746,6 +3752,7 @@ read_local_id_table_length (gdbarch *gdbarch, thread_info *tp)
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       intelgt_read_register_part (
 	regcache, data->r0_regnum,
 	2 * sizeof (uint32_t) + 3 * sizeof (uint8_t), sizeof (uint8_t),
@@ -4631,6 +4638,7 @@ intelgt_thread_workgroup (struct gdbarch *gdbarch, thread_info *tp)
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       /* Workgroup coordinates are stored as { r0.1, r0.6, r0.7 }.  */
       intelgt_read_register_part (regcache, data->r0_regnum,
 				  1 * sizeof (uint32_t), sizeof (uint32_t),
@@ -4691,6 +4699,7 @@ intelgt_get_local_ids_data (gdbarch *gdbarch, thread_info *tp)
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       /* Index of thread TP within the local ID table, stored in r0.2[7:0].  */
       intelgt_read_register_part (regcache, data->r0_regnum,
 				  2 * sizeof (uint32_t), sizeof (uint8_t),
@@ -4992,6 +5001,7 @@ is_branch (const gdb_byte inst[], uint32_t device_id)
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       {
 	/* Check the opcode.  */
 	switch (inst[0] & 0x7f)
@@ -5022,6 +5032,7 @@ is_atomic (const gdb_byte inst[], uint32_t device_id)
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       {
 	/* For instructions with CompactCtrl clear, we can check AtomicCtrl.  */
 	if ((inst[3] & 0x20) == 0)
@@ -5176,6 +5187,7 @@ intelgt_lane_re_enable_pc (gdbarch *gdbarch, thread_info *th, int lane)
     case intelgt::XE_HP:
     case intelgt::XE_HPG:
     case intelgt::XE_HPC:
+    case intelgt::XE3P_XPC:
       return {};
 
     case intelgt::XE2:
@@ -5272,6 +5284,7 @@ intelgt_displaced_step_copy_insn (gdbarch *gdbarch, CORE_ADDR from,
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       {
 	if (!is_atomic (inst.data (), device_id))
 	  break;
@@ -5342,6 +5355,7 @@ intelgt_displaced_step_copy_insn (gdbarch *gdbarch, CORE_ADDR from,
 	  case intelgt::XE_HPC:
 	  case intelgt::XE2:
 	  case intelgt::XE3:
+	  case intelgt::XE3P_XPC:
 	    if (!((inst[2] & 0x3) == 0x1) /* DualInfo.  */
 		&& !(((inst[2] & 0x3) == 0) /* SingleInfo.  */
 		     && ((inst[1] & 0xe0) == 0xc0)))
@@ -5584,6 +5598,7 @@ Device vendor id and target id not found in intelgt target description."));
 	case intelgt::XE_HPC:
 	case intelgt::XE2:
 	case intelgt::XE3:
+	case intelgt::XE3P_XPC:
 	  /* Now check the collected metadata to ensure that all
 	     mandatory pieces are in place.  */
 

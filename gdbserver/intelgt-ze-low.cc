@@ -554,6 +554,7 @@ is_systolic_exception (uint32_t device_id, uint32_t cr0_1)
 
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       return false;
 
     case intelgt::XE_INVALID:
@@ -800,6 +801,7 @@ intelgt_ze_target::is_at_eot (thread_info *tp)
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       {
 	/* The opcode mask for bits 6:0.  */
 	constexpr uint8_t OPC_MASK = 0x7f;
@@ -978,6 +980,7 @@ intelgt_ze_target::get_active_lanes (thread_info *tp)
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       {
 	/* Read the execution mask from the CE register.  */
 	uint32_t execution_mask = read_register_value ("ce");
@@ -1045,6 +1048,7 @@ intelgt_ze_target::add_regset (target_desc *tdesc, const ze_device_info &dinfo,
 	  case intelgt::XE_HPC:
 	  case intelgt::XE2:
 	  case intelgt::XE3:
+	  case intelgt::XE3P_XPC:
 	    feature = tdesc_create_feature (tdesc, intelgt::feature_grf);
 
 	    intelgt_add_regset (feature, regnum, "r", regprop.count, "grf",

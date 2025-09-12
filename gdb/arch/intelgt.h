@@ -122,6 +122,7 @@ enum xe_version
   XE_HPC = XE_VERSION (1, 4),
   XE2 = XE_VERSION (2, 0),
   XE3 = XE_VERSION (3, 0),
+  XE3P_XPC = XE_VERSION (3, 3),
 };
 
 /* Helper function to translate the device id to a device version.  */
@@ -151,6 +152,7 @@ breakpoint_bit_offset (const gdb_byte inst[], uint32_t device_id)
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       /* Check the CmptCtrl flag (bit 29).  */
       return (((inst[3] & 0x20) != 0) ? 7 : 30);
 
@@ -189,6 +191,7 @@ inst_length (const gdb_byte inst[], uint32_t device_id)
     case intelgt::XE_HPC:
     case intelgt::XE2:
     case intelgt::XE3:
+    case intelgt::XE3P_XPC:
       /* Check the CmptCtrl flag (bit 29).  */
       return (((inst[3] & 0x20) != 0)
 	      ? COMPACT_INST_LENGTH

@@ -198,6 +198,9 @@ get_xe_version (uint32_t device_id)
       case 0xD745:
 	return XE3;
 
+      case 0x674C:
+	return XE3P_XPC;
+
       default:
 	return XE_INVALID;
     }

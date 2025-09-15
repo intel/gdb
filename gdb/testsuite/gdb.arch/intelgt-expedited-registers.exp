@@ -24,7 +24,7 @@ load_lib sycl.exp
 standard_testfile intelgt-multi-kernel-grfsize.cpp
 
 # Helper procedure to check expedited registers.
-proc check_expedited_registers { expected_regs kernel_desc } {
+proc check_expedited_registers {expected_regs optional_regs kernel_desc} {
     # Initialize found flags for all registers.
     array unset found_regs
     foreach reg_info $expected_regs {
@@ -32,20 +32,44 @@ proc check_expedited_registers { expected_regs kernel_desc } {
 	set found_regs($reg_name) 0
     }
 
+    # Initialize arrays for optional registers.
+    array unset present_optional_regs
+    array unset expedited_optional_regs
+    foreach reg_info $optional_regs {
+	set reg_name [lindex $reg_info 0]
+	set present_optional_regs($reg_name) 0
+	set expedited_optional_regs($reg_name) 0
+    }
+
+    # First, check which optional registers are present by testing each one individually.
+    foreach reg_info $optional_regs {
+	set reg_name [lindex $reg_info 0]
+	gdb_test_multiple "info reg $reg_name" "check register presence for $reg_name in $kernel_desc" {
+	    -re -wrap "Invalid register.*" {
+		# Register is not present
+	    }
+	    -re -wrap "$reg_name.*" {
+		set present_optional_regs($reg_name) 1
+	    }
+	}
+    }
+
     # Use gdb_test_multiple to process output line by line.
     set unexpected_expedited_regs {}
     gdb_test_multiple "maintenance print remote-registers" \
 	"maintenance print remote-registers shows expedited registers for $kernel_desc" {
-	-re "\r\n(\[a-zA-Z0-9_\]+)\[^\r\n\]*yes\[^\r\n\]*" {
+	-re "\r\n(\[a-zA-Z0-9_\]+)\[^\r\n\]*yes\[^\r\n\]*(?=\r\n)" {
 	    set reg_name $expect_out(1,string)
 	    if {[info exists found_regs($reg_name)]} {
 		set found_regs($reg_name) 1
+	    } elseif {[info exists expedited_optional_regs($reg_name)]} {
+		set expedited_optional_regs($reg_name) 1
 	    } else {
 		lappend unexpected_expedited_regs $reg_name
 	    }
 	    exp_continue
 	}
-	-re "\r\n(\[a-zA-Z0-9_\]+)\[^\r\n\]*" {
+	-re "\r\n(\[a-zA-Z0-9_\]+)\[^\r\n\]*(?=\r\n)" {
 	    # This matches non-expedited registers (register lines with numbers)
 	    exp_continue
 	}
@@ -53,11 +77,24 @@ proc check_expedited_registers { expected_regs kernel_desc } {
 	}
     }
 
-    # Check results and report pass/fail for each register.
+    # Check results and report pass/fail for each required register.
     foreach reg_info $expected_regs {
 	set reg_name [lindex $reg_info 0]
 	set reg_desc [lindex $reg_info 1]
 	gdb_assert {$found_regs($reg_name)} "$reg_desc register is expedited in $kernel_desc"
+    }
+
+    # Check optional registers - if present, they must be expedited.
+    foreach reg_info $optional_regs {
+	set reg_name [lindex $reg_info 0]
+	set reg_desc [lindex $reg_info 1]
+	if {$present_optional_regs($reg_name)} {
+	    # Register is present, check if it's expedited.
+	    gdb_assert {$expedited_optional_regs($reg_name)} \
+		"$reg_desc register is present and expedited in $kernel_desc"
+	} else {
+	    pass "optional $reg_desc register is not present in $kernel_desc"
+	}
     }
 
     # Report unexpected expedited registers.
@@ -120,8 +157,13 @@ foreach device $sycl_device_list {
 	    {"isabase" "instruction state base register aka isabase"}
 	}
 
+	# Define optional expedited registers.
+	set optional_expedited_regs {
+	     {"mf0" "mode flags register 0 aka mf0"}
+	}
+
 	# Test expedited registers for first kernel.
-	check_expedited_registers $kernel1_expedited_regs "kernel-1 for GRF 128"
+	check_expedited_registers $kernel1_expedited_regs $optional_expedited_regs "kernel-1 for GRF 128"
 
 	# Continue to the second kernel.
 	gdb_continue_to_breakpoint "kernel-2-line" ".*kernel-2-line.*"
@@ -131,6 +173,6 @@ foreach device $sycl_device_list {
 	lset kernel2_expedited_regs 1 {"r255" "last general register for GRF 256 is r255"}
 
 	# Test expedited registers for second kernel.
-	check_expedited_registers $kernel2_expedited_regs "kernel-2 for GRF 256"
+	check_expedited_registers $kernel2_expedited_regs $optional_expedited_regs "kernel-2 for GRF 256"
     }
 }

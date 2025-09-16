@@ -1523,7 +1523,7 @@ intelgt_pseudo_register_write (gdbarch *arch,
       pseudo_to_raw_part (next_frame, buf, data->cr0_regnum, 8);
     }
   else
-    error ("Pseudo-register %s is read-only", name);
+    error (_("Pseudo-register %s is read-only"), name);
 }
 
 /* Called by tdesc_use_registers each time a new regnum
@@ -4683,16 +4683,16 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 	 mandatory pieces are in place.  */
 
       if (data->ce_regnum == -1)
-	error ("Debugging requires $ce provided by the target");
+	error (_("Debugging requires $ce provided by the target"));
       if (data->retval_regnum == -1)
-	error ("Debugging requires return value register to be provided by "
-	       "the target");
+	error (_("Debugging requires return value register to be provided "
+		 "by the target"));
       if (data->cr0_regnum == -1)
-	error ("Debugging requires control register to be provided by "
-	       "the target");
+	error (_("Debugging requires control register to be provided by "
+		 "the target"));
       if (data->sr0_regnum == -1)
-	error ("Debugging requires state register to be provided by "
-	       "the target");
+	error (_("Debugging requires state register to be provided by "
+		 "the target"));
 
       /* Unconditionally enabled pseudo-registers:  */
       data->enabled_pseudo_regs.push_back ("ip");

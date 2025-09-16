@@ -920,15 +920,31 @@ intelgt_ze_target::add_regset (target_desc *tdesc, const ze_device_info &dinfo,
     {
     case ZET_DEBUG_REGSET_TYPE_GRF_INTEL_GPU:
       {
-	feature = tdesc_create_feature (tdesc, intelgt::feature_grf);
+	intelgt::xe_version device_version
+	  = intelgt::get_xe_version (device.deviceId);
 
-	intelgt_add_regset (feature, regnum, "r", regprop.count, "grf",
-			    regprop.bitSize, regset.is_writeable,
-			    intelgt_uint_reg_type (feature, regprop.bitSize,
-						   32u),
-			    { 0, regprop.count - 1 });
+	switch (device_version)
+	  {
+	  case intelgt::XE_HP:
+	  case intelgt::XE_HPG:
+	  case intelgt::XE_HPC:
+	  case intelgt::XE2:
+	  case intelgt::XE3:
+	    feature = tdesc_create_feature (tdesc, intelgt::feature_grf);
+
+	    intelgt_add_regset (feature, regnum, "r", regprop.count, "grf",
+				regprop.bitSize, regset.is_writeable,
+				intelgt_uint_reg_type (feature,
+						       regprop.bitSize, 32u),
+				{ 0, regprop.count - 1 });
+	    break;
+
+	  default:
+	    gdb_assert_not_reached ("Unexpected device id 0x%" PRIx32,
+				    device.deviceId);
+	  }
+	break;
       }
-      break;
 
     case ZET_DEBUG_REGSET_TYPE_ADDR_INTEL_GPU:
       feature = tdesc_create_feature (tdesc, intelgt::feature_addr);

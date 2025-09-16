@@ -1388,34 +1388,70 @@ intelgt_read_pc (readable_regcache *regcache)
   gdbarch *arch = regcache->arch ();
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
 
-  /* Instruction pointer is stored in CR0.2.  */
-  uint32_t ip;
-  intelgt_read_register_part (regcache, data->cr0_regnum,
-			      sizeof (uint32_t) * 2, sizeof (uint32_t),
-			      (gdb_byte *) &ip, _("Cannot compute PC."));
+  uint32_t device_id = get_device_id (arch);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
 
-  /* Program counter is $ip + $isabase.  */
-  CORE_ADDR isabase = intelgt_get_isabase (regcache);
-  return isabase + ip;
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* Instruction pointer is stored in CR0.2.  */
+	uint32_t ip;
+	intelgt_read_register_part (regcache, data->cr0_regnum,
+				    sizeof (uint32_t) * 2, sizeof (uint32_t),
+				    (gdb_byte *) &ip, _("Cannot compute PC."));
+
+	/* Program counter is $ip + $isabase.  */
+	CORE_ADDR isabase = intelgt_get_isabase (regcache);
+	return isabase + ip;
+      }
+
+    default:
+      error (_("Unexpected device id 0x%" PRIx32), device_id);
+    }
+
+  return 0;
 }
 
 static void
 intelgt_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
   gdbarch *arch = regcache->arch ();
-  /* Program counter is $ip + $isabase, can only modify $ip.  Need
-     to ensure that the new value fits within $ip modification range
-     and propagate the write accordingly.  */
-  CORE_ADDR isabase = intelgt_get_isabase (regcache);
-  if (pc < isabase || pc > isabase + UINT32_MAX)
-    error ("Can't update $pc to value 0x%lx, out of range", pc);
+  uint32_t device_id = get_device_id (arch);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
 
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
 
-  /* Instruction pointer is stored in CR0.2.  */
-  uint32_t ip = pc - isabase;
-  regcache->cooked_write_part (data->cr0_regnum, sizeof (uint32_t) * 2,
-			       sizeof (uint32_t), (gdb_byte *) &ip);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* Program counter is $ip + $isabase, can only modify $ip.  Need
+	   to ensure that the new value fits within $ip modification range
+	   and propagate the write accordingly.  */
+	CORE_ADDR isabase = intelgt_get_isabase (regcache);
+	if (pc < isabase || pc > isabase + UINT32_MAX)
+	  error ("Can't update $pc to value 0x%lx, out of range", pc);
+
+	/* Instruction pointer is stored in CR0.2.  */
+	uint32_t ip = pc - isabase;
+	regcache->cooked_write_part (data->cr0_regnum, sizeof (uint32_t) * 2,
+				     sizeof (uint32_t), (gdb_byte *) &ip);
+	return;
+      }
+
+    default:
+      error (_("Unexpected device id 0x%" PRIx32), device_id);
+    }
+
 }
 
 /* Return the name of pseudo-register REGNUM.  */
@@ -1437,27 +1473,44 @@ intelgt_pseudo_register_name (gdbarch *arch, int regnum)
 static type *
 intelgt_pseudo_register_type (gdbarch *arch, int regnum)
 {
+  uint32_t device_id = get_device_id (arch);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+
   const char *name = intelgt_pseudo_register_name (arch, regnum);
   const struct builtin_type *bt = builtin_type (arch);
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
 
-  if (strcmp (name, "framedesc") == 0)
+  switch (device_version)
     {
-      if (data->framedesc_type != nullptr)
-	return data->framedesc_type;
-      type *frame = arch_composite_type (arch, "frame_desc", TYPE_CODE_STRUCT);
-      append_composite_type_field (frame, "return_ip", bt->builtin_uint32);
-      append_composite_type_field (frame, "return_callmask",
-				   bt->builtin_uint32);
-      append_composite_type_field (frame, "be_sp", bt->builtin_uint32);
-      append_composite_type_field (frame, "be_fp", bt->builtin_uint32);
-      append_composite_type_field (frame, "fe_fp", bt->builtin_data_ptr);
-      append_composite_type_field (frame, "fe_sp", bt->builtin_data_ptr);
-      data->framedesc_type = frame;
-      return frame;
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      if (strcmp (name, "framedesc") == 0)
+	{
+	  if (data->framedesc_type != nullptr)
+	    return data->framedesc_type;
+	  type *frame = arch_composite_type (arch, "frame_desc",
+					     TYPE_CODE_STRUCT);
+	  append_composite_type_field (frame, "return_ip", bt->builtin_uint32);
+	  append_composite_type_field (frame, "return_callmask",
+				       bt->builtin_uint32);
+	  append_composite_type_field (frame, "be_sp", bt->builtin_uint32);
+	  append_composite_type_field (frame, "be_fp", bt->builtin_uint32);
+	  append_composite_type_field (frame, "fe_fp", bt->builtin_data_ptr);
+	  append_composite_type_field (frame, "fe_sp", bt->builtin_data_ptr);
+	  data->framedesc_type = frame;
+	  return frame;
+	}
+      else if (strcmp (name, "ip") == 0)
+	return bt->builtin_uint32;
+      else
+	break;
+
+    default:
+      error (_("Unexpected device id 0x%" PRIx32), device_id);
     }
-  else if (strcmp (name, "ip") == 0)
-    return bt->builtin_uint32;
 
   return nullptr;
 }
@@ -1472,21 +1525,37 @@ intelgt_pseudo_register_read_value (gdbarch *arch,
   const char *name = intelgt_pseudo_register_name (arch, pseudo_regnum);
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
 
-  if (strcmp (name, "framedesc") == 0)
-    {
-      int grf_num = data->framedesc_base_regnum ();
-      return pseudo_from_raw_part (next_frame, pseudo_regnum, grf_num, 0);
-    }
-  else if (strcmp (name, "ip") == 0)
-    {
-      int regsize = register_size (arch, pseudo_regnum);
-      /* Instruction pointer is stored in CR0.2.  */
-      gdb_assert (data->cr0_regnum != -1);
-      /* CR0 elements are 4 byte wide.  */
-      gdb_assert (regsize + 8 <= register_size (arch, data->cr0_regnum));
+  uint32_t device_id = get_device_id (arch);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
 
-      return pseudo_from_raw_part (next_frame, pseudo_regnum,
-				   data->cr0_regnum, 8);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      if (strcmp (name, "framedesc") == 0)
+	{
+	  int grf_num = data->framedesc_base_regnum ();
+	  return pseudo_from_raw_part (next_frame, pseudo_regnum, grf_num, 0);
+	}
+      else if (strcmp (name, "ip") == 0)
+	{
+	  int regsize = register_size (arch, pseudo_regnum);
+	  /* Instruction pointer is stored in CR0.2.  */
+	  gdb_assert (data->cr0_regnum != -1);
+	  /* CR0 elements are 4 byte wide.  */
+	  gdb_assert (regsize + 8 <= register_size (arch, data->cr0_regnum));
+
+	  return pseudo_from_raw_part (next_frame, pseudo_regnum,
+				       data->cr0_regnum, 8);
+	}
+      else
+	break;
+
+    default:
+      error (_("Unexpected device id 0x%" PRIx32), device_id);
     }
 
   return nullptr;
@@ -1503,27 +1572,42 @@ intelgt_pseudo_register_write (gdbarch *arch,
   const char *name = intelgt_pseudo_register_name (arch, pseudo_regnum);
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
 
-  if (strcmp (name, "framedesc") == 0)
-    {
-      int grf_num = data->framedesc_base_regnum ();
-      int grf_size = register_size (arch, grf_num);
-      int desc_size = register_size (arch, pseudo_regnum);
-      gdb_assert (grf_size >= desc_size);
-      pseudo_to_raw_part (next_frame, buf, grf_num, 0);
-    }
-  else if (strcmp (name, "ip") == 0)
-    {
-      /* Instruction pointer is stored in CR0.2.  */
-      gdb_assert (data->cr0_regnum != -1);
-      int cr0_size = register_size (arch, data->cr0_regnum);
+  uint32_t device_id = get_device_id (arch);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
 
-      /* CR0 elements are 4 byte wide.  */
-      int reg_size = register_size (arch, pseudo_regnum);
-      gdb_assert (reg_size + 8 <= cr0_size);
-      pseudo_to_raw_part (next_frame, buf, data->cr0_regnum, 8);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      if (strcmp (name, "framedesc") == 0)
+	{
+	  int grf_num = data->framedesc_base_regnum ();
+	  int grf_size = register_size (arch, grf_num);
+	  int desc_size = register_size (arch, pseudo_regnum);
+	  gdb_assert (grf_size >= desc_size);
+	  pseudo_to_raw_part (next_frame, buf, grf_num, 0);
+	}
+      else if (strcmp (name, "ip") == 0)
+	{
+	  /* Instruction pointer is stored in CR0.2.  */
+	  gdb_assert (data->cr0_regnum != -1);
+	  int cr0_size = register_size (arch, data->cr0_regnum);
+
+	  /* CR0 elements are 4 byte wide.  */
+	  int reg_size = register_size (arch, pseudo_regnum);
+	  gdb_assert (reg_size + 8 <= cr0_size);
+	  pseudo_to_raw_part (next_frame, buf, data->cr0_regnum, 8);
+	}
+      else
+	error (_("Pseudo-register %s is read-only"), name);
+      break;
+
+    default:
+      error (_("Unexpected device id 0x%" PRIx32), device_id);
     }
-  else
-    error (_("Pseudo-register %s is read-only"), name);
 }
 
 /* Called by tdesc_use_registers each time a new regnum
@@ -1554,22 +1638,37 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
   /* Second, check if it is any specific individual register that
      needs to be tracked.  */
 
-  if (strcmp ("r0", reg_name) == 0)
-    data->r0_regnum = possible_regnum;
-  else if (strcmp ("r26", reg_name) == 0)
-    data->retval_regnum = possible_regnum;
-  else if (strcmp ("cr0", reg_name) == 0)
-    data->cr0_regnum = possible_regnum;
-  else if (strcmp ("sr0", reg_name) == 0)
-    data->sr0_regnum = possible_regnum;
-  else if (strcmp ("isabase", reg_name) == 0)
-    data->isabase_regnum = possible_regnum;
-  else if (strcmp ("ce", reg_name) == 0)
-    data->ce_regnum = possible_regnum;
-  else if (strcmp ("genstbase", reg_name) == 0)
-    data->genstbase_regnum = possible_regnum;
-  else if (strcmp ("dbg0", reg_name) == 0)
-    data->dbg0_regnum = possible_regnum;
+  uint32_t device_id = get_device_id (arch);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      if (strcmp ("r0", reg_name) == 0)
+	data->r0_regnum = possible_regnum;
+      else if (strcmp ("r26", reg_name) == 0)
+	data->retval_regnum = possible_regnum;
+      else if (strcmp ("cr0", reg_name) == 0)
+	data->cr0_regnum = possible_regnum;
+      else if (strcmp ("sr0", reg_name) == 0)
+	data->sr0_regnum = possible_regnum;
+      else if (strcmp ("isabase", reg_name) == 0)
+	data->isabase_regnum = possible_regnum;
+      else if (strcmp ("ce", reg_name) == 0)
+	data->ce_regnum = possible_regnum;
+      else if (strcmp ("genstbase", reg_name) == 0)
+	data->genstbase_regnum = possible_regnum;
+      else if (strcmp ("dbg0", reg_name) == 0)
+	data->dbg0_regnum = possible_regnum;
+      break;
+
+    default:
+      error (_("Unexpected device id 0x%" PRIx32), device_id);
+    }
 
   return possible_regnum;
 }
@@ -4669,6 +4768,9 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
 
   if (tdesc_has_registers (tdesc))
     {
+      uint32_t device_id = get_device_id (gdbarch);
+      intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+
       tdesc_arch_data_up tdesc_data = tdesc_data_alloc ();
 
       /* First assign register numbers to all registers.  The
@@ -4679,24 +4781,36 @@ intelgt_gdbarch_init (gdbarch_info info, gdbarch_list *arches)
       tdesc_use_registers (gdbarch, tdesc, std::move (tdesc_data),
 			   intelgt_unknown_register_cb);
 
-      /* Now check the collected metadata to ensure that all
-	 mandatory pieces are in place.  */
+      switch (device_version)
+	{
+	case intelgt::XE_HP:
+	case intelgt::XE_HPG:
+	case intelgt::XE_HPC:
+	case intelgt::XE2:
+	case intelgt::XE3:
+	  /* Now check the collected metadata to ensure that all
+	     mandatory pieces are in place.  */
 
-      if (data->ce_regnum == -1)
-	error (_("Debugging requires $ce provided by the target"));
-      if (data->retval_regnum == -1)
-	error (_("Debugging requires return value register to be provided "
-		 "by the target"));
-      if (data->cr0_regnum == -1)
-	error (_("Debugging requires control register to be provided by "
-		 "the target"));
-      if (data->sr0_regnum == -1)
-	error (_("Debugging requires state register to be provided by "
-		 "the target"));
+	  if (data->ce_regnum == -1)
+	    error (_("Debugging requires $ce provided by the target"));
+	  if (data->retval_regnum == -1)
+	    error (_("Debugging requires return value register to be provided "
+		     "by the target"));
+	  if (data->cr0_regnum == -1)
+	    error (_("Debugging requires control register to be provided by "
+		     "the target"));
+	  if (data->sr0_regnum == -1)
+	    error (_("Debugging requires state register to be provided by "
+		     "the target"));
 
-      /* Unconditionally enabled pseudo-registers:  */
-      data->enabled_pseudo_regs.push_back ("ip");
-      data->enabled_pseudo_regs.push_back ("framedesc");
+	  /* Unconditionally enabled pseudo-registers:  */
+	  data->enabled_pseudo_regs.push_back ("ip");
+	  data->enabled_pseudo_regs.push_back ("framedesc");
+	  break;
+
+	default:
+	  error (_("Unexpected device id 0x%" PRIx32), device_id);
+	}
 
       set_gdbarch_num_pseudo_regs (gdbarch, data->enabled_pseudo_regs.size ());
       set_gdbarch_pseudo_register_read_value (

@@ -174,8 +174,6 @@ get_xe_version (uint32_t device_id)
       case 0xE211:
       case 0xE212:
       case 0xE216:
-      case 0xE220:
-      case 0xE221:
       case 0xE222:
       case 0xE223:
 	return XE2;

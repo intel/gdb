@@ -8745,7 +8745,10 @@ i386_validate_tdesc_p (i386_gdbarch_tdep *tdep,
       tdep->num_xmm_regs = 0;
     }
 
-  if (feature_apx)
+  if (feature_apx
+      && tdep->r16_regnum != -1
+      && tdep->apx_register_names != nullptr
+      && tdep->num_apx_regs > 0)
     {
       tdep->xcr0 |= X86_XSTATE_APX_F;
       for (i = 0; i < tdep->num_apx_regs; i++)
@@ -9079,12 +9082,6 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdep->register_names = i386_register_names;
   tdep->byte_names = i386_byte_names;
   tdep->word_names = i386_word_names;
-
-  /* No eip register.  */
-  tdep->eip_regnum = -1;
-
-  /* No r16-r31 registers.  */
-  tdep->r16_regnum = -1;
 
   tdep->num_byte_regs = 8;
   tdep->num_word_regs = 8;

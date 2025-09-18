@@ -127,9 +127,9 @@ struct i386_gdbarch_tdep : gdbarch_tdep_base
      registers are supported.  */
   int eax_regnum = -1;
 
-  /* Register number for %eip.  Set this to -1 to indicate the absence
-     of %eip support.  Only used for AMD64.  */
-  int eip_regnum = 0;
+  /* Register number for %eip.  Set this to a value >= 0 in case of %eip
+     support.  Only used for AMD64.  */
+  int eip_regnum = -1;
 
   /* Number of core registers.  */
   int num_core_regs = 0;
@@ -191,9 +191,9 @@ struct i386_gdbarch_tdep : gdbarch_tdep_base
   /* YMM16-31 register names.  Only used for tdesc_numbered_register.  */
   const char * const *ymm16h_register_names = nullptr;
 
-  /* Register number for %r16.  Set this to -1 to indicate the absence
-     r16-r31 registers.  */
-  int r16_regnum = 0;
+  /* Register number for %r16.  Set this to a value >= 0 if r16-r31
+     registers are supported.  Only used for AMD64.  */
+  int r16_regnum = -1;
 
   /* r16-r31 register names.  Only used for tdesc_numbered_register.  */
   const char * const *apx_register_names = nullptr;

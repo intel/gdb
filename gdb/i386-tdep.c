@@ -9092,9 +9092,6 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdep->num_mmx_regs = 8;
   tdep->num_ymm_regs = 0;
 
-  /* No shadow stack pointer register.  */
-  tdep->ssp_regnum = -1;
-
   tdesc_arch_data_up tdesc_data = tdesc_data_alloc ();
 
   set_gdbarch_relocate_instruction (gdbarch, i386_relocate_instruction);

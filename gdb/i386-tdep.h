@@ -247,8 +247,9 @@ struct i386_gdbarch_tdep : gdbarch_tdep_base
   const char * const *tmm_register_names = nullptr;
   const char * const *tiledata_register_names = nullptr;
 
-  /* Shadow stack pointer register.  */
-  int ssp_regnum = 0;
+  /* Register number for the shadow stack pointer register.  If supported,
+     set this to a value >= 0.  */
+  int ssp_regnum = -1;
 
   /* Register number for %fsbase.  If supported, set this to a value
      >= 0.  */

@@ -247,29 +247,38 @@ foreach device $sycl_device_list {
     gdb_assert {[string first "Intel(R) corefilegen-gpu 202" $output] != -1} \
 	"CoreGen version"
 
-    # Reset previous error captures (if any).
-    if {[reset_error_captures] == 0} {
-	# Cannot access path or insufficient permissions.
-	return -1
-    }
-
     sycl_with_intelgt_lock $device {
-	# Trigger a pagefault.
-	catch {exec $binfile gpu Intel level_zero}
+	# Test both online and offline settings.
+	save_vars { env(ZET_ENABLE_PROGRAM_DEBUGGING) } {
+	    foreach_with_prefix online_offline {"1" "2"} {
+		set env(ZET_ENABLE_PROGRAM_DEBUGGING) "$online_offline"
 
-	# Copy error captures to local folder.
-	set errorfiles [copy_error_captures]
-	if {[gdb_assert {1 == [llength $errorfiles]} "got one errorfile"]} {
-	    # Translate the error capture to a corefile.
-	    set errorfile [lindex $errorfiles 0]
-	    set corefile [translate_error_capture $errorfile]
-	    if {"$corefile" == ""} {
-		# If corefile was not translated, skip rest of the tests.
-		continue
+		# Reset previous error captures (if any).
+		if {[reset_error_captures] == 0} {
+		    # Cannot access path or insufficient permissions.
+		    return -1
+		}
+
+		# Trigger a pagefault.
+		catch {exec $binfile gpu Intel level_zero}
+
+		# Copy error captures to local folder.
+		set errorfiles [copy_error_captures]
+		if {[gdb_assert {1 == [llength $errorfiles]} \
+		    "got one errorfile"]} {
+		    # Translate the error capture to a corefile.
+		    set errorfile [lindex $errorfiles 0]
+		    set corefile [translate_error_capture $errorfile]
+		    if {"$corefile" == ""} {
+			# If corefile was not translated,
+			# skip rest of the tests.
+			continue
+		    }
+
+		    # Read the corefile.
+		    read_corefile $corefile
+		}
 	    }
-
-	    # Read the corefile.
-	    read_corefile $corefile
 	}
     }
 }

@@ -595,6 +595,10 @@ struct intelgt_gdbarch_data
   int genstbase_regnum = -1;
   /* Register number for the DBG0 register.  */
   int dbg0_regnum = -1;
+  /* Register number for the FC0 register.  */
+  int fc0_regnum = -1;
+  /* Register number for the FC1 register.  */
+  int fc1_regnum = -1;
   /* Assigned regnum ranges for DWARF regsets.  */
   regnum_range regset_ranges[intelgt::regset_count];
   /* Enabled pseudo-register for the current target description.  */
@@ -1633,6 +1637,10 @@ intelgt_unknown_register_cb (gdbarch *arch, tdesc_feature *feature,
     data->genstbase_regnum = possible_regnum;
   else if (strcmp ("dbg0", reg_name) == 0)
     data->dbg0_regnum = possible_regnum;
+  else if (strcmp ("fc0", reg_name) == 0)
+    data->fc0_regnum = possible_regnum;
+  else if (strcmp ("fc1", reg_name) == 0)
+    data->fc1_regnum = possible_regnum;
 
   return possible_regnum;
 }
@@ -4528,6 +4536,62 @@ struct intelgt_displaced_step_copy_insn_closure
   gdb::byte_vector inst_buf;
 };
 
+static std::optional<CORE_ADDR>
+intelgt_lane_re_enable_pc (gdbarch *gdbarch, thread_info *th, int lane)
+{
+  gdb_assert (lane >= 0);
+
+  uint32_t device_id = get_device_id (th->inf);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+      return {};
+
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	gdb_assert (lane < 32);
+
+	/* Re-enable PC can be derived from FC registers.
+	   From FC0 (or FC1) we read the tag IP of the given LANE, which
+	   is located at FC0.[l][0:28] (or FC1.[l%16][0:28] if LANE > 15),
+	   then adjust it with ISABASE.  */
+	intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+	int fc_regnum = (lane < 16) ? data->fc0_regnum : data->fc1_regnum;
+	if (fc_regnum == -1)
+	  return {};
+
+	uint32_t tag_ip = 0x0;
+	regcache *regcache = get_thread_regcache (th);
+	intelgt_read_register_part (regcache, fc_regnum,
+				    (lane % 16) * sizeof (uint32_t),
+				    sizeof (uint32_t),
+				    (gdb_byte *) &tag_ip,
+				    _("Cannot compute re-enable PC"));
+	CORE_ADDR re_enable_pc
+	  = intelgt_get_isabase (regcache) + (CORE_ADDR) (tag_ip << 3);
+
+	/* Typically, this points to the join instruction, where all lanes
+	   are inactive, but that's okay!  In infrun we would keep going
+	   one more step, and the lane will become active.  */
+
+	dprintf ("Re-enable PC for thread %s lane %d is %s",
+		 print_thread_id (th), lane,
+		 paddress (gdbarch, re_enable_pc));
+
+	return re_enable_pc;
+      }
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
+}
+
 /* Implementation of gdbarch_displaced_step_prepare.  */
 
 static displaced_step_prepare_status
@@ -5014,6 +5078,7 @@ Device vendor id and target id not found in intelgt target description."));
 
   set_gdbarch_adjust_breakpoint_address (gdbarch,
 					 intelgt_adjust_breakpoint_address);
+  set_gdbarch_lane_re_enable_pc (gdbarch, intelgt_lane_re_enable_pc);
 
   /* Atomic sequence stepping.  */
   set_gdbarch_needs_displaced_step (gdbarch, intelgt_needs_displaced_step);

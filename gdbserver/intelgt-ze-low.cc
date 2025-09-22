@@ -283,6 +283,8 @@ protected:
 
   void prepare_thread_resume (thread_info *tp) override;
 
+  unsigned int get_active_lanes (thread_info *tp) override;
+
   /* Read one instruction from memory at PC into BUFFER and return the
      number of bytes read on success or a negative errno error code.
 
@@ -883,6 +885,57 @@ intelgt_ze_target::prepare_thread_resume (thread_info *tp)
   dprintf ("thread %s (%s) resumed, cr0.0=%" PRIx32 " .1=%" PRIx32
 	   " .2=%" PRIx32 ".", tp->id.to_string ().c_str (),
 	   ze_thread_id_str (zetp->id).c_str (), cr0[0], cr0[1], cr0[2]);
+}
+
+/* Return the current lane mask (execution mask) for thread TP.
+
+   The lane mask indicates which lanes are currently active for
+   execution.  This is used by range stepping to detect when the active
+   execution mask changes, which requires stopping range stepping since
+   different lanes may follow different execution paths.
+
+   Return the 32-bit execution mask as an unsigned int.  */
+
+unsigned int
+intelgt_ze_target::get_active_lanes (thread_info *tp)
+{
+  uint32_t device_id = get_device_id (ze_thread_device (tp));
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  regcache *regcache = get_thread_regcache (tp, /* fetch = */ false);
+
+  /* Lambda to read a register value.  */
+  auto read_register_value = [regcache] (const char *reg_name,
+					 int offset = 0) -> uint32_t
+    {
+      int regno = find_regno (regcache->tdesc, reg_name);
+      uint32_t value = 0;
+      gdb::array_view<gdb_byte> av_value ((gdb_byte *) &value, sizeof (value));
+      intelgt_read_register_part (regcache, regno, offset, av_value);
+      return value;
+    };
+
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* Read the execution mask from the CE register.  */
+	uint32_t execution_mask = read_register_value ("ce");
+
+	/* Read the dispatch mask from sr0 register and apply masking.  */
+	uint32_t dispatch_mask = read_register_value ("sr0", 0);
+
+	return execution_mask & dispatch_mask;
+      }
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
 }
 
 void

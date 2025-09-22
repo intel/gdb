@@ -1282,8 +1282,16 @@ ze_target::is_range_stepping (thread_info *tp)
       regcache *regcache = get_thread_regcache (tp, /* fetch = */ false);
       CORE_ADDR pc = read_pc (regcache);
 
-      return ((pc >= zetp->step_range_start)
-	      && (pc < zetp->step_range_end));
+      /* Check if we're still in the stepping range.  */
+      bool in_range = ((pc >= zetp->step_range_start)
+		       && (pc < zetp->step_range_end));
+      if (!in_range)
+	return false;
+
+      /* Check if the lane mask has changed since we started range stepping.
+	 If it has changed, we need to stop range stepping.  */
+      unsigned int current_lane_mask = get_active_lanes (tp);
+      return (current_lane_mask == zetp->step_start_lane_mask);
     }
 
   return false;
@@ -2670,6 +2678,10 @@ ze_target::resume (thread_resume *resume_info, size_t n)
 
 		zetp->step_range_start = rinfo.step_range_start;
 		zetp->step_range_end = rinfo.step_range_end;
+
+		/* Store the lane mask at the start of range stepping
+		   for later comparison in is_range_stepping ().  */
+		zetp->step_start_lane_mask = get_active_lanes (tp);
 	      }
 	      [[fallthrough]];
 
@@ -2984,6 +2996,7 @@ ze_target::wait (ptid_t ptid, target_waitstatus *status,
 	  zetp->waitstatus.set_ignore ();
 	  zetp->step_range_start = 0;
 	  zetp->step_range_end = 0;
+	  zetp->step_start_lane_mask = 0;
 
 	  /* FIXME: switch_to_thread
 

@@ -384,6 +384,10 @@ struct ze_thread_info
   CORE_ADDR step_range_start = 0;
   CORE_ADDR step_range_end = 0;
 
+  /* The lane mask at the start of range-stepping.  Used to detect
+     lane mask changes during range stepping.  */
+  unsigned int step_start_lane_mask = 0;
+
   /* The thread's execution state.
 
      What is this thread actually doing.  */
@@ -673,6 +677,10 @@ protected:
 
      This sets the ze execution state, typically to running.  */
   virtual void prepare_thread_resume (thread_info *tp) = 0;
+
+  /* Get the current lane mask for thread TP.
+     Returns 0 if lane masks are not supported by this target.  */
+  virtual unsigned int get_active_lanes (thread_info *tp) = 0;
 
   /* Read the memory in the context of thread TP.  */
   virtual int read_memory (thread_info *tp, CORE_ADDR memaddr,

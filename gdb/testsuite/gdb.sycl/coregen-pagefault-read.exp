@@ -250,8 +250,8 @@ foreach device $sycl_device_list {
     sycl_with_intelgt_lock $device {
 	# Test both online and offline settings.
 	save_vars { env(ZET_ENABLE_PROGRAM_DEBUGGING) } {
-	    foreach_with_prefix online_offline {"1" "2"} {
-		set env(ZET_ENABLE_PROGRAM_DEBUGGING) "$online_offline"
+	    foreach_with_prefix debug_mode {"1" "2"} {
+		set env(ZET_ENABLE_PROGRAM_DEBUGGING) "$debug_mode"
 
 		# Reset previous error captures (if any).
 		if {[reset_error_captures] == 0} {

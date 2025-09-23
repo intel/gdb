@@ -2973,8 +2973,11 @@ linux_address_in_shadow_stack_mem_range
 
   if (it != smaps.end ())
     {
-      range->first = it->start_address;
-      range->second = it->end_address;
+      if (range != nullptr)
+	{
+	  range->first = it->start_address;
+	  range->second = it->end_address;
+	}
       return true;
     }
 
@@ -3024,6 +3027,8 @@ linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch,
   set_gdbarch_get_siginfo_type (gdbarch, linux_get_siginfo_type);
   set_gdbarch_core_parse_exec_context (gdbarch,
 				       linux_corefile_parse_exec_context);
+  set_gdbarch_address_in_shadow_stack_memory_range
+    (gdbarch, linux_address_in_shadow_stack_mem_range);
 }
 
 INIT_GDB_FILE (linux_tdep)

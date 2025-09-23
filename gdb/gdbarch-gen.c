@@ -85,6 +85,7 @@ struct gdbarch
   int pc_regnum = -1;
   int ps_regnum = -1;
   int fp0_regnum = -1;
+  int ssp_regnum = -1;
   gdbarch_stab_reg_to_regnum_ftype *stab_reg_to_regnum = no_op_reg_to_regnum;
   gdbarch_ecoff_reg_to_regnum_ftype *ecoff_reg_to_regnum = no_op_reg_to_regnum;
   gdbarch_sdb_reg_to_regnum_ftype *sdb_reg_to_regnum = no_op_reg_to_regnum;
@@ -272,7 +273,6 @@ struct gdbarch
   gdbarch_use_target_description_from_corefile_notes_ftype *use_target_description_from_corefile_notes = default_use_target_description_from_corefile_notes;
   bool is_inferior_device = false;
   gdbarch_core_parse_exec_context_ftype *core_parse_exec_context = default_core_parse_exec_context;
-  gdbarch_shadow_stack_push_ftype *shadow_stack_push = nullptr;
   gdbarch_get_shadow_stack_pointer_ftype *get_shadow_stack_pointer = default_get_shadow_stack_pointer;
   gdbarch_reserve_stack_space_ftype *reserve_stack_space = default_reserve_stack_space;
   gdbarch_get_inferior_call_return_value_ftype *get_inferior_call_return_value = default_get_inferior_call_return_value;
@@ -285,6 +285,9 @@ struct gdbarch
   gdbarch_kernel_instance_id_ftype *kernel_instance_id = nullptr;
   gdbarch_entry_point_ftype *entry_point = nullptr;
   gdbarch_update_architecture_ftype *update_architecture = default_update_architecture;
+  gdbarch_address_in_shadow_stack_memory_range_ftype *address_in_shadow_stack_memory_range = nullptr;
+  gdbarch_top_addr_empty_shadow_stack_ftype *top_addr_empty_shadow_stack = nullptr;
+  int shadow_stack_element_size_aligned = 8;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -370,6 +373,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of pc_regnum, invalid_p == 0.  */
   /* Skip verify of ps_regnum, invalid_p == 0.  */
   /* Skip verify of fp0_regnum, invalid_p == 0.  */
+  /* Skip verify of ssp_regnum, invalid_p == 0.  */
   /* Skip verify of stab_reg_to_regnum, invalid_p == 0.  */
   /* Skip verify of ecoff_reg_to_regnum, invalid_p == 0.  */
   /* Skip verify of sdb_reg_to_regnum, invalid_p == 0.  */
@@ -568,7 +572,6 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of use_target_description_from_corefile_notes, invalid_p == 0.  */
   /* Skip verify of is_inferior_device, invalid_p == 0.  */
   /* Skip verify of core_parse_exec_context, invalid_p == 0.  */
-  /* Skip verify of shadow_stack_push, has predicate.  */
   /* Skip verify of get_shadow_stack_pointer, invalid_p == 0.  */
   /* Skip verify of reserve_stack_space, invalid_p == 0.  */
   /* Skip verify of get_inferior_call_return_value, invalid_p == 0.  */
@@ -580,7 +583,10 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of workitem_global_size, has predicate.  */
   /* Skip verify of kernel_instance_id, has predicate.  */
   /* Skip verify of entry_point, has predicate.  */
-  /* Skip verify of update_architecture, invalid_p == 0 */
+  /* Skip verify of update_architecture, invalid_p == 0.  */
+  /* Skip verify of address_in_shadow_stack_memory_range, has predicate.  */
+  /* Skip verify of top_addr_empty_shadow_stack, has predicate.  */
+  /* Skip verify of shadow_stack_element_size_aligned, invalid_p == 0.  */
   if (!log.empty ())
     internal_error (_("verify_gdbarch: the following are invalid ...%s"),
 		    log.c_str ());
@@ -753,6 +759,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: fp0_regnum = %s\n",
 	      plongest (gdbarch->fp0_regnum));
+  gdb_printf (file,
+	      "gdbarch_dump: ssp_regnum = %s\n",
+	      plongest (gdbarch->ssp_regnum));
   gdb_printf (file,
 	      "gdbarch_dump: stab_reg_to_regnum = <%s>\n",
 	      host_address_to_string (gdbarch->stab_reg_to_regnum));
@@ -1495,12 +1504,6 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
 	      "gdbarch_dump: core_parse_exec_context = <%s>\n",
 	      host_address_to_string (gdbarch->core_parse_exec_context));
   gdb_printf (file,
-	      "gdbarch_dump: gdbarch_shadow_stack_push_p() = %d\n",
-	      gdbarch_shadow_stack_push_p (gdbarch));
-  gdb_printf (file,
-	      "gdbarch_dump: shadow_stack_push = <%s>\n",
-	      host_address_to_string (gdbarch->shadow_stack_push));
-  gdb_printf (file,
 	      "gdbarch_dump: get_shadow_stack_pointer = <%s>\n",
 	      host_address_to_string (gdbarch->get_shadow_stack_pointer));
   gdb_printf (file,
@@ -1560,6 +1563,21 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: update_architecture = <%s>\n",
 	      host_address_to_string (gdbarch->update_architecture));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_address_in_shadow_stack_memory_range_p() = %d\n",
+	      gdbarch_address_in_shadow_stack_memory_range_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: address_in_shadow_stack_memory_range = <%s>\n",
+	      host_address_to_string (gdbarch->address_in_shadow_stack_memory_range));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_top_addr_empty_shadow_stack_p() = %d\n",
+	      gdbarch_top_addr_empty_shadow_stack_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: top_addr_empty_shadow_stack = <%s>\n",
+	      host_address_to_string (gdbarch->top_addr_empty_shadow_stack));
+  gdb_printf (file,
+	      "gdbarch_dump: shadow_stack_element_size_aligned = %s\n",
+	      plongest (gdbarch->shadow_stack_element_size_aligned));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -2305,6 +2323,23 @@ set_gdbarch_fp0_regnum (struct gdbarch *gdbarch,
 			int fp0_regnum)
 {
   gdbarch->fp0_regnum = fp0_regnum;
+}
+
+int
+gdbarch_ssp_regnum (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of ssp_regnum, invalid_p == 0.  */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_ssp_regnum called\n");
+  return gdbarch->ssp_regnum;
+}
+
+void
+set_gdbarch_ssp_regnum (struct gdbarch *gdbarch,
+			int ssp_regnum)
+{
+  gdbarch->ssp_regnum = ssp_regnum;
 }
 
 int
@@ -5904,30 +5939,6 @@ set_gdbarch_core_parse_exec_context (struct gdbarch *gdbarch,
   gdbarch->core_parse_exec_context = core_parse_exec_context;
 }
 
-bool
-gdbarch_shadow_stack_push_p (struct gdbarch *gdbarch)
-{
-  gdb_assert (gdbarch != NULL);
-  return gdbarch->shadow_stack_push != NULL;
-}
-
-void
-gdbarch_shadow_stack_push (struct gdbarch *gdbarch, CORE_ADDR new_addr, regcache *regcache)
-{
-  gdb_assert (gdbarch != NULL);
-  gdb_assert (gdbarch->shadow_stack_push != NULL);
-  if (gdbarch_debug >= 2)
-    gdb_printf (gdb_stdlog, "gdbarch_shadow_stack_push called\n");
-  gdbarch->shadow_stack_push (gdbarch, new_addr, regcache);
-}
-
-void
-set_gdbarch_shadow_stack_push (struct gdbarch *gdbarch,
-			       gdbarch_shadow_stack_push_ftype shadow_stack_push)
-{
-  gdbarch->shadow_stack_push = shadow_stack_push;
-}
-
 std::optional<CORE_ADDR>
 gdbarch_get_shadow_stack_pointer (struct gdbarch *gdbarch, regcache *regcache, bool &shadow_stack_enabled)
 {
@@ -6186,4 +6197,69 @@ set_gdbarch_update_architecture (struct gdbarch *gdbarch,
 				 gdbarch_update_architecture_ftype update_architecture)
 {
   gdbarch->update_architecture = update_architecture;
+}
+
+bool
+gdbarch_address_in_shadow_stack_memory_range_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->address_in_shadow_stack_memory_range != NULL;
+}
+
+bool
+gdbarch_address_in_shadow_stack_memory_range (struct gdbarch *gdbarch, CORE_ADDR ADDR, std::pair<CORE_ADDR, CORE_ADDR> *range)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->address_in_shadow_stack_memory_range != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_address_in_shadow_stack_memory_range called\n");
+  return gdbarch->address_in_shadow_stack_memory_range (ADDR, range);
+}
+
+void
+set_gdbarch_address_in_shadow_stack_memory_range (struct gdbarch *gdbarch,
+						  gdbarch_address_in_shadow_stack_memory_range_ftype address_in_shadow_stack_memory_range)
+{
+  gdbarch->address_in_shadow_stack_memory_range = address_in_shadow_stack_memory_range;
+}
+
+bool
+gdbarch_top_addr_empty_shadow_stack_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->top_addr_empty_shadow_stack != NULL;
+}
+
+bool
+gdbarch_top_addr_empty_shadow_stack (struct gdbarch *gdbarch, const CORE_ADDR addr, const std::pair<CORE_ADDR, CORE_ADDR> range)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->top_addr_empty_shadow_stack != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_top_addr_empty_shadow_stack called\n");
+  return gdbarch->top_addr_empty_shadow_stack (addr, range);
+}
+
+void
+set_gdbarch_top_addr_empty_shadow_stack (struct gdbarch *gdbarch,
+					 gdbarch_top_addr_empty_shadow_stack_ftype top_addr_empty_shadow_stack)
+{
+  gdbarch->top_addr_empty_shadow_stack = top_addr_empty_shadow_stack;
+}
+
+int
+gdbarch_shadow_stack_element_size_aligned (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of shadow_stack_element_size_aligned, invalid_p == 0.  */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_shadow_stack_element_size_aligned called\n");
+  return gdbarch->shadow_stack_element_size_aligned;
+}
+
+void
+set_gdbarch_shadow_stack_element_size_aligned (struct gdbarch *gdbarch,
+					       int shadow_stack_element_size_aligned)
+{
+  gdbarch->shadow_stack_element_size_aligned = shadow_stack_element_size_aligned;
 }

@@ -1202,6 +1202,7 @@ COMMON_SFILES = \
 	sentinel-frame.c \
 	ser-event.c \
 	serial.c \
+	shadow-stack.c \
 	skip.c \
 	solib.c \
 	solib-target.c \
@@ -1663,6 +1664,7 @@ HFILES_NO_SRCDIR = \
 	serial.h \
 	ser-tcp.h \
 	ser-unix.h \
+	shadow-stack.h \
 	sh-tdep.h \
 	sim-regno.h \
 	skip.h \

@@ -9028,6 +9028,31 @@ Related setting: @ref{set print raw-frame-arguments}.
 @item -frame-info @code{auto}|@code{source-line}|@code{location}|@code{source-and-location}|@code{location-and-address}|@code{short-location}
 Set printing of frame information.
 Related setting: @ref{set print frame-info}.
+
+@item -shadow
+Print the shadow stack backtrace instead of the normal backtrace.
+Similar to the normal backtrace @value{GDBN} prints one line per
+element (so-called shadow stack frames) on the shadow stack.
+
+A shadow stack is supported, for instance, with the Intel Control-Flow
+Enforcement Technology (@xref{CET}) on x86 and the Guarded Control Stack
+feature (@pxref{GCS}) on AArch64.
+
+This option may be combined with @code{-frame-info} and implies
+@code{-no-filters} and @code{-frame-arguments none}.  Also the options
+@code{-past-main}, @code{-past-entry} or @code{-hide} are not supported.
+So by default, all available shadow stack frames are printed.
+
+This is how a shadow stack backtrace looks like on amd64:
+@smallexample
+@group
+#0  0x000055555555514a in call1 at amd64-shadow-stack.c:27
+#1  0x000055555555515f in main at amd64-shadow-stack.c:38
+#2  0x00007ffff7c2a1ca in __libc_start_call_main at ../libc_main.h:58
+#3  0x00007ffff7c2a28b in __libc_start_main_impl at ../csu/libc-start.c:360
+#4  0x0000555555555065 in _start
+@end group
+@end smallexample
 @end table
 
 The optional @var{qualifier} is maintained for backward compatibility.
@@ -27101,7 +27126,9 @@ all uses of @value{GDBN} with the architecture, both native and cross.
 
 @menu
 * AArch64::
+* GCS::
 * x86::
+* CET::
 * Alpha::
 * MIPS::
 * HPPA::               HP PA architecture
@@ -27477,6 +27504,7 @@ information automatically from the core file, and will show one of the above
 messages depending on whether the synchronous or asynchronous mode is selected.
 @xref{Memory Tagging}. @xref{Memory}.
 
+@node GCS
 @subsubsection AArch64 Guarded Control Stack
 @cindex Guarded Control Stack, AArch64
 @cindex GCS, AArch64
@@ -27544,6 +27572,7 @@ registers
 
 @end itemize
 
+@node CET
 @subsubsection Intel Control-Flow Enforcement Technology.
 @cindex Intel Control-Flow Enforcement Technology.
 

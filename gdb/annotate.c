@@ -506,10 +506,15 @@ annotate_frame_address_end (void)
 }
 
 void
-annotate_frame_function_name (void)
+annotate_frame_function_name (bool shadowstack_frame)
 {
   if (annotation_level == 2)
-    printf_unfiltered (("\n\032\032frame-function-name\n"));
+    {
+      if (!shadowstack_frame)
+	printf_unfiltered (("\n\032\032frame-function-name\n"));
+      else
+	printf_unfiltered (("\n\032\032shadow-stack-frame-function-name\n"));
+    }
 }
 
 void
@@ -520,45 +525,75 @@ annotate_frame_args (void)
 }
 
 void
-annotate_frame_source_begin (void)
+annotate_frame_source_begin (bool shadowstack_frame)
 {
   if (annotation_level == 2)
-    printf_unfiltered (("\n\032\032frame-source-begin\n"));
+    {
+      if (!shadowstack_frame)
+	printf_unfiltered (("\n\032\032frame-source-begin\n"));
+      else
+	printf_unfiltered (("\n\032\032shadow-stack-frame-source-begin\n"));
+    }
 }
 
 void
-annotate_frame_source_file (void)
+annotate_frame_source_file (bool shadowstack_frame)
 {
   if (annotation_level == 2)
-    printf_unfiltered (("\n\032\032frame-source-file\n"));
+    {
+      if (!shadowstack_frame)
+	printf_unfiltered (("\n\032\032frame-source-file\n"));
+      else
+	printf_unfiltered (("\n\032\032shadow-stack-frame-source-file\n"));
+    }
 }
 
 void
-annotate_frame_source_file_end (void)
+annotate_frame_source_file_end (bool shadowstack_frame)
 {
   if (annotation_level == 2)
-    printf_unfiltered (("\n\032\032frame-source-file-end\n"));
+    {
+      if (!shadowstack_frame)
+	printf_unfiltered (("\n\032\032frame-source-file-end\n"));
+      else
+	printf_unfiltered (("\n\032\032shadow-stack-frame-source-file-end\n"));
+    }
 }
 
 void
-annotate_frame_source_line (void)
+annotate_frame_source_line (bool shadowstack_frame)
 {
   if (annotation_level == 2)
-    printf_unfiltered (("\n\032\032frame-source-line\n"));
+    {
+      if (!shadowstack_frame)
+	printf_unfiltered (("\n\032\032frame-source-line\n"));
+      else
+	printf_unfiltered (("\n\032\032shadow-stack-frame-source-line\n"));
+    }
 }
 
 void
-annotate_frame_source_end (void)
+annotate_frame_source_end (bool shadowstack_frame)
 {
   if (annotation_level == 2)
-    printf_unfiltered (("\n\032\032frame-source-end\n"));
+    {
+      if (!shadowstack_frame)
+	printf_unfiltered (("\n\032\032frame-source-end\n"));
+      else
+	printf_unfiltered (("\n\032\032shadow-stack-frame-source-end\n"));
+    }
 }
 
 void
-annotate_frame_where (void)
+annotate_frame_where (bool shadowstack_frame)
 {
   if (annotation_level == 2)
-    printf_unfiltered (("\n\032\032frame-where\n"));
+    {
+      if (!shadowstack_frame)
+	printf_unfiltered (("\n\032\032frame-where\n"));
+      else
+	printf_unfiltered (("\n\032\032shadow-stack-frame-where\n"));
+    }
 }
 
 void
@@ -568,6 +603,36 @@ annotate_frame_end (void)
     printf_unfiltered (("\n\032\032frame-end\n"));
 }
 
+
+/* Annotations for shadow stack frames.  */
+
+void
+annotate_shadowstack_frame_begin (int level, gdbarch *gdbarch, CORE_ADDR pc)
+{
+  if (annotation_level > 1)
+    printf_unfiltered (("\n\032\032shadow-stack-frame-begin %d %s\n"),
+		       level, paddress (gdbarch, pc));
+}
+
+void annotate_shadowstack_frame_address (void)
+{
+  if (annotation_level == 2)
+    printf_unfiltered (("\n\032\032shadow-stack-frame-address\n"));
+}
+
+void
+annotate_shadowstack_frame_address_end (void)
+{
+  if (annotation_level == 2)
+    printf_unfiltered (("\n\032\032shadow-stack-frame-address-end\n"));
+}
+
+void annotate_shadowstack_frame_end ()
+{
+  if (annotation_level == 2)
+    printf_unfiltered (("\n\032\032shadow-stack-frame-end\n"));
+}
+
 void
 annotate_array_section_begin (int idx, struct type *elttype)
 {

@@ -290,7 +290,6 @@ proc_with_prefix test-backtrace {} {
     clean_restart
 
     test_gdb_complete_unique "backtrace" "backtrace"
-    test_gdb_complete_none "backtrace "
 
     gdb_test "backtrace -" "Ambiguous option at: -"
     gdb_test "backtrace --" "No stack\\."
@@ -306,6 +305,7 @@ proc_with_prefix test-backtrace {} {
 	"-past-entry"
 	"-past-main"
 	"-raw-frame-arguments"
+	"-shadow"
     }
 
     # Test that we complete the qualifiers, if there's any.

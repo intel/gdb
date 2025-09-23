@@ -288,6 +288,7 @@ struct gdbarch
   gdbarch_address_in_shadow_stack_memory_range_ftype *address_in_shadow_stack_memory_range = nullptr;
   gdbarch_top_addr_empty_shadow_stack_ftype *top_addr_empty_shadow_stack = nullptr;
   int shadow_stack_element_size_aligned = 8;
+  gdbarch_get_shadow_stack_size_ftype *get_shadow_stack_size = nullptr;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -587,6 +588,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of address_in_shadow_stack_memory_range, has predicate.  */
   /* Skip verify of top_addr_empty_shadow_stack, has predicate.  */
   /* Skip verify of shadow_stack_element_size_aligned, invalid_p == 0.  */
+  /* Skip verify of get_shadow_stack_size, has predicate.  */
   if (!log.empty ())
     internal_error (_("verify_gdbarch: the following are invalid ...%s"),
 		    log.c_str ());
@@ -1578,6 +1580,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: shadow_stack_element_size_aligned = %s\n",
 	      plongest (gdbarch->shadow_stack_element_size_aligned));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_get_shadow_stack_size_p() = %d\n",
+	      gdbarch_get_shadow_stack_size_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: get_shadow_stack_size = <%s>\n",
+	      host_address_to_string (gdbarch->get_shadow_stack_size));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -6262,4 +6270,28 @@ set_gdbarch_shadow_stack_element_size_aligned (struct gdbarch *gdbarch,
 					       int shadow_stack_element_size_aligned)
 {
   gdbarch->shadow_stack_element_size_aligned = shadow_stack_element_size_aligned;
+}
+
+bool
+gdbarch_get_shadow_stack_size_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->get_shadow_stack_size != NULL;
+}
+
+long
+gdbarch_get_shadow_stack_size (struct gdbarch *gdbarch, const std::optional<CORE_ADDR> ssp, const std::pair<CORE_ADDR, CORE_ADDR> range)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->get_shadow_stack_size != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_get_shadow_stack_size called\n");
+  return gdbarch->get_shadow_stack_size (gdbarch, ssp, range);
+}
+
+void
+set_gdbarch_get_shadow_stack_size (struct gdbarch *gdbarch,
+				   gdbarch_get_shadow_stack_size_ftype get_shadow_stack_size)
+{
+  gdbarch->get_shadow_stack_size = get_shadow_stack_size;
 }

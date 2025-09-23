@@ -1896,9 +1896,11 @@ extern void set_gdbarch_core_parse_exec_context (struct gdbarch *gdbarch, gdbarc
      unwinding and inferior function calls
    - top_addr_empty_shadow_stack: required for shadow stack pointer unwinding
    - ssp_regnum: required for inferior function calls.
-
    If the shadow stack alignment is not the predefault of 8 bytes, configure
    the gdbarch value shadow_stack_element_size_aligned.
+   To support the command line option 'backtrace -shadow' in addition to all
+   values and methods listed above also the gdbarch hook get_shadow_stack_size,
+   has to be provided.
 
    If possible, return the shadow stack pointer.  If the shadow stack
    feature is enabled then set SHADOW_STACK_ENABLED to true, otherwise
@@ -2037,3 +2039,14 @@ extern void set_gdbarch_top_addr_empty_shadow_stack (struct gdbarch *gdbarch, gd
 
 extern int gdbarch_shadow_stack_element_size_aligned (struct gdbarch *gdbarch);
 extern void set_gdbarch_shadow_stack_element_size_aligned (struct gdbarch *gdbarch, int shadow_stack_element_size_aligned);
+
+/* Return the number of elements which are currently on the shadow stack
+   based on the shadow stack pointer SSP and the shadow stack memory
+   RANGE [start_address, end_address) of the current thread.
+   In case shadow stack is not enabled for the current thread, return -1. */
+
+extern bool gdbarch_get_shadow_stack_size_p (struct gdbarch *gdbarch);
+
+typedef long (gdbarch_get_shadow_stack_size_ftype) (struct gdbarch *gdbarch, const std::optional<CORE_ADDR> ssp, const std::pair<CORE_ADDR, CORE_ADDR> range);
+extern long gdbarch_get_shadow_stack_size (struct gdbarch *gdbarch, const std::optional<CORE_ADDR> ssp, const std::pair<CORE_ADDR, CORE_ADDR> range);
+extern void set_gdbarch_get_shadow_stack_size (struct gdbarch *gdbarch, gdbarch_get_shadow_stack_size_ftype *get_shadow_stack_size);

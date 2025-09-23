@@ -289,6 +289,7 @@ struct gdbarch
   gdbarch_top_addr_empty_shadow_stack_ftype *top_addr_empty_shadow_stack = nullptr;
   int shadow_stack_element_size_aligned = 8;
   gdbarch_get_shadow_stack_size_ftype *get_shadow_stack_size = nullptr;
+  gdbarch_is_no_return_shadow_stack_address_ftype *is_no_return_shadow_stack_address = nullptr;
 };
 
 /* Create a new ``struct gdbarch'' based on information provided by
@@ -589,6 +590,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of top_addr_empty_shadow_stack, has predicate.  */
   /* Skip verify of shadow_stack_element_size_aligned, invalid_p == 0.  */
   /* Skip verify of get_shadow_stack_size, has predicate.  */
+  /* Skip verify of is_no_return_shadow_stack_address, has predicate.  */
   if (!log.empty ())
     internal_error (_("verify_gdbarch: the following are invalid ...%s"),
 		    log.c_str ());
@@ -1586,6 +1588,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: get_shadow_stack_size = <%s>\n",
 	      host_address_to_string (gdbarch->get_shadow_stack_size));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_is_no_return_shadow_stack_address_p() = %d\n",
+	      gdbarch_is_no_return_shadow_stack_address_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: is_no_return_shadow_stack_address = <%s>\n",
+	      host_address_to_string (gdbarch->is_no_return_shadow_stack_address));
   if (gdbarch->dump_tdep != NULL)
     gdbarch->dump_tdep (gdbarch, file);
 }
@@ -6294,4 +6302,28 @@ set_gdbarch_get_shadow_stack_size (struct gdbarch *gdbarch,
 				   gdbarch_get_shadow_stack_size_ftype get_shadow_stack_size)
 {
   gdbarch->get_shadow_stack_size = get_shadow_stack_size;
+}
+
+bool
+gdbarch_is_no_return_shadow_stack_address_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->is_no_return_shadow_stack_address != NULL;
+}
+
+bool
+gdbarch_is_no_return_shadow_stack_address (struct gdbarch *gdbarch, const shadow_stack_frame_info &frame, std::string &frame_type)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->is_no_return_shadow_stack_address != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_is_no_return_shadow_stack_address called\n");
+  return gdbarch->is_no_return_shadow_stack_address (gdbarch, frame, frame_type);
+}
+
+void
+set_gdbarch_is_no_return_shadow_stack_address (struct gdbarch *gdbarch,
+					       gdbarch_is_no_return_shadow_stack_address_ftype is_no_return_shadow_stack_address)
+{
+  gdbarch->is_no_return_shadow_stack_address = is_no_return_shadow_stack_address;
 }

@@ -249,6 +249,13 @@ do_print_shadow_stack_frame_info
 
       uiout->field_string
 	("func", frame_type, metadata_style.style ());
+
+      if (uiout->is_mi_like_p ())
+	{
+	  uiout->field_string
+	    ("arch", (gdbarch_bfd_arch_info (gdbarch))->printable_name);
+	}
+
       uiout->text ("\n");
       gdb_flush (gdb_stdout);
       return;
@@ -312,6 +319,12 @@ do_print_shadow_stack_frame_info
 	    if (lib != nullptr)
 	      print_lib (uiout, lib, true);
 	  }
+
+	if (uiout->is_mi_like_p ())
+	  {
+	    uiout->field_string
+	      ("arch", gdbarch_bfd_arch_info (gdbarch)->printable_name);
+	  }
       } /* Extra scope to print frame tuple.  */
 
       uiout->text ("\n");
@@ -334,10 +347,9 @@ do_print_shadow_stack_frame_info
   gdb_flush (gdb_stdout);
 }
 
-/* Redirect output to a temporary buffer for the duration of
-   do_print_shadow_stack_frame_info.  */
+/* See shadow-stack.h.  */
 
-static void
+void
 print_shadow_stack_frame_info
   (gdbarch *gdbarch, const frame_print_options &fp_opts,
    const shadow_stack_frame_info &frame, print_what print_what)

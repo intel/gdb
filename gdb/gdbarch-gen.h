@@ -2050,3 +2050,20 @@ extern bool gdbarch_get_shadow_stack_size_p (struct gdbarch *gdbarch);
 typedef long (gdbarch_get_shadow_stack_size_ftype) (struct gdbarch *gdbarch, const std::optional<CORE_ADDR> ssp, const std::pair<CORE_ADDR, CORE_ADDR> range);
 extern long gdbarch_get_shadow_stack_size (struct gdbarch *gdbarch, const std::optional<CORE_ADDR> ssp, const std::pair<CORE_ADDR, CORE_ADDR> range);
 extern void set_gdbarch_get_shadow_stack_size (struct gdbarch *gdbarch, gdbarch_get_shadow_stack_size_ftype *get_shadow_stack_size);
+
+/* There can be elements on the shadow stack which are not return addresses.
+   This happens for example on x86 with CET in case of signals.
+   If an architecture implements the command options 'backtrace -shadow' and
+   the shadow stack can contain elements which are not return addresses, this
+   function has to be provided.
+
+   Return true, if FRAME does not contain a return address in FRAME->VALUE
+   but another valid value for the architecture's shadow stack.  In this case,
+   also the string frame_type has to be configured to display the type in the
+   shadow stack backtrace. */
+
+extern bool gdbarch_is_no_return_shadow_stack_address_p (struct gdbarch *gdbarch);
+
+typedef bool (gdbarch_is_no_return_shadow_stack_address_ftype) (struct gdbarch *gdbarch, const shadow_stack_frame_info &frame, std::string &frame_type);
+extern bool gdbarch_is_no_return_shadow_stack_address (struct gdbarch *gdbarch, const shadow_stack_frame_info &frame, std::string &frame_type);
+extern void set_gdbarch_is_no_return_shadow_stack_address (struct gdbarch *gdbarch, gdbarch_is_no_return_shadow_stack_address_ftype *is_no_return_shadow_stack_address);

@@ -9053,6 +9053,26 @@ This is how a shadow stack backtrace looks like on amd64:
 #4  0x0000555555555065 in _start
 @end group
 @end smallexample
+
+There can be elements on the shadow stack which are not return addresses,
+for example on x86 with the Intel Control-Flow Enforcement Technology
+(@xref{CET}).  In case of signals, the old shadow stack pointer is pushed
+in a special format with bit 63 set.  See @url{https://docs.kernel.org/arch/x86/shstk.html)}
+for more details.  For such shadow stack elements, the shadow stack
+frame just contains the level and a string describing the shadow stack
+element:
+
+@smallexample
+@group
+(gdb) bt -shadow 4
+#0  0x00007ffff7c45330 in __restore_rt from /lib/x86_64-linux-gnu/libc.so.6
+#1  <sigframe token>
+#2  0x00007ffff7c4527e in __GI_raise at ../sysdeps/posix/raise.c:26
+#3  0x000055555555519d in main at tmp/amd64-shadow-stack-signal.c:29
+(More shadow stack frames follow...)
+@end group
+@end smallexample
+
 @end table
 
 The optional @var{qualifier} is maintained for backward compatibility.

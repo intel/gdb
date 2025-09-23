@@ -544,6 +544,17 @@ Value(
     invalid=False,
 )
 
+Value(
+    comment="""
+Register number for the shadow stack pointer.  For inferior calls, the
+gdbarch value ssp_regnum has to be provided.
+""",
+    type="int",
+    name="ssp_regnum",
+    predefault="-1",
+    invalid=False,
+)
+
 Method(
     comment="""
 Convert stab register number (from `r' declaration) to a gdb REGNUM.
@@ -3010,24 +3021,23 @@ Method(
 Some targets support special hardware-assisted control-flow protection
 technologies.  For example, the Intel Control-Flow Enforcement Technology
 (Intel CET) on x86 provides a shadow stack and indirect branch tracking.
-To enable shadow stack support for inferior calls the shadow_stack_push
-gdbarch hook has to be provided.  The get_shadow_stack_pointer gdbarch
-hook has to be provided to enable displaced stepping.
+For GDB shadow stack support the following methods or values must be
+provided:
+- get_shadow_stack_pointer: required for displaced stepping and inferior
+  function calls
+- address_in_shadow_stack_memory_range: required for shadow stack pointer
+  unwinding and inferior function calls
+- top_addr_empty_shadow_stack: required for shadow stack pointer unwinding
+- ssp_regnum: required for inferior function calls.
 
-Push NEW_ADDR to the shadow stack and update the shadow stack pointer.
-""",
-    type="void",
-    name="shadow_stack_push",
-    params=[("CORE_ADDR", "new_addr"), ("regcache *", "regcache")],
-    predicate=True,
-)
+If the shadow stack alignment is not the predefault of 8 bytes, configure
+the gdbarch value shadow_stack_element_size_aligned.
 
-Method(
-    comment="""
 If possible, return the shadow stack pointer.  If the shadow stack
 feature is enabled then set SHADOW_STACK_ENABLED to true, otherwise
 set SHADOW_STACK_ENABLED to false.  This hook has to be provided to enable
-displaced stepping for shadow stack enabled programs.
+displaced stepping and inferior function calls for shadow stack enabled
+programs.
 On some architectures, the shadow stack pointer is available even if the
 feature is disabled.  So dependent on the target, an implementation of
 this function may return a valid shadow stack pointer, but set
@@ -3162,5 +3172,48 @@ Return a gdbarch corresponding to the given target description.
     name="update_architecture",
     params=[("const target_desc *", "tdesc")],
     predefault="default_update_architecture",
+    invalid=False,
+)
+
+Function(
+    comment="""
+Returns true if ADDR belongs to a shadow stack memory range.  If this is
+the case and RANGE is non-null, assign the shadow stack memory range to
+RANGE [start_address, end_address).  This hook has to be provided for
+shadow stack pointer unwinding and inferior function calls.
+""",
+    type="bool",
+    name="address_in_shadow_stack_memory_range",
+    params=[
+        ("CORE_ADDR", "ADDR"),
+        ("std::pair<CORE_ADDR, CORE_ADDR> *", "range")
+    ],
+    predicate=True,
+)
+
+Function(
+    comment="""
+Return true if ADDR points to the top of an empty shadow stack, defined by
+RANGE [start_address, end_address).  This hook has to be provided to enable
+unwinding of the shadow stack pointer.
+""",
+    type="bool",
+    name="top_addr_empty_shadow_stack",
+    params=[
+        ("const CORE_ADDR", "addr"),
+        ("const std::pair<CORE_ADDR, CORE_ADDR>", "range")
+    ],
+    predicate=True,
+)
+
+Value(
+    comment="""
+The number of bytes required to update the shadow stack pointer by one
+element.  In case the alignment is not the predefault (8 bytes), configure
+this value.
+""",
+    type="int",
+    name="shadow_stack_element_size_aligned",
+    predefault="8",
     invalid=False,
 )

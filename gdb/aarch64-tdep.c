@@ -58,6 +58,9 @@
 
 /* For inferior_ptid and current_inferior ().  */
 #include "inferior.h"
+
+#include "shadow-stack.h"
+
 /* For std::sqrt and std::pow.  */
 #include <cmath>
 
@@ -1893,29 +1896,6 @@ pass_in_v_vfp_candidate (struct gdbarch *gdbarch, struct regcache *regcache,
     }
 }
 
-/* Push LR_VALUE to the Guarded Control Stack.  */
-
-static void
-aarch64_push_gcs_entry (regcache *regs, CORE_ADDR lr_value)
-{
-  gdbarch *arch = regs->arch ();
-  aarch64_gdbarch_tdep *tdep = gdbarch_tdep<aarch64_gdbarch_tdep> (arch);
-  CORE_ADDR gcs_addr;
-
-  register_status status = regs->cooked_read (tdep->gcs_reg_base, &gcs_addr);
-  if (status != REG_VALID)
-    error (_("Can't read $gcspr."));
-
-  gcs_addr -= 8;
-  gdb_byte buf[8];
-  store_integer (buf, gdbarch_byte_order (arch), lr_value);
-  if (target_write_memory (gcs_addr, buf, sizeof (buf)) != 0)
-    error (_("Can't write to Guarded Control Stack."));
-
-  /* Update GCSPR.  */
-  regcache_cooked_write_unsigned (regs, tdep->gcs_reg_base, gcs_addr);
-}
-
 /* Remove the newest entry from the Guarded Control Stack.  */
 
 static void
@@ -1931,15 +1911,6 @@ aarch64_pop_gcs_entry (regcache *regs)
 
   /* Update GCSPR.  */
   regcache_cooked_write_unsigned (regs, tdep->gcs_reg_base, gcs_addr + 8);
-}
-
-/* Implement the "shadow_stack_push" gdbarch method.  */
-
-static void
-aarch64_shadow_stack_push (gdbarch *gdbarch, CORE_ADDR new_addr,
-			   regcache *regcache)
-{
-  aarch64_push_gcs_entry (regcache, new_addr);
 }
 
 /* Implement the "push_dummy_call" gdbarch method.  */
@@ -3683,7 +3654,7 @@ aarch64_displaced_step_b (const int is_bl, const int32_t offset,
       gdbarch_get_shadow_stack_pointer (dsd->regs->arch (), dsd->regs,
 					gcs_is_enabled);
       if (gcs_is_enabled)
-	aarch64_push_gcs_entry (dsd->regs, data->insn_addr + 4);
+	shadow_stack_push (dsd->regs, data->insn_addr + 4);
     }
 }
 
@@ -3847,7 +3818,7 @@ aarch64_displaced_step_others (const uint32_t insn,
       gdbarch_get_shadow_stack_pointer (dsd->regs->arch (), dsd->regs,
 					gcs_is_enabled);
       if (gcs_is_enabled)
-	aarch64_push_gcs_entry (dsd->regs, data->insn_addr + 4);
+	shadow_stack_push (dsd->regs, data->insn_addr + 4);
     }
   else
     aarch64_emit_insn (dsd->insn_buf, insn);
@@ -4809,6 +4780,10 @@ aarch64_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* Register a hook for converting a memory tag to a string.  */
   set_gdbarch_memtag_to_string (gdbarch, aarch64_memtag_to_string);
 
+  /* AArch64's shadow stack pointer is the GCSPR.  */
+  if (tdep->has_gcs ())
+    set_gdbarch_ssp_regnum (gdbarch, tdep->gcs_reg_base);
+
   /* ABI */
   set_gdbarch_short_bit (gdbarch, 16);
   set_gdbarch_int_bit (gdbarch, 32);
@@ -4870,9 +4845,6 @@ aarch64_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_gen_return_address (gdbarch, aarch64_gen_return_address);
 
   set_gdbarch_get_pc_address_flags (gdbarch, aarch64_get_pc_address_flags);
-
-  if (tdep->has_gcs ())
-    set_gdbarch_shadow_stack_push (gdbarch, aarch64_shadow_stack_push);
 
   tdesc_use_registers (gdbarch, tdesc, std::move (tdesc_data));
 

@@ -294,29 +294,67 @@ proc sycl_num_subdevices { device } {
 #
 # CMD is the command to execute.
 # NAME is the name of the test.
+# PROMPT_LINES_ONLY defines whether lines without rank-id should be
+# ignored ('true', default) or not ('false').
 #
 # MPIGDB multiplexes outputs from all attached debuggers.
 # This proc arranges outputs in key-value pairs, where key is the rank,
-# and value is all the lines from that rank.
+# and value is all the lines from that rank.  If PROMPT_LINE_ONLY is
+# 'false', lines without rank-id are also included.  Key-value pairs are
+# stored in global variable 'impi_gdb_output'.
 #
-# For example, if the output is following:
-#    [0]   A
-#    [2]   B
-#    [1]   C
-#    [0,2] D
-#    [1]   E
-#    [0-2] F
-# Following code prints the output of each rank:
-#    impi_get_gdb_output ("continue" "test")
-#    puts $::impi_gdb_output(0)    # -> "A\r\nD\r\nF"
-#    puts $::impi_gdb_output(1)    # -> "C\r\nE\r\nF"
-#    puts $::impi_gdb_output(2)    # -> "B\r\nD\r\nF"
+# For example, assume the output contains totally nine traces from three
+# different ranks:
+#    [0-2] (mpigdb) continue
+#    [0]   T1
+#	   T2
+#    [2]   T3
+#    [1]   T4
+#    [0,2] T5
+#	   T6
+#    [1]   T7
+#	   T8
+#    [0-2] (mpigdb)
+# Following code prints the output of each rank.  If 'prompt_lines_only' is
+# 'true' (default value), only lines with rank-id are included:
+#    impi_get_gdb_output CMD NAME
+#    puts $::impi_gdb_output(0)
+#	[0]   T1
+#	[0,2] T5
+#	[0-2] (mpigdb)
+#    puts $::impi_gdb_output(1)
+#	[1]   T4
+#	[1]   T7
+#	[0-2] (mpigdb)
+#    puts $::impi_gdb_output(2)
+#	[2]   T3
+#	[0,2] T5
+#	[0-2] (mpigdb)
+# When 'prompt_lines_only' is 'false', lines without rank-id are
+# included:
+#    impi_get_gdb_output CMD NAME false
+#    puts $::impi_gdb_output(0)
+#	[0]   T1
+#	      T2
+#	[0,2] T5
+#	      T6
+#	[0-2] (mpigdb)
+#    puts $::impi_gdb_output(1)
+#	[1]   T4
+#	[1]   T7
+#	      T8
+#	[0-2] (mpigdb)
+#    puts $::impi_gdb_output(2)
+#	[2]   T3
+#	[0,2] T5
+#	      T6
+#	[0-2] (mpigdb)
 #
 # Returns:
-#    0 in success
+#    0 in success.  Key-value pairs are stored in ::impi_gdb_output.
 #   -1 if no prompt detected, test has failed.
 
-proc impi_get_gdb_output { cmd name } {
+proc impi_get_gdb_output { cmd name {prompt_line_only true} } {
     set fill "\[^\r\n\]*"
     set full_name "get gdb lines: $name"
     set prompt_pattern {}
@@ -325,28 +363,53 @@ proc impi_get_gdb_output { cmd name } {
     # Remove any previous outputs.
     unset ::impi_gdb_output ; array set ::impi_gdb_output {}
 
-    set kfail_pattern "Process record does not support instruction 0xfae64 at.*"
+    set prompt ""
     gdb_test_multiple $cmd $full_name -prompt $::impi_gdb_prompt {
-	-re "\($::impi_rank_id\($fill\)\)" {
-
-	    set prompt $expect_out(2,string)
-	    set line $expect_out(1,string)
-	    set rank_list [impi_get_ranks_in_promt $prompt]
-	    foreach rank $rank_list {
-		set full_line ""
-		if {[info exists ::impi_gdb_output($rank)]} {
-		    set full_line $::impi_gdb_output($rank)
-		}
-		append full_line $line "\r\n" 
-		set ::impi_gdb_output($rank) $full_line
-	    }
-
-	    # Is it mpigdb prompt?
-	    if {[regexp $prompt_pattern $line]} {
-		return 0
+	-re "\(.*?\[\r\n\]\)\($::impi_rank_id\)" {
+	    if { $prompt == "" } {
+		set prompt $expect_out(3,string);
+		exp_continue
 	    } else {
+		set rank_list [impi_get_ranks_in_promt $prompt]
+		set line $expect_out(1,string)
+
+		# Remove newline at the end.
+		# If 'prompt_line_only' is set, remove all but the first line.
+		set first_indx [string first \n $line]
+		if { ($prompt_line_only && -1 < $first_indx) } {
+		    set trace_line [string replace $line [incr first_indx -1] end ]
+		} else {
+		    set trace_line [string trimright $line "\r\n"]
+		}
+
+		foreach rank $rank_list {
+		    set all_lines ""
+		    if {[info exists ::impi_gdb_output($rank)]} {
+			set all_lines $::impi_gdb_output($rank)
+		    }
+
+		    append all_lines "\[$prompt\] $trace_line\r\n"
+		    set ::impi_gdb_output($rank) $all_lines
+		}
+
+		set prompt $expect_out(3,string);
 		exp_continue
 	    }
+	}
+
+	-re "\(.*?\)\[$::whitespaces\]+\\\(mpigdb\\\)\[$::whitespaces\]*" {
+	    set rank_list [impi_get_ranks_in_promt $prompt]
+
+	    foreach rank $rank_list {
+		set all_lines ""
+		if {[info exists ::impi_gdb_output($rank)]} {
+		    set all_lines $::impi_gdb_output($rank)
+		}
+		append all_lines "\[$prompt\] (mpigdb)\r\n"
+		set ::impi_gdb_output($rank) $all_lines
+	    }
+
+	    return 0
 	}
     }
 

@@ -35,4 +35,10 @@ void shadow_stack_push (regcache *regcache, const CORE_ADDR new_addr);
 value *dwarf2_prev_ssp (const frame_info_ptr &this_frame,
 			void **this_cache, int regnum);
 
+/* Implementation of "backtrace shadow" comand.  */
+
+void backtrace_shadow_command
+  (const frame_print_options &fp_opts,
+   const char *count_exp, int from_tty);
+
 #endif /* GDB_SHADOW_STACK_H */

@@ -3029,9 +3029,11 @@ provided:
   unwinding and inferior function calls
 - top_addr_empty_shadow_stack: required for shadow stack pointer unwinding
 - ssp_regnum: required for inferior function calls.
-
 If the shadow stack alignment is not the predefault of 8 bytes, configure
 the gdbarch value shadow_stack_element_size_aligned.
+To support the command line option 'backtrace -shadow' in addition to all
+values and methods listed above also the gdbarch hook get_shadow_stack_size,
+has to be provided.
 
 If possible, return the shadow stack pointer.  If the shadow stack
 feature is enabled then set SHADOW_STACK_ENABLED to true, otherwise
@@ -3216,4 +3218,20 @@ this value.
     name="shadow_stack_element_size_aligned",
     predefault="8",
     invalid=False,
+)
+
+Method(
+    comment="""
+Return the number of elements which are currently on the shadow stack
+based on the shadow stack pointer SSP and the shadow stack memory
+RANGE [start_address, end_address) of the current thread.
+In case shadow stack is not enabled for the current thread, return -1.
+""",
+    type="long",
+    name="get_shadow_stack_size",
+    params=[
+        ("const std::optional<CORE_ADDR>", "ssp"),
+        ("const std::pair<CORE_ADDR, CORE_ADDR>", "range")
+    ],
+    predicate=True,
 )

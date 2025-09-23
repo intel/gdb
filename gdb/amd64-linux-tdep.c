@@ -2007,6 +2007,29 @@ amd64_linux_top_addr_empty_shadow_stack
   return addr == range.second;
 }
 
+/* Return the number of elements which are currently on the shadow stack
+   based on the shadow stack memory RANGE [start_address, end_address)
+   of the current thread.  In case shadow stack is not enabled for the
+   current thread, return -1.  */
+
+static long
+amd64_linux_get_shadow_stack_size
+  (gdbarch *gdbarch,
+   const std::optional<CORE_ADDR> ssp,
+   const std::pair<CORE_ADDR, CORE_ADDR> range)
+{
+  /* For x86, if we don't have a shadow stack pointer, we can assume
+     that the shadow stack is disabled for the current thread.  */
+  if (!ssp.has_value ())
+    return -1;
+
+  const unsigned long shadow_stack_bytes = range.second - *ssp;
+
+  gdb_assert ((shadow_stack_bytes % 8) == 0);
+
+  return shadow_stack_bytes / 8;
+}
+
 static void
 amd64_linux_init_abi_common (struct gdbarch_info info, struct gdbarch *gdbarch,
 			     int num_disp_step_buffers)
@@ -2070,6 +2093,9 @@ amd64_linux_init_abi_common (struct gdbarch_info info, struct gdbarch *gdbarch,
 
   set_gdbarch_top_addr_empty_shadow_stack
     (gdbarch, amd64_linux_top_addr_empty_shadow_stack);
+ 
+  set_gdbarch_get_shadow_stack_size
+    (gdbarch, amd64_linux_get_shadow_stack_size);
 }
 
 static void

@@ -1,0 +1,97 @@
+# Copyright 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests for lane divergence mode.
+
+load_lib sycl.exp
+
+standard_testfile simd.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+proc test_lane_divergence {mode_value lane} {
+
+    # Set the lane divergence mode
+    gdb_test_no_output "set lane-divergence $mode_value"
+
+    # Verify the setting was applied
+    gdb_test "show lane-divergence" \
+	"Lane divergence mode is $mode_value\\."
+
+    set condition_line [gdb_get_line_number "kernel-condition-line"]
+    set even_line [gdb_get_line_number "kernel-even-branch"]
+    set odd_line [gdb_get_line_number "kernel-odd-branch"]
+    gdb_breakpoint "$condition_line" {temporary}
+
+    gdb_continue_to_breakpoint "hit kernel BP" "$::srcfile:$condition_line.*"
+
+    gdb_test "thread :$lane" "Switching to thread.*:$lane.*"
+    gdb_test_no_output "set scheduler-locking step"
+
+    set hit_odd_branch 0
+    set hit_even_branch 0
+    gdb_test_multiple "next" "step thread branches" {
+	-re -wrap "$even_line.*" {
+	    set hit_even_branch 1
+	    send_gdb "next\n"
+	    exp_continue
+	}
+	-re -wrap "$odd_line.*" {
+	    set hit_odd_branch 1
+	    send_gdb "next\n"
+	    exp_continue
+	}
+	-re -wrap "" {
+	    if {$mode_value} {
+		gdb_assert {$hit_odd_branch != $hit_even_branch} \
+		    "single branch is hit"
+		gdb_assert {$hit_odd_branch == [expr $lane % 2 != 0]} \
+		    "hit the active branch only"
+	    } else {
+		gdb_assert {$hit_even_branch} "hit even branch"
+		gdb_assert {$hit_odd_branch} "hit odd branch"
+	    }
+	}
+    }
+}
+
+foreach device $sycl_device_list {
+    sycl_with_intelgt_lock $device {
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	foreach_with_prefix lane_divergence {"on" "off"} {
+	    foreach_with_prefix lane {0 1 6 15} {
+
+	    clean_restart "${binfile}"
+	    if {![sycl_start $device]} {
+		continue
+	    }
+
+	    test_lane_divergence $lane_divergence $lane
+	}}
+    }
+}

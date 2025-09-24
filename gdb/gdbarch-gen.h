@@ -354,6 +354,15 @@ typedef lanes_mask_t (gdbarch_active_lanes_mask_ftype) (struct gdbarch *gdbarch,
 extern lanes_mask_t gdbarch_active_lanes_mask (struct gdbarch *gdbarch, thread_info *tp);
 extern void set_gdbarch_active_lanes_mask (struct gdbarch *gdbarch, gdbarch_active_lanes_mask_ftype *active_lanes_mask);
 
+/* Get the re-enable PC for thread TP and lane LANE.
+
+   Returns the re-enable PC if available.  This address marks where the selected
+   lane becomes active again. */
+
+typedef std::optional<CORE_ADDR> (gdbarch_lane_re_enable_pc_ftype) (struct gdbarch *gdbarch, thread_info *tp, int lane);
+extern std::optional<CORE_ADDR> gdbarch_lane_re_enable_pc (struct gdbarch *gdbarch, thread_info *tp, int lane);
+extern void set_gdbarch_lane_re_enable_pc (struct gdbarch *gdbarch, gdbarch_lane_re_enable_pc_ftype *lane_re_enable_pc);
+
 /* Implement DUMMY_ID and PUSH_DUMMY_CALL, then delete
    deprecated_fp_regnum. */
 

@@ -234,6 +234,18 @@ show_debug_infrun (struct ui_file *file, int from_tty,
   gdb_printf (file, _("Inferior debugging is %s.\n"), value);
 }
 
+/* See infrun.h.  */
+bool lane_divergence = false;
+
+/* Implementation of "show lane-divergence".  */
+
+static void
+show_lane_divergence (ui_file *file, int from_tty, cmd_list_element *c,
+		      const char *value)
+{
+  gdb_printf (file, _("Lane divergence mode is %s.\n"), value);
+}
+
 /* Support for disabling address space randomization.  */
 
 bool disable_randomization = true;
@@ -8473,6 +8485,19 @@ process_event_stop_test (struct execution_control_state *ecs)
       return;
     }
 
+  /* If this lane is divergent, keep going until it becomes
+     active.  */
+  int curr_lane = ecs->event_thread->current_simd_lane ();
+  if (lane_divergence
+      && (!ecs->event_thread->is_simd_lane_active (curr_lane)))
+    {
+      infrun_debug_printf ("Resuming divergent lane %d in thread %s.",
+			   curr_lane, print_thread_id (ecs->event_thread));
+
+      keep_going (ecs);
+      return;
+    }
+
   /* Reverse stepping through solib trampolines.  */
 
   if (ecs->event_thread->control.execution_direction == EXEC_REVERSE
@@ -11556,6 +11581,16 @@ breakpoints may not be set, and the program cannot be interrupted\n\
 or signalled."),
 			   set_observer_mode,
 			   show_observer_mode,
+			   &setlist,
+			   &showlist);
+
+  add_setshow_boolean_cmd ("lane-divergence", class_run,
+			   &lane_divergence,  _("\
+Set lane divergence debugging mode."), _("\
+Show lane divergence debugging mode."), _("\
+When this mode is on, lane divergence debugging is enabled."),
+			   nullptr,
+			   show_lane_divergence,
 			   &setlist,
 			   &showlist);
 

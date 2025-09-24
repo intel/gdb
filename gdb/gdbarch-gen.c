@@ -94,6 +94,7 @@ struct gdbarch
   gdbarch_dummy_id_ftype *dummy_id = default_dummy_id;
   gdbarch_value_arg_coerce_ftype *value_arg_coerce = default_value_arg_coerce;
   gdbarch_active_lanes_mask_ftype *active_lanes_mask = nullptr;
+  gdbarch_lane_re_enable_pc_ftype *lane_re_enable_pc = [] (gdbarch *, thread_info *, int) -> std::optional<CORE_ADDR> {return {};};
   int deprecated_fp_regnum = -1;
   gdbarch_push_dummy_call_ftype *push_dummy_call = nullptr;
   enum call_dummy_location_type call_dummy_location = AT_ENTRY_POINT;
@@ -379,6 +380,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of dummy_id, invalid_p == 0.  */
   /* Skip verify of value_arg_coerce, invalid_p == 0.  */
   /* Skip verify of active_lanes_mask, has predicate.  */
+  /* Skip verify of lane_re_enable_pc, invalid_p == 0.  */
   /* Skip verify of deprecated_fp_regnum, invalid_p == 0.  */
   /* Skip verify of push_dummy_call, has predicate.  */
   /* Skip verify of call_dummy_location, invalid_p == 0.  */
@@ -779,6 +781,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: active_lanes_mask = <%s>\n",
 	      host_address_to_string (gdbarch->active_lanes_mask));
+  gdb_printf (file,
+	      "gdbarch_dump: lane_re_enable_pc = <%s>\n",
+	      host_address_to_string (gdbarch->lane_re_enable_pc));
   gdb_printf (file,
 	      "gdbarch_dump: deprecated_fp_regnum = %s\n",
 	      plongest (gdbarch->deprecated_fp_regnum));
@@ -2456,6 +2461,23 @@ set_gdbarch_active_lanes_mask (struct gdbarch *gdbarch,
 			       gdbarch_active_lanes_mask_ftype active_lanes_mask)
 {
   gdbarch->active_lanes_mask = active_lanes_mask;
+}
+
+std::optional<CORE_ADDR>
+gdbarch_lane_re_enable_pc (struct gdbarch *gdbarch, thread_info *tp, int lane)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->lane_re_enable_pc != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_lane_re_enable_pc called\n");
+  return gdbarch->lane_re_enable_pc (gdbarch, tp, lane);
+}
+
+void
+set_gdbarch_lane_re_enable_pc (struct gdbarch *gdbarch,
+			       gdbarch_lane_re_enable_pc_ftype lane_re_enable_pc)
+{
+  gdbarch->lane_re_enable_pc = lane_re_enable_pc;
 }
 
 int

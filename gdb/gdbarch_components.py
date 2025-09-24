@@ -660,6 +660,24 @@ Return the active SIMD lanes mask for a thread TP.
     invalid=False,
 )
 
+Method(
+    comment="""
+Get the re-enable PC for thread TP and lane LANE.
+
+Returns the re-enable PC if available.  This address marks where the selected
+lane becomes active again.
+""",
+    type="std::optional<CORE_ADDR>",
+    name="lane_re_enable_pc",
+    params=[
+        ("thread_info *", "tp"),
+        ("int", "lane"),
+    ],
+    predicate=False,
+    invalid=False,
+    predefault="[] (gdbarch *, thread_info *, int) -> std::optional<CORE_ADDR> {return {};}",
+)
+
 Value(
     comment="""
 Implement DUMMY_ID and PUSH_DUMMY_CALL, then delete

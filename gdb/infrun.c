@@ -8494,6 +8494,21 @@ process_event_stop_test (struct execution_control_state *ecs)
       infrun_debug_printf ("Resuming divergent lane %d in thread %s.",
 			   curr_lane, print_thread_id (ecs->event_thread));
 
+      std::optional<CORE_ADDR> re_enable_pc
+	= gdbarch_lane_re_enable_pc (gdbarch, ecs->event_thread, curr_lane);
+      if (re_enable_pc.has_value ()
+	  && (*re_enable_pc != ecs->event_thread->stop_pc ()))
+	{
+	  /* Put a breakpoint at re-enable PC and resume until breakpoint
+	     is hit.  */
+	  symtab_and_line re_sal;
+	  re_sal.pc = *re_enable_pc;
+	  re_sal.section = find_pc_overlay (re_sal.pc);
+	  re_sal.pspace = get_frame_program_space (frame);
+	  insert_step_resume_breakpoint_at_sal (gdbarch, re_sal,
+						null_frame_id);
+	}
+
       keep_going (ecs);
       return;
     }

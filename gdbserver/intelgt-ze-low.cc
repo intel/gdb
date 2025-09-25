@@ -1161,6 +1161,15 @@ intelgt_ze_target::add_regset (target_desc *tdesc, const ze_device_info &dinfo,
 						 32u));
       break;
 
+    case ZET_DEBUG_REGSET_TYPE_MSG_INTEL_GPU:
+      feature = tdesc_create_feature (tdesc, intelgt::feature_msg);
+
+      intelgt_add_regset (feature, regnum, "msg", regprop.count, "arf",
+			  regprop.bitSize, regset.is_writeable,
+			  intelgt_uint_reg_type (feature, regprop.bitSize,
+						 32u));
+      break;
+
     case ZET_DEBUG_REGSET_TYPE_MODE_FLAGS_INTEL_GPU:
       feature = tdesc_create_feature (tdesc, intelgt::feature_mf);
 

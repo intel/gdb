@@ -850,7 +850,7 @@ replace_type (struct type *ntype, struct type *type)
 	 variants.  This assertion shouldn't ever be triggered because
 	 symbol readers which do construct address-class variants don't
 	 call replace_type().  */
-      gdb_assert (TYPE_ADDRESS_CLASS_ALL (chain) == 0);
+      gdb_assert (type_address_class (chain) == 0);
 
       chain->set_length (type->length ());
       chain = TYPE_CHAIN (chain);
@@ -5396,13 +5396,9 @@ recursive_dump_type (struct type *type, int spaces)
     {
       gdb_puts (" TYPE_DATA_SPACE");
     }
-  if (TYPE_ADDRESS_CLASS_1 (type))
+  if (type_address_class (type) != 0)
     {
-      gdb_puts (" TYPE_ADDRESS_CLASS_1");
-    }
-  if (TYPE_ADDRESS_CLASS_2 (type))
-    {
-      gdb_puts (" TYPE_ADDRESS_CLASS_2");
+      gdb_printf (" TYPE_ADDRESS_CLASS (%u)", type_address_class (type));
     }
   if (TYPE_RESTRICT (type))
     {
@@ -6297,6 +6293,14 @@ builtin_type (struct objfile *objfile)
 }
 
 /* See dwarf2/call-site.h.  */
+
+unsigned int
+type_address_class (type *type)
+{
+  return address_class_from_type_instance_flags (type->instance_flags ());
+}
+
+/* See gdbtypes.h.  */
 
 CORE_ADDR
 call_site::pc () const

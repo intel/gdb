@@ -84,9 +84,11 @@ enum type_instance_flag_value : unsigned
   TYPE_INSTANCE_FLAG_DATA_SPACE = (1 << 3),
   TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 = (1 << 4),
   TYPE_INSTANCE_FLAG_ADDRESS_CLASS_2 = (1 << 5),
-  TYPE_INSTANCE_FLAG_NOTTEXT = (1 << 6),
-  TYPE_INSTANCE_FLAG_RESTRICT = (1 << 7),
-  TYPE_INSTANCE_FLAG_ATOMIC = (1 << 8)
+  TYPE_INSTANCE_FLAG_ADDRESS_CLASS_3 = (1 << 6),
+  TYPE_INSTANCE_FLAG_ADDRESS_CLASS_4 = (1 << 7),
+  TYPE_INSTANCE_FLAG_NOTTEXT = (1 << 8),
+  TYPE_INSTANCE_FLAG_RESTRICT = (1 << 9),
+  TYPE_INSTANCE_FLAG_ATOMIC = (1 << 10),
 };
 
 DEF_ENUM_FLAGS_TYPE (enum type_instance_flag_value, type_instance_flags);
@@ -176,21 +178,50 @@ DEF_ENUM_FLAGS_TYPE (enum func_type_flag_value, func_type_flags);
 #define TYPE_DATA_SPACE(t) \
   ((((t)->instance_flags ()) & TYPE_INSTANCE_FLAG_DATA_SPACE) != 0)
 
-/* * Address class flags.  Some environments provide for pointers
-   whose size is different from that of a normal pointer or address
-   types where the bits are interpreted differently than normal
-   addresses.  The TYPE_INSTANCE_FLAG_ADDRESS_CLASS_n flags may be used in
-   target specific ways to represent these different types of address
-   classes.  */
+/* * Address class flags.  Some environments provide for pointers whose
+   size is different from that of a normal pointer or address types where
+   the bits are interpreted differently than normal addresses.  The
+   TYPE_INSTANCE_FLAG_ADDRESS_CLASS_n flags together form an enum that may
+   be used in target specific ways to represent these different types of
+   address classes.  */
 
-#define TYPE_ADDRESS_CLASS_1(t) (((t)->instance_flags ()) \
-				 & TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1)
-#define TYPE_ADDRESS_CLASS_2(t) (((t)->instance_flags ()) \
-				 & TYPE_INSTANCE_FLAG_ADDRESS_CLASS_2)
-#define TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL \
-  (TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 | TYPE_INSTANCE_FLAG_ADDRESS_CLASS_2)
-#define TYPE_ADDRESS_CLASS_ALL(t) (((t)->instance_flags ()) \
-				   & TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL)
+#define TYPE_INSTANCE_FLAG_ADDRESS_CLASS_SHIFT 4
+
+#define TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL	\
+  (TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1		\
+   | TYPE_INSTANCE_FLAG_ADDRESS_CLASS_2		\
+   | TYPE_INSTANCE_FLAG_ADDRESS_CLASS_3		\
+   | TYPE_INSTANCE_FLAG_ADDRESS_CLASS_4)
+
+/* Return the address class from a set of type instance flags.  */
+
+static inline unsigned int
+address_class_from_type_instance_flags (type_instance_flags flags)
+{
+  return ((((unsigned int) flags)
+	   & ((unsigned int) TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL))
+	  >> TYPE_INSTANCE_FLAG_ADDRESS_CLASS_SHIFT);
+}
+
+/* Return the type instance flags representing an address class.  */
+
+static inline type_instance_flags
+type_instance_flags_from_address_class (unsigned int aclass)
+{
+  type_instance_flags flags = (type_instance_flag_value)
+    (aclass << TYPE_INSTANCE_FLAG_ADDRESS_CLASS_SHIFT);
+
+  gdb_assert ((((unsigned int) flags)
+	       & ~((unsigned int) TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL))
+	      == 0);
+
+  return flags;
+}
+
+/* Return the address class for a type.  */
+
+class type;
+extern unsigned int type_address_class (type *type);
 
 /* * Information about a single discriminant.  */
 
@@ -1600,7 +1631,7 @@ struct type
      instance flags are completely inherited from the target type.  No
      qualifiers can be cleared by the typedef.  See also
      check_typedef.  */
-  unsigned m_instance_flags : 9;
+  unsigned m_instance_flags : 11;
 
   /* * Length of storage for a value of this type.  The value is the
      expression in host bytes of what sizeof(type) would return.  This

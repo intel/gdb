@@ -59,12 +59,6 @@
 #include "gdb_bfd.h"
 #endif
 
-/* Address space flags.
-   We are assigning the TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 to the shared
-   local memory address space.  */
-
-#define INTELGT_TYPE_INSTANCE_FLAG_SLM TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1
-#define INTELGT_SLM_ADDRESS_QUALIFIER "slm"
 
 /* The maximum number of GRF registers to be used when passing function
    arguments.  */
@@ -1351,10 +1345,19 @@ static const char*
 intelgt_address_class_type_flags_to_name (struct gdbarch *gdbarch,
 					  type_instance_flags type_flags)
 {
-  if ((type_flags & INTELGT_TYPE_INSTANCE_FLAG_SLM) != 0)
-    return INTELGT_SLM_ADDRESS_QUALIFIER;
-  else
-    return nullptr;
+  enum intelgt::address_space aspace = (enum intelgt::address_space)
+    address_class_from_type_instance_flags (type_flags);
+  switch (aspace)
+    {
+    case intelgt::ASPACE_GLOBAL:
+      return nullptr;
+
+    case intelgt::ASPACE_SLM:
+      return intelgt::ASPACE_STR_SLM;
+    }
+
+  warning (_("Unknown address class: %u."), aspace);
+  return nullptr;
 }
 
 /* Implementation of `address_class_type_flags' gdbarch method.
@@ -1364,9 +1367,16 @@ intelgt_address_class_type_flags_to_name (struct gdbarch *gdbarch,
 static type_instance_flags
 intelgt_address_class_type_flags (int byte_size, int dwarf2_addr_class)
 {
-  /* The value 1 of the DW_AT_address_class attribute corresponds to SLM.  */
-  if (dwarf2_addr_class == 1)
-    return INTELGT_TYPE_INSTANCE_FLAG_SLM;
+  enum intelgt::address_space aspace = (enum intelgt::address_space)
+    dwarf2_addr_class;
+  switch (aspace)
+    {
+    case intelgt::ASPACE_GLOBAL:
+    case intelgt::ASPACE_SLM:
+      return type_instance_flags_from_address_class (aspace);
+    }
+
+  warning (_("Unknown address class: %u."), aspace);
   return 0;
 }
 
@@ -1378,9 +1388,10 @@ intelgt_address_class_name_to_type_flags (struct gdbarch *gdbarch,
 					  const char* name,
 					  type_instance_flags *type_flags_ptr)
 {
-  if (strcmp (name, INTELGT_SLM_ADDRESS_QUALIFIER) == 0)
+  if (strcmp (name, intelgt::ASPACE_STR_SLM) == 0)
     {
-      *type_flags_ptr = INTELGT_TYPE_INSTANCE_FLAG_SLM;
+      *type_flags_ptr
+	= type_instance_flags_from_address_class (intelgt::ASPACE_SLM);
       return true;
     }
   else
@@ -1395,10 +1406,18 @@ intelgt_translate_address (struct gdbarch *gdbarch,
 			   type_instance_flags type_flags, CORE_ADDR addr,
 			   unsigned int *addr_space_ptr)
 {
-  if ((type_flags & INTELGT_TYPE_INSTANCE_FLAG_SLM) != 0)
-    *addr_space_ptr = 1;
-  else
-    *addr_space_ptr = 0;
+  enum intelgt::address_space aspace = (enum intelgt::address_space)
+    address_class_from_type_instance_flags (type_flags);
+  switch (aspace)
+    {
+    case intelgt::ASPACE_GLOBAL:
+    case intelgt::ASPACE_SLM:
+      *addr_space_ptr = aspace;
+      return addr;
+    }
+
+  warning (_("Unknown address class: %u."), aspace);
+  *addr_space_ptr = 0;
   return addr;
 }
 

@@ -91,6 +91,22 @@ constexpr const char *dwarf_regset_features[regset_count] = {
   feature_mme,
 };
 
+/* We define the following address spaces:  */
+enum address_space : unsigned int
+{
+  /* The global (default) address space shared between host and device.
+
+     Generic pointers, which are device-specific, are mapped into this
+     global address space.  */
+  ASPACE_GLOBAL = 0,
+
+  /* The Shared Local Memory address space shared within a threadgroup.  */
+  ASPACE_SLM,
+};
+
+/* Names for the above address spaces.  */
+constexpr const char *ASPACE_STR_SLM = "slm";
+
 /* The encoding for XE version enumerates follows this pattern, which is
    aligned with the IGA encoding.  */
 

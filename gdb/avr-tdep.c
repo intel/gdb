@@ -74,12 +74,10 @@
 
 /* Address space flags */
 
-/* We are assigning the TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 to the flash address
+/* We are assigning the TYPE_ADDRESS_CLASS 1 to the flash address
    space.  */
 
-#define AVR_TYPE_ADDRESS_CLASS_FLASH TYPE_ADDRESS_CLASS_1
-#define AVR_TYPE_INSTANCE_FLAG_ADDRESS_CLASS_FLASH  \
-  TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1
+#define AVR_TYPE_ADDRESS_CLASS_FLASH 1
 
 
 enum
@@ -310,7 +308,7 @@ avr_address_to_pointer (struct gdbarch *gdbarch,
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
 
   /* Is it a data address in flash?  */
-  if (AVR_TYPE_ADDRESS_CLASS_FLASH (type))
+  if (type_address_class (type) == AVR_TYPE_ADDRESS_CLASS_FLASH)
     {
       /* A data pointer in flash is byte addressed.  */
       store_unsigned_integer (buf, type->length (), byte_order,
@@ -342,7 +340,7 @@ avr_pointer_to_address (struct gdbarch *gdbarch,
     = extract_unsigned_integer (buf, type->length (), byte_order);
 
   /* Is it a data address in flash?  */
-  if (AVR_TYPE_ADDRESS_CLASS_FLASH (type))
+  if (type_address_class (type) == AVR_TYPE_ADDRESS_CLASS_FLASH)
     {
       /* A data pointer in flash is already byte addressed.  */
       return avr_make_iaddr (addr);
@@ -1386,7 +1384,8 @@ avr_address_class_type_flags (int byte_size, int dwarf2_addr_class)
      pointer types and therefore the flag is set to the pointer type and
      not its target type.  */
   if (dwarf2_addr_class == 1 && byte_size == 2)
-    return AVR_TYPE_INSTANCE_FLAG_ADDRESS_CLASS_FLASH;
+    return type_instance_flags_from_address_class
+      (AVR_TYPE_ADDRESS_CLASS_FLASH);
   return 0;
 }
 
@@ -1398,7 +1397,8 @@ static const char*
 avr_address_class_type_flags_to_name (struct gdbarch *gdbarch,
 				      type_instance_flags type_flags)
 {
-  if (type_flags & AVR_TYPE_INSTANCE_FLAG_ADDRESS_CLASS_FLASH)
+  if (address_class_from_type_instance_flags (type_flags)
+      == AVR_TYPE_ADDRESS_CLASS_FLASH)
     return "flash";
   else
     return NULL;
@@ -1415,7 +1415,8 @@ avr_address_class_name_to_type_flags (struct gdbarch *gdbarch,
 {
   if (strcmp (name, "flash") == 0)
     {
-      *type_flags_ptr = AVR_TYPE_INSTANCE_FLAG_ADDRESS_CLASS_FLASH;
+      *type_flags_ptr = type_instance_flags_from_address_class
+	(AVR_TYPE_ADDRESS_CLASS_FLASH);
       return true;
     }
   else

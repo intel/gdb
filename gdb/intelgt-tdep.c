@@ -3412,25 +3412,25 @@ static void
 check_valid (const implicit_args &args)
 {
   /* The current implementation corresponds to the layout
-     defined for version 0.  */
+     defined for version 0, but version 1 is backwards compatible.  */
   if (args.struct_version != 0)
-    error (_("Implicit arguments struct_version is not expected %d"),
-	   args.struct_version);
+    dprintf ("Implicit arguments struct_version %d is not expected",
+	     args.struct_version);
 
   /* We require fields up to local_id_table_ptr.  */
   if (args.struct_size <= 80)
-    error (_("Implicit arguments struct_size is not expected %d"),
+    error (_("Implicit arguments struct_size %d is not expected"),
 	   args.struct_size);
 
   /* We expect SIMD width be only 1, 8, 16, or 32.  */
   if (args.simd_width != 1 && args.simd_width != 8
       && args.simd_width != 16 && args.simd_width != 32)
-    error (_("Implicit arguments simd_width is not expected %d"),
+    error (_("Implicit arguments simd_width %d is not expected"),
 	   args.simd_width);
 
   /* The number of dimensions could be 1, 2, or 3.  */
   if (args.num_work_dim == 0 || args.num_work_dim > 3)
-    error (_("Implicit arguments num_work_dim is not expected %d"),
+    error (_("Implicit arguments num_work_dim %d is not expected"),
 	   args.num_work_dim);
 }
 

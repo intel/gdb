@@ -306,6 +306,9 @@ protected:
 		    const unsigned char *myaddr, int len,
 		    unsigned int addr_space = 0) override;
 
+  zet_debug_memory_space_type_t mspace_from_aspace
+    (unsigned int aspace) override;
+
 private:
   /* Add a register set for REGPROP on DEVICE to REGSETS and increment REGNUM
      accordingly.  */
@@ -677,6 +680,21 @@ intelgt_ze_target::write_memory (thread_info *tp, CORE_ADDR memaddr,
   memaddr = intelgt_untag_address (memaddr);
 
   return ze_target::write_memory (tp, memaddr, myaddr, len, addr_space);
+}
+
+zet_debug_memory_space_type_t
+intelgt_ze_target::mspace_from_aspace (unsigned int aspace)
+{
+  switch (aspace)
+    {
+    case intelgt::ASPACE_GLOBAL:
+      return ZET_DEBUG_MEMORY_SPACE_TYPE_DEFAULT;
+
+    case intelgt::ASPACE_SLM:
+      return ZET_DEBUG_MEMORY_SPACE_TYPE_SLM;
+    }
+
+  error (_("Unexpected DWARF address space %u."), aspace);
 }
 
 int

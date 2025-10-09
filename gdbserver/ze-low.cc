@@ -3075,7 +3075,7 @@ ze_target::read_memory (thread_info *tp, CORE_ADDR memaddr,
   memset (&desc, 0, sizeof (desc));
   desc.stype = ZET_STRUCTURE_TYPE_DEBUG_MEMORY_SPACE_DESC;
   desc.pNext = nullptr;
-  desc.type = (zet_debug_memory_space_type_t) addr_space;
+  desc.type = mspace_from_aspace (addr_space);
   desc.address = (uint64_t) memaddr;
 
   std::pair<ze_device_thread_t, ze_device_info *> context
@@ -3117,7 +3117,7 @@ ze_target::write_memory (thread_info *tp, CORE_ADDR memaddr,
   memset (&desc, 0, sizeof (desc));
   desc.stype = ZET_STRUCTURE_TYPE_DEBUG_MEMORY_SPACE_DESC;
   desc.pNext = nullptr;
-  desc.type = (zet_debug_memory_space_type_t) addr_space;
+  desc.type = mspace_from_aspace (addr_space);
   desc.address = (uint64_t) memaddr;
 
   std::pair<ze_device_thread_t, ze_device_info *> context

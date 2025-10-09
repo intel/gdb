@@ -691,6 +691,10 @@ protected:
   virtual int write_memory (thread_info *tp, CORE_ADDR memaddr,
 			    const unsigned char *myaddr, int len,
 			    unsigned int addr_space = 0);
+
+  /* Translate a DWARF address space into a level-zero memory space.  */
+  virtual zet_debug_memory_space_type_t mspace_from_aspace
+    (unsigned int aspace) = 0;
 };
 
 #endif /* GDBSERVER_ZE_LOW_H */

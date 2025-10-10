@@ -78,6 +78,12 @@ foreach device $sycl_device_list {
 	}
 
 	gdb_breakpoint "get_index" {temporary}
+	if {[is_xe2 $device]
+	    && [string match -nocase "*0xe223*" $device]} {
+	    setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+	} elseif {[is_xe3 $device]} {
+	    setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
+	}
 	gdb_continue_to_breakpoint "hit the BP inside the kernel"
 
 	set fill "\[^\r\n\]*"
@@ -106,6 +112,12 @@ foreach device $sycl_device_list {
 	    }
 	}
 
+	if {[is_xe2 $device]
+	    && [string match -nocase "*0xe223*" $device]} {
+	    setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+	} elseif {[is_xe3 $device]} {
+	    setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
+	}
 	gdb_assert {$atomic_address} "found atomic address"
 
 	if {$is_compacted} {
@@ -116,8 +128,20 @@ foreach device $sycl_device_list {
 
 	gdb_breakpoint "*$bp_address" {temporary}
 
+	if {[is_xe2 $device]
+	    && [string match -nocase "*0xe223*" $device]} {
+	    setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+	} elseif {[is_xe3 $device]} {
+	    setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
+	}
 	gdb_continue_to_breakpoint "continue to bp after atomic"
 
+	if {[is_xe2 $device]
+	    && [string match -nocase "*0xe223*" $device]} {
+	    setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+	} elseif {[is_xe3 $device]} {
+	    setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
+	}
 	# Make sure that the application computes correct results.
 	gdb_test_multiple "continue" "correct matrix multiplication" {
 	    -re -wrap "Correct..*" {

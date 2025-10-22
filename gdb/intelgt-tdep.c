@@ -1421,6 +1421,58 @@ intelgt_translate_address (struct gdbarch *gdbarch,
   return addr;
 }
 
+/* Implementation of `cast_address_class_pointer' gdbarch method, as
+   defined in gdbarch.h.  */
+
+static CORE_ADDR
+intelgt_cast_address_class_pointer (gdbarch *gdbarch,
+				    unsigned int from_aclass,
+				    CORE_ADDR address,
+				    unsigned int to_aclass)
+{
+  switch (from_aclass)
+    {
+    case intelgt::ASPACE_GLOBAL:
+      switch (to_aclass)
+	{
+	case intelgt::ASPACE_GLOBAL:
+	  return address;
+
+	case intelgt::ASPACE_SLM:
+	  /* Check that the generic address has the SLM tag.  */
+	  if (((address >> 61) & 0x7ul) != 0x2ul)
+	    error (_("Generic pointer does not point to SLM."));
+
+	  /* Clean the upper 32 bits.  SLM pointers are 32-bit.  */
+	  address &= 0xFFFFFFFFul;
+	  return address;
+	}
+
+      error (_("Casting to unrecognized address class %d."),
+	     to_aclass);
+
+    case intelgt::ASPACE_SLM:
+      switch (to_aclass)
+	{
+	case intelgt::ASPACE_GLOBAL:
+	  /* Clean the upper 32 bits.  */
+	  address &= 0xFFFFFFFFul;
+	  /* Add the SLM tag.  */
+	  address |= (0x2ul << 61);
+	  return address;
+
+	case intelgt::ASPACE_SLM:
+	  return address;
+	}
+
+      error (_("Casting to unrecognized address class %d."),
+	     to_aclass);
+    }
+
+  error (_("Casting from unrecognized address class %d."),
+	 from_aclass);
+}
+
 /* Utility function to lookup the pseudo-register number by name.  Exact
    amount of pseudo-registers may differ and thus fixed constants can't be
    used for this.  */
@@ -5066,6 +5118,8 @@ Device vendor id and target id not found in intelgt target description."));
   set_gdbarch_address_class_type_flags_to_name
     (gdbarch, intelgt_address_class_type_flags_to_name);
   set_gdbarch_translate_address (gdbarch, intelgt_translate_address);
+  set_gdbarch_cast_address_class_pointer (gdbarch,
+					  intelgt_cast_address_class_pointer);
   set_gdbarch_address_class_type_flags
     (gdbarch, intelgt_address_class_type_flags);
 

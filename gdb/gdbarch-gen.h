@@ -986,6 +986,17 @@ typedef CORE_ADDR (gdbarch_translate_address_ftype) (struct gdbarch *gdbarch, ty
 extern CORE_ADDR gdbarch_translate_address (struct gdbarch *gdbarch, type_instance_flags type_flags, CORE_ADDR addr, unsigned int *addr_space_ptr);
 extern void set_gdbarch_translate_address (struct gdbarch *gdbarch, gdbarch_translate_address_ftype *translate_address);
 
+/* Convert the given ADDR in address class FROM_ACLASS to an address in
+   address class TO_ACLASS.  This method can be used for casting a
+   pointer-to-address-space to a generic pointer and vice versa.  Raise
+   an error if the cast cannot be made. */
+
+extern bool gdbarch_cast_address_class_pointer_p (struct gdbarch *gdbarch);
+
+typedef CORE_ADDR (gdbarch_cast_address_class_pointer_ftype) (struct gdbarch *gdbarch, unsigned int from_aclass, CORE_ADDR address, unsigned int to_aclass);
+extern CORE_ADDR gdbarch_cast_address_class_pointer (struct gdbarch *gdbarch, unsigned int from_aclass, CORE_ADDR address, unsigned int to_aclass);
+extern void set_gdbarch_cast_address_class_pointer (struct gdbarch *gdbarch, gdbarch_cast_address_class_pointer_ftype *cast_address_class_pointer);
+
 /* Execute vendor-specific DWARF Call Frame Instruction.  OP is the instruction.
    FS are passed from the generic execute_cfa_program function. */
 

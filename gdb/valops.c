@@ -292,6 +292,25 @@ value_cast_pointers (struct type *type, struct value *arg2,
   struct type *t1 = check_typedef (type1->target_type ());
   struct type *t2 = check_typedef (type2->target_type ());
 
+  /* Are we casting a pointer-to-address-space to a generic pointer,
+     or vice versa?  If so, do the architecture-specific
+     conversion.  */
+  gdbarch *arch = arg2->arch ();
+  unsigned int aclass1 = type_address_class (t1);
+  unsigned int aclass2 = type_address_class (t2);
+
+  if (aclass1 != aclass2
+      && gdbarch_cast_address_class_pointer_p (arch))
+    {
+      CORE_ADDR address = value_as_address (arg2);
+      CORE_ADDR new_address
+	= gdbarch_cast_address_class_pointer (arch,
+					      aclass2,
+					      address,
+					      aclass1);
+      arg2 = value_from_pointer (arg2->type (), new_address);
+    }
+
   if (t1->code () == TYPE_CODE_STRUCT
       && t2->code () == TYPE_CODE_STRUCT
       && (subclass_check || !value_logical_not (arg2)))

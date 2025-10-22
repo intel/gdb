@@ -1,0 +1,96 @@
+# Copyright 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests Intel GT architecture handling for pointer-to-address-space
+# and generic pointers.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+foreach device $sycl_device_list {
+    sycl_with_intelgt_lock $device {
+
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	clean_restart "${binfile}"
+
+	if {![sycl_start $device]} {
+	    continue
+	}
+
+	set bp_line [gdb_get_line_number "break-here"]
+	gdb_breakpoint $bp_line
+	gdb_continue_to_breakpoint "hit the bp" ".*$srcfile:$bp_line.*"
+
+	gdb_test "ptype lptr" "= @slm short \\*"
+	gdb_test "ptype gptr" "= short \\*"
+
+	set lptr_val [get_hexadecimal_valueof "lptr" "invalid"]
+	# Ignore the upper 32 bits.
+	set slm_offset [get_hexadecimal_valueof \
+			    "${lptr_val} & 0xffffffff" "invalid"]
+	set gptr_val [get_hexadecimal_valueof "gptr" "invalid"]
+
+	# The tag for SLM is b010 in the uppermost 3 bits.
+	set generic [get_hexadecimal_valueof \
+			 "${slm_offset} | 0x4000000000000000" "invalid"]
+	gdb_assert { "$generic" eq "$gptr_val" } "generic pointer value"
+
+	# Test casting from/to generic/slm.
+	gdb_test "print (short *) lptr" "$generic" "slm to generic"
+	gdb_test "print (@slm short *) lptr" "$lptr_val" "slm to slm"
+
+	gdb_test "print (short *) gptr" "$gptr_val" "generic to generic"
+	gdb_test "print (@slm short *) gptr" "$slm_offset" "generic to slm"
+
+	gdb_test "print (@slm short *) (short *) lptr" "$slm_offset" \
+	    "slm to generic to slm"
+	gdb_test "print (short *) (@slm short *) gptr" "$generic" \
+	    "generic to slm to generic"
+
+	# Dereference.
+	gdb_test "print *(@slm short *) $slm_offset" "= 42" "deref slm"
+	gdb_test "print *(short *) $generic" " = 42" "deref generic"
+
+	# Double-dereference.
+	set lptr_address [get_hexadecimal_valueof "&lptr" "invalid"]
+	gdb_test "print **(@slm short **) $lptr_address" "= 42" \
+	    "double deref slm"
+
+	set gptr_address [get_hexadecimal_valueof "&gptr" "invalid"]
+	gdb_test "print **(short **) $gptr_address" "= 42" \
+	    "double deref generic"
+
+	# Unrecognized generic tag.
+	gdb_test "print (@slm short *)(short *) 0xF000000000000000" \
+	    "Generic pointer does not point to SLM\\." \
+	    "unrecognized generic tag"
+    }
+}

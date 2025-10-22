@@ -1698,6 +1698,24 @@ Returns the translated address.
 
 Method(
     comment="""
+Convert the given ADDR in address class FROM_ACLASS to an address in
+address class TO_ACLASS.  This method can be used for casting a
+pointer-to-address-space to a generic pointer and vice versa.  Raise
+an error if the cast cannot be made.
+""",
+    type="CORE_ADDR",
+    name="cast_address_class_pointer",
+    params=[
+        ("unsigned int", "from_aclass"),
+        ("CORE_ADDR", "address"),
+        ("unsigned int", "to_aclass")
+    ],
+    predicate=True,
+    invalid=True,
+)
+
+Method(
+    comment="""
 Execute vendor-specific DWARF Call Frame Instruction.  OP is the instruction.
 FS are passed from the generic execute_cfa_program function.
 """,

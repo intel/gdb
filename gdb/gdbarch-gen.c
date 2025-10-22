@@ -177,6 +177,7 @@ struct gdbarch
   gdbarch_address_class_type_flags_ftype *address_class_type_flags = nullptr;
   gdbarch_address_class_type_flags_to_name_ftype *address_class_type_flags_to_name = nullptr;
   gdbarch_translate_address_ftype *translate_address = nullptr;
+  gdbarch_cast_address_class_pointer_ftype *cast_address_class_pointer = nullptr;
   gdbarch_execute_dwarf_cfa_vendor_op_ftype *execute_dwarf_cfa_vendor_op = default_execute_dwarf_cfa_vendor_op;
   gdbarch_address_class_name_to_type_flags_ftype *address_class_name_to_type_flags = nullptr;
   gdbarch_register_reggroup_p_ftype *register_reggroup_p = default_register_reggroup_p;
@@ -467,6 +468,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of address_class_type_flags, has predicate.  */
   /* Skip verify of address_class_type_flags_to_name, has predicate.  */
   /* Skip verify of translate_address, has predicate.  */
+  /* Skip verify of cast_address_class_pointer, has predicate.  */
   /* Skip verify of execute_dwarf_cfa_vendor_op, invalid_p == 0.  */
   /* Skip verify of address_class_name_to_type_flags, has predicate.  */
   /* Skip verify of register_reggroup_p, invalid_p == 0.  */
@@ -1084,6 +1086,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: translate_address = <%s>\n",
 	      host_address_to_string (gdbarch->translate_address));
+  gdb_printf (file,
+	      "gdbarch_dump: gdbarch_cast_address_class_pointer_p() = %d\n",
+	      gdbarch_cast_address_class_pointer_p (gdbarch));
+  gdb_printf (file,
+	      "gdbarch_dump: cast_address_class_pointer = <%s>\n",
+	      host_address_to_string (gdbarch->cast_address_class_pointer));
   gdb_printf (file,
 	      "gdbarch_dump: execute_dwarf_cfa_vendor_op = <%s>\n",
 	      host_address_to_string (gdbarch->execute_dwarf_cfa_vendor_op));
@@ -3988,6 +3996,30 @@ set_gdbarch_translate_address (struct gdbarch *gdbarch,
 			       gdbarch_translate_address_ftype translate_address)
 {
   gdbarch->translate_address = translate_address;
+}
+
+bool
+gdbarch_cast_address_class_pointer_p (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  return gdbarch->cast_address_class_pointer != NULL;
+}
+
+CORE_ADDR
+gdbarch_cast_address_class_pointer (struct gdbarch *gdbarch, unsigned int from_aclass, CORE_ADDR address, unsigned int to_aclass)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->cast_address_class_pointer != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_cast_address_class_pointer called\n");
+  return gdbarch->cast_address_class_pointer (gdbarch, from_aclass, address, to_aclass);
+}
+
+void
+set_gdbarch_cast_address_class_pointer (struct gdbarch *gdbarch,
+					gdbarch_cast_address_class_pointer_ftype cast_address_class_pointer)
+{
+  gdbarch->cast_address_class_pointer = cast_address_class_pointer;
 }
 
 bool

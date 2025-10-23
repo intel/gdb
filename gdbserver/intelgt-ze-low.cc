@@ -815,7 +815,16 @@ intelgt_ze_target::is_at_eot (thread_info *tp)
 	      constexpr uint8_t CTRL_EOT_SEND = 34;
 	      return intelgt::get_inst_bit (inst, CTRL_EOT_SEND);
 	    }
-
+	  case 0x33: /* sendg */
+	  case 0x34: /* sendgc */
+	  case 0x35: /* sendgx */
+	  case 0x36: /* sendgxc */
+	    {
+	      /* The End Of Thread control.  Only used for SENDG, SENDGC,
+		 SENDGX and SENDGXC.  */
+	      constexpr uint8_t CTRL_EOT_SENDG = 32;
+	      return intelgt::get_inst_bit (inst, CTRL_EOT_SENDG);
+	    }
 	  default:
 	    return false;
 	  }

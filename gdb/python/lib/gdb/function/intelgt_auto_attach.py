@@ -648,6 +648,17 @@ INTELGT_AUTO_ATTACH_GDBSERVER_GT_PATH is deprecated. Use INTELGT_AUTO_ATTACH_GDB
             gdbserver_attach_str = \
               f"{self.gdbserver_install_path}/{gdbserver_attach_str}"
 
+        # Start gdbserver-ze with the same affinity mask that the host
+        # inferior was started with.  If we are attaching to an
+        # already-running inferior, GDB and the inferior are not
+        # necessarily in the same environment.
+        affinity = gdb.execute(f"info proc environ {inf.pid}", False, True)
+        for line in affinity.split('\n'):
+            if 'ZE_AFFINITY_MASK=' in line:
+                line = line.strip()
+                gdbserver_attach_str = f"{line} {gdbserver_attach_str}"
+                break
+
         DebugLogger.log(f"gdbserver-ze attach command: {gdbserver_attach_str}")
 
         try:

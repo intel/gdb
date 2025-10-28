@@ -95,6 +95,10 @@ thread filter thread-list|all|all-lanes [-ascending]
   for filtering, the "-unavailable" option can be used.  The "-q/-s/-c" optional
   flags are used to control the output.
 
+info proc environ
+  Print the initial environment variables of the specified process.
+  Supported on Linux.
+
 * Changed commands
 
 thread apply thread-list|all|all-lanes -unavailable

@@ -3033,20 +3033,21 @@ ze_target::store_registers (regcache *regcache, int regno)
     ze_store_register (regcache->thread, regcache, regno);
 }
 
-/* Determine the thread id and device context for accessing ADDR_SPACE
+/* Determine the thread id and device context for accessing MSPACE
    from THREAD.  */
 static std::pair<ze_device_thread_t, ze_device_info *>
-ze_memory_access_context (thread_info *thread, unsigned int addr_space)
+ze_memory_access_context (thread_info *thread,
+			  zet_debug_memory_space_type_t mspace)
 {
-  /* With a stopped thread, we can access all address spaces, and we
+  /* With a stopped thread, we can access all memory spaces, and we
      should be able to determine the device for that thread.  */
   if (ze_thread_stopped (thread))
     return std::pair<ze_device_thread_t, ze_device_info *>
       { ze_thread_id (thread), ze_thread_device (thread) };
 
-  /* Without a stopped thread, we may only access the default address
+  /* Without a stopped thread, we may only access the default memory
      space and only in the context of thread ALL.  */
-  if (addr_space != ZET_DEBUG_MEMORY_SPACE_TYPE_DEFAULT)
+  if (mspace != ZET_DEBUG_MEMORY_SPACE_TYPE_DEFAULT)
     error (_("need thread to access non-default address space."));
 
   /* Try to determine the device using THREAD but fall back to the current
@@ -3079,7 +3080,7 @@ ze_target::read_memory (thread_info *tp, CORE_ADDR memaddr,
   desc.address = (uint64_t) memaddr;
 
   std::pair<ze_device_thread_t, ze_device_info *> context
-    = ze_memory_access_context (tp, addr_space);
+    = ze_memory_access_context (tp, desc.type);
   ze_device_thread_t thread = context.first;
   ze_device_info *device = context.second;
   gdb_assert (device != nullptr);
@@ -3121,7 +3122,7 @@ ze_target::write_memory (thread_info *tp, CORE_ADDR memaddr,
   desc.address = (uint64_t) memaddr;
 
   std::pair<ze_device_thread_t, ze_device_info *> context
-    = ze_memory_access_context (tp, addr_space);
+    = ze_memory_access_context (tp, desc.type);
   ze_device_thread_t thread = context.first;
   ze_device_info *device = context.second;
   gdb_assert (device != nullptr);

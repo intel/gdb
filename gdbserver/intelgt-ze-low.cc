@@ -225,9 +225,9 @@ intelgt_decode_tagged_address (CORE_ADDR addr)
      cannot be added to the (cached) type instance flags, as it changes at
      runtime.  */
   if ((addr >> 61) == 0x2ul)
-    return (unsigned int) ZET_DEBUG_MEMORY_SPACE_TYPE_SLM;
+    return intelgt::ASPACE_SLM;
 
-  return (unsigned int) ZET_DEBUG_MEMORY_SPACE_TYPE_DEFAULT;
+  return intelgt::ASPACE_GLOBAL;
 }
 
 static CORE_ADDR
@@ -661,7 +661,7 @@ intelgt_ze_target::read_memory (thread_info *tp, CORE_ADDR memaddr,
 				unsigned char *myaddr, int len,
 				unsigned int addr_space)
 {
-  if (addr_space == (unsigned int) ZET_DEBUG_MEMORY_SPACE_TYPE_DEFAULT)
+  if (addr_space == intelgt::ASPACE_GLOBAL)
     addr_space = intelgt_decode_tagged_address (memaddr);
 
   memaddr = intelgt_untag_address (memaddr);
@@ -674,7 +674,7 @@ intelgt_ze_target::write_memory (thread_info *tp, CORE_ADDR memaddr,
 				 const unsigned char *myaddr, int len,
 				 unsigned int addr_space)
 {
-  if (addr_space == (unsigned int) ZET_DEBUG_MEMORY_SPACE_TYPE_DEFAULT)
+  if (addr_space == intelgt::ASPACE_GLOBAL)
     addr_space = intelgt_decode_tagged_address (memaddr);
 
   memaddr = intelgt_untag_address (memaddr);

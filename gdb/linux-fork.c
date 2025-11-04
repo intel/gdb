@@ -1,6 +1,7 @@
 /* GNU/Linux native-dependent code for debugging multiple forks.
 
    Copyright (C) 2005-2024 Free Software Foundation, Inc.
+   Copyright (C) 2025 Intel Corporation
 
    This file is part of GDB.
 

@@ -1,5 +1,6 @@
 /* ELF support for BFD.
    Copyright (C) 1991-2024 Free Software Foundation, Inc.
+   Copyright (C) 2023-2024 Intel Corporation
 
    Written by Fred Fish @ Cygnus Support, from information published
    in "UNIX System V Release 4, Programmers Guide: ANSI C and

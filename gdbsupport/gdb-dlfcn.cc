@@ -1,6 +1,7 @@
 /* Platform independent shared object routines for GDB.
 
    Copyright (C) 2011-2024 Free Software Foundation, Inc.
+   Copyright (C) 2022 Intel Corporation
 
    This file is part of GDB.
 

@@ -1,6 +1,7 @@
 /* Trace file TFILE format support in GDB.
 
    Copyright (C) 1997-2024 Free Software Foundation, Inc.
+   Copyright (C) 2021 Intel Corporation
 
    This file is part of GDB.
 

@@ -1,6 +1,7 @@
 /* Target-vector operations for controlling windows child processes, for GDB.
 
    Copyright (C) 1995-2024 Free Software Foundation, Inc.
+   Copyright (C) 2014-2021 Intel Corporation
 
    Contributed by Cygnus Solutions, A Red Hat Company.
 

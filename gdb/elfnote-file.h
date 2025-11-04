@@ -3,6 +3,7 @@
    is usage of C++ features and/or GDB own concepts.
 
    Copyright (C) 2021 Free Software Foundation, Inc.
+   Copyright (C) 2022 Intel Corporation
 
    This file is part of GDB.
 

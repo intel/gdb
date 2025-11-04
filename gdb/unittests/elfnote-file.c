@@ -1,6 +1,7 @@
 /* Self tests for ELF NT_FILE builder/iterator.
 
    Copyright (C) 2021 Free Software Foundation, Inc.
+   Copyright (C) 2022 Intel Corporation
 
    This file is part of GDB.
 

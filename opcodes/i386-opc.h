@@ -1,5 +1,6 @@
 /* Declarations for Intel 80386 opcode table
    Copyright (C) 2007-2024 Free Software Foundation, Inc.
+   Copyright (C) 2013-2025 Intel Corporation
 
    This file is part of the GNU opcodes library.
 

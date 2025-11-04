@@ -1,6 +1,7 @@
 /* Evaluate expressions for GDB.
 
    Copyright (C) 1986-2024 Free Software Foundation, Inc.
+   Copyright (C) 2013-2025 Intel Corporation
 
    This file is part of GDB.
 

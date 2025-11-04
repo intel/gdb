@@ -1,6 +1,7 @@
 /* varobj support for C and C++.
 
    Copyright (C) 1999-2024 Free Software Foundation, Inc.
+   Copyright (C) 2024 Intel Corporation
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by

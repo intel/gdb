@@ -1,5 +1,6 @@
 /* ELF linking support for BFD.
    Copyright (C) 1995-2024 Free Software Foundation, Inc.
+   Copyright (C) 2020 Intel Corporation
 
    This file is part of BFD, the Binary File Descriptor library.
 

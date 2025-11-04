@@ -1,6 +1,7 @@
 # This testcase is part of GDB, the GNU debugger.
 #
 # Copyright 2013-2024 Free Software Foundation, Inc.
+# Copyright (C) 2013-2024 Intel Corporation
 #
 # Contributed by Intel Corp. <markus.t.metzger@intel.com>
 #

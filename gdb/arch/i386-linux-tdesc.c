@@ -1,6 +1,7 @@
 /* Target description related code for GNU/Linux i386.
 
    Copyright (C) 2024 Free Software Foundation, Inc.
+   Copyright (C) 2024 Intel Corporation
 
    This file is part of GDB.
 

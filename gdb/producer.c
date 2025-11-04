@@ -1,6 +1,7 @@
 /* Producer string parsers for GDB.
 
    Copyright (C) 2012-2024 Free Software Foundation, Inc.
+   Copyright (C) 2017-2020 Intel Corporation
 
    This file is part of GDB.
 

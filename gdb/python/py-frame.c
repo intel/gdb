@@ -1,6 +1,7 @@
 /* Python interface to stack frames
 
    Copyright (C) 2008-2024 Free Software Foundation, Inc.
+   Copyright (C) 2024 Intel Corporation
 
    This file is part of GDB.
 

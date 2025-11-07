@@ -33,6 +33,7 @@ set_board_info isremote 0
 if {[istarget "*-*-mingw*"]} {
     set_board_info multitop ""
     set_board_info mathlib ""
+    set_board_info ldflags "-Xlinker /ignore:4217,importeddllmain"
 }
 
 set_board_info compiler    "icx"

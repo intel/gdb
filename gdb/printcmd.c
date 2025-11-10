@@ -988,11 +988,11 @@ find_string_backward (struct gdbarch *gdbarch,
   return string_start_addr;
 }
 
-/* Examine data at address ADDR in format FMT.
+/* Examine data at address NEXT_ADDRESS in format FMT.
    Fetch it from memory and print on gdb_stdout.  */
 
 static void
-do_examine (struct format_data fmt, struct gdbarch *gdbarch, CORE_ADDR addr)
+do_examine_next_address (struct format_data fmt)
 {
   char format = 0;
   char size;
@@ -1007,8 +1007,6 @@ do_examine (struct format_data fmt, struct gdbarch *gdbarch, CORE_ADDR addr)
   format = fmt.format;
   size = fmt.size;
   count = fmt.count;
-  next_gdbarch = gdbarch;
-  next_address = addr;
 
   /* Instruction format implies fetch single bytes
      regardless of the specified size.
@@ -1081,18 +1079,19 @@ do_examine (struct format_data fmt, struct gdbarch *gdbarch, CORE_ADDR addr)
       count = -count;
       if (format == 'i')
 	{
-	  next_address = find_instruction_backward (gdbarch, addr, count,
-						    &count);
+	  next_address = find_instruction_backward (next_gdbarch,
+						    next_address,
+						    count, &count);
 	}
       else if (format == 's')
 	{
-	  next_address = find_string_backward (gdbarch, addr, count,
-					       val_type->length (),
+	  next_address = find_string_backward (next_gdbarch, next_address,
+					       count, val_type->length (),
 					       &opts, &count);
 	}
       else
 	{
-	  next_address = addr - count * val_type->length ();
+	  next_address = next_address - count * val_type->length ();
 	}
 
       /* The following call to print_formatted updates next_address in every
@@ -1107,7 +1106,7 @@ do_examine (struct format_data fmt, struct gdbarch *gdbarch, CORE_ADDR addr)
   /* Whether we need to print the memory tag information for the current
      address range.  */
   bool print_range_tag = true;
-  uint32_t gsize = gdbarch_memtag_granule_size (gdbarch);
+  uint32_t gsize = gdbarch_memtag_granule_size (next_gdbarch);
 
   /* Print as many objects as specified in COUNT, at most maxelts per line,
      with the address of the next one at the start of each line.  */
@@ -1125,24 +1124,25 @@ do_examine (struct format_data fmt, struct gdbarch *gdbarch, CORE_ADDR addr)
 	  tag_laddr = align_down (next_address, gsize);
 	  tag_haddr = align_down (next_address + gsize, gsize);
 
-	  struct value *v_addr
-	    = value_from_ulongest (builtin_type (gdbarch)->builtin_data_ptr,
-				   tag_laddr);
+	  type *data_ptr = builtin_type (next_gdbarch)->builtin_data_ptr;
+	  struct value *v_addr = value_from_ulongest (data_ptr, tag_laddr);
 
-	  if (target_is_address_tagged (gdbarch, value_as_address (v_addr)))
+	  if (target_is_address_tagged (next_gdbarch,
+					value_as_address (v_addr)))
 	    {
 	      /* Fetch the allocation tag.  */
 	      struct value *tag
-		= gdbarch_get_memtag (gdbarch, v_addr, memtag_type::allocation);
+		= gdbarch_get_memtag (next_gdbarch, v_addr,
+				      memtag_type::allocation);
 	      std::string atag
-		= gdbarch_memtag_to_string (gdbarch, tag);
+		= gdbarch_memtag_to_string (next_gdbarch, tag);
 
 	      if (!atag.empty ())
 		{
 		  gdb_printf (_("<Allocation Tag %s for range [%s,%s)>\n"),
 			      atag.c_str (),
-			      paddress (gdbarch, tag_laddr),
-			      paddress (gdbarch, tag_haddr));
+			      paddress (next_gdbarch, tag_laddr),
+			      paddress (next_gdbarch, tag_haddr));
 		}
 	    }
 	  print_range_tag = false;
@@ -1856,7 +1856,7 @@ x_command (const char *exp, int from_tty)
   if (!next_gdbarch)
     error_no_arg (_("starting display address"));
 
-  do_examine (fmt, next_gdbarch, next_address);
+  do_examine_next_address (fmt);
 
   /* If the examine succeeds, we remember its size and format for next
      time.  Set last_size to 'b' for strings.  */
@@ -2131,7 +2131,10 @@ do_one_display (struct display *d)
 	  addr = value_as_address (val);
 	  if (d->format.format == 'i')
 	    addr = gdbarch_addr_bits_remove (d->exp->gdbarch, addr);
-	  do_examine (d->format, d->exp->gdbarch, addr);
+
+	  next_gdbarch = d->exp->gdbarch;
+	  next_address = addr;
+	  do_examine_next_address (d->format);
 	}
       catch (const gdb_exception_error &ex)
 	{

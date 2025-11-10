@@ -103,6 +103,9 @@ enum
   /* The position of the Illegal Opcode Exception Status bit in CR0.1.  */
   intelgt_cr0_1_illegal_opcode_status = 28,
 
+  /* The position of the Systolic Exception Status bit in CR0.1.  */
+  intelgt_cr0_1_systolic_exception_status = 27,
+
   /* The position of the Force Exception Status and Control bit in CR0.1.  */
   intelgt_cr0_1_force_exception_status = 26,
 
@@ -538,6 +541,28 @@ intelgt_ze_target::create_tdesc
   return tret;
 }
 
+static bool
+is_systolic_exception (uint32_t device_id, uint32_t cr0_1)
+{
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+      return (cr0_1 & (1 << intelgt_cr0_1_systolic_exception_status)) != 0;
+
+    case intelgt::XE2:
+    case intelgt::XE3:
+      return false;
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
+}
+
 target_stop_reason
 intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 {
@@ -549,6 +574,10 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
     intelgt_read_cr0 (regcache, 1),
     intelgt_read_cr0 (regcache, 2)
   };
+
+  uint32_t device_id = get_device_id (ze_thread_device (tp));
+
+  bool is_systolic = is_systolic_exception (device_id, cr0[1]);
 
   std::string ex_keywords
     = std::string ("[ ")
@@ -562,6 +591,7 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
        ? "sw " : "")
     + (((cr0[1] & (1 << intelgt_cr0_1_external_halt_status)) != 0)
        ? "eh " : "")
+    + (is_systolic ? "se " : "")
     + (((cr0[1] & (1 << intelgt_cr0_1_pagefault_status)) != 0)
        ? "pf " : "")
     + "]";
@@ -638,6 +668,12 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
       intelgt_write_cr0 (regcache, 1, cr0[1]);
 
       signal = GDB_EXC_SOFTWARE;
+      return TARGET_STOPPED_BY_NO_REASON;
+    }
+
+  if (is_systolic)
+    {
+      signal = GDB_SIGNAL_SYSTOLIC;
       return TARGET_STOPPED_BY_NO_REASON;
     }
 

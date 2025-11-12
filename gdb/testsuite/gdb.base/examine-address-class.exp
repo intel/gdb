@@ -1,0 +1,46 @@
+# Copyright (C) 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Verify that 'x' command preserves the type instance flags of its
+# argument.
+
+standard_testfile
+
+if {[prepare_for_testing "failed to prepare" ${testfile} ${srcfile}]} {
+    return -1
+}
+
+if {![runto_main]} {
+    return
+}
+
+set linenum [gdb_get_line_number "break-here"]
+gdb_test "until $linenum" "break-here.*" "run until the line"
+
+set address [get_hexadecimal_valueof "&var" "invalid" "get address"]
+
+gdb_test "x/1dh (long *) $address" "$address:\[ \t\]+42"
+gdb_test "print \$_" "\\(int16_t \\*\\) $address" "type matches the format"
+
+gdb_test "x/1dh (@data long *) $address" "$address:\[ \t\]+42"
+gdb_test "print \$_" "\\(@data int16_t \\*\\) $address" \
+    "type instance flags are preserved"
+
+# Our format above was 'h'.  Thus, next address to examine
+# must be 2 bytes after the original address we passed.
+
+set next_address "0x[format %x [expr $address + 2]]"
+verbose -log "expected next address: $next_address"
+gdb_test "x" "$next_address:\[ \t\]+$decimal"

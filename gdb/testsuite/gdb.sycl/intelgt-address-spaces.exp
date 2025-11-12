@@ -79,6 +79,10 @@ foreach device $sycl_device_list {
 	gdb_test "print *(@slm short *) $slm_offset" "= 42" "deref slm"
 	gdb_test "print *(short *) $generic" " = 42" "deref generic"
 
+	# 'x' command.
+	gdb_test "x/1dh (@slm short *) $slm_offset" \
+	    "$slm_offset:\[ \t\]+42" "x command"
+
 	# Double-dereference.
 	set lptr_address [get_hexadecimal_valueof "&lptr" "invalid"]
 	gdb_test "print **(@slm short **) $lptr_address" "= 42" \

@@ -5354,7 +5354,19 @@ is_atomic (const gdb_byte inst[], uint32_t device_id)
       {
 	/* For instructions with CompactCtrl clear, we can check AtomicCtrl.  */
 	if ((inst[3] & 0x20) == 0)
-	  return (inst[4] & 0x1) != 0;
+	  {
+	    /* Some instructions are not treated as atomic.  */
+	    switch (inst[0] & 0x7f)
+	      {
+	      case 0x33: /* sendg */
+	      case 0x34: /* sendgc */
+	      case 0x35: /* sendgx */
+	      case 0x36: /* sendgxc */
+		return false;
+	      }
+
+	    return (inst[4] & 0x1) != 0;
+	  }
 
 	/* For compacted instructions, we need to check the opcode.  */
 	switch (inst[0] & 0x7f)

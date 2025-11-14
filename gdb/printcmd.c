@@ -988,11 +988,11 @@ find_string_backward (struct gdbarch *gdbarch,
   return string_start_addr;
 }
 
-/* Examine data at address NEXT_ADDRESS in format FMT.
-   Fetch it from memory and print on gdb_stdout.  */
+/* Given format FMT and architecture GDBARCH, return the corresponding
+   value type.  */
 
-static void
-do_examine_next_address (struct format_data fmt)
+static type *
+format_to_type (format_data fmt, gdbarch *gdbarch)
 {
   char format = fmt.format;
   char size = fmt.size;
@@ -1008,11 +1008,11 @@ do_examine_next_address (struct format_data fmt)
   if (size == 'a')
     {
       /* Pick the appropriate size for an address.  */
-      if (gdbarch_ptr_bit (next_gdbarch) == 64)
+      if (gdbarch_ptr_bit (gdbarch) == 64)
 	size = 'g';
-      else if (gdbarch_ptr_bit (next_gdbarch) == 32)
+      else if (gdbarch_ptr_bit (gdbarch) == 32)
 	size = 'w';
-      else if (gdbarch_ptr_bit (next_gdbarch) == 16)
+      else if (gdbarch_ptr_bit (gdbarch) == 16)
 	size = 'h';
       else
 	/* Bad value for gdbarch_ptr_bit.  */
@@ -1020,13 +1020,13 @@ do_examine_next_address (struct format_data fmt)
     }
 
   if (size == 'b')
-    val_type = builtin_type (next_gdbarch)->builtin_int8;
+    val_type = builtin_type (gdbarch)->builtin_int8;
   else if (size == 'h')
-    val_type = builtin_type (next_gdbarch)->builtin_int16;
+    val_type = builtin_type (gdbarch)->builtin_int16;
   else if (size == 'w')
-    val_type = builtin_type (next_gdbarch)->builtin_int32;
+    val_type = builtin_type (gdbarch)->builtin_int32;
   else if (size == 'g')
-    val_type = builtin_type (next_gdbarch)->builtin_int64;
+    val_type = builtin_type (gdbarch)->builtin_int64;
 
   if (format == 's')
     {
@@ -1035,9 +1035,9 @@ do_examine_next_address (struct format_data fmt)
       /* Search for "char16_t"  or "char32_t" types or fall back to 8-bit char
 	 if type is not found.  */
       if (size == 'h')
-	char_type = builtin_type (next_gdbarch)->builtin_char16;
+	char_type = builtin_type (gdbarch)->builtin_char16;
       else if (size == 'w')
-	char_type = builtin_type (next_gdbarch)->builtin_char32;
+	char_type = builtin_type (gdbarch)->builtin_char32;
       if (char_type)
 	val_type = char_type;
       else
@@ -1046,15 +1046,49 @@ do_examine_next_address (struct format_data fmt)
 	    warning (_("Unable to display strings with "
 		       "size '%c', using 'b' instead."), size);
 	  size = 'b';
-	  val_type = builtin_type (next_gdbarch)->builtin_int8;
+	  val_type = builtin_type (gdbarch)->builtin_int8;
 	}
     }
 
+  gdb_assert (val_type != nullptr);
+  return val_type;
+}
+
+/* Examine data at address NEXT_ADDRESS in format FMT.
+   Fetch it from memory and print on gdb_stdout.  */
+
+static void
+do_examine_next_address (struct format_data fmt)
+{
+  char format = fmt.format;
+  type *val_type = format_to_type (fmt, next_gdbarch);
+
   int maxelts = 8;
-  if (size == 'w')
-    maxelts = 4;
-  if (size == 'g')
-    maxelts = 2;
+  char size;
+  switch (val_type->length ())
+    {
+    case 1:
+      size = 'b';
+      break;
+
+    case 2:
+      size = 'h';
+      break;
+
+    case 4:
+      size = 'w';
+      maxelts = 4;
+      break;
+
+    case 8:
+      size = 'g';
+      maxelts = 2;
+      break;
+
+    default:
+      gdb_assert_not_reached ("unexpected type length for next_address");
+    }
+
   if (format == 's' || format == 'i')
     maxelts = 1;
 

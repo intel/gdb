@@ -1598,6 +1598,59 @@ handle_pt_insn_events (struct btrace_thread_info *btinfo,
 	    break;
 	  }
 #endif /* defined (LIBIPT_VERSION >= 0x201) */
+
+#if (LIBIPT_VERSION >= 0x202)
+	case ptev_trig:
+	  {
+	    std::string aux_string = std::string (_("trig: trbv = "))
+	      + hex_string (event.variant.trig.trbv);
+
+	    if (event.variant.trig.mult != 0)
+	      aux_string += std::string (", mult");
+
+	    if (event.ip_suppressed == 0)
+	      {
+		pc = event.variant.trig.ip;
+		aux_string += std::string (", ip = ") + hex_string (*pc);
+	      }
+
+	    if (event.variant.trig.icnt != 0)
+	      aux_string += std::string (", icnt = ")
+		+ hex_string (event.variant.trig.icnt);
+
+	    handle_pt_aux_insn (btinfo, aux_string, pc);
+	    break;
+	  }
+
+	case ptev_swintr:
+	  {
+	    std::string aux_string = std::string (_("swintr: vector = "))
+	      + hex_string (event.variant.swintr.vector);
+
+	    if (event.ip_suppressed == 0)
+	      {
+		pc = event.variant.swintr.ip;
+		aux_string += std::string (", ip = ") + hex_string (*pc);
+	      }
+
+	    handle_pt_aux_insn (btinfo, aux_string, pc);
+	    break;
+	  }
+
+	case ptev_syscall:
+	  {
+	    std::string aux_string = std::string (_("syscall"));
+
+	    if (event.ip_suppressed == 0)
+	      {
+		pc = event.variant.syscall.ip;
+		aux_string += std::string (": ip = ") + hex_string (*pc);
+	      }
+
+	    handle_pt_aux_insn (btinfo, aux_string, pc);
+	    break;
+	  }
+#endif /* (LIBIPT_VERSION >= 0x202) */
 	}
     }
 #endif /* defined (HAVE_PT_INSN_EVENT) */

@@ -575,6 +575,24 @@ private:
   data_block *blocks_list;
 };
 
+struct intelgt_pseudo_register
+{
+  /* Pseudo-register name.  */
+  std::string name;
+
+  /* Register number of the matching raw register.  */
+  int raw_regnum = -1;
+
+  /* Offset in the raw register.  */
+  uint32_t offset = 0;
+
+  /* Pseudo-register type.  */
+  type *reg_type = nullptr;
+
+  /* True if pseudo-register is read-only.  */
+  bool read_only = false;
+};
+
 /* The 'gdbarch_data' stuff specific for this architecture.  */
 
 struct intelgt_gdbarch_data
@@ -602,9 +620,7 @@ struct intelgt_gdbarch_data
   /* Assigned regnum ranges for DWARF regsets.  */
   regnum_range regset_ranges[intelgt::regset_count];
   /* Enabled pseudo-register for the current target description.  */
-  std::vector<std::string> enabled_pseudo_regs;
-  /* Pseudo-register types cache for non-standard register types.  */
-  std::unordered_map<std::string, type *> reg_types_ext;
+  std::vector<intelgt_pseudo_register> enabled_pseudo_regs;
   /* Debug area memory manager.  */
   target_memory_allocator *scratch_area = nullptr;
 
@@ -729,6 +745,19 @@ intelgt_register_type (gdbarch *gdbarch, int regno)
 {
   type *typ = tdesc_register_type (gdbarch, regno);
   return typ;
+}
+
+static intelgt_pseudo_register *
+intelgt_find_pseudo_register_by_number (gdbarch *gdbarch, int pseudo_regnum)
+{
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+  int num_regs = gdbarch_num_regs (gdbarch);
+  int index = pseudo_regnum - num_regs;
+
+  gdb_assert (index >= 0);
+
+  return &data->enabled_pseudo_regs[index];
 }
 
 static int
@@ -1487,10 +1516,20 @@ static int
 intelgt_pseudo_register_num (gdbarch *arch, const char *name)
 {
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
-  auto iter = std::find (data->enabled_pseudo_regs.begin (),
-			 data->enabled_pseudo_regs.end (), name);
-  gdb_assert (iter != data->enabled_pseudo_regs.end ());
-  return gdbarch_num_regs (arch) + (iter - data->enabled_pseudo_regs.begin ());
+
+  auto iter
+    = std::find_if (data->enabled_pseudo_regs.begin (),
+		    data->enabled_pseudo_regs.end (),
+		    [name] (const intelgt_pseudo_register &ptype)
+		    {
+		      return ptype.name == name;
+		    });
+
+  if (iter == data->enabled_pseudo_regs.end ())
+    error ("Invalid pseudo-register '%s'", name);
+
+  int index = std::distance (data->enabled_pseudo_regs.begin (), iter);
+  return index + gdbarch_num_regs (arch);
 }
 
 static CORE_ADDR
@@ -1573,12 +1612,10 @@ intelgt_write_pc (struct regcache *regcache, CORE_ADDR pc)
 static const char *
 intelgt_pseudo_register_name (gdbarch *arch, int regnum)
 {
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
-  int base_num = gdbarch_num_regs (arch);
-  if (regnum < base_num
-      || regnum >= base_num + data->enabled_pseudo_regs.size ())
-    error ("Invalid pseudo-register regnum %d", regnum);
-  return data->enabled_pseudo_regs[regnum - base_num].c_str ();
+  intelgt_pseudo_register *ptype
+    = intelgt_find_pseudo_register_by_number (arch, regnum);
+
+  return ptype->name.c_str ();
 }
 
 /* Return the GDB type object for the "standard" data type of data in
@@ -1587,36 +1624,10 @@ intelgt_pseudo_register_name (gdbarch *arch, int regnum)
 static type *
 intelgt_pseudo_register_type (gdbarch *arch, int regnum)
 {
-  uint32_t device_id = get_device_id (arch);
-  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  intelgt_pseudo_register *ptype
+    = intelgt_find_pseudo_register_by_number (arch, regnum);
 
-  const char *name = intelgt_pseudo_register_name (arch, regnum);
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
-
-  /* If name is already cached, we're done.  */
-  auto it = data->reg_types_ext.find (name);
-  if (it != data->reg_types_ext.end ())
-    return it->second;
-
-  const struct builtin_type *bt = builtin_type (arch);
-
-  switch (device_version)
-    {
-    case intelgt::XE_HP:
-    case intelgt::XE_HPG:
-    case intelgt::XE_HPC:
-    case intelgt::XE2:
-    case intelgt::XE3:
-      if (strcmp (name, "ip") == 0)
-	return bt->builtin_uint32;
-
-      return nullptr;
-
-    case intelgt::XE_INVALID:
-      break;
-    }
-
-  error (_("Unexpected device id 0x%" PRIx32), device_id);
+  return ptype->reg_type;
 }
 
 /* Read the value of a pseudo-register REGNUM.  */
@@ -1626,22 +1637,17 @@ intelgt_pseudo_register_read_value (gdbarch *arch,
 				    const frame_info_ptr &next_frame,
 				    int pseudo_regnum)
 {
-  const char *name = intelgt_pseudo_register_name (arch, pseudo_regnum);
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  intelgt_pseudo_register *ptype
+    = intelgt_find_pseudo_register_by_number (arch, pseudo_regnum);
 
-  if (strcmp (name, "ip") == 0)
-    {
-      int regsize = register_size (arch, pseudo_regnum);
-      /* Instruction pointer is stored in CR0.2.  */
-      gdb_assert (data->cr0_regnum != -1);
-      /* CR0 elements are 4 byte wide.  */
-      gdb_assert (regsize + 8 <= register_size (arch, data->cr0_regnum));
+  int regsize = register_size (arch, pseudo_regnum);
 
-      return pseudo_from_raw_part (next_frame, pseudo_regnum,
-				   data->cr0_regnum, 8);
-    }
+  gdb_assert (ptype->raw_regnum != -1);
+  gdb_assert (regsize + ptype->offset
+	      <= register_size (arch, ptype->raw_regnum));
 
-  return nullptr;
+  return pseudo_from_raw_part (next_frame, pseudo_regnum, ptype->raw_regnum,
+			       ptype->offset);
 }
 
 /* Write the value of a pseudo-register REGNUM.  */
@@ -1652,23 +1658,18 @@ intelgt_pseudo_register_write (gdbarch *arch,
 			       int pseudo_regnum,
 			       gdb::array_view<const gdb_byte> buf)
 {
-  const char *name = intelgt_pseudo_register_name (arch, pseudo_regnum);
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (arch);
+  intelgt_pseudo_register *ptype
+    = intelgt_find_pseudo_register_by_number (arch, pseudo_regnum);
 
-  if (strcmp (name, "ip") == 0)
-    {
-      /* Instruction pointer is stored in CR0.2.  */
-      gdb_assert (data->cr0_regnum != -1);
-      int cr0_size = register_size (arch, data->cr0_regnum);
+  if (ptype->read_only)
+    error (_("Pseudo-register %d is read-only"), pseudo_regnum);
 
-      /* CR0 elements are 4 byte wide.  */
-      int reg_size = register_size (arch, pseudo_regnum);
-      gdb_assert (reg_size + 8 <= cr0_size);
-      pseudo_to_raw_part (next_frame, buf, data->cr0_regnum, 8);
-      return;
-    }
+  gdb_assert (ptype->raw_regnum != -1);
+  int raw_size = register_size (arch, ptype->raw_regnum);
 
-  error (_("Pseudo-register %s is read-only"), name);
+  int reg_size = register_size (arch, pseudo_regnum);
+  gdb_assert (reg_size + ptype->offset <= raw_size);
+  pseudo_to_raw_part (next_frame, buf, ptype->raw_regnum, ptype->offset);
 }
 
 /* Called by tdesc_use_registers each time a new regnum
@@ -5033,6 +5034,13 @@ Device vendor id and target id not found in intelgt target description."));
   set_gdbarch_num_regs (gdbarch, 0);
   set_gdbarch_register_name (gdbarch, tdesc_register_name);
 
+  /* Populate gdbarch fields.  */
+  set_gdbarch_addr_bit (gdbarch, 64);
+  set_gdbarch_ptr_bit (gdbarch, 64);
+  set_gdbarch_long_bit (gdbarch, 64);
+  set_gdbarch_char_signed (gdbarch, 1);
+  set_gdbarch_wchar_signed (gdbarch, 1);
+
   if (tdesc_has_registers (tdesc))
     {
       uint32_t device_id = get_device_id (gdbarch);
@@ -5047,6 +5055,8 @@ Device vendor id and target id not found in intelgt target description."));
 
       tdesc_use_registers (gdbarch, tdesc, std::move (tdesc_data),
 			   intelgt_unknown_register_cb);
+
+      const struct builtin_type *bt = builtin_type (gdbarch);
 
       switch (device_version)
 	{
@@ -5075,7 +5085,9 @@ Device vendor id and target id not found in intelgt target description."));
 			intelgt_value_of_framedesc_user_reg, nullptr);
 
 	  /* Unconditionally enabled pseudo-registers:  */
-	  data->enabled_pseudo_regs.push_back ("ip");
+	  data->enabled_pseudo_regs.push_back ({"ip", data->cr0_regnum,
+						8 /* Raw offset.  */,
+						bt->builtin_uint32});
 	  break;
 
 	default:
@@ -5093,11 +5105,6 @@ Device vendor id and target id not found in intelgt target description."));
       set_gdbarch_write_pc (gdbarch, intelgt_write_pc);
       set_gdbarch_register_reggroup_p (gdbarch, intelgt_register_reggroup_p);
     }
-
-  /* Populate gdbarch fields.  */
-  set_gdbarch_ptr_bit (gdbarch, 64);
-  set_gdbarch_addr_bit (gdbarch, 64);
-  set_gdbarch_long_bit (gdbarch, 64);
 
   set_gdbarch_register_type (gdbarch, intelgt_register_type);
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, intelgt_dwarf_reg_to_regnum);

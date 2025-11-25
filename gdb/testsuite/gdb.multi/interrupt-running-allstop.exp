@@ -1,0 +1,92 @@
+# Copyright 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test resuming from an interrupt with the multi-target feature when
+# we have a combination of non-stop + all-stop targets.
+
+load_lib gdbserver-support.exp
+
+require allow_gdbserver_tests
+
+standard_testfile
+
+# We specifically want non-stop + all-stop combination of targets.
+if {[target_info gdb_protocol] != ""} {
+    unsupported "the test is designed for the native target"
+    return -1
+}
+
+if {[prepare_for_testing "failed to build" $testfile $srcfile {debug}]} {
+    return -1
+}
+
+# Start inferior 1 on the native target.
+if {![runto_main]} {
+    return -1
+}
+
+delete_breakpoints
+
+# Add and start inferior 2.
+gdb_test "add-inferior -no-connection" "Added inferior 2.*"\
+    "add empty inferior 2"
+gdb_test "inferior 2" "Switching to inferior 2.*" \
+    "switch to inferior 2"
+set gdbserver [gdbserver_start "" [standard_output_file $binfile]]
+set gdbserver_gdbport [lindex $gdbserver 1]
+gdb_target_cmd "remote" $gdbserver_gdbport
+
+# Continue both inferiors.  They should start spinning.
+gdb_test_no_output "set schedule-multiple on"
+set test "continue inferiors"
+send_gdb "continue\n"
+gdb_expect 5 {
+    -re "Continu\[^\r\n\]*\[\r\n\]" {
+	pass $test
+    }
+    default {
+	fail $test
+    }
+}
+sleep 2
+
+# Interrupt with CtrlC.
+send_gdb "\003"
+gdb_test_multiple "" "interrupting stops the program" {
+    -re -wrap "received signal SIGINT, Interrupt.*" {
+	pass $gdb_test_name
+    }
+}
+
+set current_inf [get_integer_valueof "\$_inferior" "invalid"]
+if {$current_inf == 1} {
+    set other_inf 2
+} else {
+    set other_inf 1
+}
+
+# Define a breakpoint for the other inferior to hit after the loop.
+set line [gdb_get_line_number "break-here"]
+gdb_breakpoint "$srcfile:$line inferior $other_inf" {temporary}
+
+# Unblock progress.
+gdb_test "thread apply ${other_inf}.* print spin=0" ".*" \
+    "set spin to 0"
+
+# Continue again.  We should not see a spurious SIGINT.
+# Other inferior should hit the breakpoint.
+gdb_test "continue" \
+    "Thread ${other_inf}.1 .* breakpoint .*$srcfile:$line.*break-here.*" \
+    "hit breakpoint"

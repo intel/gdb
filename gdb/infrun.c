@@ -6172,6 +6172,20 @@ stop_all_threads (const char *reason, inferior *inf)
 	  for (int i = 0; i < waits_needed; i++)
 	    {
 	      wait_one_event event = wait_one ();
+
+	      if ((interrupt_requested.find (event.target)
+		   != interrupt_requested.end ())
+		  && event.ws.kind () == TARGET_WAITKIND_STOPPED
+		  && event.ws.sig () == GDB_SIGNAL_INT)
+		{
+		  /* This is an intended stop.  However, all-stop
+		     targets cannot reply with GDB_SIGNAL_0, because
+		     they are always stopped with CtrlC.  Do the
+		     conversion here, so that handle_one does not save
+		     the event to report later.  */
+		  event.ws.set_stopped (GDB_SIGNAL_0);
+		}
+
 	      if (handle_one (event))
 		break;
 	    }

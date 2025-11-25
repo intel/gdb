@@ -1,0 +1,87 @@
+# This testcase is part of GDB, the GNU debugger.
+
+# Copyright 2025 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test attaching to a process in async mode (with '&') while
+# another process is running.
+
+standard_testfile
+
+require can_spawn_for_attach
+
+if {[prepare_for_testing "failed to prepare" $testfile $srcfile {debug}]} {
+    return
+}
+
+set spawn_id_list [spawn_wait_for_attach $binfile]
+set test_spawn_id [lindex $spawn_id_list 0]
+set testpid [spawn_id_get_pid $test_spawn_id]
+
+proc do_test {async_mode} {
+    save_vars {::GDBFLAGS} {
+	# If GDB and GDBserver are both running locally, set the sysroot to avoid
+	# reading files via the remote protocol.
+	if {![is_remote host] && ![is_remote target]} {
+	    set ::GDBFLAGS "${::GDBFLAGS} -ex \"set sysroot\""
+	}
+
+	# To query the target after async attach with '&', we need
+	# to be running in target-non-stop mode.
+	set ::GDBFLAGS \
+	    "${::GDBFLAGS} -ex \"maint set target-non-stop on\""
+	clean_restart $::binfile
+    }
+
+    if {![runto_main]} {
+	return
+    }
+
+    # Leave inferior 1 running.
+    gdb_test "continue &" ".*" "run asynchronously"
+    gdb_test "info threads" "\\(running\\)" "inferior 1 is running"
+
+    # Attach to the second inferior.
+    gdb_test "add-inferior" "Added inferior 2.*" \
+	"add second inferior"
+    gdb_test "inferior 2" "Switching to inferior 2.*" \
+	"switch to second inferior"
+
+    if {$async_mode} {
+	set cmd "attach $::testpid &"
+    } else {
+	set cmd "attach $::testpid"
+    }
+
+    gdb_test "$cmd" "Attaching to .*" "attach to program 2"
+
+    if {$async_mode} {
+	# Thread 1.1 was already running.  Thread 2.1 should be
+	# resumed because of '&'.  So, no thread should be stopped.
+	gdb_test "info threads -stopped" "No threads\\." \
+	    "check thread states"
+    } else {
+	# Thread 1.1 was running.  Attaching should have stopped it.
+	# So, both threads should be stopped.
+	gdb_test "info threads -stopped" " 1\\.1 .* 2\\.1 .*" \
+	    "check thread states"
+    }
+}
+
+foreach_with_prefix async {0 1} {
+    do_test $async
+}
+
+kill_wait_spawned_process $test_spawn_id

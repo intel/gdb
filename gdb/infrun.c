@@ -4681,7 +4681,7 @@ stop_all_threads_if_all_stop_mode ()
 /* See infrun.h.  */
 
 void
-wait_for_inferior (inferior *inf)
+wait_for_inferior (inferior *inf, bool stop_all_infs)
 {
   infrun_debug_printf ("wait_for_inferior ()");
 
@@ -4720,7 +4720,8 @@ wait_for_inferior (inferior *inf)
 	break;
     }
 
-  stop_all_threads_if_all_stop_mode ();
+  if (!non_stop)
+    stop_all_threads ("wait_for_inferior", stop_all_infs ? nullptr : inf);
 
   /* No error, don't finish the state yet.  */
   finish_state.release ();

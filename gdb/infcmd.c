@@ -2752,8 +2752,10 @@ attach_command (const char *args, int from_tty)
       if (!target_is_async_p ())
 	mark_infrun_async_event_handler ();
 
-      /* Wait for stop.  */
-      wait_for_inferior (inferior);
+      /* Wait for stop.  If this was an async request with "&", stop
+	 INFERIOR only, let other inferiors run.  In attach_post_wait,
+	 we resume INFERIOR in case of "&".  */
+      wait_for_inferior (inferior, !async_exec);
     }
 
   attach_post_wait (from_tty, mode);

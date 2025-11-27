@@ -54,6 +54,7 @@
 #include <array>
 #include <optional>
 #include <unordered_map>
+#include <sstream>
 #if defined (HAVE_LIBYAML_CPP)
 #include <yaml-cpp/yaml.h>
 #include "gdb_bfd.h"
@@ -165,6 +166,11 @@ intelgt_get_hw_simd_width (gdbarch *gdbarch, thread_info *tp);
 
 static std::optional<uint32_t>
 find_prologue_size_using_zeinfo (CORE_ADDR start_address);
+
+/* Compute a kernel identifier string of PC using available zeinfo.  */
+
+static std::string intelgt_get_kernel_fingerprint (gdbarch *gdbarch,
+						   CORE_ADDR pc);
 
 /* Read and write vectors on the stack while considering the SIMD
    vectorization.
@@ -2714,6 +2720,15 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
       return sp;
     }
 
+  /* Make sure that the callee and the caller are in the same kernel.  */
+  CORE_ADDR pc = regcache_read_pc (regcache);
+  const std::string current_kernel
+    = intelgt_get_kernel_fingerprint (gdbarch, pc);
+  const std::string callee_kernel
+    = intelgt_get_kernel_fingerprint (gdbarch, funaddr);
+  if (current_kernel != callee_kernel)
+    error (_("Cannot call a function from a different kernel."));
+
   /* Allocate memory for two instructions in the scratch area.  The first is
      for the CALLA, and the second is the return address, where GDB inserts
      a breakpoint.  */
@@ -3787,6 +3802,28 @@ intelgt_get_kernel_zeinfo (gdbarch *gdbarch, thread_info *tp)
   CORE_ADDR pc = regcache_read_pc (regcache);
 
   return zeinfo_from_pc (gdbarch, pc);
+}
+
+static std::string
+intelgt_get_kernel_fingerprint (gdbarch *gdbarch, CORE_ADDR pc)
+{
+  const zeinfo::kernel &zeinfo_kernel = zeinfo_from_pc (gdbarch, pc);
+
+  /* Build kernel identifier from mandatory zeinfo fields.
+
+     NOTE: The kernel name should be unique and serve as a kernel
+     identifier, but to be on the safe side, we append SIMD_SIZE and
+     GRF_COUNT.  */
+  std::stringstream sstream;
+  sstream << zeinfo_kernel.name
+	  << (uint32_t) zeinfo_kernel.simd_size
+	  << zeinfo_kernel.grf_count;
+
+  dprintf ("Kernel info: name = %s, simd_size = %u, grf_count = %u",
+	   zeinfo_kernel.name.c_str (), zeinfo_kernel.simd_size,
+	   zeinfo_kernel.grf_count);
+
+  return sstream.str ();
 }
 
 static uint8_t

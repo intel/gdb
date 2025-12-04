@@ -189,6 +189,13 @@ get_xe_version (uint32_t device_id)
 
       case 0xFD80:
       case 0xFD81:
+
+      case 0xD740:
+      case 0xD741:
+      case 0xD742:
+      case 0xD743:
+      case 0xD744:
+      case 0xD745:
 	return XE3;
 
       default:

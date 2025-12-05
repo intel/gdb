@@ -1318,6 +1318,17 @@ jit_event_handler (gdbarch *gdbarch, objfile *jiter)
     }
 }
 
+/* See jit.h  */
+
+bool
+is_jit_object (objfile *obj)
+{
+  if (obj == nullptr)
+    return false;
+
+  return obj->jited_data != nullptr;
+}
+
 /* Implementation of "show jit-reader-directory".  */
 
 static void

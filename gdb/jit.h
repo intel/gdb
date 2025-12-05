@@ -122,4 +122,9 @@ extern void jit_breakpoint_re_set (void);
 
 extern void jit_event_handler (gdbarch *gdbarch, objfile *jiter);
 
+/* Return true if the given objfile OBJ is a jit object;
+   false, otherwise.  */
+
+extern bool is_jit_object (objfile *obj);
+
 #endif /* GDB_JIT_H */

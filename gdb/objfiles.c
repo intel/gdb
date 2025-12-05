@@ -326,6 +326,24 @@ entry_point_address (program_space *pspace)
   return retval;
 }
 
+/* Return the current frame's objfile, if exists.
+   Return nullptr, otherwise.  */
+
+objfile *
+current_frame_objfile ()
+{
+  if (!target_has_execution ())
+    return nullptr;
+
+  frame_info_ptr this_frame = get_current_frame ();
+  symbol *fun = get_frame_function (this_frame);
+
+  if (fun != nullptr)
+    return fun->objfile ();
+
+  return nullptr;
+}
+
 separate_debug_iterator &
 separate_debug_iterator::operator++ ()
 {

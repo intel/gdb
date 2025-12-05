@@ -28,6 +28,7 @@
 #include "value.h"
 #include "symfile.h"
 #include "objfiles.h"
+#include "jit.h"
 #include "gdbsupport/gdb_regex.h"
 #include "expression.h"
 #include "language.h"
@@ -2715,8 +2716,23 @@ lookup_global_symbol (const char *name,
 	objfile = objfile->separate_debug_objfile_backlink;
     }
 
-  block_symbol bs
-    = lookup_global_or_static_symbol (name, GLOBAL_BLOCK, objfile, domain);
+  block_symbol bs = {nullptr, nullptr};
+
+  if (objfile == nullptr)
+    {
+      objfile = current_frame_objfile ();
+      if (objfile != nullptr
+	  && objfile->separate_debug_objfile_backlink != nullptr)
+	objfile = objfile->separate_debug_objfile_backlink;
+    }
+
+  /* If this is a jit object, prioritize it.  */
+  if (is_jit_object (objfile))
+    bs = lookup_symbol_in_objfile (objfile, GLOBAL_BLOCK, name, domain);
+
+  if (bs.symbol == nullptr)
+    bs = lookup_global_or_static_symbol (name, GLOBAL_BLOCK, objfile, domain);
+
   if (better_symbol (sym, bs.symbol, domain) == sym)
     return { sym, global_block };
   else

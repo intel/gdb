@@ -896,6 +896,8 @@ extern int entry_point_address_query (program_space *pspace,
 
 extern CORE_ADDR entry_point_address (program_space *pspace);
 
+extern objfile *current_frame_objfile ();
+
 extern void build_objfile_section_table (struct objfile *);
 
 extern void free_objfile_separate_debug (struct objfile *);

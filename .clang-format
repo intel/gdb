@@ -1,0 +1,169 @@
+# -*- yaml -*-
+
+# Copyright (C) 2021-2025 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# A clang format style for gdb.
+
+# ⚠️⚠️⚠️ DO NOT BULK REFORMAT FILES ⚠️⚠️⚠️
+
+# This style is still in flux and still considered "alpha".  Use "git
+# clang-format" or the like to reformat just the parts your patch
+# touches -- at most.  At some point in the future we will bulk
+# reformat and at that point we'll send out new instructions.
+
+# There is currently not a blessed version of clang-format.  This was
+# tried with versions 18-21 with various results.
+
+# There's a gdb bug open for discussion of the format.
+#
+#    https://sourceware.org/bugzilla/show_bug.cgi?id=30098
+#
+# It also has links to relevant upstream clang-format bugs.
+
+# Options here are generally in alphabetical order.
+
+Language: Cpp
+# BasedOnStyle: GNU
+AccessModifierOffset: -2
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignConsecutiveMacros: false
+AlignEscapedNewlines: Left
+AlignOperands: true
+AlignTrailingComments: true
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortBlocksOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterReturnType: TopLevelDefinitions
+AlwaysBreakBeforeMultilineStrings: false
+AlwaysBreakTemplateDeclarations: Yes
+#
+# Run:
+# git grep 'define ATTRIBUTE_' -- include gdb* | \
+#   sed -e's/^.*\(ATTRIBUTE_[A-Z0-9_]*\).*$/\1/' | \
+#   sort -u | \
+#   sed -e "s/^\(.*\)$/  '\1',/"
+AttributeMacros: [
+  'ATTRIBUTE_ALIGNED_ALIGNOF',
+  'ATTRIBUTE_COLD',
+  'ATTRIBUTE_FORMAT_PRINTF_STANDARD',
+  'ATTRIBUTE_FPTR_PRINTF',
+  'ATTRIBUTE_GCC_STRUCT',
+  'ATTRIBUTE_HOT',
+  'ATTRIBUTE_MALLOC',
+  'ATTRIBUTE_NOCLONE',
+  'ATTRIBUTE_NONNULL',
+  'ATTRIBUTE_NONSTRING',
+  'ATTRIBUTE_NORETURN',
+  'ATTRIBUTE_NO_SANITIZE_UNDEFINED',
+  'ATTRIBUTE_NULL_PRINTF',
+  'ATTRIBUTE_PACKED',
+  'ATTRIBUTE_PRINTF',
+  'ATTRIBUTE_PURE',
+  'ATTRIBUTE_RESULT_SIZE_1',
+  'ATTRIBUTE_RESULT_SIZE_1_2',
+  'ATTRIBUTE_RESULT_SIZE_2',
+  'ATTRIBUTE_RETURNS_NONNULL',
+  'ATTRIBUTE_SENTINEL',
+  'ATTRIBUTE_UNUSED',
+  'ATTRIBUTE_UNUSED_LABEL',
+  'ATTRIBUTE_UNUSED_RESULT',
+  'ATTRIBUTE_USED',
+  'ATTRIBUTE_VISIBILITY',
+  'ATTRIBUTE_WARN_UNUSED_RESULT',
+  ]
+BinPackArguments: true
+BinPackParameters: true
+# Because BreakBeforeBraces = GNU, we don't need BraceWrapping.
+BreakBeforeBinaryOperators: All
+BreakBeforeBraces: GNU
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeColon
+BreakStringLiterals: true
+ColumnLimit: 79
+CommentPragmas: 'ARI:'
+CompactNamespaces: false
+ConstructorInitializerIndentWidth: 2
+ContinuationIndentWidth: 2
+Cpp11BracedListStyle: false
+DerivePointerAlignment: false
+DisableFormat: false
+# The docs say not to use this.
+# ExperimentalAutoDetectBinPacking: false
+FixNamespaceComments: true
+IncludeBlocks: Preserve
+IndentCaseLabels: false
+# This next setting is incorrect but it's a clang-format issue.
+IndentGotoLabels: true
+IndentPPDirectives: None
+IndentWidth: 2
+IndentWrappedFunctionNames: false
+KeepEmptyLinesAtTheStartOfBlocks: false
+LineEnding: LF
+# MacroBlockBegin: ''
+# MacroBlockEnd: ''
+MaxEmptyLinesToKeep: 1
+NamespaceIndentation: None
+# NamespaceMacros
+PackConstructorInitializers: Never
+PenaltyBreakAssignment: 50
+PenaltyBreakBeforeFirstCallParameter: 100
+# clang 20 setting:
+# PenaltyBreakBeforeMemberAccess: 50
+# PenaltyBreakComment
+# PenaltyBreakFirstLessLess
+PenaltyBreakOpenParenthesis: 100
+# PenaltyBreakString
+# PenaltyBreakTemplateDeclaration
+# PenaltyExcessCharacter
+# PenaltyReturnTypeOnItsOwnLine
+PointerAlignment: Right
+# RawStringFormats: [ I don't think we need this ]
+# Should be IndentOnly but that requires clang 20.
+ReflowComments: false
+# FIXME - enable
+SortIncludes: Never
+SortUsingDeclarations: true
+SpaceAfterCStyleCast: true
+SpaceAfterLogicalNot: false
+SpaceAfterTemplateKeyword: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: true
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParens: Always
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceBeforeSquareBrackets: false
+SpaceInEmptyBlock: false
+SpacesBeforeTrailingComments: 1
+SpacesInAngles: false
+SpacesInContainerLiterals: true
+SpacesInParens: Never
+SpacesInSquareBrackets: false
+Standard: c++17
+# Oh Python...
+StatementMacros: [ 'PyObject_HEAD' ]
+TabWidth: 8
+TypenameMacros: [ 'ENUM_BITFIELD' ]
+UseTab: ForContinuationAndIndentation

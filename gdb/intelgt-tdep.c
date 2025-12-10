@@ -2826,6 +2826,42 @@ intelgt_push_dummy_code (gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
   return sp;
 }
 
+/* Helper for 'intelgt_push_dummy_call' that unconditionally clears
+   exception bits that could block an infcall.  */
+
+static void
+intelgt_clear_exception_bits (gdbarch *gdbarch, regcache *regcache)
+{
+  uint32_t device_id = get_device_id (gdbarch);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* Clear any exceptions in CR0.1[16:31].  Otherwise, the function call
+	   will be aborted, and the exception is reported instead.  */
+	constexpr uint16_t cr0_1_exception_mask = 0x0;
+	constexpr size_t offset = sizeof (uint32_t) + sizeof (uint16_t);
+	intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+	intelgt_write_register_part (regcache, data->cr0_regnum, offset,
+				     sizeof (cr0_1_exception_mask),
+				     (gdb_byte *) &cr0_1_exception_mask,
+				     _("Cannot write CR0.1."));
+	return;
+      }
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
+}
+
 /* Intelgt implementation of the "push_dummy_call" method.  */
 
 static CORE_ADDR
@@ -2982,6 +3018,10 @@ intelgt_push_dummy_call (gdbarch *gdbarch, value *function, regcache *regcache,
 			       elt.field->type ()->length (),
 			       (gdb_byte *) &fe_sp,
 			       _("Cannot store FE stack pointer."));
+
+  /* Clear potentially set exception bits to allow the infcall to run.  */
+  intelgt_clear_exception_bits (gdbarch, regcache);
+
   return fe_sp;
 }
 

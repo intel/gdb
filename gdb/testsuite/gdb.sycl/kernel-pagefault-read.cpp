@@ -19,6 +19,12 @@
 #include "../lib/sycl-util.cpp"
 
 int
+foo (int a)
+{
+  return a + 1;
+}
+
+int
 main (int argc, char *argv[])
 {
   int data[1] {7};
@@ -32,6 +38,7 @@ main (int argc, char *argv[])
 
       cgh.single_task<> ([=] ()
 	{
+	  int a = foo (2);
 	  int *src = nullptr;  /* line-before-pagefault */
 	  int num = *src;      /* pagefault-line */
 	  numbers[0] = num;    /* last-line */

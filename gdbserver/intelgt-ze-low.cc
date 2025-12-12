@@ -611,6 +611,44 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
       return TARGET_STOPPED_BY_NO_REASON;
     }
 
+  if ((cr0[1] & (1 << intelgt_cr0_1_illegal_opcode_status)) != 0)
+    {
+      cr0[1] &= ~(1 << intelgt_cr0_1_illegal_opcode_status);
+      intelgt_write_cr0 (regcache, 1, cr0[1]);
+
+      signal = GDB_SIGNAL_ILL;
+      return TARGET_STOPPED_BY_NO_REASON;
+    }
+
+  if ((cr0[1] & (1 << intelgt_cr0_1_software_exception_control)) != 0)
+    {
+      cr0[1] &= ~(1 << intelgt_cr0_1_software_exception_control);
+      intelgt_write_cr0 (regcache, 1, cr0[1]);
+
+      signal = GDB_EXC_SOFTWARE;
+      return TARGET_STOPPED_BY_NO_REASON;
+    }
+
+  if (is_systolic)
+    {
+      signal = GDB_SIGNAL_SYSTOLIC;
+      return TARGET_STOPPED_BY_NO_REASON;
+    }
+
+  if ((cr0[1] & ((1 << intelgt_cr0_1_force_exception_status)
+		 | (1 << intelgt_cr0_1_external_halt_status))) != 0)
+    {
+      cr0[1] &= ~(1 << intelgt_cr0_1_force_exception_status);
+      cr0[1] &= ~(1 << intelgt_cr0_1_external_halt_status);
+      intelgt_write_cr0 (regcache, 1, cr0[1]);
+
+      signal = GDB_SIGNAL_INT;
+      return TARGET_STOPPED_BY_NO_REASON;
+    }
+
+  /* We can only have one exception at a time when single stepping a thread.
+     Thus, the breakpoint / step completed exception bit must be cleared last
+     to ensure the exception is reported to the user.  */
   if ((cr0[1] & (1 << intelgt_cr0_1_breakpoint_status)) != 0)
     {
       cr0[1] &= ~(1 << intelgt_cr0_1_breakpoint_status);
@@ -651,41 +689,6 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 	  signal = GDB_SIGNAL_TRAP;
 	  return TARGET_STOPPED_BY_SW_BREAKPOINT;
 	}
-    }
-
-  if ((cr0[1] & (1 << intelgt_cr0_1_illegal_opcode_status)) != 0)
-    {
-      cr0[1] &= ~(1 << intelgt_cr0_1_illegal_opcode_status);
-      intelgt_write_cr0 (regcache, 1, cr0[1]);
-
-      signal = GDB_SIGNAL_ILL;
-      return TARGET_STOPPED_BY_NO_REASON;
-    }
-
-  if ((cr0[1] & (1 << intelgt_cr0_1_software_exception_control)) != 0)
-    {
-      cr0[1] &= ~(1 << intelgt_cr0_1_software_exception_control);
-      intelgt_write_cr0 (regcache, 1, cr0[1]);
-
-      signal = GDB_EXC_SOFTWARE;
-      return TARGET_STOPPED_BY_NO_REASON;
-    }
-
-  if (is_systolic)
-    {
-      signal = GDB_SIGNAL_SYSTOLIC;
-      return TARGET_STOPPED_BY_NO_REASON;
-    }
-
-  if ((cr0[1] & ((1 << intelgt_cr0_1_force_exception_status)
-		 | (1 << intelgt_cr0_1_external_halt_status))) != 0)
-    {
-      cr0[1] &= ~(1 << intelgt_cr0_1_force_exception_status);
-      cr0[1] &= ~(1 << intelgt_cr0_1_external_halt_status);
-      intelgt_write_cr0 (regcache, 1, cr0[1]);
-
-      signal = GDB_SIGNAL_INT;
-      return TARGET_STOPPED_BY_NO_REASON;
     }
 
   signal = GDB_SIGNAL_UNKNOWN;

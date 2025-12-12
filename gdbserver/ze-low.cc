@@ -2139,6 +2139,14 @@ ze_target::resume_single_thread (thread_info *thread)
 
   bool should_resume = ze_prepare_for_resuming (thread);
   gdb_assert (should_resume);
+
+  /* Make sure any thread we're about to resume does not have a pending
+     stop event.  */
+  gdb_signal signal = GDB_SIGNAL_0;
+  target_stop_reason reason = get_stop_reason (thread, signal);
+  gdb_assert ((reason == TARGET_STOPPED_BY_NO_REASON)
+	      && (signal == GDB_SIGNAL_UNKNOWN));
+
   prepare_thread_resume (thread);
   regcache_invalidate_thread (thread);
   ze_resume (*device, zetp->id);
@@ -2155,14 +2163,35 @@ ze_target::mark_eventing_threads (ptid_t resume_ptid, resume_kind rkind)
   size_t num_eventing = 0;
   for_each_thread (resume_ptid, [=, &num_eventing] (thread_info *tp)
     {
+      ze_thread_info *zetp = ze_thread (tp);
+      gdb_assert (zetp != nullptr);
+
+      /* Process remaining exceptions in stopped threads.  Each call of
+	 'get_stop_reason' clears a single exception bit.  The thread will
+	 not resume until all exceptions are reported.  */
+      if (!ze_has_priority_waitstatus (tp)
+	  && ze_thread_stopped (tp))
+	{
+	  gdb_signal signal = GDB_SIGNAL_UNKNOWN;
+	  target_stop_reason reason = get_stop_reason (tp, signal);
+
+	  /* Only report the exception if there is a real reason.  We use
+	     GDB_SIGNAL_0 for spurious breakpoint exceptions.  The thread
+	     should be resumed in this case.  */
+	  if ((reason != TARGET_STOPPED_BY_NO_REASON)
+	      && (signal != GDB_SIGNAL_UNKNOWN)
+	      && (signal != GDB_SIGNAL_0))
+	    {
+	      zetp->stop_reason = reason;
+	      zetp->waitstatus.set_stopped (signal);
+	    }
+	}
+
       if (!ze_has_priority_waitstatus (tp))
 	{
 	  (void) ze_move_waitstatus (tp);
 	  return;
 	}
-
-      ze_thread_info *zetp = ze_thread (tp);
-      gdb_assert (zetp != nullptr);
 
       /* If the thread's stop event was being held, it is now the time
 	 to convert the state to 'stopped' to unleash the event.  */

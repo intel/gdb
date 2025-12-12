@@ -134,5 +134,16 @@ foreach device $sycl_device_list {
 	# Verify we actually had the breakpoint and the fault reported
 	# at the same address.
 	gdb_assert {[get_hexadecimal_valueof "\$pc" invalid] == $break_addr}
+
+	# Test inferior calls.
+	gdb_test "print foo (3)" " = 4"
+
+	# Make sure that GDB reports the breakpoint stop upon resuming.
+	gdb_test "continue" ".*Breakpoint.*" \
+	    "hit the breakpoint exception"
+	gdb_test "print/x \$pc" "$break_addr" "thread did not make progress"
+
+	# BP exception bit should be properly reset, continue to end.
+	continue_sycl_program_to_termination
     }}
 }

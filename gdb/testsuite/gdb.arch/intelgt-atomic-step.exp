@@ -119,6 +119,8 @@ foreach device $sycl_device_list {
 	    if {[is_xe2 $device]
 		&& [string match -nocase "*0xe223*" $device]} {
 		setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+	    } elseif {[is_xe3 $device]} {
+		 setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
 	    }
 	    gdb_test_multiple "continue" "hit the BP inside the kernel" {
 		-re -wrap "hit Temporary breakpoint.*" {

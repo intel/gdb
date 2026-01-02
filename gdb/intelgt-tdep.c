@@ -98,13 +98,20 @@ struct regnum_range
   int end;
 };
 
+/* Header common to all implicit arguments structure versions.
+   Used to determine the version and size before parsing.  */
+struct implicit_args_header
+{
+  uint8_t struct_size;
+  uint8_t struct_version;
+};
+
 /* Implicit arguments structure, version 0.
    The lifespan of a structure and the corresponding local ID table is
    the corresponding kernel dispatch.  */
 struct implicit_args_v0
 {
-  uint8_t struct_size;
-  uint8_t struct_version;
+  implicit_args_header header;
   uint8_t num_work_dim;
   uint8_t simd_width;
   uint32_t local_size_x;
@@ -122,19 +129,42 @@ struct implicit_args_v0
   uint32_t group_count_y;
   uint32_t group_count_z;
   uint64_t rt_global_buffer_ptr;
+  uint64_t assert_buffer_ptr;
+};
 
-  /* Disable copy, default others.  */
-  implicit_args_v0 () = default;
-  implicit_args_v0 &operator= (const implicit_args_v0 &) = delete;
-  implicit_args_v0 (const implicit_args_v0 &) = delete;
-  implicit_args_v0 (implicit_args_v0 &&) = default;
-  implicit_args_v0 &operator= (implicit_args_v0 &&) = default;
+/* Implicit arguments structure, version 1.  Identical with version 0 up
+   to assert_buffer_ptr.  */
+struct implicit_args_v1 {
+  implicit_args_header header;
+  uint8_t num_work_dim;
+  uint8_t simd_width;
+  uint32_t local_size_x;
+  uint32_t local_size_y;
+  uint32_t local_size_z;
+  uint64_t global_size_x;
+  uint64_t global_size_y;
+  uint64_t global_size_z;
+  uint64_t printf_buffer_ptr;
+  uint64_t global_offset_x;
+  uint64_t global_offset_y;
+  uint64_t global_offset_z;
+  uint64_t local_id_table_ptr;
+  uint32_t group_count_x;
+  uint32_t group_count_y;
+  uint32_t group_count_z;
+  uint64_t rt_global_buffer_ptr;
+  uint64_t assert_buffer_ptr;
+  uint64_t scratch_descriptor_ptr;
+  uint64_t sync_buffer_ptr;
+  uint32_t enqueued_local_size_x;
+  uint32_t enqueued_local_size_y;
+  uint32_t enqueued_local_size_z;
 };
 
 /* The value type of the implicit arguments cache.  We want to store both
-   the implicit arguments structure and its local ID table.  */
+   the implicit arguments blob and its local ID table.  */
 
-typedef std::pair<implicit_args_v0, std::vector<uint16_t>>
+typedef std::pair<gdb::byte_vector, std::vector<uint16_t>>
   implicit_args_value_pair;
 
 /* Global cache to store implicit args and local IDs.
@@ -3402,79 +3432,122 @@ intelgt_entry_point (CORE_ADDR *entry_p)
 
 namespace intelgt_implicit_args
 {
-/* A helper function to parse the fields of the implicit args structure.
-   ENTRY is the reference to the field, we return the parsed value here.
-   OFFSET is the reference to the offset of the field in BUFFER.  After
-   parsing the ENTRY, it gets incremented by the SIZEOF (ENTRY).
-   BUF is the buffer from where the structure is parsed.
-   BYTE_ORDER is arch specific.
-   STRUCT_SIZE is the size of the whole struct.  Used for validation.  */
+/* Read a field of type T from the blob at the given offset.
+   Errors if the field extends beyond the blob size.  */
 
-template <typename T>
-static void
-parse_arg (T &entry, size_t &offset, const gdb_byte *buf,
-	   bfd_endian byte_order, uint8_t struct_size)
+template<typename T>
+static T
+read_field (const gdb::byte_vector &blob, bfd_endian byte_order,
+	    size_t offset, const char *field_name)
 {
-  if (offset + sizeof (entry) > struct_size)
-    error (_("Implicit argument parsing failed: (offset %ld + field size %ld) "
-	     "is greater than the read struct size %d."),
-	   offset, sizeof (entry), struct_size);
-  if (offset + sizeof (entry) > sizeof (implicit_args_v0))
-    error (_("Implicit argument parsing failed: (offset %ld + field size %ld) "
-	     "is greater than the expected struct size %ld."),
-	   offset, sizeof (entry), sizeof (implicit_args_v0));
-  entry = extract_unsigned_integer (buf + offset, sizeof (entry), byte_order);
-  offset += sizeof (entry);
+  const size_t size = sizeof (T);
+  if ((offset + size) > blob.size ())
+    error (_("Implicit arguments field '%s' at offset %zu "
+	     "(size %zu) extends beyond buffer size %zu."),
+	   field_name, offset, size, blob.size ());
+  return static_cast<T> (extract_unsigned_integer (blob.data () + offset, size,
+						   byte_order));
 }
 
-/* Parse BUF into the implicit ARGS struct.  The result is written
-   to the implicit ARGS.
-   Note, the current layout corresponds to the version 0
-   of the implicit arguments structure.
-   Error out if the structure could not be parsed.  */
+/* Macro to read a field from an implicit_args struct, automatically
+   providing the field name for error messages.  */
+#define READ_FIELD(type, blob, byte_order, struct_type, field) \
+  read_field<type> ((blob), (byte_order), \
+		    offsetof (struct_type, field), #field)
 
-static void
-parse_struct (implicit_args_v0 &args, const gdb_byte *buf,
-	      const bfd_endian byte_order)
+/* Return the SIMD width from the cached implicit args.  */
+
+static uint8_t
+get_simd_width (gdbarch *gdbarch, const gdb::byte_vector &blob,
+		bfd_endian byte_order)
 {
-  args.struct_size = extract_unsigned_integer (buf, sizeof (args.struct_size),
-					       byte_order);
-  /* It could happen that the struct has some fields not yet known to
-     the debugger.  Ignore them and continue.  */
-  if (args.struct_size > sizeof (implicit_args_v0))
-    dprintf ("Implicit arguments have greater size (%d) than expected (%ld).",
-	     args.struct_size, sizeof (implicit_args_v0));
+  uint8_t version = READ_FIELD (uint8_t, blob, byte_order,
+				implicit_args_header, struct_version);
+  switch (version)
+    {
+    case 0:
+    case 1:
+      {
+	static_assert (offsetof (implicit_args_v0, simd_width)
+		       == offsetof (implicit_args_v1, simd_width));
+	uint8_t simd_width = READ_FIELD (uint8_t, blob, byte_order,
+					 implicit_args_v0, simd_width);
+	/* We expect SIMD width be only 1, 8, 16, or 32.  */
+	if (simd_width != 1 && simd_width != 8 && simd_width != 16
+	    && simd_width != 32)
+	  error (_("Implicit arguments simd_width %d is not expected"),
+		 simd_width);
+	return simd_width;
+      }
+    }
 
-  size_t offset = sizeof (args.struct_size);
-  const uint8_t struct_size = args.struct_size;
-  parse_arg (args.struct_version, offset, buf, byte_order, struct_size);
-  parse_arg (args.num_work_dim, offset, buf, byte_order, struct_size);
-  parse_arg (args.simd_width, offset, buf, byte_order, struct_size);
-  parse_arg (args.local_size_x, offset, buf, byte_order, struct_size);
-  parse_arg (args.local_size_y, offset, buf, byte_order, struct_size);
-  parse_arg (args.local_size_z, offset, buf, byte_order, struct_size);
-  parse_arg (args.global_size_x, offset, buf, byte_order, struct_size);
-  parse_arg (args.global_size_y, offset, buf, byte_order, struct_size);
-  parse_arg (args.global_size_z, offset, buf, byte_order, struct_size);
-  parse_arg (args.printf_buffer_ptr, offset, buf, byte_order, struct_size);
-  parse_arg (args.global_offset_x, offset, buf, byte_order, struct_size);
-  parse_arg (args.global_offset_y, offset, buf, byte_order, struct_size);
-  parse_arg (args.global_offset_z, offset, buf, byte_order, struct_size);
-  parse_arg (args.local_id_table_ptr, offset, buf, byte_order, struct_size);
-  try
+  error (_("Unsupported implicit arguments version %d."), version);
+}
+
+/* Return the local size from the cached implicit args.  */
+
+static std::array<uint32_t, 3>
+get_local_size (const gdb::byte_vector &blob, bfd_endian byte_order)
+{
+  uint8_t version = READ_FIELD (uint8_t, blob, byte_order,
+				implicit_args_header, struct_version);
+  switch (version)
     {
-      /* We do not require the following fields to be present.  Do not error
-	 out if they are missing.  */
-      parse_arg (args.group_count_x, offset, buf, byte_order, struct_size);
-      parse_arg (args.group_count_y, offset, buf, byte_order, struct_size);
-      parse_arg (args.group_count_z, offset, buf, byte_order, struct_size);
-      parse_arg (args.rt_global_buffer_ptr, offset, buf, byte_order,
-		 struct_size);
+    case 0:
+    case 1:
+      {
+	/* Assert that V0 and V1 have the same layout for these fields.  */
+	static_assert (offsetof (implicit_args_v0, local_size_x)
+		       == offsetof (implicit_args_v1, local_size_x));
+	static_assert (offsetof (implicit_args_v0, local_size_y)
+		       == offsetof (implicit_args_v1, local_size_y));
+	static_assert (offsetof (implicit_args_v0, local_size_z)
+		       == offsetof (implicit_args_v1, local_size_z));
+
+	uint32_t x = READ_FIELD (uint32_t, blob, byte_order,
+				 implicit_args_v0, local_size_x);
+	uint32_t y = READ_FIELD (uint32_t, blob, byte_order,
+				 implicit_args_v0, local_size_y);
+	uint32_t z = READ_FIELD (uint32_t, blob, byte_order,
+				 implicit_args_v0, local_size_z);
+	return  { x, y, z };
+      }
     }
-  catch (const gdb_exception_error &e)
+
+    error (_("Unsupported implicit arguments version %d."), version);
+}
+
+/* Return the global size from the cached implicit args.  */
+
+static std::array<uint64_t, 3>
+get_global_size (const gdb::byte_vector &blob, bfd_endian byte_order)
+{
+  uint8_t version = READ_FIELD (uint8_t, blob, byte_order,
+				implicit_args_header, struct_version);
+  switch (version)
     {
-      dprintf ("%s", e.message->c_str ());
+    case 0:
+    case 1:
+      {
+	/* Assert that V0 and V1 have the same layout for these fields.  */
+	static_assert (offsetof (implicit_args_v0, global_size_x)
+		       == offsetof (implicit_args_v1, global_size_x));
+	static_assert (offsetof (implicit_args_v0, global_size_y)
+		       == offsetof (implicit_args_v1, global_size_y));
+	static_assert (offsetof (implicit_args_v0, global_size_z)
+		       == offsetof (implicit_args_v1, global_size_z));
+
+	uint64_t x = READ_FIELD (uint64_t, blob, byte_order,
+				 implicit_args_v0, global_size_x);
+	uint64_t y = READ_FIELD (uint64_t, blob, byte_order,
+				 implicit_args_v0, global_size_y);
+	uint64_t z = READ_FIELD (uint64_t, blob, byte_order,
+				 implicit_args_v0, global_size_z);
+	return  { x, y, z };
+      }
     }
+
+    error (_("Unsupported implicit arguments version %d."), version);
 }
 
 /* Return the address of the implicit args structure.  */
@@ -3482,30 +3555,45 @@ parse_struct (implicit_args_v0 &args, const gdb_byte *buf,
 static CORE_ADDR
 get_address (gdbarch *gdbarch, thread_info *tp)
 {
-  /* The implicit arguments address is stored as r0.0[31:6] as a
-     general state offset.  */
-
   regcache *regcache = get_thread_regcache (tp);
   intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
   uint64_t implicit_args_address = 0;
   std::string error_msg = _("Cannot read implicit arguments.");
 
-  intelgt_read_register_part (regcache, data->r0_regnum, 0,
-			      sizeof (uint32_t),
-			      (gdb_byte *) &implicit_args_address,
-			      error_msg.c_str ());
+  uint32_t device_id = get_device_id (gdbarch);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
 
-  /* Mask out the lowest 6 bits.  */
-  implicit_args_address &= ~0x3f;
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      {
+	/* The implicit arguments address is stored as
+	   r0.0[31:6] as a general state offset.  */
+	intelgt_read_register_part (regcache, data->r0_regnum, 0,
+				    sizeof (uint32_t),
+				    (gdb_byte *) &implicit_args_address,
+				    error_msg.c_str ());
 
-  /* Adjust with genstbase.  */
-  uint64_t genstbase;
-  intelgt_read_register_part (regcache, data->genstbase_regnum, 0,
-			      sizeof (uint64_t), (gdb_byte *) &genstbase,
-			      error_msg.c_str ());
-  implicit_args_address += genstbase;
+	/* Mask out the lowest 6 bits.  */
+	implicit_args_address &= ~0x3f;
 
-  return (CORE_ADDR) implicit_args_address;
+	/* Adjust with genstbase.  */
+	uint64_t genstbase;
+	intelgt_read_register_part (regcache, data->genstbase_regnum, 0,
+				    sizeof (uint64_t), (gdb_byte *) &genstbase,
+				    error_msg.c_str ());
+	implicit_args_address += genstbase;
+	return (CORE_ADDR) implicit_args_address;
+      }
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+  error (_("Unsupported device id 0x%" PRIx32), device_id);
 }
 
 /* Construct the key for the thread TP and the implicit args
@@ -3526,35 +3614,6 @@ make_key (gdbarch *gdbarch, thread_info *tp)
   CORE_ADDR address = get_address (gdbarch, tp);
 
   return make_key (gdbarch, tp, address);
-}
-
-/* Heuristic check that the implicit args structure is valid.
-   Error out if the implicit ARGS have an unexpected value.  */
-
-static void
-check_valid (const implicit_args_v0 &args)
-{
-  /* The current implementation corresponds to the layout
-     defined for version 0, but version 1 is backwards compatible.  */
-  if (args.struct_version != 0)
-    dprintf ("Implicit arguments struct_version %d is not expected",
-	     args.struct_version);
-
-  /* We require fields up to local_id_table_ptr.  */
-  if (args.struct_size <= 80)
-    error (_("Implicit arguments struct_size %d is not expected"),
-	   args.struct_size);
-
-  /* We expect SIMD width be only 1, 8, 16, or 32.  */
-  if (args.simd_width != 1 && args.simd_width != 8
-      && args.simd_width != 16 && args.simd_width != 32)
-    error (_("Implicit arguments simd_width %d is not expected"),
-	   args.simd_width);
-
-  /* The number of dimensions could be 1, 2, or 3.  */
-  if (args.num_work_dim == 0 || args.num_work_dim > 3)
-    error (_("Implicit arguments num_work_dim %d is not expected"),
-	   args.num_work_dim);
 }
 
 /* Get the overall number of uint16_t elements in a single local id entry.
@@ -3610,9 +3669,42 @@ local_id_entry_length (unsigned int simd_width)
     }
 }
 
-/* Read and parse the local ID table corresponding to the passed
-   IMPLICIT_ARGS struct.  Return the flat vector of decoded elements,
-   including the "reserved" parts in-between (e.g., for SIMD 8).
+/* Read the number of threads in a workgroup.  Local ID table has that many
+   entries.  */
+
+static uint8_t
+read_local_id_table_length (gdbarch *gdbarch, thread_info *tp)
+{
+  uint8_t local_id_table_length;
+  regcache *regcache = get_thread_regcache (tp);
+  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
+
+  uint32_t device_id = get_device_id (gdbarch);
+  intelgt::xe_version device_version = intelgt::get_xe_version (device_id);
+
+  switch (device_version)
+    {
+    case intelgt::XE_HP:
+    case intelgt::XE_HPG:
+    case intelgt::XE_HPC:
+    case intelgt::XE2:
+    case intelgt::XE3:
+      intelgt_read_register_part (
+	regcache, data->r0_regnum,
+	2 * sizeof (uint32_t) + 3 * sizeof (uint8_t), sizeof (uint8_t),
+	(gdb_byte *) &local_id_table_length,
+	_("Cannot read number of elements in local ID table."));
+      return local_id_table_length;
+
+    case intelgt::XE_INVALID:
+      break;
+    }
+
+  error (_("Unexpected device id 0x%" PRIx32), device_id);
+}
+
+/* Read and parse the local ID table.  Return the flat vector of decoded
+   elements, including the "reserved" parts in-between (e.g., for SIMD 8).
 
    The local ID table is a table of different combinations of work item
    local IDs within a workgroup.  These combinations are the same for all
@@ -3620,32 +3712,22 @@ local_id_entry_length (unsigned int simd_width)
 
    An entry of the local ID table is a struct with 3 or 6 fields,
    depending on the SIMD width.
-   See the comment to local_id_vector_size for the details.
+   See the comment to local_id_entry_length for the details.
 
    We store the local ID table as a flat vector, to simplify the representation
    for different SIMD widths.  */
 
 static std::vector<uint16_t>
 read_local_id_table (gdbarch *gdbarch, thread_info *tp,
-		     const implicit_args_v0 &args, bfd_endian byte_order)
+		     uint8_t simd_width, uint64_t local_id_table_ptr,
+		     bfd_endian byte_order)
 {
-  /* Read the number of threads in a workgroup from r0.2[31:24].
-     Local ID table has that many entries.  */
-  uint8_t local_id_table_length;
-  regcache *regcache = get_thread_regcache (tp);
-  intelgt_gdbarch_data *data = get_intelgt_gdbarch_data (gdbarch);
-
-  intelgt_read_register_part (regcache, data->r0_regnum,
-			      2 * sizeof (uint32_t) + 3 * sizeof (uint8_t),
-			      sizeof (uint8_t),
-			      (gdb_byte *) &local_id_table_length,
-			      _("Cannot read number of elements in local ID "
-				"table."));
+  uint8_t local_id_table_length = read_local_id_table_length (gdbarch, tp);
 
   dprintf ("Number of elements in local ID table: %u", local_id_table_length);
 
   /* The vector-length of one entry in the local ID table.  */
-  const size_t local_id_entry_len = local_id_entry_length (args.simd_width);
+  const size_t local_id_entry_len = local_id_entry_length (simd_width);
 
   /* The number of uint16_t elements to read for the complete
      local ID table.  */
@@ -3654,15 +3736,15 @@ read_local_id_table (gdbarch *gdbarch, thread_info *tp,
   /* Buffer to read the raw local ID table.  */
   const size_t bytes_to_read = sizeof (uint16_t) * elements_to_read;
   std::vector<gdb_byte> local_ids_raw (bytes_to_read);
-  int err = target_read_memory (args.local_id_table_ptr,
+  int err = target_read_memory (local_id_table_ptr,
 				local_ids_raw.data (), bytes_to_read);
   if (err != 0)
     error (_("Cannot read local ID table at address %s of size %zu."),
-	   paddress (gdbarch, args.local_id_table_ptr), bytes_to_read);
+	   paddress (gdbarch, local_id_table_ptr), bytes_to_read);
 
   /* The parsed local ID table.  */
   std::vector<uint16_t> local_ids (elements_to_read);
-  for (int i = 0; i < elements_to_read; i++)
+  for (size_t i = 0; i < elements_to_read; i++)
     local_ids[i]
       = extract_unsigned_integer (local_ids_raw.data () + i * sizeof (uint16_t),
 				  sizeof (uint16_t), byte_order);
@@ -3670,8 +3752,7 @@ read_local_id_table (gdbarch *gdbarch, thread_info *tp,
   return local_ids;
 }
 
-/* Read the implicit args struct for the thread TP.  If the final struct
-   is valid, store it in the global cache.  */
+/* Read the implicit args for thread TP and store in the global cache.  */
 
 static void
 read_args (gdbarch *gdbarch, thread_info *tp)
@@ -3679,29 +3760,59 @@ read_args (gdbarch *gdbarch, thread_info *tp)
   const bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   CORE_ADDR args_address = get_address (gdbarch, tp);
 
+  dprintf ("Implicit args address: %s (inferior %d)",
+	   paddress (gdbarch, args_address), tp->inf->num);
+
   const std::string cache_key = make_key (gdbarch, tp, args_address);
   /* We should not re-read the same implicit arguments.  */
   gdb_assert (implicit_args_cache.count (cache_key) == 0);
 
-  /* Read the whole struct with the size we expect.  */
-  gdb_byte buf[sizeof (implicit_args_v0)];
-  if (target_read_memory (args_address, buf, sizeof (implicit_args_v0)) != 0)
-    error (_("Could not read implicit args structure of size %ld "
-	     "at address 0x%lx."),
-	   sizeof (implicit_args_v0), args_address);
+  /* Read header first to determine struct size.  Use a raw buffer and
+     read_field to be consistent with how we parse the rest of the blob.  */
+  gdb::byte_vector header_buf (sizeof (implicit_args_header));
+  if (target_read_memory (args_address, header_buf.data (),
+			  header_buf.size ()) != 0)
+    error (_("Could not read implicit args header at address %s."),
+	   paddress (gdbarch, args_address));
 
-  implicit_args_v0 implicit_args_v0;
-  parse_struct (implicit_args_v0, buf, byte_order);
-  /* Heuristic sanity check of the struct.  */
-  check_valid (implicit_args_v0);
+  /* struct_size is the size in bytes.  */
+  uint8_t struct_size = READ_FIELD (uint8_t, header_buf, byte_order,
+				    implicit_args_header, struct_size);
+  gdb::byte_vector args_blob (struct_size);
+  if (target_read_memory (args_address, args_blob.data (), struct_size) != 0)
+    error (_("Could not read implicit args at address %s."),
+	   paddress (gdbarch, args_address));
 
-  /* Now read the local IDs flat sequence.  */
+  /* Extract fields needed for local ID table.  Version determines which
+     struct layout to use.  */
+  uint8_t version = READ_FIELD (uint8_t, args_blob, byte_order,
+				implicit_args_header, struct_version);
+
+  uint8_t simd_width;
+  uint64_t local_id_ptr;
+
+  switch (version)
+    {
+    case 0:
+    case 1:
+      static_assert (offsetof (implicit_args_v0, simd_width)
+		     == offsetof (implicit_args_v1, simd_width));
+      simd_width = READ_FIELD (uint8_t, args_blob, byte_order,
+			       implicit_args_v0, simd_width);
+      local_id_ptr = READ_FIELD (uint64_t, args_blob, byte_order,
+				 implicit_args_v0, local_id_table_ptr);
+      break;
+    default:
+      error (_("Unsupported implicit arguments version %d."), version);
+    }
+
+  /* Read the local IDs.  */
   std::vector<uint16_t> local_ids
-    = read_local_id_table (gdbarch, tp, implicit_args_v0, byte_order);
+    = read_local_id_table (gdbarch, tp, simd_width, local_id_ptr, byte_order);
 
-  /* Cache both implicit args and local IDs.  */
+  /* Cache both implicit args blob and local IDs.  */
   implicit_args_cache[cache_key]
-    = std::make_pair (std::move (implicit_args_v0), std::move (local_ids));
+    = std::make_pair (std::move (args_blob), std::move (local_ids));
 }
 } /* namespace intelgt_implicit_args.  */
 
@@ -3867,10 +3978,11 @@ intelgt_get_hw_simd_width (gdbarch *gdbarch, thread_info *tp)
 	 after every resume.  */
       dprintf ("Cannot access zeinfo (%s).  Try implicit arguments.",
 	       e.what ());
-      const auto &implicit_args_v0
-	= intelgt_implicit_args_find_value_pair (gdbarch, tp).first;
+      const implicit_args_value_pair &entry
+	= intelgt_implicit_args_find_value_pair (gdbarch, tp);
 
-      return implicit_args_v0.simd_width;
+      return intelgt_implicit_args::get_simd_width
+	(gdbarch, entry.first, gdbarch_byte_order (gdbarch));
     }
 }
 
@@ -4233,10 +4345,8 @@ intelgt_get_local_ids_data (gdbarch *gdbarch, thread_info *tp)
   if (tp->is_unavailable ())
     error (_("%s"), err_msg.c_str ());
 
-  const implicit_args_value_pair &value_pair
+  const implicit_args_value_pair &entry
     = intelgt_implicit_args_find_value_pair (gdbarch, tp);
-  const implicit_args_v0 &implicit_args_v0 = value_pair.first;
-  const std::vector<uint16_t> &local_ids = value_pair.second;
 
   uint8_t tid;
   regcache *regcache = get_thread_regcache (tp);
@@ -4265,10 +4375,11 @@ intelgt_get_local_ids_data (gdbarch *gdbarch, thread_info *tp)
   /* Local ID entry size.  */
   unsigned int local_id_len
     = intelgt_implicit_args::local_id_entry_length (
-       implicit_args_v0.simd_width);
+	intelgt_implicit_args::get_simd_width
+	  (gdbarch, entry, gdbarch_byte_order (gdbarch)));
   gdb_assert (local_id_len % 3 == 0);
 
-  return { local_ids, tid, local_id_len };
+  return { entry.second, tid, local_id_len };
 }
 
 /* Compute the local ID coordinates within a workgroup for a given
@@ -4340,13 +4451,25 @@ intelgt_current_workitem_global_id (gdbarch *gdbarch, thread_info *tp)
   std::array<uint32_t, 3> local_id
     = intelgt_current_workitem_local_id (gdbarch, tp);
   std::array<uint32_t, 3> group = intelgt_thread_workgroup (gdbarch, tp);
-  const implicit_args_v0 &implicit_args_v0
-    = intelgt_implicit_args_find_value_pair (gdbarch, tp).first;
+  const implicit_args_value_pair &entry
+    = intelgt_implicit_args_find_value_pair (gdbarch, tp);
+
+  std::array<uint32_t, 3> local_size;
+  try
+    {
+      local_size
+	= intelgt_implicit_args::get_local_size (entry.first,
+						 gdbarch_byte_order (gdbarch));
+    }
+  catch (const gdb_exception_error &e)
+    {
+      error (_ ("Global ID not available."));
+    }
 
   std::array<uint64_t, 3> global_id;
-  global_id[0] = group[0] * implicit_args_v0.local_size_x + local_id[0];
-  global_id[1] = group[1] * implicit_args_v0.local_size_y + local_id[1];
-  global_id[2] = group[2] * implicit_args_v0.local_size_z + local_id[2];
+  global_id[0] = group[0] * local_size[0] + local_id[0];
+  global_id[1] = group[1] * local_size[1] + local_id[1];
+  global_id[2] = group[2] * local_size[2] + local_id[2];
 
   return global_id;
 }
@@ -4357,13 +4480,21 @@ intelgt_workitem_local_size (gdbarch *gdbarch, thread_info *tp)
   if (tp->is_unavailable ())
     error (_("Cannot read local size of unavailable thread."));
 
-  const implicit_args_v0 &implicit_args_v0
-    = intelgt_implicit_args_find_value_pair (gdbarch, tp).first;
+  const implicit_args_value_pair &entry
+    = intelgt_implicit_args_find_value_pair (gdbarch, tp);
 
   std::array<uint32_t, 3> local_size;
-  local_size[0] = implicit_args_v0.local_size_x;
-  local_size[1] = implicit_args_v0.local_size_y;
-  local_size[2] = implicit_args_v0.local_size_z;
+  try
+    {
+      local_size
+	= intelgt_implicit_args::get_local_size (entry.first,
+						 gdbarch_byte_order (gdbarch));
+    }
+  catch (const gdb_exception_error &e)
+    {
+      error (_ ("Local size not available in implicit arguments."));
+    }
+
   return local_size;
 }
 
@@ -4373,13 +4504,20 @@ intelgt_workitem_global_size (gdbarch *gdbarch, thread_info *tp)
   if (tp->is_unavailable ())
     error (_("Cannot read global size of unavailable thread."));
 
-  const implicit_args_v0 &implicit_args_v0
-    = intelgt_implicit_args_find_value_pair (gdbarch, tp).first;
+  const implicit_args_value_pair &entry
+    = intelgt_implicit_args_find_value_pair (gdbarch, tp);
 
   std::array<uint64_t, 3> global_size;
-  global_size[0] = implicit_args_v0.global_size_x;
-  global_size[1] = implicit_args_v0.global_size_y;
-  global_size[2] = implicit_args_v0.global_size_z;
+  try
+    {
+      global_size = intelgt_implicit_args::get_global_size (
+	entry.first, gdbarch_byte_order (gdbarch));
+    }
+  catch (const gdb_exception_error &e)
+    {
+      error (_("Global size not available in implicit arguments."));
+    }
+
   return global_size;
 }
 

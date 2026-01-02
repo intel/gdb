@@ -50,6 +50,7 @@
 #include "solib.h"
 #include "symfile.h"
 #include "xml-tdesc.h"
+#include "gdbsupport/selftest.h"
 #include <algorithm>
 #include <array>
 #include <optional>
@@ -3814,6 +3815,272 @@ read_args (gdbarch *gdbarch, thread_info *tp)
   implicit_args_cache[cache_key]
     = std::make_pair (std::move (args_blob), std::move (local_ids));
 }
+
+#if GDB_SELF_TEST
+namespace selftests
+{
+
+/* Initialize common fields in a test blob.  Works for any implicit_args
+   struct version that has local_size and global_size fields.  */
+
+template<typename ImplicitArgsType>
+static void
+init_test_blob_common (gdb::byte_vector &blob, bfd_endian byte_order,
+		       uint8_t version)
+{
+  blob[offsetof (ImplicitArgsType, header.struct_size)]
+    = sizeof (ImplicitArgsType);
+  blob[offsetof (ImplicitArgsType, header.struct_version)] = version;
+  blob[offsetof (ImplicitArgsType, num_work_dim)] = 3;
+
+  /* Set local_size_x = 256, local_size_y = 4, local_size_z = 1.  */
+  store_unsigned_integer (&blob[offsetof (ImplicitArgsType, local_size_x)],
+			  sizeof (uint32_t), byte_order, 256);
+  store_unsigned_integer (&blob[offsetof (ImplicitArgsType, local_size_y)],
+			  sizeof (uint32_t), byte_order, 4);
+  store_unsigned_integer (&blob[offsetof (ImplicitArgsType, local_size_z)],
+			  sizeof (uint32_t), byte_order, 1);
+
+  /* Set global_size_x = 1024, global_size_y = 512, global_size_z = 2.  */
+  store_unsigned_integer (&blob[offsetof (ImplicitArgsType, global_size_x)],
+			  sizeof (uint64_t), byte_order, 1024);
+  store_unsigned_integer (&blob[offsetof (ImplicitArgsType, global_size_y)],
+			  sizeof (uint64_t), byte_order, 512);
+  store_unsigned_integer (&blob[offsetof (ImplicitArgsType, global_size_z)],
+			  sizeof (uint64_t), byte_order, 2);
+}
+
+/* Create a valid V0 test blob with known values.  */
+
+static gdb::byte_vector
+create_test_blob_v0 (bfd_endian byte_order)
+{
+  gdb::byte_vector blob (sizeof (implicit_args_v0), 0);
+  init_test_blob_common<implicit_args_v0> (blob, byte_order, 0);
+
+  /* V0-specific: set simd_width.  */
+  blob[offsetof (implicit_args_v0, simd_width)] = 32;
+
+  return blob;
+}
+
+/* Test read_field reads correct values from a blob.  */
+
+static void
+test_read_field_basic ()
+{
+  gdb::byte_vector blob = create_test_blob_v0 (BFD_ENDIAN_LITTLE);
+
+  /* Test reading single-byte fields.  */
+  uint8_t simd_width = READ_FIELD (uint8_t, blob, BFD_ENDIAN_LITTLE,
+				   implicit_args_v0, simd_width);
+  SELF_CHECK (simd_width == 32);
+
+  uint8_t num_work_dim = READ_FIELD (uint8_t, blob, BFD_ENDIAN_LITTLE,
+				     implicit_args_v0, num_work_dim);
+  SELF_CHECK (num_work_dim == 3);
+
+  /* Test reading 32-bit fields.  */
+  uint32_t local_x = READ_FIELD (uint32_t, blob, BFD_ENDIAN_LITTLE,
+				 implicit_args_v0, local_size_x);
+  SELF_CHECK (local_x == 256);
+
+  uint32_t local_y = READ_FIELD (uint32_t, blob, BFD_ENDIAN_LITTLE,
+				 implicit_args_v0, local_size_y);
+  SELF_CHECK (local_y == 4);
+
+  /* Test reading 64-bit fields.  */
+  uint64_t global_x = READ_FIELD (uint64_t, blob, BFD_ENDIAN_LITTLE,
+				  implicit_args_v0, global_size_x);
+  SELF_CHECK (global_x == 1024);
+}
+
+/* Test read_field with big endian byte order.  */
+
+static void
+test_read_field_endian ()
+{
+  gdb::byte_vector blob_le = create_test_blob_v0 (BFD_ENDIAN_LITTLE);
+  gdb::byte_vector blob_be = create_test_blob_v0 (BFD_ENDIAN_BIG);
+
+  /* Single-byte fields should be the same regardless of endianness.  */
+  uint8_t simd_le = READ_FIELD (uint8_t, blob_le, BFD_ENDIAN_LITTLE,
+				implicit_args_v0, simd_width);
+  uint8_t simd_be = READ_FIELD (uint8_t, blob_be, BFD_ENDIAN_BIG,
+				implicit_args_v0, simd_width);
+  SELF_CHECK (simd_le == simd_be);
+  SELF_CHECK (simd_le == 32);
+
+  /* Multi-byte fields need matching endianness.  */
+  uint32_t local_x_le = READ_FIELD (uint32_t, blob_le, BFD_ENDIAN_LITTLE,
+				    implicit_args_v0, local_size_x);
+  uint32_t local_x_be = READ_FIELD (uint32_t, blob_be, BFD_ENDIAN_BIG,
+				    implicit_args_v0, local_size_x);
+  SELF_CHECK (local_x_le == 256);
+  SELF_CHECK (local_x_be == 256);
+
+  uint64_t global_x_le = READ_FIELD (uint64_t, blob_le, BFD_ENDIAN_LITTLE,
+				     implicit_args_v0, global_size_x);
+  uint64_t global_x_be = READ_FIELD (uint64_t, blob_be, BFD_ENDIAN_BIG,
+				     implicit_args_v0, global_size_x);
+  SELF_CHECK (global_x_le == 1024);
+  SELF_CHECK (global_x_be == 1024);
+}
+
+/* Test read_field throws error when accessing beyond blob bounds.  */
+
+static void
+test_read_field_bounds ()
+{
+  /* Create a blob that is too small.  */
+  gdb::byte_vector small_blob (4, 0);
+
+  try
+    {
+      /* simd_width is at offset 3, so a 4-byte blob should be enough
+	 for that, but local_size_x is at a larger offset.  */
+      READ_FIELD (uint32_t, small_blob, BFD_ENDIAN_LITTLE,
+		  implicit_args_v0, local_size_x);
+      SELF_CHECK (false);  /* Should not reach here.  */
+    }
+  catch (const gdb_exception_error &)
+    {
+      /* Expected.  */
+      SELF_CHECK (true);
+    }
+}
+
+/* Test get_simd_width accessor.  */
+
+static void
+test_get_simd_width_v0 ()
+{
+  gdb::byte_vector blob = create_test_blob_v0 (BFD_ENDIAN_LITTLE);
+
+  uint8_t width = get_simd_width (nullptr, blob, BFD_ENDIAN_LITTLE);
+  SELF_CHECK (width == 32);
+}
+
+/* Test get_simd_width throws for unknown version.  */
+
+static void
+test_get_simd_width_unknown_version ()
+{
+  gdb::byte_vector blob = create_test_blob_v0 (BFD_ENDIAN_LITTLE);
+
+  /* Set version to an unknown value.  */
+  blob[offsetof (implicit_args_v0, header.struct_version)] = 99;
+
+  try
+    {
+      get_simd_width (nullptr, blob, BFD_ENDIAN_LITTLE);
+      SELF_CHECK (false);  /* Should not reach here.  */
+    }
+  catch (const gdb_exception_error &)
+    {
+      /* Expected - unknown version.  */
+      SELF_CHECK (true);
+    }
+}
+
+/* Test get_local_size accessor.  */
+
+static void
+test_get_local_size_v0 ()
+{
+  gdb::byte_vector blob = create_test_blob_v0 (BFD_ENDIAN_LITTLE);
+
+  std::array<uint32_t, 3> local_size = get_local_size (blob,
+						       BFD_ENDIAN_LITTLE);
+  SELF_CHECK (local_size[0] == 256);
+  SELF_CHECK (local_size[1] == 4);
+  SELF_CHECK (local_size[2] == 1);
+}
+
+/* Test get_global_size accessor.  */
+
+static void
+test_get_global_size_v0 ()
+{
+  gdb::byte_vector blob = create_test_blob_v0 (BFD_ENDIAN_LITTLE);
+
+  std::array<uint64_t, 3> global_size = get_global_size (blob,
+							 BFD_ENDIAN_LITTLE);
+  SELF_CHECK (global_size[0] == 1024);
+  SELF_CHECK (global_size[1] == 512);
+  SELF_CHECK (global_size[2] == 2);
+}
+
+/* Test reading from a truncated blob.  */
+
+static void
+test_get_local_size_truncated ()
+{
+  /* Create a blob that is too small for local_size fields.  */
+  gdb::byte_vector blob (8, 0);
+  blob[offsetof (implicit_args_v0, header.struct_version)] = 0;
+
+  try
+    {
+      get_local_size (blob, BFD_ENDIAN_LITTLE);
+
+      /* Should not reach here.  */
+      SELF_CHECK (false);  
+    }
+  catch (const gdb_exception_error &e)
+    {
+      SELF_CHECK (true);
+    }
+}
+
+/* Create a valid V1 test blob with known values.  */
+
+static gdb::byte_vector
+create_test_blob_v1 (bfd_endian byte_order)
+{
+  gdb::byte_vector blob (sizeof (implicit_args_v1), 0);
+  init_test_blob_common<implicit_args_v1> (blob, byte_order, 1);
+
+  /* V1-specific: set group_count = {4, 128, 2} to match global/local.  */
+  store_unsigned_integer (&blob[offsetof (implicit_args_v1, group_count_x)],
+			  sizeof (uint32_t), byte_order, 4);
+  store_unsigned_integer (&blob[offsetof (implicit_args_v1, group_count_y)],
+			  sizeof (uint32_t), byte_order, 128);
+  store_unsigned_integer (&blob[offsetof (implicit_args_v1, group_count_z)],
+			  sizeof (uint32_t), byte_order, 2);
+
+  return blob;
+}
+
+/* Test get_local_size accessor for V1.  */
+
+static void
+test_get_local_size_v1 ()
+{
+  gdb::byte_vector blob = create_test_blob_v1 (BFD_ENDIAN_LITTLE);
+
+  std::array<uint32_t, 3> local_size = get_local_size (blob,
+						       BFD_ENDIAN_LITTLE);
+  SELF_CHECK ((local_size[0] == 256));
+  SELF_CHECK ((local_size[1] == 4));
+  SELF_CHECK ((local_size[2] == 1));
+}
+
+/* Test get_global_size accessor for V1.  */
+
+static void
+test_get_global_size_v1 ()
+{
+  gdb::byte_vector blob = create_test_blob_v1 (BFD_ENDIAN_LITTLE);
+
+  std::array<uint64_t, 3> global_size = get_global_size (blob,
+							 BFD_ENDIAN_LITTLE);
+  SELF_CHECK (global_size[0] == 1024);
+  SELF_CHECK (global_size[1] == 512);
+  SELF_CHECK (global_size[2] == 2);
+}
+} /* namespace selftests.  */
+#endif /* GDB_SELF_TEST.  */
 } /* namespace intelgt_implicit_args.  */
 
 static implicit_args_value_pair &
@@ -5451,4 +5718,36 @@ INIT_GDB_FILE (intelgt_tdep)
   gdb::observers::solib_loaded.attach (intelgt_on_solib_loaded, "intelgt");
   gdb::observers::solib_unloaded.attach (intelgt_on_solib_unloaded, "intelgt");
 #endif /* defined (HAVE_LIBYAML_CPP) */
+#if GDB_SELF_TEST
+  selftests::register_test
+    ("intelgt::read_field_basic",
+     intelgt_implicit_args::selftests::test_read_field_basic);
+  selftests::register_test
+    ("intelgt::read_field_endian",
+     intelgt_implicit_args::selftests::test_read_field_endian);
+  selftests::register_test
+    ("intelgt::read_field_bounds",
+     intelgt_implicit_args::selftests::test_read_field_bounds);
+  selftests::register_test
+    ("intelgt::get_simd_width_v0",
+     intelgt_implicit_args::selftests::test_get_simd_width_v0);
+  selftests::register_test
+    ("intelgt::get_simd_width_unknown_version",
+     intelgt_implicit_args::selftests::test_get_simd_width_unknown_version);
+  selftests::register_test
+    ("intelgt::get_local_size_v0",
+     intelgt_implicit_args::selftests::test_get_local_size_v0);
+  selftests::register_test
+    ("intelgt::get_global_size_v0",
+     intelgt_implicit_args::selftests::test_get_global_size_v0);
+  selftests::register_test
+    ("intelgt::get_local_size_truncated",
+     intelgt_implicit_args::selftests::test_get_local_size_truncated);
+  selftests::register_test
+    ("intelgt::get_local_size_v1",
+     intelgt_implicit_args::selftests::test_get_local_size_v1);
+  selftests::register_test
+    ("intelgt::get_global_size_v1",
+     intelgt_implicit_args::selftests::test_get_global_size_v1);
+#endif /* GDB_SELF_TEST.  */
 }

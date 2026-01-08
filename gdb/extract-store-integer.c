@@ -20,26 +20,27 @@
 #include "gdbarch.h"
 #include "gdbsupport/selftest.h"
 
-template<typename T, typename>
-T
-extract_integer (gdb::array_view<const gdb_byte> buf, enum bfd_endian byte_order)
-{
-  typename std::make_unsigned<T>::type retval = 0;
+/* See extract-store-integer.h.  */
 
-  /* It is ok if BUF is wider than T, but only if the value is
+void
+extract_integer (gdb::array_view<gdb_byte> dst,
+		 gdb::array_view<const gdb_byte> buf,
+		 enum bfd_endian byte_order,
+		 bool is_signed)
+{
+  /* It is ok if BUF is wider than DST, but only if the value is
      representable.  */
   bool bad_repr = false;
-  if (buf.size () > (int) sizeof (T))
+  if (buf.size () > dst.size ())
     {
-      const size_t end = buf.size () - sizeof (T);
+      const size_t end = buf.size () - dst.size ();
       if (byte_order == BFD_ENDIAN_BIG)
 	{
 	  for (size_t i = 0; i < end; ++i)
 	    {
 	      /* High bytes == 0 are always ok, and high bytes == 0xff
 		 are ok when the type is signed.  */
-	      if ((buf[i] == 0
-		   || (std::is_signed<T>::value && buf[i] == 0xff))
+	      if ((buf[i] == 0 || (is_signed && buf[i] == 0xff))
 		  /* All the high bytes must be the same, no
 		     alternating 0 and 0xff.  */
 		  && (i == 0 || buf[i - 1] == buf[i]))
@@ -61,8 +62,7 @@ extract_integer (gdb::array_view<const gdb_byte> buf, enum bfd_endian byte_order
 	    {
 	      /* High bytes == 0 are always ok, and high bytes == 0xff
 		 are ok when the type is signed.  */
-	      if ((buf[i] == 0
-		   || (std::is_signed<T>::value && buf[i] == 0xff))
+	      if ((buf[i] == 0 || (is_signed && buf[i] == 0xff))
 		  /* All the high bytes must be the same, no
 		     alternating 0 and 0xff.  */
 		  && (i == bufsz || buf[i] == buf[i + 1]))
@@ -81,7 +81,7 @@ extract_integer (gdb::array_view<const gdb_byte> buf, enum bfd_endian byte_order
 
   if (bad_repr)
     error (_("Value cannot be represented as integer of %d bytes."),
-	   (int) sizeof (T));
+	   (int) dst.size ());
 
   /* Start at the most significant end of the integer, and work towards
      the least significant.  */
@@ -89,28 +89,43 @@ extract_integer (gdb::array_view<const gdb_byte> buf, enum bfd_endian byte_order
     {
       size_t i = 0;
 
-      if (std::is_signed<T>::value)
+      if (is_signed)
 	{
 	  /* Do the sign extension once at the start.  */
-	  retval = ((LONGEST) buf[i] ^ 0x80) - 0x80;
+	  dst[buf.size () - 1] = ((LONGEST) buf[i] ^ 0x80) - 0x80;
 	  ++i;
 	}
       for (; i < buf.size (); ++i)
-	retval = (retval << 8) | buf[i];
+	dst[buf.size () - 1 - i] = buf[i];
     }
   else
     {
       ssize_t i = buf.size () - 1;
 
-      if (std::is_signed<T>::value)
+      if (is_signed)
 	{
 	  /* Do the sign extension once at the start.  */
-	  retval = ((LONGEST) buf[i] ^ 0x80) - 0x80;
+	  dst[i] = ((LONGEST) buf[i] ^ 0x80) - 0x80;
 	  --i;
 	}
       for (; i >= 0; --i)
-	retval = (retval << 8) | buf[i];
+	dst[i] = buf[i];
     }
+
+  /* Extend the upper bytes when DST is wider than BUF.  */
+  if (is_signed && (dst[buf.size () - 1] & 0x80) != 0)
+    for (size_t i = buf.size (); i < dst.size (); ++i)
+      dst[i] = 0xff;
+}
+
+template<typename T, typename>
+T
+extract_integer (gdb::array_view<const gdb_byte> buf, enum bfd_endian byte_order)
+{
+  typename std::make_unsigned<T>::type retval = 0;
+  gdb::array_view<gdb_byte> dst ((gdb_byte *) &retval, sizeof (T));
+  extract_integer (dst, buf, byte_order, std::is_signed<T>::value);
+
   return retval;
 }
 

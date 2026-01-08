@@ -20,6 +20,14 @@
 
 #include <type_traits>
 
+/* Convert the target-format buffer SRC into the host-format buffer
+   DST, according to BYTE_ORDER and taking IS_SIGNED into account.  */
+
+void extract_integer (gdb::array_view<gdb_byte> dst,
+		      gdb::array_view<const gdb_byte> src,
+		      enum bfd_endian byte_order,
+		      bool is_signed);
+
 template<typename T, typename = std::is_integral<T>>
 T extract_integer (gdb::array_view<const gdb_byte>, enum bfd_endian byte_order);
 

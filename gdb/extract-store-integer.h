@@ -65,7 +65,8 @@ extern CORE_ADDR extract_typed_address (const gdb_byte *buf,
 					struct type *type);
 
 /* All 'store' functions accept a host-format integer and store a
-   target-format integer at ADDR which is LEN bytes long.  */
+   target-format integer, either at DST, which contains its size,
+   or at ADDR, which is LEN bytes long.  */
 
 template<typename T, typename = RequireLongest<T>>
 extern void store_integer (gdb::array_view<gdb_byte> dst,

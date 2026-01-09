@@ -162,9 +162,9 @@ struct implicit_args_v1 {
 };
 
 /* The value type of the implicit arguments cache.  We want to store both
-   the implicit arguments blob and its local ID table.  */
+   the implicit arguments blob and its local ID table (as raw bytes).  */
 
-typedef std::pair<gdb::byte_vector, std::vector<uint16_t>>
+typedef std::pair<gdb::byte_vector, gdb::byte_vector>
   implicit_args_value_pair;
 
 /* Global cache to store implicit args and local IDs.
@@ -3703,8 +3703,7 @@ read_local_id_table_length (gdbarch *gdbarch, thread_info *tp)
   error (_("Unexpected device id 0x%" PRIx32), device_id);
 }
 
-/* Read and parse the local ID table.  Return the flat vector of decoded
-   elements, including the "reserved" parts in-between (e.g., for SIMD 8).
+/* Read the local ID table as raw bytes.
 
    The local ID table is a table of different combinations of work item
    local IDs within a workgroup.  These combinations are the same for all
@@ -3714,14 +3713,20 @@ read_local_id_table_length (gdbarch *gdbarch, thread_info *tp)
    depending on the SIMD width.
    See the comment to local_id_entry_length for the details.
 
-   We store the local ID table as a flat vector, to simplify the representation
-   for different SIMD widths.  */
+   We store the local ID table as raw bytes and decode on-demand.  */
 
-static std::vector<uint16_t>
+static gdb::byte_vector
 read_local_id_table (gdbarch *gdbarch, thread_info *tp,
-		     uint8_t simd_width, uint64_t local_id_table_ptr,
-		     bfd_endian byte_order)
+		     uint8_t simd_width, uint64_t local_id_table_ptr)
 {
+  /* If the pointer is null, return an empty vector.  The caller
+     will handle the unavailability gracefully.  */
+  if (local_id_table_ptr == 0ull)
+    {
+      dprintf ("Local ID table pointer is null.");
+      return {};
+    }
+
   uint8_t local_id_table_length = read_local_id_table_length (gdbarch, tp);
 
   dprintf ("Number of elements in local ID table: %u", local_id_table_length);
@@ -3733,23 +3738,19 @@ read_local_id_table (gdbarch *gdbarch, thread_info *tp,
      local ID table.  */
   const size_t elements_to_read = local_id_table_length * local_id_entry_len;
 
-  /* Buffer to read the raw local ID table.  */
+  /* Read the raw local ID table.  */
   const size_t bytes_to_read = sizeof (uint16_t) * elements_to_read;
-  std::vector<gdb_byte> local_ids_raw (bytes_to_read);
+  gdb::byte_vector local_ids_raw (bytes_to_read);
   int err = target_read_memory (local_id_table_ptr,
 				local_ids_raw.data (), bytes_to_read);
   if (err != 0)
-    error (_("Cannot read local ID table at address %s of size %zu."),
-	   paddress (gdbarch, local_id_table_ptr), bytes_to_read);
+    {
+      warning (_("Cannot read local ID table at address %s."),
+	       paddress (gdbarch, local_id_table_ptr));
+      return {};
+    }
 
-  /* The parsed local ID table.  */
-  std::vector<uint16_t> local_ids (elements_to_read);
-  for (size_t i = 0; i < elements_to_read; i++)
-    local_ids[i]
-      = extract_unsigned_integer (local_ids_raw.data () + i * sizeof (uint16_t),
-				  sizeof (uint16_t), byte_order);
-
-  return local_ids;
+  return local_ids_raw;
 }
 
 /* Read the implicit args for thread TP and store in the global cache.  */
@@ -3806,9 +3807,9 @@ read_args (gdbarch *gdbarch, thread_info *tp)
       error (_("Unsupported implicit arguments version %d."), version);
     }
 
-  /* Read the local IDs.  */
-  std::vector<uint16_t> local_ids
-    = read_local_id_table (gdbarch, tp, simd_width, local_id_ptr, byte_order);
+  /* Read the local IDs as raw bytes.  */
+  gdb::byte_vector local_ids
+    = read_local_id_table (gdbarch, tp, simd_width, local_id_ptr);
 
   /* Cache both implicit args blob and local IDs.  */
   implicit_args_cache[cache_key]
@@ -4330,11 +4331,11 @@ intelgt_thread_workgroup (struct gdbarch *gdbarch, thread_info *tp)
   error (_("Unexpected device id 0x%" PRIx32), device_id);
 }
 
-/* Tuple containing the reference to the local IDs flat list, thread's TID,
-   and the length of the flat local ID entry (vectorized).  */
+/* Tuple containing the reference to the local IDs raw blob,
+   thread's TID, and the length of the flat local ID entry (vectorized).  */
 
 using local_ids_data
-  = std::tuple<const std::vector<uint16_t>&, uint8_t, unsigned int>;
+  = std::tuple<const gdb::byte_vector&, uint8_t, unsigned int>;
 
 /* Read the data required to compute local IDs of the thread TP.  */
 
@@ -4347,6 +4348,11 @@ intelgt_get_local_ids_data (gdbarch *gdbarch, thread_info *tp)
 
   const implicit_args_value_pair &entry
     = intelgt_implicit_args_find_value_pair (gdbarch, tp);
+
+  /* Check if local IDs are available.  The local ID table may be
+     unavailable if the pointer was null or the memory was unreadable.  */
+  if (entry.second.empty ())
+    error (_("Local ID table not available."));
 
   uint8_t tid;
   regcache *regcache = get_thread_regcache (tp);
@@ -4372,11 +4378,14 @@ intelgt_get_local_ids_data (gdbarch *gdbarch, thread_info *tp)
       error (_("Unexpected device id 0x%" PRIx32), device_id);
     }
 
+  const bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+
   /* Local ID entry size.  */
+  unsigned int simd_width
+    = intelgt_implicit_args::get_simd_width (gdbarch, entry.first,
+					     byte_order);
   unsigned int local_id_len
-    = intelgt_implicit_args::local_id_entry_length (
-	intelgt_implicit_args::get_simd_width
-	  (gdbarch, entry, gdbarch_byte_order (gdbarch)));
+    = intelgt_implicit_args::local_id_entry_length (simd_width);
   gdb_assert (local_id_len % 3 == 0);
 
   return { entry.second, tid, local_id_len };
@@ -4385,24 +4394,48 @@ intelgt_get_local_ids_data (gdbarch *gdbarch, thread_info *tp)
 /* Compute the local ID coordinates within a workgroup for a given
    thread TP.  */
 
+/* Decode a single uint16_t from the local ID blob at the given index.  */
+
+static uint16_t
+get_local_id_element (const gdb::byte_vector &blob, size_t index,
+		      bfd_endian byte_order)
+{
+  size_t offset = index * sizeof (uint16_t);
+  if (offset + sizeof (uint16_t) > blob.size ())
+    error (_("Local ID index %zu is out of range [0-%zu]."),
+	   index, blob.size ());
+  return extract_unsigned_integer (blob.data () + offset,
+				   sizeof (uint16_t), byte_order);
+}
+
+/* Return local ID coordinates {x, y, z} for a given base offset.  */
+
+static std::array<uint32_t, 3>
+get_local_id_coords (const gdb::byte_vector &blob, unsigned int base_offset,
+		     unsigned int coord_len, bfd_endian byte_order)
+{
+  return {
+    get_local_id_element (blob, base_offset + 0 * coord_len, byte_order),
+    get_local_id_element (blob, base_offset + 1 * coord_len, byte_order),
+    get_local_id_element (blob, base_offset + 2 * coord_len, byte_order)
+  };
+}
+
 static std::array<uint32_t, 3>
 intelgt_current_workitem_local_id (gdbarch *gdbarch, thread_info *tp)
 {
   const local_ids_data lid_data = intelgt_get_local_ids_data (gdbarch, tp);
-  const std::vector<uint16_t> local_ids = std::get<0> (lid_data);
+  const gdb::byte_vector &local_ids_blob = std::get<0> (lid_data);
   const uint8_t tid = std::get<1> (lid_data);
   const unsigned int id_len = std::get<2> (lid_data);
+  const bfd_endian byte_order = gdbarch_byte_order (gdbarch);
 
   const int lane = tp->current_simd_lane ();
   const unsigned int tid_lane_offset = tid * id_len + lane;
   const unsigned int coord_len = id_len / 3;
 
-  std::array<uint32_t, 3> local_id;
-  local_id[0] = local_ids[tid_lane_offset + 0 * coord_len];
-  local_id[1] = local_ids[tid_lane_offset + 1 * coord_len];
-  local_id[2] = local_ids[tid_lane_offset + 2 * coord_len];
-
-  return local_id;
+  return get_local_id_coords (local_ids_blob, tid_lane_offset,
+			      coord_len, byte_order);
 }
 
 /* Compute the local ID coordinates within a workgroup for a given
@@ -4412,28 +4445,29 @@ static std::vector<std::array<uint32_t, 3>>
 intelgt_all_workitem_local_ids (gdbarch *gdbarch, thread_info *tp)
 {
   const local_ids_data lid_data = intelgt_get_local_ids_data (gdbarch, tp);
-  const std::vector<uint16_t> local_ids = std::get<0> (lid_data);
+  const gdb::byte_vector &local_ids_blob = std::get<0> (lid_data);
   const uint8_t tid = std::get<1> (lid_data);
   const unsigned int id_len = std::get<2> (lid_data);
+  const bfd_endian byte_order = gdbarch_byte_order (gdbarch);
 
   const unsigned int tid_offset = tid * id_len;
   const unsigned int coord_len = id_len / 3;
 
   const lanes_mask_t dispatch_mask = intelgt_dispatch_mask (gdbarch, tp);
   std::vector<std::array<uint32_t, 3>> lids;
+  lids.reserve (std::bitset<32> (dispatch_mask).count ());
 
   /* Collect ids for existing lanes.  We use the dispatch mask here so we do
      not include IDs which do not exist, if the thread processes less
      work-items than its SIMD width.  */
   foreach_lane (dispatch_mask, [&] (int lane)
     {
-      const unsigned int tid_lane_offset = tid_offset + lane;
-      lids.emplace_back (std::array<uint32_t, 3>
-			 {
-			   local_ids[tid_lane_offset + 0 * coord_len],
-			   local_ids[tid_lane_offset + 1 * coord_len],
-			   local_ids[tid_lane_offset + 2 * coord_len]
-			 });
+      const unsigned int base = tid_offset + lane;
+      lids.emplace_back (std::array<uint32_t, 3>{
+	get_local_id_element (local_ids_blob, base + 0 * coord_len, byte_order),
+	get_local_id_element (local_ids_blob, base + 1 * coord_len, byte_order),
+	get_local_id_element (local_ids_blob, base + 2 * coord_len, byte_order)
+      });
       return true;
     });
 

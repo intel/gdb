@@ -650,6 +650,29 @@ struct intelgt_gdbarch_data
       case intelgt::XE_HP:
       case intelgt::XE_HPG:
       case intelgt::XE_HPC:
+	if (current_program_space->core_bfd ())
+	  {
+	    /* Corefile has only one target descriptor.  Since threads
+	       may have different number of GRF registers, we must check
+	       the count by reading the 'Large GRF' flag at CR0.0[13].  */
+	    uint32_t cr0_0;
+	    constexpr int large_grf_count = 256;
+	    constexpr int small_grf_count = 128;
+	    gdb_assert ((grf_count == small_grf_count)
+			|| (grf_count == large_grf_count));
+	    thread_info *curr_thread = inferior_thread ();
+	    regcache *regcache = get_thread_regcache (curr_thread);
+	    intelgt_read_register_part (regcache,
+					this->cr0_regnum, 0, sizeof (uint32_t),
+					(gdb_byte *) &cr0_0,
+					_("Cannot determine GRF mode."));
+	    int framedesc_regnum = ((cr0_0 & (1 << 13))
+				    ? large_grf_count : small_grf_count) - 1;
+	    gdb_assert (framedesc_regnum < grf_count);
+	    return framedesc_regnum;
+	  }
+
+	[[fallthrough]];
       case intelgt::XE2:
       case intelgt::XE3:
 	return grf_count - 1;

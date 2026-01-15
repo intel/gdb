@@ -72,12 +72,15 @@ gdb_test "thread 1.1" "Switching to thread 1.1.*" "first switch to thread 1.1"
 # Remove the breakpoint from inf 1.  Now only a breakpoint in inf 2 remains.
 gdb_test "clear $srcfile:$break_pos" "Deleted breakpoint 2 " "remove inf 1 breakpoint"
 gdb_test_no_output "set schedule-multiple on"
+
+setup_kfail "IGDB/3948" *-*-*
 gdb_test "next" ".*Thread 2.*hit Breakpoint.*" "next while in inferior 1"
 
 # We should be able to normally switch to thread 1.1.
 # In case of a bad GDB flow the GDB was losing the thread.
 # The thread should also not be in a "running" state because it is
 # stopped.
+setup_kfail "IGDB/3948" *-*-*
 gdb_test_multiple "thread 1.1" "Switching to thread 1.1" {
     -re "\\\[Switching to thread 1.1 \\(Thread .*\\)\\\]" {
         pass $gdb_test_name

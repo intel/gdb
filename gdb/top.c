@@ -1312,7 +1312,7 @@ print_gdb_version (struct ui_file *stream, bool interactive)
   /* Second line is a copyright notice.  */
 
   gdb_printf (stream,
-	      "Copyright (C) 2025 Free Software Foundation, Inc.; (C) 2025 Intel Corp.\n");
+	      "Copyright (C) 2026 Free Software Foundation, Inc.; (C) 2026 Intel Corp.\n");
 
   /* Following the copyright is a brief statement that the program is
      free software, that users are free to copy and change it on

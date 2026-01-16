@@ -5267,8 +5267,6 @@ process_serial_event (void)
 void
 handle_serial_event (int err, gdb_client_data client_data)
 {
-  threads_debug_printf ("handling possible serial event");
-
   /* Really handle it.  */
   if (process_serial_event () < 0)
     {
@@ -5300,7 +5298,6 @@ void
 handle_target_event (int err, gdb_client_data client_data)
 {
   client_state &cs = get_client_state ();
-  threads_debug_printf ("handling possible target event");
 
   cs.last_ptid = mywait (minus_one_ptid, &cs.last_status,
 		      TARGET_WNOHANG, 1);

@@ -92,6 +92,9 @@ extern void discard_queued_stop_replies (ptid_t ptid);
    the vStopped notifications queue.  */
 extern int in_queued_stop_replies (ptid_t ptid);
 
+/* Push a notification to GDB for library changes of PROCESS.  */
+void push_notif_library (process_info *process);
+
 #include "remote-utils.h"
 
 #include "utils.h"

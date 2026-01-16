@@ -41,6 +41,7 @@ using notif_event_up = std::unique_ptr<notif_event>;
 enum REMOTE_NOTIF_ID
 {
   REMOTE_NOTIF_STOP = 0,
+  REMOTE_NOTIF_LIBRARY,
   REMOTE_NOTIF_LAST,
 };
 
@@ -128,6 +129,7 @@ void remote_notif_process (struct remote_notif_state *state,
 remote_notif_state *remote_notif_state_allocate (remote_target *remote);
 
 extern const notif_client notif_client_stop;
+extern const notif_client notif_client_library;
 
 extern bool notif_debug;
 

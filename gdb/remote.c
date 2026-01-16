@@ -108,7 +108,9 @@ struct protocol_feature;
 struct packet_reg;
 
 struct stop_reply;
+struct library_reply;
 using stop_reply_up = std::unique_ptr<stop_reply>;
+using library_reply_up = std::unique_ptr<library_reply>;
 
 /* Generic configuration support for packets the stub optionally
    supports.  Allows the user to specify the use of the packet as well
@@ -1639,6 +1641,17 @@ struct stop_reply : public notif_event
   std::vector<CORE_ADDR> watch_data_addresses;
 
   int core;
+};
+
+struct library_reply : public notif_event
+{
+  /* The identifier of the process about this event.  */
+  int pid;
+
+  /* The remote state this event is associated with.  When the remote
+     connection, represented by a remote_state object, is closed,
+     all the associated library_reply events should be released.  */
+  struct remote_state *rs;
 };
 
 /* Return TARGET as a remote_target if it is one, else nullptr.  */
@@ -5312,6 +5325,16 @@ as_stop_reply_up (notif_event_up event)
   return stop_reply_up (stop_reply);
 }
 
+/* Transfer ownership of the library_reply owned by EVENT to a
+   library_reply_up object.  */
+
+static library_reply_up
+as_library_reply_up (notif_event_up event)
+{
+  library_reply *reply = static_cast<library_reply *> (event.release ());
+  return library_reply_up (reply);
+}
+
 /* Read, decode, and return a hex-encoded string from *PTR.  Update *PTR to
    point at the first character past the end of the string that was read
    in.  */
@@ -8159,6 +8182,75 @@ const notif_client notif_client_stop =
   remote_notif_stop_can_get_pending_events,
   remote_notif_stop_alloc_reply,
   REMOTE_NOTIF_STOP,
+};
+
+static void
+remote_notif_library_parse (remote_target *remote,
+			    const notif_client *self, const char *buf,
+			    notif_event *event)
+{
+  library_reply *reply = (library_reply *) event;
+
+  ULONGEST pid;
+  const char *endp = unpack_varlen_hex (buf, &pid);
+  if (endp == buf)
+    error (_("No process id in Library notification: %s."), buf);
+  if (endp[0] != 0)
+    error (_("Trailing junk in Library notification: %s."), buf);
+
+  reply->pid = (int) pid;
+  if (((ULONGEST) reply->pid) != pid)
+    error (_("Bad Library notification process id: %s."), buf);
+}
+
+static void
+remote_notif_library_ack (remote_target *remote,
+			  const notif_client *self, const char *buf,
+			  notif_event_up event)
+{
+  library_reply_up reply = as_library_reply_up (std::move (event));
+
+  scoped_restore_current_thread restore_thread;
+  inferior *process = find_inferior_pid (remote, reply->pid);
+  if (process == nullptr)
+    {
+      process = remote->remote_add_inferior (false, reply->pid, -1, 1);
+      process->needs_setup = 1;
+    }
+
+  switch_to_inferior_no_thread (process);
+  if (process->needs_setup)
+    setup_inferior (0);
+
+  handle_solib_event ();
+
+  putpkt (remote, self->ack_command);
+}
+
+static int
+remote_notif_library_can_get_pending_events (remote_target *remote,
+					     const notif_client *self)
+{
+  return 1;
+}
+
+static notif_event_up
+remote_notif_library_alloc_reply ()
+{
+  return notif_event_up (new library_reply ());
+}
+
+/* A client of notification Library.  */
+
+const notif_client notif_client_library =
+{
+  "Library",
+  "vLibrary",
+  remote_notif_library_parse,
+  remote_notif_library_ack,
+  remote_notif_library_can_get_pending_events,
+  remote_notif_library_alloc_reply,
+  REMOTE_NOTIF_LIBRARY,
 };
 
 /* If CONTEXT contains any fork/vfork/clone child threads that have

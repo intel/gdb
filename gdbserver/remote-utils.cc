@@ -1239,7 +1239,8 @@ prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
 	      }
 	  }
 
-	if (current_process ()->dlls_changed)
+	if (current_process ()->dlls_changed
+	    && !target_uses_library_notifications ())
 	  {
 	    strcpy (buf, "library:;");
 	    buf += strlen (buf);

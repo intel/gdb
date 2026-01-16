@@ -272,8 +272,59 @@ in_queued_stop_replies (ptid_t ptid)
 
 struct notif_server notif_stop =
 {
-  "vStopped", "Stop", {}, vstop_notif_reply,
+  "vStopped", "Stop", {}, vstop_notif_reply, nullptr,
 };
+
+/* Library notifications.  */
+
+struct vlibrary_notif : public notif_event
+{
+  vlibrary_notif (ptid_t::pid_type pid_) : pid (pid_)
+    {}
+
+  /* The process that got the event.  */
+  int pid;
+};
+
+static void
+vlibrary_notif_reply (struct notif_event *event, char *own_buf)
+{
+  gdb_assert (target_uses_library_notifications ());
+
+  vlibrary_notif *notif = (vlibrary_notif *) event;
+  int pid = notif->pid;
+
+  process_info *process = find_process_pid (pid);
+  notify_dlls (process);
+
+  if (pid < 0)
+    sprintf (own_buf, "-%x", pid);
+  else
+    sprintf (own_buf, "%x", pid);
+}
+
+static void
+vlibrary_notif_ack (struct notif_event *event)
+{
+  vlibrary_notif *notif = (vlibrary_notif *) event;
+  process_info *process = find_process_pid (notif->pid);
+  ack_dlls (process);
+}
+
+struct notif_server notif_library =
+{
+  "vLibrary", "Library", {}, vlibrary_notif_reply, vlibrary_notif_ack,
+};
+
+void
+push_notif_library (process_info *process)
+{
+  if (!process->dlls_changed)
+    return;
+
+  notif_push (&notif_library, new vlibrary_notif (process->pid));
+  process->dlls_changed = false;
+}
 
 static int
 target_running (void)
@@ -1906,6 +1957,9 @@ handle_qxfer_features (const char *annex,
 static std::string
 print_qxfer_libraries_entry (const dll_info &dll)
 {
+  if (dll.hidden && target_uses_library_notifications ())
+    return "";
+
   switch (dll.location)
     {
     case dll_info::in_memory:

@@ -154,3 +154,49 @@ unloaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
       return false;
     });
 }
+
+/* See dll.h.  */
+
+void
+notify_dlls (process_info *proc)
+{
+  if (proc == nullptr)
+    return;
+
+  for (dll_info &dll : proc->all_dlls)
+    dll.hidden = false;
+}
+
+/* Acknowledge DLL in PROC.  */
+
+static void
+ack_dll (process_info *proc, const dll_info &dll)
+{
+  switch (dll.location)
+    {
+    case dll_info::on_disk:
+      target_ack_library (proc, dll.name.c_str ());
+      return;
+
+    case dll_info::in_memory:
+      target_ack_in_memory_library (proc, dll.begin, dll.end);
+      return;
+    }
+
+  gdb_assert_not_reached ("unknown dll location: %x", dll.location);
+}
+
+/* See dll.h.  */
+
+void
+ack_dlls (process_info *proc)
+{
+  if (proc == nullptr)
+    return;
+
+  for (dll_info &dll : proc->all_dlls)
+    {
+      if (!dll.hidden)
+	ack_dll (proc, dll);
+    }
+}

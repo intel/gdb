@@ -875,3 +875,21 @@ process_stratum_target::get_ipa_tdesc_idx ()
 {
   return 0;
 }
+
+bool
+process_stratum_target::uses_library_notifications ()
+{
+  return false;
+}
+
+void
+process_stratum_target::ack_library (process_info *process, const char *name)
+{
+}
+
+void
+process_stratum_target::ack_in_memory_library (process_info *process,
+					       CORE_ADDR begin,
+					       CORE_ADDR end)
+{
+}

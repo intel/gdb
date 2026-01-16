@@ -48,6 +48,7 @@ bool notif_debug = false;
 static const notif_client *const notifs[] =
 {
   &notif_client_stop,
+  &notif_client_library,
 };
 
 static_assert (ARRAY_SIZE (notifs) == REMOTE_NOTIF_LAST);

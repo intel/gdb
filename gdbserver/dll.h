@@ -54,6 +54,21 @@ struct dll_info
 
   /* The base address at which the library is loaded.  */
   CORE_ADDR base_addr;
+
+  /* Whether to tell GDB about this library.
+
+     We use this when library notifications are used to track which
+     libraries belong to the current library event, so when GDB
+     acknowledges the event, we know which libraries GDB has acknowledged.
+
+     New libraries that were added in the meantime need to wait for the
+     next library event.
+
+     For targets that do not use library notifications, this will be
+     ignored and GDB will always get the full list of libraries.  This
+     means that library annotations in stop replies cannot be mixed with
+     library notifications.  */
+  bool hidden = true;
 };
 
 extern void loaded_dll (const char *name, CORE_ADDR base_addr);
@@ -66,5 +81,11 @@ extern void unloaded_dll (process_info *proc, const char *name,
 			  CORE_ADDR base_addr);
 extern void unloaded_dll (process_info *proc, CORE_ADDR begin, CORE_ADDR end,
 			  CORE_ADDR base_addr);
+
+/* Clear the hidden flag for all libraries in PROC.  */
+extern void notify_dlls (process_info *proc);
+
+/* Acknowledge all non-hidden libraries.  */
+extern void ack_dlls (process_info *proc);
 
 #endif /* GDBSERVER_DLL_H */

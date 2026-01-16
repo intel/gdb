@@ -54,10 +54,14 @@ struct notif_server
 
   /* Write event EVENT to OWN_BUF.  */
   void (*write) (struct notif_event *event, char *own_buf);
+
+  /* EVENT has been acknowledged by GDB.  */
+  void (*ack) (struct notif_event *event);
 };
 using notif_server_p = struct notif_server *;
 
 extern struct notif_server notif_stop;
+extern struct notif_server notif_library;
 
 int handle_notif_ack (char *own_buf, int packet_len);
 void notif_write_event (struct notif_server *notif, char *own_buf);

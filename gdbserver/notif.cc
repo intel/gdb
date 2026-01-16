@@ -52,6 +52,7 @@
 static struct notif_server *notifs[] =
 {
   &notif_stop,
+  &notif_library,
 };
 
 /* Write another event or an OK, if there are no more left, to
@@ -103,6 +104,9 @@ handle_notif_ack (char *own_buf, int packet_len)
 
       remote_debug_printf ("%s: acking %d", np->ack_name,
 			   (int) np->queue.size ());
+
+      if (np->ack != nullptr)
+	np->ack (head);
 
       delete head;
     }

@@ -47592,6 +47592,14 @@ for information on how these notifications are acknowledged by
 @value{GDBN}.
 @tab Report an asynchronous stop event in non-stop mode.
 
+@item Library
+@tab vLibrary
+@tab @var{pid}.  The process for which libraries have changed.
+@tab Report asynchronous changes in the loaded libraries.
+@value{GDBN} should use @samp{qXfer:libraries:read} to fetch a new
+list of loaded libraries and acknowledge the notification when the
+changes have been processed.
+
 @end multitable
 
 @node Remote Non-Stop

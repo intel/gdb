@@ -18,6 +18,10 @@ qXfer:libraries:read's response
   The qXfer:libraries:read query supports reporting in-memory libraries.
   Older GDB will silently ignore them.
 
+%Library
+  This notification informs about asynchronous changes in the loaded
+  libraries of a process.
+
 *** Changes in GDB 18
 
 * Support for the Common Trace Format (CTF) has been removed.  GDB now

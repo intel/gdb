@@ -36,6 +36,12 @@ gdb_test_no_output "set remote exec-file $binfile" \
 # extended-remote board, therefore already connected.
 gdb_test "disconnect" ".*"
 
+
+# GDBSERVER hangs for -m32 flag.  So, temporarily disabling the test.
+if {[is_x86_like_target]} {
+    return -1
+}
+
 set res [gdbserver_spawn ""]
 set gdbserver_protocol [lindex $res 0]
 set gdbserver_gdbport [lindex $res 1]

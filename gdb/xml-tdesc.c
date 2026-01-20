@@ -157,9 +157,41 @@ tdesc_start_device (struct gdb_xml_parser *parser,
   if (attr != nullptr)
     device->target_id = * (ULONGEST *) attr->value.get ();
 
+  attr = xml_find_attribute (attributes, "family");
+  if (attr != nullptr)
+    device->family = (char *) attr->value.get ();
+
+  attr = xml_find_attribute (attributes, "model");
+  if (attr != nullptr)
+    device->model = (char *) attr->value.get ();
+
+  attr = xml_find_attribute (attributes, "stepping");
+  if (attr != nullptr)
+    device->stepping = * (ULONGEST *) attr->value.get ();
+
   attr = xml_find_attribute (attributes, "name");
   if (attr != nullptr)
     device->name = (char *) attr->value.get ();
+
+  attr = xml_find_attribute (attributes, "pci-slot");
+  if (attr != nullptr)
+    device->pci_slot = (char *) attr->value.get ();
+
+  attr = xml_find_attribute (attributes, "uuid");
+  if (attr != nullptr)
+    device->uuid = (char *) attr->value.get ();
+
+  attr = xml_find_attribute (attributes, "total-cores");
+  if (attr != nullptr)
+    device->total_cores = * (ULONGEST *) attr->value.get ();
+
+  attr = xml_find_attribute (attributes, "total-threads");
+  if (attr != nullptr)
+    device->total_threads = * (ULONGEST *) attr->value.get ();
+
+  attr = xml_find_attribute (attributes, "subdevice-id");
+  if (attr != nullptr)
+    device->subdevice_id = * (ULONGEST *) attr->value.get ();
 
   set_tdesc_device_info (data->tdesc, device);
 }
@@ -617,7 +649,15 @@ static const struct gdb_xml_element feature_children[] = {
 static const struct gdb_xml_attribute device_attributes[] = {
   { "vendor-id", GDB_XML_AF_OPTIONAL, gdb_xml_parse_attr_ulongest, NULL },
   { "target-id", GDB_XML_AF_OPTIONAL, gdb_xml_parse_attr_ulongest, NULL },
+  { "family", GDB_XML_AF_OPTIONAL, NULL, NULL },
+  { "model", GDB_XML_AF_OPTIONAL, NULL, NULL },
+  { "stepping", GDB_XML_AF_OPTIONAL, gdb_xml_parse_attr_ulongest, NULL },
   { "name", GDB_XML_AF_OPTIONAL, NULL, NULL },
+  { "pci-slot", GDB_XML_AF_OPTIONAL, NULL, NULL },
+  { "uuid", GDB_XML_AF_OPTIONAL, NULL, NULL },
+  { "total-cores", GDB_XML_AF_OPTIONAL, gdb_xml_parse_attr_ulongest, NULL },
+  { "total-threads", GDB_XML_AF_OPTIONAL, gdb_xml_parse_attr_ulongest, NULL },
+  { "subdevice-id", GDB_XML_AF_OPTIONAL, gdb_xml_parse_attr_ulongest, NULL},
   { NULL, GDB_XML_EF_NONE, NULL, NULL }
 };
 

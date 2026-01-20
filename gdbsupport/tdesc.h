@@ -325,7 +325,11 @@ struct tdesc_device : tdesc_element
 {
   tdesc_device ()
   {
+    family = "";
+    model = "";
     name = "";
+    pci_slot = "";
+    uuid = "";
   }
 
   virtual ~tdesc_device () = default;
@@ -338,8 +342,32 @@ struct tdesc_device : tdesc_element
   /* The id of the device, given by its vendor.  */
   std::optional<uint32_t> target_id;
 
+  /* The family of the device.  */
+  std::string family;
+
+  /* The model of the device.  */
+  std::string model;
+
+  /* The stepping of the device.  */
+  std::optional<uint32_t> stepping;
+
   /* The name of the device.  */
   std::string name;
+
+  /* The location where the device is positioned.  */
+  std::string pci_slot;
+
+  /* The UUID of the device.  */
+  std::string uuid;
+
+  /* The number of cores available in the device.  */
+  std::optional<size_t> total_cores;
+
+  /* The number of threads available in the device.  */
+  std::optional<size_t> total_threads;
+
+  /* The subdevice id, if this device is a subdevice.  */
+  std::optional<uint32_t> subdevice_id;
 
   void accept (tdesc_element_visitor &v) const override
   {
@@ -350,7 +378,15 @@ struct tdesc_device : tdesc_element
   {
     return (vendor_id == other.vendor_id
 	    && target_id == other.target_id
-	    && name == other.name);
+	    && family == other.family
+	    && model == other.model
+	    && stepping == other.stepping
+	    && name == other.name
+	    && pci_slot == other.pci_slot
+	    && uuid == other.uuid
+	    && total_cores == other.total_cores
+	    && total_threads == other.total_threads
+	    && subdevice_id == other.subdevice_id);
   }
 
   bool operator!= (const tdesc_device &other) const

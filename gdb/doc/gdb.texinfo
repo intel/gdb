@@ -49716,7 +49716,15 @@ shown with the example below.  All attributes are optional.
 @smallexample
   <device vendor-id="0x8086"
           target-id="0x56a1"
-          name="Intel(R) Arc(TM) A750 Graphics" />
+          family="abc"
+          model="xyz"
+          stepping="3"
+          name="Intel(R) Arc(TM) A750 Graphics"
+          pci-slot="03:00.0"
+          uuid="0003000856a18086"
+          total-cores="448"
+          total-threads="3584"
+          subdevice-id="1"/>
 @end smallexample
 
 @subsection Features

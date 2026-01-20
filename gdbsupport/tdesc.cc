@@ -443,8 +443,32 @@ print_xml_feature::visit (const tdesc_device *device)
     string_appendf (tmp, " target-id=\"0x%04" PRIx32 "\"",
 		    *device->target_id);
 
+  if (!device->family.empty ())
+    string_appendf (tmp, " family=\"%s\"", device->family.c_str ());
+
+  if (!device->model.empty ())
+    string_appendf (tmp, " model=\"%s\"", device->model.c_str ());
+
+  if (device->stepping.has_value ())
+    string_appendf (tmp, " stepping=\"%d\"", *device->stepping);
+
   if (!device->name.empty ())
     string_appendf (tmp, " name=\"%s\"", device->name.c_str ());
+
+  if (!device->pci_slot.empty ())
+    string_appendf (tmp, " pci-slot=\"%s\"", device->pci_slot.c_str ());
+
+  if (!device->uuid.empty ())
+    string_appendf (tmp, " uuid=\"%s\"", device->uuid.c_str ());
+
+  if (device->total_cores.has_value ())
+    string_appendf (tmp, " total-cores=\"%ld\"", *device->total_cores);
+
+  if (device->total_threads.has_value ())
+    string_appendf (tmp, " total-threads=\"%ld\"", *device->total_threads);
+
+  if (device->subdevice_id.has_value ())
+    string_appendf (tmp, " subdevice-id=\"%d\"", *device->subdevice_id);
 
   string_appendf (tmp, "/>");
   add_line (tmp);

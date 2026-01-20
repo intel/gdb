@@ -25,7 +25,15 @@
 <!ATTLIST device
 	vendor-id	CDATA	#IMPLIED
 	target-id	CDATA	#IMPLIED
+	family		CDATA	#IMPLIED
+	model		CDATA	#IMPLIED
+	stepping	CDATA	#IMPLIED
 	name		CDATA	#IMPLIED
+	pci-slot	CDATA	#IMPLIED
+	uuid		CDATA	#IMPLIED
+	total-cores	CDATA	#IMPLIED
+	total-threads	CDATA	#IMPLIED
+	subdevice-id	CDATA	#IMPLIED
 	>
 
 <!ELEMENT feature

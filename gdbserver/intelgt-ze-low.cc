@@ -269,6 +269,19 @@ intelgt_write_cr0 (const ze_device_info &device,
     }
 }
 
+/* Return a human-readable device UUID string.  */
+
+static std::string
+device_uuid_str (const uint8_t uuid[], size_t size)
+{
+  std::stringstream sstream;
+  for (int i = size - 1; i >= 0; --i)
+    sstream << std::hex << std::setfill ('0') << std::setw (2)
+	    << static_cast<int> (uuid[i]);
+
+  return sstream.str ();
+}
+
 /* Target op definitions for Intel GT target based on Level-Zero.  */
 
 class intelgt_ze_target : public ze_target
@@ -480,10 +493,28 @@ intelgt_ze_target::create_tdesc
   set_tdesc_architecture (tdesc.get (), "intelgt");
   set_tdesc_osabi (tdesc.get (), GDB_OSABI_LINUX);
 
+  std::string device_uuid = device_uuid_str (
+    dinfo->properties.uuid.id, sizeof (dinfo->properties.uuid.id));
+  const uint32_t total_cores = (properties.numSlices
+				* properties.numSubslicesPerSlice
+				* properties.numEUsPerSubslice);
+  const uint32_t total_threads = (total_cores * properties.numThreadsPerEU);
+
   tdesc_device *device_info = new tdesc_device ();
   device_info->vendor_id = properties.vendorId;
   device_info->target_id = properties.deviceId;
   device_info->name = properties.name;
+  device_info->pci_slot = string_printf ("%02" PRIx32 ":%02" PRIx32
+					 ".%" PRId32,
+					 pci_properties.address.bus,
+					 pci_properties.address.device,
+					 pci_properties.address.function);
+  device_info->uuid = device_uuid;
+  device_info->total_cores = total_cores;
+  device_info->total_threads = total_threads;
+
+  if (properties.flags & ZE_DEVICE_PROPERTY_FLAG_SUBDEVICE)
+    device_info->subdevice_id = properties.subdeviceId;
 
   set_tdesc_device_info (tdesc.get (), device_info);
 

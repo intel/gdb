@@ -3981,8 +3981,16 @@ workitem_global_id_make_value (gdbarch *gdbarch, internalvar *var,
     return value::allocate (bt->builtin_void);
 
   thread_info *tp = inferior_thread ();
-  std::array<uint64_t, 3> global_id
-    = gdbarch_current_workitem_global_id (gdbarch, tp);
+  std::array<uint64_t, 3> global_id;
+  try
+    {
+      global_id = gdbarch_current_workitem_global_id (gdbarch, tp);
+    }
+  catch (const gdb_exception_error &e)
+    {
+      warning (_("%s"), e.what ());
+      return value::allocate (bt->builtin_void);
+    }
 
   type *result_type = init_vector_type (bt->builtin_unsigned_long_long, 3);
   result_type->set_name ("_gdb_workitem");
@@ -4001,8 +4009,16 @@ workitem_local_size_make_value (gdbarch *gdbarch, internalvar *var,
     return value::allocate (bt->builtin_void);
 
   thread_info *tp = inferior_thread ();
-  std::array<uint32_t, 3> local_size
-    = gdbarch_workitem_local_size (gdbarch, tp);
+  std::array<uint32_t, 3> local_size;
+  try
+    {
+      local_size = gdbarch_workitem_local_size (gdbarch, tp);
+    }
+  catch (const gdb_exception_error &e)
+    {
+      warning (_("%s"), e.what ());
+      return value::allocate (bt->builtin_void);
+    }
 
   type *result_type = init_vector_type (bt->builtin_unsigned_int, 3);
   result_type->set_name ("_gdb_workitem");
@@ -4021,8 +4037,16 @@ workitem_global_size_make_value (gdbarch *gdbarch, internalvar *var,
     return value::allocate (bt->builtin_void);
 
   thread_info *tp = inferior_thread ();
-  std::array<uint64_t, 3> global_size
-    = gdbarch_workitem_global_size (gdbarch, tp);
+  std::array<uint64_t, 3> global_size;
+  try
+    {
+      global_size = gdbarch_workitem_global_size (gdbarch, tp);
+    }
+  catch (const gdb_exception_error &e)
+    {
+      warning (_("%s"), e.what ());
+      return value::allocate (bt->builtin_void);
+    }
 
   type *result_type = init_vector_type (bt->builtin_uint64, 3);
   result_type->set_name ("_gdb_workitem");

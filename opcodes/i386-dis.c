@@ -1,5 +1,6 @@
 /* Print i386 instructions for GDB, the GNU debugger.
    Copyright (C) 1988-2024 Free Software Foundation, Inc.
+   Copyright (C) 2013-2026 Intel Corporation
 
    This file is part of the GNU opcodes library.
 

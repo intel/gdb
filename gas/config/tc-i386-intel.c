@@ -1,5 +1,6 @@
 /* tc-i386.c -- Assemble Intel syntax code for ix86/x86-64
    Copyright (C) 2009-2024 Free Software Foundation, Inc.
+   Copyright (C) 2014-2026 Intel Corporation
 
    This file is part of GAS, the GNU Assembler.
 

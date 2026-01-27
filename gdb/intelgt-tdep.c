@@ -3011,10 +3011,26 @@ intelgt_get_inferior_call_return_value (gdbarch *gdbarch,
 {
   value *retval = nullptr;
 
-  retval = value::allocate (ri->value_type);
-  intelgt_return_value_as_value (ri->gdbarch, ri->function, ri->value_type,
-				 get_thread_regcache (inferior_thread ()),
-				 &retval, nullptr);
+  if (ri->value_type->code () == TYPE_CODE_VOID)
+    retval = value::allocate (ri->value_type);
+  else
+    {
+      thread_info *thr = inferior_thread ();
+      bool stack_temporaries = thread_stack_temporaries_enabled_p (thr);
+
+      intelgt_return_value_as_value (ri->gdbarch, ri->function, ri->value_type,
+				     get_thread_regcache (thr),
+				     &retval, nullptr);
+
+      if (stack_temporaries && class_or_union_p (ri->value_type))
+	{
+	  /* Force class/union return values onto the stack so methods can
+	     be called on them (requires a memory address for "this").
+	     See default_get_inferior_call_return_value in infcall.c.  */
+	  retval->force_lval (ri->struct_addr);
+	  push_thread_stack_temporary (thr, retval);
+	}
+    }
 
   gdb_assert (retval != nullptr);
   return retval;

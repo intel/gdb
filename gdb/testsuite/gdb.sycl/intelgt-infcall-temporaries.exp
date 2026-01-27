@@ -1,0 +1,106 @@
+# Copyright 2026 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDB support for temporaries struct type return values on IntelGT
+# architecture.
+
+load_lib sycl.exp
+
+standard_testfile .cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return 0
+}
+
+if {[build_executable "failed to compile $srcfile" \
+    "${binfile}" $srcfile {sycl debug}]} {
+    return -1
+}
+
+proc test_temporaries {lane} {
+
+    set dim [get_integer_valueof "dim0" -1]
+
+    # Test basic variable access in struct.
+    gdb_test "print ivar.getx() == dim0" "= true" \
+	"access int_struct value"
+
+    # Test struct return value with array.
+    gdb_test "print int4\[0\] == return_int_array(dim0)\[0\]" "= true" \
+	"return_int_array struct return value matches"
+
+    gdb_test "print uc4\[0\] == return_uchar_array(dim0)\[0\]" "= true" \
+	"return_uchar_array struct return value matches"
+
+    # Test if GDB evaluate 'this' pointer for the method call.
+    gdb_test "print return_int_array(dim0)\[0\]" ".*[expr $dim * 100].*" \
+	"call method on returned int_array_4 temporary for lane $lane"
+
+    gdb_test "print return_uchar_array(dim0)\[0\]" "= .*$dim.*" \
+	"call method on returned uchar_array_4 temporary for lane $lane"
+
+    # Test member function returning struct.
+    gdb_test "print int4_member\[0\] == str_gr_64.getint_array(0)\[0\]" "= true" \
+	"member function struct return value matches"
+
+    gdb_test "print uc4_member\[0\] == str_gr_64.getuchar_array(0)\[0\]" "= true" \
+	"member function uchar struct return value matches"
+
+    # Test struct return from add function.
+    gdb_test "print res\[0\] == add(s2)\[0\]" "= true" \
+	"add function struct return value matches"
+
+    # Test return values in nested function calls.
+    gdb_test \
+	"print int4\[0\] == make_str_gr_64(dim0).getint_array(0)\[0\]" \
+	"= true" "return value of nested function call matches struct value"
+}
+
+foreach device $sycl_device_list {
+
+    sycl_with_intelgt_lock $device {
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	clean_restart "${binfile}"
+
+	if {![sycl_start $device]} {
+	    continue
+	}
+
+	set bp_loc [gdb_get_line_number "break-line"]
+	gdb_breakpoint "$::srcfile:$bp_loc" {temporary}
+
+	gdb_test "continue" ".*$::srcfile:$bp_loc.*"
+
+	# Test for simd lane values ZERO and NON-ZERO values.
+	foreach_with_prefix lane {0 1 5 9 15} {
+	    gdb_test_multiple "thread :$lane" "Switch active lane" {
+		-re -wrap "SIMD lane $lane is inactive in thread.*" {
+		    continue
+		}
+		-re -wrap "Switching to thread .*" {
+		    pass $gdb_test_name
+		}
+	    }
+	    test_temporaries $lane
+	}
+    }
+}

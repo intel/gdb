@@ -1,0 +1,85 @@
+# Copyright 2026 Free Software Foundation, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test scenarios where we try to interrupt threads that exited.
+
+load_lib sycl.exp
+
+standard_testfile sycl-hello.cpp
+
+set sycl_device_list [init_sycl_devices_list]
+if {[llength $sycl_device_list] == 0} {
+    unsupported "target does not support SYCL"
+    return
+}
+
+if {[build_executable "failed to compile $srcfile" "$binfile" "$srcfile" \
+	 {sycl debug}]} {
+    return
+}
+
+foreach device $sycl_device_list {
+    sycl_with_intelgt_lock $device {
+	if {![require_sycl_device "$device" "gpu" "Intel*"]} {
+	    unsupported "test is aimed at Intel GPUs only"
+	    continue
+	}
+
+	clean_restart $testfile
+	if {![sycl_start $device]} {
+	    continue
+	}
+
+	set line [gdb_get_line_number "inside-kernel"]
+	gdb_breakpoint $line
+	gdb_continue_to_breakpoint ".*inside-kernel.*"
+
+	gdb_test_no_output "set scheduler-locking on"
+	gdb_test_multiple "continue" "continue thread" {
+	    -re "Continuing" {
+		pass $gdb_test_name
+	    }
+	}
+
+	after 500 {send_gdb "\003"}
+	gdb_test "" "Thread .* exited.*" "thread exited"
+	gdb_test "thread" ".*exited.*"
+
+	gdb_test_no_output "set scheduler-locking off"
+	gdb_test_no_output "set schedule-multiple off"
+
+	with_test_prefix "thread exited" {
+	    gdb_test_multiple "continue" "continue inferior" {
+		-re "Continuing" {
+		    pass $gdb_test_name
+		}
+	    }
+
+	    after 500 {send_gdb "\003"}
+	    gdb_test "" "No unwaited-for children left." "no resumed"
+	}
+
+	with_test_prefix "no thread" {
+	    gdb_test_multiple "continue" "continue inferior" {
+		-re "Continuing" {
+		    pass $gdb_test_name
+		}
+	    }
+
+	    after 500 {send_gdb "\003"}
+	    gdb_test "" "No unwaited-for children left." "no resumed"
+	}
+    }
+}

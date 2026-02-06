@@ -159,7 +159,7 @@ unload_dll_if (process_info *proc,
 	       std::function<bool (const dll_info &)> pred)
 {
   auto iter = std::find_if (proc->all_dlls.begin (), proc->all_dlls.end (),
-			    pred);
+			    std::move (pred));
 
   if (iter == proc->all_dlls.end ())
     /* For some inferiors we might get unloaded_dll events without having

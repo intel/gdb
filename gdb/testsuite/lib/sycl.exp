@@ -39,10 +39,14 @@ if {![info exists OFFLOAD_IGNORE_PREPARE_FOR_TESTING]} {
 if {![info exists OFFLOAD_PERF_AOT_TESTING]} {
     set OFFLOAD_PERF_AOT_TESTING "0"
 }
+if {![info exists OFFLOAD_DEVICE_CHECK]} {
+    set OFFLOAD_DEVICE_CHECK "0"
+}
 
 verbose -log "OFFLOAD_DEVICE_GROUP is '$OFFLOAD_DEVICE_GROUP'"
 verbose -log "OFFLOAD_IGNORE_PREPARE_FOR_TESTING is '$OFFLOAD_IGNORE_PREPARE_FOR_TESTING'"
 verbose -log "OFFLOAD_PERF_AOT_TESTING is '$OFFLOAD_PERF_AOT_TESTING'"
+verbose -log "OFFLOAD_DEVICE_CHECK is '$OFFLOAD_DEVICE_CHECK'"
 
 # Return true if the SYCL device selected via the board file
 # matches the arguments.  Otherwise return false.
@@ -112,8 +116,10 @@ proc get_sycl_supported_devices {sycl_device_list} {
     set src "$srcdir/lib/sycl-hello.cpp"
 
     # Don't re-compile in case OFFLOAD_IGNORE_PREPARE_FOR_TESTING option
-    # is set.
-    if {$OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"} {
+    # is set or OFFLOAD_DEVICE_CHECK is set and file already exists.
+    if {$OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"
+	|| ($::OFFLOAD_DEVICE_CHECK == "1"
+	    && [file exists "$objdir/sycl-hello"])} {
 	set exe "$objdir/sycl-hello"
     } else {
 	set exe [standard_output_file sycl-hello]
@@ -217,8 +223,10 @@ gdb_caching_proc init_sycl_devices_list {} {
     set src "$srcdir/lib/sycl-devices.cpp"
 
     # Don't re-compile in case OFFLOAD_IGNORE_PREPARE_FOR_TESTING option
-    # is set.
-    if {$OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"} {
+    # is set or OFFLOAD_DEVICE_CHECK is set and file already exists.
+    if {$OFFLOAD_IGNORE_PREPARE_FOR_TESTING == "1"
+	|| ($::OFFLOAD_DEVICE_CHECK == "1"
+	    && [file exists "$objdir/sycl-devices"])} {
 	set exe "$objdir/sycl-devices"
 	clean_restart $exe
     } else {

@@ -9563,8 +9563,41 @@ ada_name_association::assign (aggregate_assigner &assigner,
 
   if (ada_is_direct_array_type (assigner.lhs->type ()))
     {
-      value *tem = m_val->evaluate (nullptr, assigner.exp, EVAL_NORMAL);
-      index = longest_to_int (value_as_long (tem));
+      std::optional<LONGEST> enum_index;
+
+      /* If the array's index type has enumeration type, then simple
+	 names should be looked up as enumerators.  */
+      if (const char *name = find_name (op);
+	  name != nullptr)
+	{
+	  type *idx_type
+	    = ada_check_typedef (assigner.lhs->type ())->index_type ();
+	  idx_type = get_base_type (idx_type);
+	  if (idx_type->code () == TYPE_CODE_ENUM)
+	    {
+	      for (const auto &field : idx_type->fields ())
+		{
+		  const char *ename = ada_enum_name (field.name ());
+		  if (streq (name, ename))
+		    {
+		      enum_index = field.loc_enumval ();
+		      break;
+		    }
+		}
+
+	      /* If we didn't find the name, that is ok -- the user
+		 might have written (VAR => EXPR), naming some
+		 variable somewhere.  */
+	    }
+	}
+
+      if (enum_index.has_value ())
+	index = *enum_index;
+      else
+	{
+	  value *tem = m_val->evaluate (nullptr, assigner.exp, EVAL_NORMAL);
+	  index = value_as_long (tem);
+	}
     }
   else
     {

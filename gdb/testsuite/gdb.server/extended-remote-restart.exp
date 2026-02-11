@@ -119,6 +119,10 @@ proc test_reload { do_kill_p follow_child_p } {
     # Disconnect, and reconnect to the target.
     gdb_test "disconnect" ".*"
 
+    if { $do_kill_p eq 0 && $follow_child_p } {
+	setup_kfail "IGDB/6829" *-*-*
+    }
+
     if { [gdb_reconnect] == 0 } {
 	pass "reconnect after fork"
     } else {

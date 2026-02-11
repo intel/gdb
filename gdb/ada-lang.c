@@ -9531,6 +9531,30 @@ ada_name_association::dump (ui_file *stream, int depth)
   m_val->dump (stream, depth + 1);
 }
 
+/* See ada-exp.h.  */
+
+const char *
+ada_name_association::find_name (operation_up &op) const
+{
+  ada_string_operation *strop
+    = dynamic_cast<ada_string_operation *> (m_val.get ());
+
+  if (strop != nullptr)
+    return strop->get_name ();
+
+  ada_var_value_operation *vvo
+    = dynamic_cast<ada_var_value_operation *> (m_val.get ());
+  if (vvo == nullptr)
+    return nullptr;
+  /* In this scenario, the user wrote (name => expr), but
+     write_name_assoc found some fully-qualified name and substituted
+     it.  This happens because, at parse time, the meaning of the
+     expression isn't known; but here we know that just the base name
+     was supplied and it refers to the name of a field.  */
+  const char *name = vvo->get_symbol ()->natural_name ();
+  return ada_unqualified_name (name);
+}
+
 void
 ada_name_association::assign (aggregate_assigner &assigner,
 			      operation_up &op)
@@ -9544,27 +9568,9 @@ ada_name_association::assign (aggregate_assigner &assigner,
     }
   else
     {
-      ada_string_operation *strop
-	= dynamic_cast<ada_string_operation *> (m_val.get ());
-
-      const char *name;
-      if (strop != nullptr)
-	name = strop->get_name ();
-      else
-	{
-	  ada_var_value_operation *vvo
-	    = dynamic_cast<ada_var_value_operation *> (m_val.get ());
-	  if (vvo == nullptr)
-	    error (_("Invalid record component association."));
-	  name = vvo->get_symbol ()->natural_name ();
-	  /* In this scenario, the user wrote (name => expr), but
-	     write_name_assoc found some fully-qualified name and
-	     substituted it.  This happens because, at parse time, the
-	     meaning of the expression isn't known; but here we know
-	     that just the base name was supplied and it refers to the
-	     name of a field.  */
-	  name = ada_unqualified_name (name);
-	}
+      const char *name = find_name (op);
+      if (name == nullptr)
+	error (_("Invalid record component association."));
 
       index = 0;
       if (! find_struct_field (name, assigner.lhs->type (), 0,

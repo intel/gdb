@@ -60,10 +60,10 @@ proc test_call_stack {device} {
 
     set fill "\[^\r\n\]*"
 
-    set fourth_desc "fourth \\(x4=$fill, y4=$fill\\) at ${fill}$srcfile:$fourth_loc"
-    set third_desc "third \\(x3=$fill, y3=$fill\\) at ${fill}$srcfile:$third_loc"
-    set second_desc "second \\(x2=$fill, y2=$fill\\) at ${fill}$srcfile:$second_loc"
-    set first_desc "first \\(x1=$fill, y1=$fill\\) at ${fill}$srcfile:$first_loc"
+    set fourth_desc "fourth \\(x4=30, y4=81\\) at ${fill}$srcfile:$fourth_loc"
+    set third_desc "third \\(x3=25, y3=27\\) at ${fill}$srcfile:$third_loc"
+    set second_desc "second \\(x2=20, y2=9\\) at ${fill}$srcfile:$second_loc"
+    set first_desc "first \\(x1=15, y1=3\\) at ${fill}$srcfile:$first_loc"
     set outer_desc "${fill}operator\\(\\)${fill} at ${fill}$srcfile:$outer_loc"
     set inlined_inner_desc \
 	"inlined_second ${fill} at ${fill}$srcfile:$inlined_inner_loc"
@@ -85,6 +85,64 @@ proc test_call_stack {device} {
 				"#4${fill} $outer_desc.*"] \
 	"first backtrace"
 
+    # Store frame descriptors as a list for convenience.
+    # We use this when we iterate through frames.
+    set list_desc [list $fourth_desc $third_desc $second_desc $first_desc $outer_desc]
+
+    # Switch between frames and check the values of arguments.
+    for {set frame 1} {$frame < 4} {incr frame} {
+	set desc [lindex $list_desc $frame]
+	gdb_test "frame $frame" "#$frame${fill} $desc.*" "switch to frame $frame"
+
+	# Compute expected arguments values.
+	set num [expr {4 - $frame}]
+	set x_exp [expr {15 + ($num - 1) * 5}]
+	set y_exp [expr {3 ** $num}]
+	gdb_test "print x$num" "= $x_exp" "print x$num at first bp"
+	gdb_test "print y$num" "= $y_exp" "print y$num at first bp"
+    }
+
+    gdb_test "frame 4" "#4${fill} $outer_desc.*" "switch to frame 4"
+    gdb_test "print fourteen" "= 14" "print fourteen at first bp"
+    gdb_test "print four" "= 4"
+    gdb_test "print ten" "= 10"
+
+    # Go back to frame zero and check that args are still displayed correctly.
+    gdb_test "frame 0" "#0${fill} $fourth_desc.*" "switch to frame 0"
+    gdb_test "print x4" "= 30" "print x4 at first bp"
+    gdb_test "print y4" "= 81" "print y4 at first bp"
+
+    # We finish frames from fourth to first in a loop.
+    # After every finish we check the backtrace.
+    for {set i 0} {$i < 4} {incr i} {
+	with_test_prefix "finish and backtrace #$i" {
+	    # Compute the expected value at the current level.
+	    set val_exp [expr {2430 + $i * 30}]
+
+	    # Finish the function calls.
+	    set value_returned "\r\nValue returned is $valnum_re = $val_exp"
+
+	    # Find frame descriptors for the starting and ending frames.
+	    set desc_from [lindex $list_desc $i]
+	    set desc_to [lindex $list_desc [expr {$i + 1}]]
+
+	    gdb_test "finish" [multi_line \
+				   "Run till exit from #0$fill$desc_from" \
+				   "$fill$desc_to" \
+				   "${fill}${value_returned}"]
+
+	    # Construct the expected backtrace value.
+	    set bt_exp ""
+	    set num [expr {4 - $i}]
+	    for {set frame 0} {$frame < $num} {incr frame} {
+		# Index of frame descriptor from LIST_DESC list.
+		set desc_index_exp [expr {$i + $frame + 1}]
+		append bt_exp "#${frame}${fill} [lindex $list_desc $desc_index_exp]\r\n"
+	    }
+	    append bt_exp "\\(More stack frames follow...\\)"
+	    gdb_test "backtrace $num" $bt_exp
+	}
+    }
     # Test inlined function calls.
     gdb_breakpoint $inlined_inner_loc
 
@@ -95,6 +153,20 @@ proc test_call_stack {device} {
 				"#1${fill} $inlined_middle_desc" \
 				"#2${fill} $inlined_outer_desc.*"] \
 	"backtrace for inlined calls"
+
+    gdb_test "frame 1" "#1${fill} $inlined_middle_desc.*" \
+	"switch to frame 1, inlined"
+    gdb_test "print num1" "= 10" "print num1 at second bp"
+    gdb_test "print num2" "= 2" "print num2 at second bp"
+
+    gdb_test "frame 2" "#2${fill} $inlined_outer_desc.*" \
+	"switch to frame 2, inlined"
+    gdb_test "print fourteen" "= 14" "print fourteen at second bp"
+
+    gdb_test "frame 0" "#0${fill} $inlined_inner_desc.*" \
+	"switch to frame 0, inlined"
+    gdb_test "print x" "= 15" "print x at second bp"
+    gdb_test "print y" "= 6" "print y at second bp"
 
     delete_breakpoints
 

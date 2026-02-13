@@ -46,20 +46,19 @@ foreach device $sycl_device_list {
 
 	gdb_continue_to_breakpoint "bp 1" ".*$srcfile:$outer_loc.*"
 
-	set fill "\[^\r\n\]+"
 	set ten 0
 	set four 0
 	set fourteen 0
 	gdb_test_multiple "info locals" "info locals 1" -lbl {
-	    -re "\r\nten = $fill" {
+	    -re "\r\nten = 10" {
 		set ten 1
 		exp_continue
 	    }
-	    -re "\r\nfour = $fill" {
+	    -re "\r\nfour = 4" {
 		set four 1
 		exp_continue
 	    }
-	    -re "\r\nfourteen = $fill" {
+	    -re "\r\nfourteen = 14" {
 		set fourteen 1
 		exp_continue
 	    }
@@ -70,9 +69,9 @@ foreach device $sycl_device_list {
 	}
 
 	gdb_continue_to_breakpoint "bp 2" ".*$srcfile:$inner_loc.*"
-	gdb_test "info locals" "result = $fill.*" "info locals 2"
+	gdb_test "info locals" "result = 2490.*" "info locals 2"
 	gdb_test "info args" [multi_line \
-				  "x1 = $fill" \
-				  "y1 = $fill"]
+				  "x1 = 15" \
+				  "y1 = 3"]
     }
 }

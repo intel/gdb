@@ -1420,6 +1420,7 @@ public: /* Remote specific methods.  */
   void remote_detach_pid (int pid);
 
   void remote_vcont_probe ();
+  void remote_qattached_probe ();
 
   void remote_resume_with_hc (ptid_t ptid, int step,
 			      gdb_signal siggnal);
@@ -3220,6 +3221,7 @@ remote_target::remote_notice_new_inferior (ptid_t currthread,
 
   if (!in_thread_list (this, currthread))
     {
+      struct remote_state *rs = get_remote_state ();
       struct inferior *inf = NULL;
       int pid = currthread.pid ();
 
@@ -3240,8 +3242,8 @@ remote_target::remote_notice_new_inferior (ptid_t currthread,
 	  target_find_description ();
 	}
 
-      if (inferior_ptid.is_pid ()
-	  && pid == inferior_ptid.pid ())
+      if (inferior_ptid == null_ptid
+	  || (inferior_ptid.is_pid () && pid == inferior_ptid.pid ()))
 	{
 	  /* inferior_ptid has no thread member yet.  This can happen
 	     with the vAttach -> remote_wait,"TAAthread:" path if the
@@ -3254,7 +3256,9 @@ remote_target::remote_notice_new_inferior (ptid_t currthread,
 	    {
 	      thread_info *thr
 		= remote_add_thread (currthread, state, internal_state, false);
-	      switch_to_thread (thr);
+
+	      if (!rs->starting_up)
+		switch_to_thread (thr);
 	    }
 	  return;
 	}
@@ -3278,13 +3282,8 @@ remote_target::remote_notice_new_inferior (ptid_t currthread,
 	 it needs to with it (e.g., read shared libraries, insert
 	 breakpoints), unless we're just setting up an all-stop
 	 connection.  */
-      if (inf != NULL)
-	{
-	  struct remote_state *rs = get_remote_state ();
-
-	  if (!rs->starting_up)
-	    notice_new_inferior (new_thr, internal_state, 0);
-	}
+      if (inf != nullptr && !rs->starting_up)
+	notice_new_inferior (new_thr, internal_state, 0);
     }
 }
 
@@ -5457,6 +5456,9 @@ remote_target::start_remote_1 (int from_tty, int extended_p)
      attribute.  */
   remote_vcont_probe ();
 
+  /* Similarly, probe qAttached.  */
+  remote_qattached_probe ();
+
   /* If the stub wants to get a QAllow, compose one and send it.  */
   if (m_features.packet_support (PACKET_QAllow) != PACKET_DISABLE)
     set_permissions ();
@@ -7041,14 +7043,26 @@ extended_remote_target::attach (const char *args, int from_tty)
 	     target_pid_to_str (ptid_t (pid)).c_str (), result.err_msg ());
     }
 
-  switch_to_inferior_no_thread (remote_add_inferior (false, pid, 1, 0));
+  /* Do not create a process assuming PID as the process ID.  We will
+     learn about new processes from the remote target.  This allows
+     targets to provide other process IDs than the one we passed to
+     vAttach.
 
-  inferior_ptid = ptid_t (pid);
+     For targets that are not able to provide the information we need,
+     create a default inferior now.  */
+  if (!m_features.remote_multi_process_p ()
+      || !(m_features.packet_support (PACKET_qAttached) == PACKET_ENABLE))
+    switch_to_inferior_no_thread (remote_add_inferior (false, pid, 1, 0));
 
   if (target_is_non_stop_p ())
     {
       /* Get list of threads.  */
       update_thread_list ();
+
+      /* If we have got a new inferior for PID, switch to it.  */
+      inferior *inferior = find_inferior_pid (this, pid);
+      if (inferior != nullptr)
+	switch_to_inferior_no_thread (inferior);
 
       thread_info *thread = first_thread_of_inferior (current_inferior ());
       if (thread != nullptr)
@@ -7062,6 +7076,10 @@ extended_remote_target::attach (const char *args, int from_tty)
       /* Now, if we have thread information, update the main thread's
 	 ptid.  */
       ptid_t curr_ptid = remote_current_thread (ptid_t (pid));
+
+      /* We may not have created the inferior yet.  */
+      if (find_inferior_pid (this, curr_ptid.pid ()) == nullptr)
+	remote_add_inferior (false, curr_ptid.pid (), 1, 0);
 
       /* Add the main thread to the thread list.  We add the thread
 	 silently in this case (the final true parameter).  */
@@ -7162,6 +7180,19 @@ remote_target::remote_vcont_probe ()
     }
 
   m_features.packet_ok (rs->buf, PACKET_vCont);
+}
+
+/* Probe whether the remote target supports qAttached.  */
+
+void
+remote_target::remote_qattached_probe ()
+{
+  remote_state *rs = get_remote_state ();
+
+  strcpy (rs->buf.data (), "qAttached");
+  putpkt (rs->buf);
+  getpkt (&rs->buf);
+  m_features.packet_ok (rs->buf, PACKET_qAttached);
 }
 
 /* Helper function for building "vCont" resumptions.  Write a

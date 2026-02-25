@@ -2787,6 +2787,9 @@ attach_post_wait (int from_tty, enum attach_post_wait_mode mode)
 	{
 	  if (inferior_thread ()->stop_signal () == GDB_SIGNAL_0)
 	    {
+	      scoped_restore save_multi
+		= make_scoped_restore (&sched_multi, 0);
+
 	      clear_proceed_status (0);
 	      proceed ((CORE_ADDR) -1, GDB_SIGNAL_DEFAULT);
 	    }

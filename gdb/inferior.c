@@ -180,7 +180,7 @@ inferior::set_arch (gdbarch *arch)
 void
 inferior::add_continuation (std::function<void ()> &&cont)
 {
-  m_continuations.emplace_front (std::move (cont));
+  m_continuations.emplace_back (std::move (cont));
 }
 
 void

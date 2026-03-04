@@ -53,13 +53,19 @@ proc step_over_atomic {displaced_stepping device} {
 	    pass $gdb_test_name
 	}
     }
-    if {[is_xe3 $device]} {
+    if {[is_xe2 $device]
+	&& [string match -nocase "*0xe223*" $device]} {
+	setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+    } elseif {[is_xe3 $device]} {
 	setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
     }
     gdb_assert {$atomic_address} "found atomic address"
 
     gdb_breakpoint "*$atomic_address" {temporary}
-    if {[is_xe3 $device]} {
+    if {[is_xe2 $device]
+	&& [string match -nocase "*0xe223*" $device]} {
+	setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+    } elseif {[is_xe3 $device]} {
 	setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
     }
     gdb_continue_to_breakpoint "continue to bp at atomic instruction"
@@ -74,7 +80,10 @@ proc step_over_atomic {displaced_stepping device} {
 	set next_pc [format 0x%x [expr $curr_pc + 0x08]]
     }
 
-    if {[is_xe3 $device]} {
+    if {[is_xe2 $device]
+	&& [string match -nocase "*0xe223*" $device]} {
+	setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+    } elseif {[is_xe3 $device]} {
 	setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
     }
     gdb_test "nexti" "${hex}\[\\t\\s\].*\[\r\n\]+${decimal}${fill}" \
@@ -82,7 +91,10 @@ proc step_over_atomic {displaced_stepping device} {
 
     set pc_test_name "check PC after atomic step over"
     set pc [get_hexadecimal_valueof "\$pc" "invalid" "read PC"]
-    if {[is_xe3 $device]} {
+    if {[is_xe2 $device]
+	&& [string match -nocase "*0xe223*" $device]} {
+	setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+    } elseif {[is_xe3 $device]} {
 	setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
     }
     if {($displaced_stepping eq "on" && $pc eq $next_pc)
@@ -92,7 +104,10 @@ proc step_over_atomic {displaced_stepping device} {
 	fail $pc_test_name
     }
 
-    if {[is_xe3 $device]} {
+    if {[is_xe2 $device]
+	&& [string match -nocase "*0xe223*" $device]} {
+	setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+    } elseif {[is_xe3 $device]} {
 	setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
     }
     # Make sure that the application computes correct results.

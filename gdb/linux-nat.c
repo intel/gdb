@@ -2627,6 +2627,9 @@ status_callback (struct lwp_info *lp)
   if (!lwp_status_pending_p (lp))
     return false;
 
+  if (is_lwp_marked_dead (lp))
+    return true;
+
   if (lp->stop_reason == TARGET_STOPPED_BY_SW_BREAKPOINT
       || lp->stop_reason == TARGET_STOPPED_BY_HW_BREAKPOINT)
     {

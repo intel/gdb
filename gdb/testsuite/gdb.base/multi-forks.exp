@@ -186,5 +186,15 @@ gdb_test "detach inferior 5" "Detaching .*" "detach 5"
 
 for {set i 6} { $i <= 16} {incr i} {
     gdb_test_no_output "kill inferior $i" "kill $i"
-    gdb_test "info inferior $i" "<null>.*" "did kill $i"
+    gdb_test_multiple "info inferior $i" "did kill $i" {
+	-re -wrap "<null>.*" {
+	    pass $gdb_test_name
+	}
+	-re -wrap "No inferiors." {
+	    pass $gdb_test_name
+	}
+	-re -wrap ".*" {
+	    fail $gdb_test_name
+	}
+    }
 }

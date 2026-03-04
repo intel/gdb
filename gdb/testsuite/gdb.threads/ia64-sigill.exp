@@ -64,7 +64,7 @@ gdb_test_multiple "continue" "continue" -prompt $prompt {
 	set ok 1
 	exp_continue
     }
-    -re -wrap "" {
+    -re "$gdb_prompt" {
 	gdb_assert { $ok } $gdb_test_name
     }
     -re "\r\n\[^\r\n\]*(?=\r\n\[^\r\n\]*\r\n)" {
@@ -72,7 +72,7 @@ gdb_test_multiple "continue" "continue" -prompt $prompt {
     }
 }
 
-gdb_test_no_output {delete $sigill_bpnum}
+gdb_test {delete $sigill_bpnum}
 
 set ok 0
 gdb_test_multiple "continue" "continue for the pending signal" -prompt $prompt {
@@ -80,10 +80,10 @@ gdb_test_multiple "continue" "continue for the pending signal" -prompt $prompt {
 	# Breakpoint has been skipped in the other thread.
 	set ok 1
     }
-    -re " received signal .*\r\n$gdb_prompt $" {
+    -re " received signal .*\r\n$gdb_prompt" {
 	fail $gdb_test_name
     }
-    -re -wrap "" {
+    -re "$gdb_prompt" {
 	gdb_assert { $ok } $gdb_test_name
     }
     -re "\r\n\[^\r\n\]*(?=\r\n\[^\r\n\]*\r\n)" {

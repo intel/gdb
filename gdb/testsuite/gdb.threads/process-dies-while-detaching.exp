@@ -166,6 +166,7 @@ proc do_detach {multi_process cmd child_exit} {
 	error "unhandled \$child_exit: $child_exit"
     }
 
+    set no_live_thread_re "Cannot execute this command without a live selected thread."
     set is_remote [expr {[target_info exists gdb_protocol]
 			 && [target_info gdb_protocol] == "remote"}]
 
@@ -184,7 +185,7 @@ proc do_detach {multi_process cmd child_exit} {
 	} elseif {$cmd == "continue"} {
 	    # Make sure that continuing works and that the parent process
 	    # exits cleanly.
-	    gdb_test "continue" $continue_re
+	    gdb_test "continue" ($continue_re|$no_live_thread_re)
 	} else {
 	    perror "unhandled command: $cmd"
 	}
@@ -197,7 +198,7 @@ proc do_detach {multi_process cmd child_exit} {
 	if {$cmd == "detach"} {
 	    gdb_test "detach" "Detaching from .*, process ${decimal}\r\n\\\[Inferior $decimal \\(.*\\) detached\\\]$extra"
 	} elseif {$cmd == "continue"} {
-	    gdb_test "continue" $continue_re
+	    gdb_test "continue" ($continue_re|$no_live_thread_re)
 	} else {
 	    perror "unhandled command: $cmd"
 	}

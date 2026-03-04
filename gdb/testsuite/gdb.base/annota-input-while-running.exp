@@ -36,7 +36,7 @@ if {![runto_main]} {
 # gdb_test_multiple.
 
 set old_gdb_prompt $gdb_prompt
-set gdb_prompt "\r\n\032\032pre-prompt\r\n$gdb_prompt \r\n\032\032prompt\r\n"
+set gdb_prompt "\r\n\032\032pre-prompt\r\n$gdb_prompt \r\n\032\032prompt\r\n(\r\n\032\032frames-invalid\r\n)?"
 
 # Like gdb_test, but cope with the annotation prompt.
 proc gdb_annota_test {command pattern message} {

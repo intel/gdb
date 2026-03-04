@@ -65,11 +65,11 @@ gdb_test_no_output "set debug target 1"
 set hardware_step 0
 set test "probe target hardware step"
 gdb_test_multiple "pipe si | grep resume" $test {
-    -re "resume \\(\[^\r\n\]+, step, .*$gdb_prompt $" {
+    -re "resume \\(\[^\r\n\]+, step, .*$gdb_prompt" {
 	set hardware_step 1
 	pass $test
     }
-    -re "$gdb_prompt $" {
+    -re "$gdb_prompt" {
 	pass $test
     }
 }

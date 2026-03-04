@@ -83,13 +83,13 @@ if {$prev_addr == ""} {
 set seen 0
 
 set test "stepi"
-set prompt "$gdb_prompt \\\[infrun\\\] fetch_inferior_event: exit\r\n$"
+set prompt "$gdb_prompt \\\[infrun\\\] fetch_inferior_event: exit\r\n"
 if {[gdb_test_multiple "stepi" "$test" -prompt $prompt {
     -re {\[infrun\] handle_signal_stop: random signal} {
 	set seen 1
 	exp_continue
     }
-    -re "$prompt$" {
+    -re "$prompt" {
     }
 }] != 0} {
     return

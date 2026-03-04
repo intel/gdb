@@ -62,7 +62,7 @@ gdb_test "break 25" \
 #
 
 set old_gdb_prompt $gdb_prompt
-set gdb_prompt "\r\n\032\032pre-prompt\r\n$gdb_prompt \r\n\032\032prompt\r\n"
+set gdb_prompt "\r\n\032\032pre-prompt\r\n$gdb_prompt \r\n\032\032prompt\r\n(\r\n\032\032frames-invalid\r\n)?"
 
 send_gdb "set annotate 2\n"
 gdb_expect {

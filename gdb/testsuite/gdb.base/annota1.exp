@@ -57,7 +57,7 @@ gdb_test "break ${srcfile}:${main_line}" \
 #       true with this annotated prompt.
 
 set old_gdb_prompt $gdb_prompt
-set gdb_prompt "\r\n\032\032pre-prompt\r\n$gdb_prompt \r\n\032\032prompt\r\n"
+set gdb_prompt "\r\n\032\032pre-prompt\r\n$gdb_prompt \r\n\032\032prompt\r\n(\r\n\032\032frames-invalid\r\n)?"
 
 #
 # Escape all the characters in the path that need it. For instance
@@ -546,7 +546,7 @@ proc thread_test {} {
 	gdb_breakpoint "$linenum"
 
 	set gdb_prompt \
-	    "\r\n\032\032pre-prompt\r\n$gdb_prompt \r\n\032\032prompt\r\n"
+	    "\r\n\032\032pre-prompt\r\n$gdb_prompt \r\n\032\032prompt\r\n(\r\n\032\032frames-invalid\r\n)?"
 
 	gdb_test_multiple "set annotate 2" "" {
 	    -re "set annotate 2\r\n$gdb_prompt$" {

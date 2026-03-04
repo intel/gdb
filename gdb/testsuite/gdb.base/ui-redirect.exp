@@ -119,7 +119,7 @@ with_test_prefix "debugging" {
     "Copying output to /dev/null.*Copying debug output to /dev/null\\."
 
     gdb_test \
-	-prompt "$gdb_prompt \\\[infrun\\\] fetch_inferior_event: exit\r\n$" \
+	-prompt "$gdb_prompt \\\[infrun\\\] fetch_inferior_event: exit\r\n" \
 	"continue" \
 	"Continuing.*\\\[infrun\\\] .*\\\[infrun\\\] .*Breakpoint ${::decimal}, foo.*"
 

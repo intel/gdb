@@ -4415,12 +4415,43 @@ find_function_alias_target (bound_minimal_symbol msymbol)
 /* See symtab.h.  */
 
 bool
-in_trampoline_function (CORE_ADDR pc)
+in_trampoline_code (CORE_ADDR pc)
 {
-  /* Find the innermost function containing pc.  This might be an inlined
-     function.  */
+  /* Find the innermost function containing pc, which might be an inlined
+     function.  This is used by stepping logic to detect when execution is
+     within ANY trampoline code (inline or concrete) and continue stepping
+     through it.
+
+     Unlike in_trampoline_function(), this uses containing_function() by
+     calling find_pc_sect_containing_function to detect inline trampolines as
+     well as concrete ones.  */
   symbol *sym = find_pc_sect_containing_function (pc,
 						  find_pc_mapped_section (pc));
+  return sym != nullptr && TYPE_IS_TRAMPOLINE (sym->type ());
+}
+
+/* See symtab.h.  */
+
+bool
+in_trampoline_function (CORE_ADDR pc)
+{
+  /* Find the concrete non-inlined function at pc, skipping inlined blocks.
+     The find_pc_sect_function calls block->linkage_function which skips
+     inlined blocks to return the concrete function at the PC.  This ensures
+     we check the concrete function's trampoline flag, not the flag from an
+     abstract inline origin that might be marked as a trampoline.
+
+     This is used by forward stepping to determine if about to step into a
+     concrete trampoline function and by frame navigation commands to skip
+     trampoline frames.
+
+     For O2 optimization, the compiler may create trampoline wrappers with
+     both DW_AT_trampoline + DW_AT_inline.  At a given PC, inlined code from
+     such abstract trampolines may exist, but the concrete function at that
+     PC is the user's real function (not a trampoline).  Using linkage_function
+     by calling find_pc_sect_function avoids incorrectly checking the inline
+     trampoline's abstract origin.  */
+  symbol *sym = find_pc_sect_function (pc, find_pc_mapped_section (pc));
   return sym != nullptr && TYPE_IS_TRAMPOLINE (sym->type ());
 }
 

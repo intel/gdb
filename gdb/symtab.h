@@ -2392,12 +2392,22 @@ extern const struct gnu_ifunc_fns *gnu_ifunc_fns_p;
 
 extern CORE_ADDR find_solib_trampoline_target (const frame_info_ptr &, CORE_ADDR);
 
-/* Return whether or not the current pc is within a block that belongs to a
-   function that is marked as a trampoline by the compiler.  */
+/* Return whether the current pc is within a block that belongs to a
+   function that is marked as a trampoline by the compiler.  This checks
+   only the concrete (non-inline) function at the PC.  Used by forward stepping
+   to check if about to step into a concrete trampoline function and attempt
+   to resolve its target.  Also used for frame navigation commands.  */
 
 extern bool in_trampoline_function (CORE_ADDR pc);
 
-/* Return whether or not the pc of the current frame is within a block that
+/* Return whether the current pc is within any trampoline code
+   (inline or concrete).  Used to detect when execution stepped into ANY
+   trampoline code (inline or concrete) and continue stepping through it.
+   Also used for reverse stepping logic.  */
+
+extern bool in_trampoline_code (CORE_ADDR pc);
+
+/* Return whether the pc of the current frame is within a block that
    belongs to a function that is marked as a trampoline by the compiler.  */
 
 extern bool in_trampoline_frame (frame_info_ptr);

@@ -3173,32 +3173,29 @@ clear_proceed_status (int step, bool about_to_proceed)
       && !target_record_will_replay (inferior_ptid, execution_direction))
     target_record_stop_replaying ();
 
-  if (!non_stop && inferior_ptid != null_ptid)
+  ptid_t resume_ptid = user_visible_resume_ptid (step);
+  process_stratum_target *resume_target
+    = user_visible_resume_target (resume_ptid);
+
+  if (resume_ptid == null_ptid)
+    return;
+
+  /* Delete the per-thread status of all threads we're about to resume,
+     implicitly and explicitly.  */
+  for (thread_info &tp : all_non_exited_threads (resume_target, resume_ptid))
+    if (tp.internal_state () != THREAD_INT_RUNNING)
+      clear_proceed_status_thread (&tp);
+
+  for (inferior *inf : all_non_exited_inferiors (resume_target))
     {
-      ptid_t resume_ptid = user_visible_resume_ptid (step);
-      process_stratum_target *resume_target
-	= user_visible_resume_target (resume_ptid);
+      if (!inf->has_execution ())
+	continue;
 
-      /* In all-stop mode, delete the per-thread status of all threads
-	 we're about to resume, implicitly and explicitly.  */
-      for (thread_info &tp : all_non_exited_threads (resume_target, resume_ptid))
-	if (tp.internal_state () != THREAD_INT_RUNNING)
-	  clear_proceed_status_thread (&tp);
-    }
+      ptid_t ptid { inf->pid };
+      if (!ptid.matches (resume_ptid))
+	continue;
 
-  if (inferior_ptid != null_ptid)
-    {
-      struct inferior *inferior;
-
-      if (non_stop)
-	{
-	  /* If in non-stop mode, only delete the per-thread status of
-	     the current thread.  */
-	  clear_proceed_status_thread (inferior_thread ());
-	}
-
-      inferior = current_inferior ();
-      inferior->control.stop_soon = NO_STOP_QUIETLY;
+      inf->control.stop_soon = NO_STOP_QUIETLY;
     }
 
   if (about_to_proceed)

@@ -199,6 +199,16 @@ get_xe_version (uint32_t device_id)
 	return XE3;
 
       case 0x674C:
+
+      case 0xD750:
+      case 0xD751:
+      case 0xD752:
+      case 0xD753:
+      case 0xD754:
+      case 0xD755:
+      case 0xD756:
+      case 0xD757:
+      case 0xD75F:
 	return XE3P_XPC;
 
       default:

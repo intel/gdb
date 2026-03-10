@@ -8644,8 +8644,15 @@ process_event_stop_test (struct execution_control_state *ecs)
      trampoline function.  In either case we continue to single step until we
      are out of the trampoline code again.  This check has to be done before
      stop_pc_sal.line == 0 below, as trampolines usually don't have source
-     line information associated with them.  */
-  if (skip_trampoline_functions && in_trampoline_function (stop_pc_sal.pc))
+     line information associated with them.
+     The in_trampoline_code() is used here (which detects both inline and
+     concrete trampolines).  Because this is already mid-step and need to
+     detect ANY trampoline code (inline or concrete) to properly step through
+     it.  This handles cases where compilers emit DW_AT_trampoline
+     + DW_AT_inline (e.g., O2 optimizations), where inlined trampoline code
+     may exist at the current PC even though the concrete function is not a
+     trampoline.  */
+  if (skip_trampoline_functions && in_trampoline_code (stop_pc_sal.pc))
     {
       infrun_debug_printf ("stepped into trampoline code");
       keep_going (ecs);

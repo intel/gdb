@@ -15,6 +15,7 @@
 
 ! Source code for func-trampoline.exp.
 
+!DIR$ ATTRIBUTES NOINLINE  :: second
 integer(kind=4) function second(x, y)
   integer(kind=4), intent(in) :: x
   integer(kind=4), intent(in) :: y

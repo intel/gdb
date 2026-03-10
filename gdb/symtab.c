@@ -4460,6 +4460,25 @@ in_trampoline_function (CORE_ADDR pc)
 bool
 in_trampoline_frame (frame_info_ptr fi)
 {
+  /* For inline frames, they share the PC of their caller.  We need to check
+     the frame's function directly, not look up the function at the PC.
+     Looking up by PC would return the caller's function not the inline
+     function itself.
+
+     For O2 optimized code, the compiler may inline trampoline wrappers into
+     regular functions.  In such cases, looking up by PC would point to the
+     concrete regular function and incorrectly return false (not a trampoline).
+     By checking the inline frame's function directly via get_frame_function(),
+     we correctly identify when the inline frame itself is a trampoline.  */
+  if (get_frame_type (fi) == INLINE_FRAME)
+    {
+      symbol *func = get_frame_function (fi);
+      return func != nullptr && TYPE_IS_TRAMPOLINE (func->type ());
+    }
+
+  /* For non-inline frames, use in_trampoline_function() which looks up only
+     the concrete function at the PC, ensuring we check the actual frame's
+     function and not any inlined code within it.  */
   std::optional<CORE_ADDR> pc;
   if ((pc = get_frame_pc_if_available (fi)))
     return in_trampoline_function (pc.value ());

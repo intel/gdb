@@ -21,7 +21,7 @@ require allow_fortran_tests
 if {![test_compiler_info {ifx-*} f90]} {
     untested "This test is only applicable for IFX, which emits the\
 	trampoline DIE in Dwarf."
-    return -1
+    return
 }
 
 standard_testfile ".f90"
@@ -35,7 +35,7 @@ proc init_test {} {
 
     clean_restart ${binfile}
     if {![fortran_runto_main]} {
-	return -1
+	return
     }
 
     # Set breakpoint inside the innermost function 'second'.
@@ -43,38 +43,49 @@ proc init_test {} {
     gdb_continue_to_breakpoint "innermost-body" ".*$srcfile:$inner_loc.*"
 }
 
-if {[build_executable "failed to prepare" ${testfile} ${srcfile} \
-    {debug f90}]} {
-    return -1
-}
-
 set inner_loc [gdb_get_line_number "second-breakpt"]
 set middle_loc [gdb_get_line_number "first-breakpt"]
 set outer_loc [gdb_get_line_number "main-outer-loc"]
 set fill "\[^\r\n\]*"
 
-set inner_desc  "second \\(x=20, y=9\\) at ${fill}$srcfile:$inner_loc"
-set middle_desc "first \\(num1=16, num2=3\\) at ${fill}$srcfile:$middle_loc"
-set outer_desc  ".* at .*$srcfile:$outer_loc"
+# Test both O0 and O2 to verify trampoline handling works correctly
+# with and without optimization.
+foreach_with_prefix opt_level {O0 O2} {
+    if {[build_executable "failed to prepare" ${testfile}_${opt_level} ${srcfile} \
+	[list debug f90 "optimize=-${opt_level}"]]} {
+	continue
+    }
 
-with_test_prefix "backtrace" {
-    init_test
+    set binfile "${testfile}_${opt_level}"
 
-    # Limit the backtrace to 3 frames and ensure both frames for first
-    # and second function are shown only and trampoline frames are filtered.
-    gdb_test "backtrace 3" [multi_line \
-	"#$decimal.* $inner_desc" \
-	"#$decimal.* $middle_desc" \
-	"#$decimal.* $outer_desc.*"]
-}
+    if {[string match -nocase "O2" $opt_level]} {
+	# At O2, parameters may be optimized out
+	set inner_desc  "second \\(.*\\) at ${fill}$srcfile:$inner_loc"
+	set middle_desc "first \\(.*\\) at ${fill}$srcfile:$middle_loc"
+    } else {
+	set inner_desc  "second \\(x=20, y=9\\) at ${fill}$srcfile:$inner_loc"
+	set middle_desc "first \\(num1=16, num2=3\\) at ${fill}$srcfile:$middle_loc"
+    }
+    set outer_desc  ".* at .*$srcfile:$outer_loc"
 
-with_test_prefix "backtrace outerframes" {
-    init_test
+    with_test_prefix "backtrace" {
+	init_test
 
-    gdb_test "backtrace -3" [multi_line \
-	"#$decimal.* $middle_desc" \
-	"#$decimal.* $outer_desc.*"]
-}
+	# Limit the backtrace to 3 frames and ensure both frames for first
+	# and second function are shown only and trampoline frames are filtered.
+	gdb_test "backtrace 3" [multi_line \
+	    "#$decimal.* $inner_desc" \
+	    "#$decimal.* $middle_desc" \
+	    "#$decimal.* $outer_desc.*"]
+	}
+
+    with_test_prefix "backtrace outerframes" {
+	init_test
+
+	gdb_test "backtrace -3" [multi_line \
+	    "#$decimal.* $middle_desc" \
+	    "#$decimal.* $outer_desc.*"]
+    }
 
 with_test_prefix "finish" {
     init_test
@@ -99,4 +110,5 @@ with_test_prefix "return" {
     gdb_test "return" \
 	".*first = second \\(num1 \\+ 4, num2 \\* 3\\) \\! first-breakpt" \
 	"" "Make second return now.*y or n. $" "y"
+}
 }

@@ -8560,11 +8560,12 @@ process_event_stop_test (struct execution_control_state *ecs)
 	  keep_going (ecs);
 	  return;
 	}
-      else if (skip_trampoline_functions && in_trampoline_function (stop_pc))
+      else if (skip_trampoline_functions && in_trampoline_code (stop_pc))
 	{
-	  /* While reverse stepping if we are in a trampoline function call
+	  /* While reverse stepping if we are in trampoline code
 	     we will just continue single step in the hope of leaving the
-	     trampoline again soon.  */
+	     trampoline again soon.  Uses in_trampoline_code() to detect
+	     both inline and concrete trampolines.  */
 	  keep_going (ecs);
 	  return;
 	}

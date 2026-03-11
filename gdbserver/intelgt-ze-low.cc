@@ -700,7 +700,7 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
       cr0[1] &= ~(1 << intelgt_cr0_1_oob_status);
       intelgt_write_cr0 (regcache, 1, cr0[1]);
 
-      signal = GDB_EXC_BAD_INSTRUCTION;
+      signal = GDB_SIGNAL_ILL;
       return TARGET_STOPPED_BY_NO_REASON;
     }
 

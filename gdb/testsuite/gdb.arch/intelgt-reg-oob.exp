@@ -86,7 +86,7 @@ foreach device $sycl_device_list {
 	    "confirm that the instruction has been changed"
 
 	# We should stop with the 'EXC_BAD_INSTRUCTION' signal upon resuming.
-	gdb_test "continue" "received signal EXC_BAD_INSTRUCTION, Illegal instruction/operand.*" \
+	gdb_test "continue" "received signal SIGILL, Illegal instruction.*" \
 	    "continue until hitting the exception"
     }
 }

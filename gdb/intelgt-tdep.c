@@ -5805,7 +5805,7 @@ intelgt_report_signal_info (gdbarch *gdbarch, ui_out *uiout, gdb_signal sig)
   switch (sig)
     {
     case GDB_SIGNAL_SEGV:
-    case GDB_EXC_BAD_INSTRUCTION:
+    case GDB_SIGNAL_ILL:
       uiout->text (_("\n"));
       uiout->text (_("Warning: The location reported for the signal may be "
 		     "inaccurate"));

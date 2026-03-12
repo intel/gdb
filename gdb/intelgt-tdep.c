@@ -2968,6 +2968,7 @@ encode_calla (gdb_byte buff[], CORE_ADDR funaddr, regcache *regcache,
 	      error (_("F0 register is needed for this operation but could "
 		       "not be found."));
 
+	    gdb_assert (0 <= current_lane && current_lane < 32);
 	    ULONGEST f0 = 1ul << current_lane;
 	    regcache->cooked_write (f0_regnum, f0);
 	  }

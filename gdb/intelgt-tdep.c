@@ -1653,7 +1653,7 @@ intelgt_cast_address_class_pointer (gdbarch *gdbarch,
 	  /* Clean the upper 32 bits.  */
 	  address &= 0xFFFFFFFFul;
 	  /* Add the SLM tag.  */
-	  address |= (0x2ul << 61);
+	  address |= (0x2ULL << 61);
 	  return address;
 
 	case intelgt::ASPACE_SLM:

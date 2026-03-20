@@ -1913,6 +1913,24 @@ aarch64_pop_gcs_entry (regcache *regs)
   regcache_cooked_write_unsigned (regs, tdep->gcs_reg_base, gcs_addr + 8);
 }
 
+static bool
+aarch64_top_addr_empty_shadow_stack
+  (const CORE_ADDR addr,
+   const std::pair<CORE_ADDR, CORE_ADDR> range)
+{
+  gdb_assert (addr >= range.first);
+
+  /* For AArch64, addr must be strictly less than the upper address in the
+     range, but other architectures allow it to be equal to the upper
+     address when the stack is empty so GDB core works with those addresses
+     and can send them our way.  */
+  gdb_assert (addr <= range.second);
+
+  /* The GCS grows down, and the oldest entry isn't an address.
+     Just the value '0'.  */
+  return addr >= range.second - 8;
+}
+
 /* Implement the "push_dummy_call" gdbarch method.  */
 
 static CORE_ADDR
@@ -4782,7 +4800,12 @@ aarch64_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* AArch64's shadow stack pointer is the GCSPR.  */
   if (tdep->has_gcs ())
-    set_gdbarch_ssp_regnum (gdbarch, tdep->gcs_reg_base);
+    {
+      /* AArch64's shadow stack pointer is the GCSPR.  */
+      set_gdbarch_ssp_regnum (gdbarch, tdep->gcs_reg_base);
+      set_gdbarch_top_addr_empty_shadow_stack
+       (gdbarch, aarch64_top_addr_empty_shadow_stack);
+    }
 
   /* ABI */
   set_gdbarch_short_bit (gdbarch, 16);

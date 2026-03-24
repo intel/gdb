@@ -15,7 +15,7 @@
 
 # This file tests AMX-fp16 support.
 
-require allow_amx_tests
+require allow_amx_fp16_tests
 
 standard_testfile
 set comp_flags "-mamx-tile -mamx-fp16"

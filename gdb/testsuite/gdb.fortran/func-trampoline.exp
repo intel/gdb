@@ -108,11 +108,11 @@ foreach_with_prefix opt_level {O0 O2} {
 	    "${fill}first = second \\(num1 \\+ 4, num2 \\* 3\\).*${fill}"]
     }
 
-with_test_prefix "return" {
-    init_test
+    with_test_prefix "return" {
+	init_test
 
-    gdb_test "return" \
-	".*first = second \\(num1 \\+ 4, num2 \\* 3\\) \\! first-breakpt" \
-	"" "Make second return now.*y or n. $" "y"
-}
+	gdb_test "return" \
+	    ".*first = second \\(num1 \\+ 4, num2 \\* 3\\) \\! first-breakpt" \
+	    "" "Make second return now.*y or n. $" "y"
+    }
 }

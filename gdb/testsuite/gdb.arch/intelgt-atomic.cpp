@@ -24,7 +24,7 @@ static constexpr uint32_t sg_size = 16;
 #endif
 
 #ifndef MATRIX_SIZE
-#define MATRIX_SIZE 2048
+#define MATRIX_SIZE 512
 #endif
 
 #define BF16_EPSILON 0.00781250

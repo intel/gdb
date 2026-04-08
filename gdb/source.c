@@ -1179,11 +1179,11 @@ open_embedded_source (struct symtab *s,
 
   size_t source_len = strlen (s->source);
   scoped_memfd fd (s->source, source_len, temp_name.c_str ());
-  if (fd.get () < 0)
-    return std::move (fd);
 
-  *fullname = make_unique_xstrdup (temp_name.c_str ());
-  return std::move (fd);
+  if (fd.get () >= 0)
+    *fullname = make_unique_xstrdup (temp_name.c_str ());
+
+  return scoped_fd (fd.release ());
 }
 
 /* Open a source file given a symtab S.  Returns a file descriptor or

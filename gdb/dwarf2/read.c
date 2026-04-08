@@ -17467,6 +17467,18 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 	       : cu->list_in_scope);
 	  break;
 	case DW_TAG_imported_declaration:
+	  sym->set_domain (TYPE_DOMAIN);
+	  sym->set_loc_class_index (LOC_TYPEDEF);
+	  /* For Fortran imported declarations, use current scope context
+	     rather than forcing global scope.  This ensures variable aliases
+	     are scoped correctly (function-level, module-level, or
+	     program-level).  */
+	  if (cu->lang () == language_fortran)
+	    list_to_add = cu->list_in_scope;
+	  else
+	    list_to_add = cu->get_builder ()->get_global_symbols ();
+
+	  break;
 	case DW_TAG_namespace:
 	  sym->set_domain (TYPE_DOMAIN);
 	  sym->set_loc_class_index (LOC_TYPEDEF);

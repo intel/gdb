@@ -70,6 +70,8 @@ proc skip_openmp_tests {device} {
 		verbose "OpenMP: Compilation failed." 0
 		return 1
 	    }
+	} else {
+	    set exe "$objdir/openmp-devices"
 	}
 
 	# Number of devices is always returned 0 in case of OpenMP Host offload so

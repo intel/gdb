@@ -58,13 +58,13 @@ proc skip_openmp_tests {device} {
 
     set result 1
     openmp_with_intelgt_lock $device "cpp" {
-	set exe "$objdir/openmp-devices"
 	set src "$srcdir/lib/openmp-devices.cpp"
 
 	# Don't re-compile in case OFFLOAD_DEVICE_CHECK is set and file
 	# already exists.
 	if {!($::OFFLOAD_DEVICE_CHECK == "1"
 	      && [file exists "$objdir/openmp-devices"])} {
+	    set exe [standard_output_file openmp-devices]
 	    if {[build_executable "failed to compile $src" \
 		"${exe}" $src {openmp c++ debug}]} {
 		verbose "OpenMP: Compilation failed." 0

@@ -34,6 +34,12 @@ bool
 set_desired_thread ()
 {
   client_state &cs = get_client_state ();
+  if (cs.general_thread == null_ptid)
+    {
+      switch_to_thread (nullptr);
+      return false;
+    }
+
   if (cs.general_thread.is_pid ())
     {
       process_info *proc = find_process_pid (cs.general_thread.pid ());

@@ -3490,10 +3490,11 @@ remote_target::program_signals (gdb::array_view<const unsigned char> signals)
     }
 }
 
-/* If PTID is MAGIC_NULL_PTID, don't set any thread.  If PTID is
-   MINUS_ONE_PTID, set the thread to -1, so the stub returns the
-   thread.  If GEN is set, set the general thread, if not, then set
-   the step/continue thread.  */
+/* If PTID is MAGIC_NULL_PTID, NULL_PTID, or ANY_THREAD_PTID don't set any
+   thread and let the remote stub select the thread.  If PTID is
+   MINUS_ONE_PTID, set the thread to -1, so the stub returns the thread.
+   If GEN is set, set the general thread, if not, then set the
+   step/continue thread.  */
 void
 remote_target::set_thread (ptid_t ptid, int gen)
 {
@@ -3507,9 +3508,9 @@ remote_target::set_thread (ptid_t ptid, int gen)
 
   *buf++ = 'H';
   *buf++ = gen ? 'g' : 'c';
-  if (ptid == magic_null_ptid)
-    xsnprintf (buf, endbuf - buf, "0");
-  else if (ptid == any_thread_ptid)
+  if (ptid == magic_null_ptid
+      || ptid == null_ptid
+      || ptid == any_thread_ptid)
     xsnprintf (buf, endbuf - buf, "0");
   else if (ptid == minus_one_ptid)
     xsnprintf (buf, endbuf - buf, "-1");

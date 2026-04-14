@@ -4858,14 +4858,8 @@ process_serial_event (void)
 	    {
 	      /* The ptid represents a pid.  */
 	      thread_info *thread = find_any_thread_of_pid (thread_id.pid ());
-
-	      if (thread == NULL)
-		{
-		  write_enn (cs.own_buf);
-		  break;
-		}
-
-	      thread_id = thread->id;
+	      if (thread != nullptr)
+		thread_id = thread->id;
 	    }
 	  else
 	    {
@@ -4885,14 +4879,15 @@ process_serial_event (void)
 		     the currently selected thread is still valid. If
 		     it is not, select the first available.  */
 		  thread_info *thread = find_thread_ptid (cs.general_thread);
-		  if (thread == NULL)
+		  if (thread == nullptr)
 		    thread = get_first_thread ();
-		  thread_id = thread->id;
+
+		  if (thread != nullptr)
+		    thread_id = thread->id;
 		}
 
 	      cs.general_thread = thread_id;
 	      set_desired_thread ();
-	      gdb_assert (current_thread != NULL);
 	    }
 	  else if (cs.own_buf[1] == 'c')
 	    cs.cont_thread = thread_id;

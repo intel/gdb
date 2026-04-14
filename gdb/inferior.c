@@ -767,29 +767,25 @@ inferior_command (const char *args, int from_tty)
       if (inf == NULL)
 	error (_("Inferior ID %d not known."), num);
 
-      if (inf->pid != 0)
+      if (inf->pid == 0)
+	switch_to_inferior_no_thread (inf);
+      else if (inf != current_inferior ())
 	{
-	  if (inf != current_inferior ())
-	    {
-	      thread_info *tp = any_thread_of_inferior (inf);
-	      if (tp == NULL)
-		error (_("Inferior has no threads."));
-
-	      switch_to_thread (tp);
-	    }
-
-	  notify_user_selected_context_changed
-	    (USER_SELECTED_INFERIOR
-	     | USER_SELECTED_THREAD
-	     | USER_SELECTED_FRAME);
+	  thread_info *tp = any_thread_of_inferior (inf);
+	  if (tp == nullptr)
+	    switch_to_inferior_no_thread (inf);
+	  else
+	    switch_to_thread (tp);
 	}
+
+      if (inferior_ptid == null_ptid)
+	notify_user_selected_context_changed
+	  (USER_SELECTED_INFERIOR);
       else
-	{
-	  switch_to_inferior_no_thread (inf);
-
-	  notify_user_selected_context_changed
-	    (USER_SELECTED_INFERIOR);
-	}
+	notify_user_selected_context_changed
+	  (USER_SELECTED_INFERIOR
+	   | USER_SELECTED_THREAD
+	   | USER_SELECTED_FRAME);
 
       /* Switching current inferior may have made one of the inferiors
 	 prunable, so prune it.  */

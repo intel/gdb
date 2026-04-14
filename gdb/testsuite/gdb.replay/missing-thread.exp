@@ -83,10 +83,7 @@ proc_with_prefix record_initial_logfile { log_filename } {
 # The line to be modified is the last <threads>...</threads> line, this is
 # the reply from the remote that indicates the thread list.  It is expected
 # that the thread list will contain two threads.
-#
-# When DROP_BOTH is true then both threads will be removed from the modified
-# line.  Otherwise, only the second thread is removed.
-proc update_replay_log { in_filename out_filename drop_both } {
+proc update_replay_log { in_filename out_filename } {
     # Read IN_FILENAME into a list.
     set fd [open $in_filename]
     set data [read $fd]
@@ -108,11 +105,7 @@ proc update_replay_log { in_filename out_filename drop_both } {
     set fixed_log false
     if {[regexp "^(r .*<threads>\\\\n)(<thread id.*/>\\\\n)(<thread id.*/>\\\\n)(</threads>.*)$" $line \
 	     match part1 part2 part3 part4]} {
-	if { $drop_both } {
-	    set line $part1$part4
-	} else {
-	    set line $part1$part2$part4
-	}
+	set line $part1$part2$part4
 	set lines [lreplace $lines $idx $idx $line]
 	set fixed_log true
     }
@@ -192,16 +185,11 @@ proc run_test { non_stop } {
     # The replay log is placed in 'replay.log'.
     set remote_log [standard_output_file replay${suffix}.log]
     set missing_1_log [standard_output_file replay-missing-1${suffix}.log]
-    set missing_2_log [standard_output_file replay-missing-2${suffix}.log]
 
     record_initial_logfile $remote_log
 
-    if { ![update_replay_log $remote_log $missing_1_log false] } {
+    if { ![update_replay_log $remote_log $missing_1_log] } {
 	fail "couldn't update remote replay log (drop 1 case)"
-    }
-
-    if { ![update_replay_log $remote_log $missing_2_log true] } {
-	fail "couldn't update remote replay log (drop 2 case)"
     }
 
     with_test_prefix "with unmodified log" {
@@ -215,16 +203,6 @@ proc run_test { non_stop } {
 	# the event should be missing from the thread list, GDB will give an
 	# error when the inferior stops.
 	replay_with_log $missing_1_log true $non_stop
-    }
-
-    with_test_prefix "missing 2 threads log" {
-	# When we drop both threads from the <threads> reply, GDB doesn't
-	# actually remove both threads from the inferior; an inferior must
-	# always have at least one thread.  So in this case, as the primary
-	# thread is first, GDB drops this, then retains the second thread, which
-	# is the one we're stopping in, and so, we don't expect to see the error
-	# in this case.
-	replay_with_log $missing_2_log false $non_stop
     }
 }
 

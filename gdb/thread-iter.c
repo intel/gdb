@@ -113,7 +113,7 @@ all_matching_threads_iterator::all_matching_threads_iterator
 	  m_mode = mode::ALL_THREADS_OF_INFERIOR;
 
 	  m_inf = find_inferior_pid (filter_target, filter_ptid.pid ());
-	  if (m_inf != nullptr)
+	  if (m_inf != nullptr && !m_inf->thread_list.empty ())
 	    m_thr = &m_inf->thread_list.front ();
 	}
       else

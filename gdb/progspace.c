@@ -1,6 +1,7 @@
 /* Program and address space management, for GDB, the GNU debugger.
 
    Copyright (C) 2009-2026 Free Software Foundation, Inc.
+   Copyright (C) 2021-2026 Intel Corporation.
 
    This file is part of GDB.
 

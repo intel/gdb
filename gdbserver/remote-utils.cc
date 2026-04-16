@@ -1,5 +1,6 @@
 /* Remote utility routines for the remote server for GDB.
    Copyright (C) 1986-2026 Free Software Foundation, Inc.
+   Copyright (C) 2020-2026 Intel Corporation.
 
    This file is part of GDB.
 

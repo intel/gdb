@@ -1,6 +1,7 @@
 /* Unit tests for the cli-utils.c file.
 
    Copyright (C) 2018-2026 Free Software Foundation, Inc.
+   Copyright (C) 2019-2026 Intel Corporation.
 
    This file is part of GDB.
 

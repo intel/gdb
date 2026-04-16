@@ -1,5 +1,6 @@
 /* Target-dependent code for the 32-bit OpenRISC 1000, for the GDB.
    Copyright (C) 2008-2026 Free Software Foundation, Inc.
+   Copyright (C) 2023-2026 Intel Corporation.
 
    This file is part of GDB.
 

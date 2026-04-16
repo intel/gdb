@@ -1,6 +1,7 @@
 /* Shared library declarations for GDB, the GNU Debugger.
 
    Copyright (C) 1992-2026 Free Software Foundation, Inc.
+   Copyright (C) 2023-2026 Intel Corporation.
 
    This file is part of GDB.
 

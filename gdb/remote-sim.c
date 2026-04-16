@@ -1,6 +1,7 @@
 /* Generic remote debugging interface for simulators.
 
    Copyright (C) 1993-2026 Free Software Foundation, Inc.
+   Copyright (C) 2021-2026 Intel Corporation.
 
    Contributed by Cygnus Support.
    Steve Chamberlain (sac@cygnus.com).

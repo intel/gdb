@@ -1,5 +1,6 @@
 /* Handling of inferior events for the event loop for GDB, the GNU debugger.
    Copyright (C) 1999-2026 Free Software Foundation, Inc.
+   Copyright (C) 2024-2026 Intel Corporation.
    Written by Elena Zannoni <ezannoni@cygnus.com> of Cygnus Solutions.
 
    This file is part of GDB.

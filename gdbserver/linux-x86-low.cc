@@ -1,6 +1,7 @@
 /* GNU/Linux/x86-64 specific low level interface, for the remote server
    for GDB.
    Copyright (C) 2002-2026 Free Software Foundation, Inc.
+   Copyright (C) 2025-2026 Intel Corporation.
 
    This file is part of GDB.
 

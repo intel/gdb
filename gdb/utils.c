@@ -3449,7 +3449,10 @@ wait_to_die_with_timeout (pid_t pid, int *status, int timeout)
       alarm (timeout);
 #endif
 
-      waitpid_result = gdb::waitpid (pid, status, 0);
+      /* Do not use gdb::waitpid here.  We want to interrupt the
+	 syscall with SIGALRM above to prevent waiting forever, and if
+	 that interrupt happens, we don't want to repeat.  */
+      waitpid_result = waitpid (pid, status, 0);
 
 #ifdef SIGALRM
       alarm (0);

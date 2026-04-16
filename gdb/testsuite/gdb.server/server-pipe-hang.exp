@@ -1,0 +1,52 @@
+# Copyright 2026 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This test relies on starting gdbserver using the pipe syntax.  Afterwards
+# it checks if "detach" command does not hang.
+
+# Test is aimed at starting with the native target only.
+# We manually create a pipe connection to a gdbserver below.
+if {[target_info gdb_protocol] != ""} {
+    unsupported "test is for native target only"
+    return
+}
+
+load_lib gdbserver-support.exp
+
+standard_testfile
+
+require allow_gdbserver_tests
+
+set gdbserver [find_gdbserver]
+if { $gdbserver == "" } {
+    unsupported "could not find gdbserver"
+    return
+}
+
+if {[build_executable "failed to prepare" $testfile $srcfile debug]} {
+    return
+}
+
+clean_restart
+
+gdb_test "target remote | ${::gdbserver} - ${::binfile}" ".*" \
+    "start gdbserver using pipe syntax"
+
+# The 5 seconds alarm in wait_to_die_with_timeout should make us get
+# the prompt.
+save_vars timeout {
+    set timeout 30
+    gdb_test "detach" ".*" "detached without hang"
+}

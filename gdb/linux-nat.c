@@ -1,6 +1,7 @@
 /* GNU/Linux native-dependent code common to multiple platforms.
 
    Copyright (C) 2001-2026 Free Software Foundation, Inc.
+   Copyright (C) 2021-2026 Intel Corporation.
 
    This file is part of GDB.
 

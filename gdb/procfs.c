@@ -1,6 +1,7 @@
 /* Machine independent support for Solaris /proc (process file system) for GDB.
 
    Copyright (C) 1999-2026 Free Software Foundation, Inc.
+   Copyright (C) 2020-2026 Intel Corporation.
 
    Written by Michael Snyder at Cygnus Solutions.
    Based on work by Fred Fish, Stu Grossman, Geoff Noer, and others.

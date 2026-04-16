@@ -1,6 +1,7 @@
 /* Read ELF (Executable and Linking Format) object files for GDB.
 
    Copyright (C) 1991-2026 Free Software Foundation, Inc.
+   Copyright (C) 2026 Intel Corporation.
 
    Written by Fred Fish at Cygnus Support.
 

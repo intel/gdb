@@ -1,5 +1,6 @@
 /* Basic, host-specific, and target-specific definitions for GDB.
    Copyright (C) 1986-2026 Free Software Foundation, Inc.
+   Copyright (C) 2025-2026 Intel Corporation.
 
    This file is part of GDB.
 

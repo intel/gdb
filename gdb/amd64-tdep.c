@@ -1,6 +1,7 @@
 /* Target-dependent code for AMD64.
 
    Copyright (C) 2001-2026 Free Software Foundation, Inc.
+   Copyright (C) 2023-2026 Intel Corporation.
 
    Contributed by Jiri Smid, SuSE Labs.
 

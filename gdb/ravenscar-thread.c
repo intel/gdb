@@ -1,6 +1,7 @@
 /* Ada Ravenscar thread support.
 
    Copyright (C) 2004-2026 Free Software Foundation, Inc.
+   Copyright (C) 2021-2026 Intel Corporation.
 
    This file is part of GDB.
 

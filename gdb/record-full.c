@@ -40,6 +40,7 @@
 #include "infrun.h"
 #include "gdbsupport/gdb_unlinker.h"
 #include "gdbsupport/byte-vector.h"
+#include "gdbsupport/scoped_signal_handler.h"
 #include "async-event.h"
 #include "top.h"
 #include "valprint.h"
@@ -1162,6 +1163,7 @@ record_full_wait_1 (struct target_ops *ops,
 {
   scoped_restore restore_operation_disable
     = record_full_gdb_operation_disable_set ();
+  scoped_signal_handler<SIGINT> interrupt_handler (record_full_sig_handler);
 
   if (record_debug)
     gdb_printf (gdb_stdlog,
@@ -1182,7 +1184,6 @@ record_full_wait_1 (struct target_ops *ops,
     }
 
   record_full_get_sig = 0;
-  signal (SIGINT, record_full_sig_handler);
 
   record_full_stop_reason = TARGET_STOPPED_BY_NO_REASON;
 
@@ -1470,8 +1471,6 @@ record_full_wait_1 (struct target_ops *ops,
 	  throw;
 	}
     }
-
-  signal (SIGINT, handle_sigint);
 
   return inferior_ptid;
 }

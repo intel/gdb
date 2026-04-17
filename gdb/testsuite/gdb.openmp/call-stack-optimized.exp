@@ -1,0 +1,122 @@
+# Copyright 2026 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Tests GDB's support for OpenMP when there are function calls inside
+# the optimized kernel.
+
+load_lib openmp.exp
+
+set device_list [omp_get_device_list]
+if {[llength ${device_list}] == 0} {
+    unsupported "target does not support OpenMP"
+    return 0
+}
+
+standard_testfile .f90
+
+if {[build_executable "failed to compile ${srcfile}" \
+    ${binfile} ${srcfile} {openmp f90 debug "optimize=-O2"}]} {
+    return -1
+}
+
+foreach device_info ${device_list} {
+    openmp_with_intelgt_lock $device_info "f90" {
+
+	clean_restart "${binfile}"
+	if {![fortran_runto_main]} {
+	    untested "Failed to run to main"
+	    continue
+	}
+
+	set third_loc $srcfile:[gdb_get_line_number "ordinary-third-loc"]
+	set second_loc $srcfile:[gdb_get_line_number "ordinary-second-loc"]
+	set first_loc $srcfile:[gdb_get_line_number "ordinary-first-loc"]
+
+	set fill "\[^\r\n\]*"
+
+	set opt_val "$::decimal\|\<optimized out\>"
+	# At O2, the line number for fourth can vary due to optimization
+	set fourth_loc "$srcfile:$::decimal"
+	set fourth_desc \
+	    "fourth \\(x4=.*, y4=.*\\) at ${fill}$fourth_loc"
+	set third_desc \
+	    "third \\((x|y)3=($opt_val), (x|y)3=($opt_val)\\) at ${fill}$third_loc"
+	set second_desc \
+	    "second \\((x|y)2=($opt_val), (x|y)2=($opt_val)\\) at ${fill}$second_loc"
+	set first_desc \
+	    "first \\((x|y)1=($opt_val), (x|y)1=(.*)\\) at ${fill}$first_loc"
+
+	set outer_loc [gdb_get_line_number "ordinary-outer-loc"]
+	set inlined_inner_loc [gdb_get_line_number "inlined-inner-loc"]
+	set inlined_middle_loc [gdb_get_line_number "inlined-middle-loc"]
+	set inlined_outer_loc [gdb_get_line_number "inlined-outer-loc"]
+
+	set outer_desc  "MAIN__.* at .*${srcfile}:${outer_loc}"
+
+	set inlined_inner_desc \
+	    "inlined_second ${fill} at ${fill}${srcfile}:${inlined_inner_loc}"
+	set inlined_middle_desc \
+	    "inlined_first ${fill} at ${fill}${srcfile}:${inlined_middle_loc}"
+	set inlined_outer_desc \
+	    "MAIN__.* at ${fill}${srcfile}:${inlined_outer_loc}"
+
+	set trampoline "skip_dummy_trampoline_frame"
+
+	# Test breaking on function names inside the kernel.
+	gdb_breakpoint "${srcfile}:fourth"
+	gdb_continue_to_breakpoint "break_at_fourth" \
+	    ".*fourth.*"
+
+	# Limit the backtrace to 5 frames because frame #5
+	# and beyond are implementation-specific to the OpenMP runtime.
+	gdb_test "backtrace 5" \
+	    [multi_line \
+		"#0${fill} $fourth_desc" \
+		"#2${fill} $third_desc" \
+		"#4${fill} $second_desc" \
+		"#6${fill} $first_desc" \
+		"#8${fill} $outer_desc.*"] \
+	    "first backtrace"
+
+	delete_breakpoints
+	# Test inlined function calls.
+	gdb_breakpoint $inlined_inner_loc
+
+	gdb_continue_to_breakpoint "inlined-body" ".*$inlined_inner_loc.*"
+
+	gdb_test "backtrace 3" [multi_line \
+				"#0${fill} $inlined_inner_desc" \
+				"#1${fill} $inlined_middle_desc" \
+				"#2${fill} $inlined_outer_desc.*"] \
+	    "backtrace for inlined calls"
+
+	delete_breakpoints
+	gdb_breakpoint "${srcfile}:fourth"
+	gdb_continue_to_breakpoint "second break_at_fourth" \
+	    ".*${fourth_loc}.*"
+
+	gdb_test "backtrace 5" \
+	    [multi_line \
+		"#0${fill} $fourth_desc" \
+		"#2${fill} $third_desc" \
+		"#4${fill} $second_desc" \
+		"#6${fill} $first_desc" \
+		"#8${fill} MAIN__.* at .*"] \
+	    "second backtrace"
+
+	gdb_test "continue" "${inferior_exited_re} normally].*" \
+	    "continue to end"
+    }
+}

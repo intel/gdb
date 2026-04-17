@@ -18,10 +18,7 @@
 
 # Test is aimed at starting with the native target only.
 # We manually create a pipe connection to a gdbserver below.
-if {[target_info gdb_protocol] != ""} {
-    unsupported "test is for native target only"
-    return
-}
+require gdb_protocol_is_native
 
 load_lib gdbserver-support.exp
 

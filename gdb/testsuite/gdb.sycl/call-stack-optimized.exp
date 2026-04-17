@@ -84,6 +84,9 @@ proc test_call_stack {device} {
     # Continue to breakpoint inside the kernel.
     gdb_continue_to_breakpoint "innermost-body" ".*fourth.*"
 
+    if {[is_xe_hpg $device] || [is_xe_hpc $device]} {
+	setup_kfail "JIRA GSD/12638" "*-*-*"
+    }
     # Limit the backtrace to 5 frames because frame #5
     # and beyond are implementation-specific to the SYCL runtime.
     gdb_test "backtrace 5" [multi_line \
@@ -98,8 +101,14 @@ proc test_call_stack {device} {
     # Test inlined function calls.
     gdb_breakpoint $inlined_inner_loc
 
+    if {[is_xe_hpg $device] || [is_xe_hpc $device]} {
+	setup_kfail "JIRA GSD/12638" "*-*-*"
+    }
     gdb_continue_to_breakpoint "inlined-body" ".*$inlined_inner_loc.*"
 
+    if {[is_xe_hpg $device] || [is_xe_hpc $device]} {
+	setup_kfail "JIRA GSD/12638" "*-*-*"
+    }
     gdb_test "backtrace 3" [multi_line \
 				"#0${fill} $inlined_inner_desc" \
 				"#1${fill} $inlined_middle_desc" \
@@ -112,6 +121,9 @@ proc test_call_stack {device} {
     # to the third.
     gdb_breakpoint "*fourth"
 
+    if {[is_xe_hpg $device] || [is_xe_hpc $device]} {
+	setup_kfail "JIRA GSD/12368" "*-*-*"
+    }
     gdb_test "continue" "fourth.*$srcfile.*" "continue to fourth prologue"
     set i 0
     set current_line [get_current_line]
@@ -124,6 +136,9 @@ proc test_call_stack {device} {
 
     # Print the current instruction and framedesc for logging purposes.
     gdb_test "display/i \$pc"
+    if {[is_xe_hpg $device]} {
+	setup_kfail "JIRA GSD/12368" "*-*-*"
+    }
     gdb_test "display/x \$framedesc"
 
     # Check the backtrace at each instruction until the return.  We do not
@@ -136,6 +151,7 @@ proc test_call_stack {device} {
 	with_test_prefix "iteration $i" {
 	    if {[require_sycl_device "$device" "gpu" "Intel*"]} {
 		set fourth_desc "fourth ${fill} at ${fill}$srcfile:$current_line"
+		setup_kfail "JIRA GSD/12638" "*-*-*"
 		gdb_test "backtrace 6" [multi_line \
 					    "#0${fill} $fourth_desc" \
 					    "#1${fill} $third_desc" \

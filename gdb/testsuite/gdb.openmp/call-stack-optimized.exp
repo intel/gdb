@@ -79,6 +79,9 @@ foreach device_info ${device_list} {
 	gdb_continue_to_breakpoint "break_at_fourth" \
 	    ".*fourth.*"
 
+	if {[require_openmp_device "GPU"]} {
+	    setup_kfail "JIRA GSD/12638" "*-*-*"
+	}
 	# Limit the backtrace to 5 frames because frame #5
 	# and beyond are implementation-specific to the OpenMP runtime.
 	gdb_test "backtrace 5" \
@@ -94,8 +97,14 @@ foreach device_info ${device_list} {
 	# Test inlined function calls.
 	gdb_breakpoint $inlined_inner_loc
 
+	if {[require_openmp_device "GPU"]} {
+	    setup_kfail "JIRA GSD/12638" "*-*-*"
+	}
 	gdb_continue_to_breakpoint "inlined-body" ".*$inlined_inner_loc.*"
 
+	if {[require_openmp_device "GPU"]} {
+	    setup_kfail "JIRA GSD/12638" "*-*-*"
+	}
 	gdb_test "backtrace 3" [multi_line \
 				"#0${fill} $inlined_inner_desc" \
 				"#1${fill} $inlined_middle_desc" \
@@ -104,8 +113,16 @@ foreach device_info ${device_list} {
 
 	delete_breakpoints
 	gdb_breakpoint "${srcfile}:fourth"
+	if {[require_openmp_device "GPU"]} {
+	    setup_kfail "JIRA GSD/12354" "*-*-*"
+	}
 	gdb_continue_to_breakpoint "second break_at_fourth" \
 	    ".*${fourth_loc}.*"
+
+	# Failing due to wrapper calls in call stack.
+	if {[require_openmp_device "GPU"]} {
+	    setup_kfail "JIRA GSD/12354" "*-*-*"
+	}
 
 	gdb_test "backtrace 5" \
 	    [multi_line \
@@ -116,6 +133,9 @@ foreach device_info ${device_list} {
 		"#8${fill} MAIN__.* at .*"] \
 	    "second backtrace"
 
+	if {[require_openmp_device "GPU"]} {
+	    setup_kfail "JIRA GSD/12354" "*-*-*"
+	}
 	gdb_test "continue" "${inferior_exited_re} normally].*" \
 	    "continue to end"
     }

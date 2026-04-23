@@ -325,6 +325,9 @@ enum {
   /* Support for the QNonStop packet.  */
   PACKET_QNonStop,
 
+  /* Support for AlwaysNonStop extension.  */
+  PACKET_AlwaysNonStop_feature,
+
   /* Support for the QThreadEvents packet.  */
   PACKET_QThreadEvents,
 
@@ -1444,6 +1447,8 @@ public: /* Remote specific methods.  */
   void set_remote_traceframe ();
 
   void check_binary_download (CORE_ADDR addr);
+
+  bool always_non_stop_p () override;
 
   target_xfer_status remote_write_bytes_aux (const char *header,
 					     CORE_ADDR memaddr,
@@ -6136,6 +6141,8 @@ static const struct protocol_feature remote_protocol_features[] = {
   { "multiprocess", PACKET_DISABLE, remote_supported_packet,
     PACKET_multiprocess_feature },
   { "QNonStop", PACKET_DISABLE, remote_supported_packet, PACKET_QNonStop },
+  { "AlwaysNonStop", PACKET_DISABLE, remote_supported_packet,
+    PACKET_AlwaysNonStop_feature },
   { "qXfer:siginfo:read", PACKET_DISABLE, remote_supported_packet,
     PACKET_qXfer_siginfo_read },
   { "qXfer:siginfo:write", PACKET_DISABLE, remote_supported_packet,
@@ -9899,6 +9906,18 @@ remote_target::check_binary_download (CORE_ADDR addr)
 	break;
       }
     }
+}
+
+/* Determine whether the remote target operates in non-stop mode.
+   Returns true if the target advertises AlwaysNonStop, and supports
+   QNonStop for asynchronous execution and stop notifications.  */
+
+bool
+remote_target::always_non_stop_p ()
+{
+  return ((m_features.packet_support (PACKET_QNonStop) == PACKET_ENABLE)
+	  && (m_features.packet_support (PACKET_AlwaysNonStop_feature)
+	      == PACKET_ENABLE));
 }
 
 /* Helper function to resize the payload in order to try to get a good
@@ -17166,6 +17185,8 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
 
   add_packet_config_cmd (PACKET_multi_wp_addr,
 			 "multi-wp-addr", "multiple-watchpoint-addresses", 0);
+  add_packet_config_cmd (PACKET_AlwaysNonStop_feature,
+			 "AlwaysNonStop", "always-non-stop-feature", 0);
 
   /* Assert that we've registered "set remote foo-packet" commands
      for all packet configs.  */

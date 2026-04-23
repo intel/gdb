@@ -147,6 +147,9 @@ bool disable_packet_qC;
 bool disable_packet_qfThreadInfo;
 bool disable_packet_T;
 
+/* Set if you want to enable optional packets or extensions via CLI.  */
+bool enable_always_non_stop;
+
 static unsigned char *mem_buf;
 
 /* A sub-class of 'struct notif_event' for stop, holding information
@@ -903,10 +906,19 @@ handle_general_set (char *own_buf)
 	}
 
       req_str = req ? "non-stop" : "all-stop";
-      if (the_target->start_non_stop (req == 1) != 0)
+
+      try
 	{
-	  fprintf (stderr, "Setting %s mode failed\n", req_str);
-	  write_enn (own_buf);
+	  if (the_target->start_non_stop (req == 1) != 0)
+	    {
+	      sprintf (own_buf, "E.Setting %s mode failed.", req_str);
+	      return;
+	    }
+	}
+      catch (const gdb_exception_error &exception)
+	{
+	  /* The target rejected the setting, forward the error message.  */
+	  sprintf (own_buf, "E.%s", exception.what ());
 	  return;
 	}
 
@@ -2903,7 +2915,11 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 	strcat (own_buf, ";exec-events+");
 
       if (target_supports_non_stop ())
-	strcat (own_buf, ";QNonStop+");
+	{
+	  strcat (own_buf, ";QNonStop+");
+	  if (target_always_non_stop ())
+	    strcat (own_buf, ";AlwaysNonStop+");
+	}
 
       if (target_supports_disable_randomization ())
 	strcat (own_buf, ";QDisableRandomization+");
@@ -2966,6 +2982,19 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 
       if (cs.single_inferior_argument)
 	strcat (own_buf, ";single-inf-arg+");
+
+      /* If the target requires non-stop mode, initialize it now rather
+	 than waiting for GDB to request it via QNonStop:1.  */
+      if (target_supports_non_stop () && target_always_non_stop ())
+	{
+	  if (the_target->start_non_stop (true) != 0)
+	    error ("Cannot initialize target: requires non-stop mode but "
+		   "non-stop mode initialization failed.");
+
+	  non_stop = true;
+	  remote_debug_printf ("Target requires non-stop mode: "
+			       "enabled at startup.\n");
+	}
 
       /* Reinitialize components as needed for the new connection.  */
       hostio_handle_new_gdb_connection ();
@@ -4016,6 +4045,10 @@ gdbserver_usage (FILE *stream)
 	   "                          Options:\n"
 	   "                            vCont, vConts, T, Tthread, qC, qfThreadInfo and\n"
 	   "                            threads (disable all threading packets).\n"
+	   "  --enable-packet=OPT1[,OPT2,...]\n"
+	   "                        Enable support for RSP packets or extensions.\n"
+	   "                          Options:\n"
+	   "                            AlwaysNonStop.\n"
 	   "\n"
 	   "For more information, consult the GDB manual (available as on-line \n"
 	   "info or a printed manual).\n");
@@ -4034,6 +4067,13 @@ gdbserver_show_disableable (FILE *stream)
 	   "T stop reply packet\n"
 	   "  threads     \tAll of the above\n"
 	   "  T           \tAll 'T' packets\n");
+}
+
+static void
+gdbserver_show_enableable (FILE *stream)
+{
+  fprintf (stream, "Enableable packets:\n"
+	   "  AlwaysNonStop\tForce AlwaysNonStop extension\n");
 }
 
 /* Start up the event loop.  This is the entry point to the event
@@ -4271,7 +4311,7 @@ captured_main (int argc, char *argv[])
 
   enum opts { OPT_VERSION = 1, OPT_HELP, OPT_ATTACH, OPT_MULTI, OPT_WRAPPER,
     OPT_DEBUG, OPT_DEBUG_FILE, OPT_DEBUG_FORMAT, OPT_DISABLE_PACKET,
-    OPT_DISABLE_RANDOMIZATION, OPT_NO_DISABLE_RANDOMIZATION,
+    OPT_ENABLE_PACKET, OPT_DISABLE_RANDOMIZATION, OPT_NO_DISABLE_RANDOMIZATION,
     OPT_STARTUP_WITH_SHELL, OPT_NO_STARTUP_WITH_SHELL, OPT_ONCE,
     OPT_SELFTEST, OPT_NO_ESCAPE
   };
@@ -4289,6 +4329,9 @@ captured_main (int argc, char *argv[])
       /* --disable-packet is optional_argument only so that we can print a
 	 better help list when the argument is missing.  */
       {"disable-packet", optional_argument, nullptr, OPT_DISABLE_PACKET},
+      /* --enable-packet is optional_argument only so that we can print a
+	 better help list when the argument is missing.  */
+      {"enable-packet", optional_argument, nullptr, OPT_ENABLE_PACKET},
       {"disable-randomization", no_argument, nullptr,
        OPT_DISABLE_RANDOMIZATION},
       {"no-disable-randomization", no_argument, nullptr,
@@ -4490,6 +4533,32 @@ captured_main (int argc, char *argv[])
 		    fprintf (stderr, "Don't know how to disable \"%s\".\n\n",
 			     tok);
 		    gdbserver_show_disableable (stderr);
+		    exit (1);
+		  }
+	      }
+	  }
+	  break;
+
+	case OPT_ENABLE_PACKET:
+	  {
+	    char *packets = optarg;
+	    if (packets == nullptr)
+	      {
+		gdbserver_show_enableable (stdout);
+		exit (1);
+	      }
+	    char *saveptr;
+	    for (char *tok = strtok_r (packets, ",", &saveptr);
+		 tok != nullptr;
+		 tok = strtok_r (nullptr, ",", &saveptr))
+	      {
+		if (streq ("AlwaysNonStop", tok))
+		  enable_always_non_stop = true;
+		else
+		  {
+		    fprintf (stderr, "Don't know how to enable \"%s\".\n\n",
+			     tok);
+		    gdbserver_show_enableable (stderr);
 		    exit (1);
 		  }
 	      }

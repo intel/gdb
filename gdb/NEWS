@@ -47,6 +47,19 @@ info threads [-gid] [-stopped] [ID]...
   the stopped threads to be printed.  The flag can be useful to get a
   reduced list when there is a large number of unstopped threads.
 
+* gdbserver now accepts --enable-packet=PACKET to enable specific remote
+  protocol packets or extensions at startup.  Currently this supports
+  'AlwaysNonStop' to force the target to always operate in non-stop mode.
+
+* New remote protocol extension 'AlwaysNonStop' allows gdbserver to
+  indicate that the target prefers to operate in non-stop mode.  When a
+  remote stub advertises 'AlwaysNonStop+' in its qSupported reply, GDB
+  will operate the stub in non-stop mode (when 'maint set target-non-stop'
+  is 'auto', the default).  If the user explicitly sets 'maint set
+  target-non-stop off', GDB will allow the connection but the stub may
+  reject attempts to switch to all-stop mode with a descriptive error
+  message.
+
 *** Changes in GDB 18
 
 * Support for the Common Trace Format (CTF) has been removed.  GDB now

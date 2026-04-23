@@ -43127,7 +43127,9 @@ does not indicate support.
 
 @item maint set target-non-stop off
 @value{GDBN} does not control the target in non-stop mode even if the
-target supports it.
+target supports it.  Note: targets that prefer non-stop mode (via
+@samp{AlwaysNonStop+}) may reject attempts to switch to all-stop mode
+with a descriptive error message.
 @end table
 
 Here is how @code{set non-stop} and @code{maint set target-non-stop}
@@ -45302,6 +45304,12 @@ Reply:
 @table @samp
 @item OK
 The request succeeded.
+
+@item @samp{E.@var{message}}
+The request failed.  This may occur if the stub prefers non-stop mode
+and advertised @samp{AlwaysNonStop+} support, and @value{GDBN} attempted to
+switch to all-stop mode with @samp{QNonStop:0}.  The stub returns a
+textual error message describing why the mode switch was rejected.
 @end table
 
 This packet is not probed by default; the remote stub must request it,
@@ -45719,6 +45727,22 @@ multiple-watchpoint-addresses-packet} command (@pxref{Remote
 Configuration, set remote multiple-watchpoint-addresses-packet}).
 @end table
 
+@item AlwaysNonStop
+This feature indicates that @value{GDBN} supports remote stubs that
+prefer non-stop mode operation.  If the stub advertises
+@samp{AlwaysNonStop+}, it will run in non-stop mode, similar to
+the setting @code{maint set target-non-stop on}.  If @value{GDBN}
+attempts to switch the target to all-stop mode, the stub may reject
+the request with a descriptive error message.
+
+Note: @samp{AlwaysNonStop+} requires @samp{QNonStop+} support.
+If a stub advertises @samp{AlwaysNonStop+} without @samp{QNonStop+},
+the @samp{AlwaysNonStop+} extension will be silently ignored by @value{GDBN}.
+
+Use of this feature is controlled by the @code{set remote
+always-non-stop-feature-packet} command (@pxref{Remote
+Configuration, set remote always-non-stop-feature-packet}).
+
 Stubs should ignore any unknown values for
 @var{gdbfeature}.  Any @value{GDBN} which sends a @samp{qSupported}
 packet supports receiving packets of unlimited length (earlier
@@ -46114,6 +46138,13 @@ packet (@pxref{qXfer fdpic loadmap read}).
 @item QNonStop
 The remote stub understands the @samp{QNonStop} packet
 (@pxref{QNonStop}).
+
+@item AlwaysNonStop
+The remote stub prefers non-stop mode operation, may reject
+@samp{QNonStop:0} requests with a descriptive error message, and
+automatically initializes to non-stop mode.  This feature must be
+advertised together with @samp{QNonStop+}; if advertised without it,
+the feature will be silently ignored by @value{GDBN}.  @xref{QNonStop}.
 
 @item QCatchSyscalls
 The remote stub understands the @samp{QCatchSyscalls} packet
@@ -52461,6 +52492,19 @@ To disable this escaping, use @option{--no-escape-args}.  With this
 option special shell characters will not be escaped.  When
 @command{gdbserver} starts a new shell in order to invoke the
 inferior, this new shell will expand any special shell characters.
+
+@item --enable-packet=@var{packet}@r{[},@var{packet}@dots{}@r{]}
+Enable specific remote protocol packets or extensions at startup.
+The @var{packet} argument can be one of the following:
+
+@table @code
+@item AlwaysNonStop
+Force the target to always operate in non-stop mode.  When this
+extension is enabled, @command{gdbserver} will reject any attempts
+by @value{GDBN} to switch to all-stop mode with a descriptive error
+message.  This is useful for targets that require non-stop mode
+for correct operation.
+@end table
 
 @c --disable-packet is not documented for users.
 

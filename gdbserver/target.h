@@ -265,6 +265,9 @@ public:
   /* Return true if non-stop mode is supported.  */
   virtual bool supports_non_stop ();
 
+  /* Return true if target must run in non-stop mode.  */
+  virtual bool always_non_stop ();
+
   /* Enables async target events.  Returns the previous enable
      state.  */
   virtual bool async (bool enable);
@@ -602,6 +605,9 @@ int kill_inferior (process_info *proc);
 
 #define target_supports_non_stop() \
   the_target->supports_non_stop ()
+
+#define target_always_non_stop() \
+  the_target->always_non_stop ()
 
 #define target_async(enable) \
   the_target->async (enable)

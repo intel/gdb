@@ -517,6 +517,12 @@ process_stratum_target::supports_non_stop ()
 }
 
 bool
+process_stratum_target::always_non_stop ()
+{
+  return enable_always_non_stop;
+}
+
+bool
 process_stratum_target::async (bool enable)
 {
   return false;

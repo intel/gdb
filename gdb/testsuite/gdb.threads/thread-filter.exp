@@ -22,21 +22,23 @@ if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
     return -1
 }
 
-proc get_stopped_threads {match_text} {
-    set stopped_threads {}
-    set fill "\[^\r\n\]+"
+namespace eval thread_filter {
+    proc get_stopped_threads {match_text} {
+	set stopped_threads {}
+	set fill "\[^\r\n\]+"
 
-    gdb_test_multiple "info threads -stopped" "stopped threads: $match_text" {
-	-re "\r\n. ($::decimal)${fill} $match_text" {
-	    lappend stopped_threads $expect_out(1,string)
-	    exp_continue
+	gdb_test_multiple "info threads -stopped" "stopped threads: $match_text" {
+	    -re "\r\n. ($::decimal)${fill} $match_text" {
+		lappend stopped_threads $expect_out(1,string)
+		exp_continue
+	    }
+	    -re -wrap "" {
+		pass $gdb_test_name
+	    }
 	}
-	-re -wrap "" {
-	    pass $gdb_test_name
-	}
+
+	return $stopped_threads
     }
-
-    return $stopped_threads
 }
 
 proc test_thread_filter {thr_range {location ""} {expr ""} {m_list ""} \
@@ -95,8 +97,8 @@ set bp_location $srcfile:$linenum
 gdb_breakpoint $bp_location
 gdb_continue_to_breakpoint "$srcfile:$linenum"
 
-set all_stopped_threads [get_stopped_threads ""]
-set stopped_threads [get_stopped_threads "thread_function"]
+set all_stopped_threads [thread_filter::get_stopped_threads ""]
+set stopped_threads [thread_filter::get_stopped_threads "thread_function"]
 set total_stopped [llength $stopped_threads]
 
 set first_thread_all [lindex $all_stopped_threads 0]

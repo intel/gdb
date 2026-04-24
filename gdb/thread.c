@@ -2045,14 +2045,9 @@ scoped_restore_current_simd_lane::~scoped_restore_current_simd_lane ()
     return;
 
   /* The current target may have changed.  SIMD lane queries may require
-     target access via the current_inferior's top target.  Do the switch
-     but make sure the thread is alive.  */
+     target access via the current_inferior's top target.  Do the switch.  */
   scoped_restore_current_thread restore_thread;
-  if (!switch_to_thread_if_alive (m_tp.get ()))
-    {
-      restore_thread.dont_restore ();
-      return;
-    }
+  switch_to_thread (m_tp.get ());
 
   if (m_simd_lane_num != -1 && m_tp->has_simd_lanes ())
     {

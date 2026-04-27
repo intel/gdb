@@ -1810,11 +1810,11 @@ handle_qxfer_auxv (const char *annex,
   if (!the_target->supports_read_auxv () || writebuf != NULL)
     return -2;
 
-  if (annex[0] != '\0' || current_thread == NULL)
+  process_info *process = current_process ();
+  if (annex[0] != '\0' || process == nullptr)
     return -1;
 
-  return the_target->read_auxv (current_thread->id.pid (), offset, readbuf,
-				len);
+  return the_target->read_auxv (process->pid, offset, readbuf, len);
 }
 
 /* Handle qXfer:exec-file:read.  */
@@ -1832,10 +1832,11 @@ handle_qxfer_exec_file (const char *annex,
 
   if (annex[0] == '\0')
     {
-      if (current_thread == NULL)
+      process_info *process = current_process ();
+      if (process == nullptr)
 	return -1;
 
-      pid = current_thread->id.pid ();
+      pid = process->pid;
     }
   else
     {
@@ -1876,7 +1877,7 @@ handle_qxfer_features (const char *annex,
   if (writebuf != NULL)
     return -2;
 
-  if (!target_running ())
+  if (!current_process ())
     return -1;
 
   /* Grab the correct annex.  */
@@ -1906,7 +1907,8 @@ handle_qxfer_libraries (const char *annex,
   if (writebuf != NULL)
     return -2;
 
-  if (annex[0] != '\0' || current_thread == NULL)
+  process_info *process = current_process ();
+  if (annex[0] != '\0' || process == nullptr)
     return -1;
 
   std::string document = "<library-list version=\"1.0\">\n";

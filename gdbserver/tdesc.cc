@@ -127,10 +127,11 @@ copy_target_description (struct target_desc *dest,
 const struct target_desc *
 current_target_desc (void)
 {
-  if (current_thread == NULL)
+  process_info *process = current_process ();
+  if (process == nullptr)
     return &default_description;
 
-  return current_process ()->tdesc;
+  return process->tdesc;
 }
 
 /* An empty structure.  */

@@ -278,7 +278,7 @@ struct notif_server notif_stop =
 static int
 target_running (void)
 {
-  return get_first_thread () != NULL;
+  return (get_first_process () != nullptr);
 }
 
 /* See gdbsupport/common-inferior.h.  */
@@ -339,8 +339,12 @@ attach_inferior (int pid)
 	  && cs.last_status.sig () == GDB_SIGNAL_STOP)
 	cs.last_status.set_stopped (GDB_SIGNAL_TRAP);
 
-      current_thread->last_resume_kind = resume_stop;
-      current_thread->last_status = cs.last_status;
+      /* We may not have any threads, yet, after attaching.  */
+      if (current_thread != nullptr)
+	{
+	  current_thread->last_resume_kind = resume_stop;
+	  current_thread->last_status = cs.last_status;
+	}
     }
 
   return 0;

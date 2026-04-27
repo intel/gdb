@@ -23,22 +23,22 @@
 try:
     import dpctl
 except ModuleNotFoundError:
-    print ("NUMBA: Python exception ModuleNotFoundError detected!")
-    quit ()
+    print("NUMBA: Python exception ModuleNotFoundError detected!")
+    quit()
+
 
 def list_devices():
-    """Programmatically get a list of the available devices.
-    """
+    """Programmatically get a list of the available devices."""
 
     devices_list = ""
     for d in dpctl.get_devices():
-        if (len (devices_list) != 0):
+        if len(devices_list) != 0:
             devices_list += ","
         devices_list += d.name
         devices_list += ";"
         devices_list += d.filter_string
-    print ("DPCTL: List of Target devices: [", devices_list, "]", sep='')
+    print("DPCTL: List of Target devices: [", devices_list, "]", sep="")
 
 
 if __name__ == "__main__":
-    list_devices ()
+    list_devices()

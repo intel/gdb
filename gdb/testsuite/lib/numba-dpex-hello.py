@@ -18,23 +18,25 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import subprocess
+
 subprocess._USE_VFORK = False
 subprocess._USE_POSIX_SPAWN = True
 
 try:
-    import numba_dpex as dpex
-    from numba_dpex import Range
     import dpctl
     import dpnp
-    import numpy as np
     import numba
+    import numba_dpex as dpex
+    import numpy as np
+    from numba_dpex import Range
 except ModuleNotFoundError:
-    print ("NUMBA: Python exception ModuleNotFoundError detected!")
-    quit ()
+    print("NUMBA: Python exception ModuleNotFoundError detected!")
+    quit()
 
-import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'lib'))
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 
 @dpex.kernel
@@ -45,7 +47,9 @@ def data_parallel_sum(item, a, b, c):
 
 def main():
     if len(sys.argv) < 2:
-        print(f"Usage: python {sys.argv[0]} <opencl|level_zero|cuda>:<cpu|gpu>:<0|1|...>")
+        print(
+            f"Usage: python {sys.argv[0]} <opencl|level_zero|cuda>:<cpu|gpu>:<0|1|...>"
+        )
         return
 
     print("njit:", numba.__version__)
@@ -67,5 +71,5 @@ def main():
     print("Done...")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

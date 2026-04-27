@@ -23,27 +23,31 @@ from numba import njit
 
 @njit(debug=True)
 def func_sum(a_in_func, b_in_func):
-    result = 0                                                    # func_line_1
-    result = a_in_func + b_in_func                                # func_line_2
-    return result                                                 # func_line_3
+    result = 0  # func_line_1
+    result = a_in_func + b_in_func  # func_line_2
+    return result  # func_line_3
 
 
 @njit(debug=True)
 def kernel_sum(a_in_kernel, b_in_kernel, size):
-    c_in_kernel = np.empty_like(a_in_kernel)                      # numba-kernel-breakpoint
-    for i in range(size):                                         # kernel_line_2
-        c_in_kernel[i] = func_sum(a_in_kernel[i], b_in_kernel[i]) # kernel_line_3
-    return c_in_kernel                                            # kernel_line_4
+    c_in_kernel = np.empty_like(a_in_kernel)  # numba-kernel-breakpoint
+    for i in range(size):  # kernel_line_2
+        c_in_kernel[i] = func_sum(a_in_kernel[i], b_in_kernel[i])  # kernel_line_3
+    return c_in_kernel  # kernel_line_4
 
 
 def main():
-    a = np.array([1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5])
-    b = np.array([9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5])
+    a = np.array(
+        [1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5, 1234.5]
+    )
+    b = np.array(
+        [9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5, 9876.5]
+    )
     global_size = np.size(a)
     c = np.ones_like(a)
 
     c = kernel_sum(a, b, global_size)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

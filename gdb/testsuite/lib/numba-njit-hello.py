@@ -18,12 +18,12 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 try:
-    import numpy as np
     import numba
+    import numpy as np
     from numba import njit
 except ModuleNotFoundError:
-    print ("NUMBA: Python exception ModuleNotFoundError detected!")
-    quit ()
+    print("NUMBA: Python exception ModuleNotFoundError detected!")
+    quit()
 
 
 @njit
@@ -56,5 +56,5 @@ def main():
     print("Done...")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

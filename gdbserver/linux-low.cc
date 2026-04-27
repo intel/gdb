@@ -1213,6 +1213,11 @@ linux_process_target::attach (unsigned long pid)
       error (_("Cannot attach to process %ld: %s"), pid, reason.c_str ());
     }
 
+  /* Don't report shared library events after attaching, even if some
+     libraries are preloaded.  GDB will always poll the library list.
+     Avoids the "stopped by shared library event" notice on the GDB
+     side.  */
+  proc->dlls_changed = false;
   open_proc_mem_file (proc);
 
   /* Don't ignore the initial SIGSTOP if we just attached to this

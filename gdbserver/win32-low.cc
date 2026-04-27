@@ -373,6 +373,13 @@ do_initial_child_stuff (HANDLE proch, DWORD pid, int attached)
     = inferior_started_by_cygwin (pid, attached);
 #endif
 
+  /* Don't report shared library events after attaching, even if some
+     libraries are preloaded.  GDB will always poll the library list.
+     Avoids the "stopped by shared library event" notice on the GDB
+     side.  */
+  if (attached)
+    proc->dlls_changed = false;
+
   windows_process.child_initialization_done = 1;
 }
 

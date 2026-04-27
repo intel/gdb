@@ -3365,12 +3365,6 @@ handle_v_attach (char *own_buf)
     {
       if (attach_inferior (pid) == 0)
 	{
-	  /* Don't report shared library events after attaching, even if
-	     some libraries are preloaded.  GDB will always poll the
-	     library list.  Avoids the "stopped by shared library event"
-	     notice on the GDB side.  */
-	  current_process ()->dlls_changed = false;
-
 	  if (non_stop)
 	    {
 	      /* In non-stop, we don't send a resume reply.  Stop events

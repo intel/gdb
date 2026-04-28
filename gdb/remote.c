@@ -12237,8 +12237,17 @@ remote_target::xfer_partial (enum target_object object,
   int unit_size
     = gdbarch_addressable_memory_unit_size (current_inferior ()->arch ());
 
+  /* Some objects require a thread, whereas others only require a process.
+     If we have no current thread, use the current process, instead.  */
+  ptid_t ptid = inferior_ptid;
+  if (ptid == null_ptid)
+    {
+      inferior *inf = current_inferior ();
+      if (inf != nullptr)
+	ptid = ptid_t (inf->pid);
+    }
   set_remote_traceframe ();
-  set_general_thread (inferior_ptid);
+  set_general_thread (ptid);
 
   rs = get_remote_state ();
 

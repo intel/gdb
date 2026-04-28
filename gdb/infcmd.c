@@ -722,6 +722,9 @@ error_is_running (void)
 static void
 ensure_not_running (void)
 {
+  if (inferior_ptid == null_ptid)
+    return;
+
   if (inferior_thread ()->state () == THREAD_RUNNING)
     error_is_running ();
 }
@@ -787,7 +790,9 @@ continue_1 (bool all_threads_p)
     }
   else
     {
-      ensure_valid_thread ();
+      /* Allow continuing inferiors without threads.  */
+      if (inferior_ptid != null_ptid)
+	ensure_valid_thread ();
       ensure_not_running ();
       clear_proceed_status (0);
       proceed ((CORE_ADDR) -1, GDB_SIGNAL_DEFAULT);
@@ -836,7 +841,7 @@ continue_command (const char *args, int from_tty)
       struct thread_info *tp;
 
       if (non_stop)
-	tp = inferior_thread ();
+	tp = (inferior_ptid == null_ptid ? nullptr : inferior_thread ());
       else
 	{
 	  process_stratum_target *last_target;
@@ -870,13 +875,21 @@ continue_command (const char *args, int from_tty)
 
   ensure_not_tfind_mode ();
 
+  /* Switch away from an exited thread if that is the last thread in the
+     inferior to allow resuming that inferior.  */
+  inferior* inf = current_inferior ();
+  if (any_live_thread_of_inferior (inf) == nullptr)
+    switch_to_inferior_no_thread (inf);
+
   if (!non_stop || !all_threads_p)
     {
-      ensure_valid_thread ();
+      /* Allow continuing inferiors without threads.  */
+      if (inferior_ptid != null_ptid)
+	ensure_valid_thread ();
       ensure_not_running ();
     }
 
-  prepare_execution_command (current_inferior ()->top_target (), async_exec);
+  prepare_execution_command (inf->top_target (), async_exec);
 
   if (from_tty)
     gdb_printf (_("Continuing.\n"));

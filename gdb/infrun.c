@@ -3249,6 +3249,9 @@ thread_still_needs_step_over (struct thread_info *tp)
 static bool
 schedlock_applies (struct thread_info *tp)
 {
+  if (tp == nullptr)
+    return (scheduler_mode == schedlock_on);
+
   return (scheduler_mode == schedlock_on
 	  || (scheduler_mode == schedlock_step
 	      && tp->control.stepping_command)
@@ -3645,15 +3648,12 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 {
   INFRUN_SCOPED_DEBUG_ENTER_EXIT;
 
-  struct gdbarch *gdbarch;
-  CORE_ADDR pc;
-
   /* If we're stopped at a fork/vfork, switch to either the parent or child
      thread as defined by the "set follow-fork-mode" command, or, if both
      the parent and child are controlled by GDB, and schedule-multiple is
      on, follow the child.  If none of the above apply then we just proceed
      resuming the current thread.  */
-  if (!follow_fork ())
+  if ((inferior_ptid != null_ptid) && !follow_fork ())
     {
       /* The target for some reason decided not to resume.  */
       normal_stop ();
@@ -3665,56 +3665,69 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
   /* We'll update this if & when we switch to a new thread.  */
   update_previous_thread ();
 
-  thread_info *cur_thr = inferior_thread ();
-  infrun_debug_printf ("cur_thr = %s", cur_thr->ptid.to_string ().c_str ());
+  thread_info *cur_thr = nullptr;
+  regcache *regcache = nullptr;
+  gdbarch *gdbarch = nullptr;
+  CORE_ADDR pc = 0;
+  int step = 0;
 
-  regcache *regcache = get_thread_regcache (cur_thr);
-  gdbarch = regcache->arch ();
-  pc = regcache_read_pc_protected (regcache);
+  if (inferior_ptid != null_ptid)
+    {
+      cur_thr = inferior_thread ();
+      infrun_debug_printf ("cur_thr = %s",
+			   cur_thr->ptid.to_string ().c_str ());
 
-  /* Fill in with reasonable starting values.  */
-  init_thread_stepping_state (cur_thr);
+      regcache = get_thread_regcache (cur_thr);
+      gdbarch = regcache->arch ();
+      pc = regcache_read_pc_protected (regcache);
 
-  gdb_assert (!thread_is_in_step_over_chain (cur_thr));
+      /* Fill in with reasonable starting values.  */
+      init_thread_stepping_state (cur_thr);
+      step = cur_thr->control.stepping_command;
 
-  ptid_t resume_ptid
-    = user_visible_resume_ptid (cur_thr->control.stepping_command);
+      gdb_assert (!thread_is_in_step_over_chain (cur_thr));
+    }
+
+  ptid_t resume_ptid = user_visible_resume_ptid (step);
   process_stratum_target *resume_target
     = user_visible_resume_target (resume_ptid);
 
   check_multi_target_resumption (resume_target);
 
-  if (addr == (CORE_ADDR) -1)
+  if (inferior_ptid != null_ptid)
     {
-      const address_space *aspace = cur_thr->inf->aspace.get ();
+      if (addr == (CORE_ADDR) -1)
+	{
+	  const address_space *aspace = cur_thr->inf->aspace.get ();
 
-      if (cur_thr->stop_pc_p ()
-	  && pc == cur_thr->stop_pc ()
-	  && breakpoint_here_p (aspace, pc) == ordinary_breakpoint_here
-	  && execution_direction != EXEC_REVERSE)
-	/* There is a breakpoint at the address we will resume at,
-	   step one instruction before inserting breakpoints so that
-	   we do not stop right away (and report a second hit at this
-	   breakpoint).
+	  if (cur_thr->stop_pc_p ()
+	      && pc == cur_thr->stop_pc ()
+	      && breakpoint_here_p (aspace, pc) == ordinary_breakpoint_here
+	      && execution_direction != EXEC_REVERSE)
+	    /* There is a breakpoint at the address we will resume at,
+	       step one instruction before inserting breakpoints so that
+	       we do not stop right away (and report a second hit at this
+	       breakpoint).
 
-	   Note, we don't do this in reverse, because we won't
-	   actually be executing the breakpoint insn anyway.
-	   We'll be (un-)executing the previous instruction.  */
-	cur_thr->stepping_over_breakpoint = 1;
-      else if (gdbarch_single_step_through_delay_p (gdbarch)
-	       && gdbarch_single_step_through_delay (gdbarch,
-						     get_current_frame ()))
-	/* We stepped onto an instruction that needs to be stepped
-	   again before re-inserting the breakpoint, do so.  */
-	cur_thr->stepping_over_breakpoint = 1;
+	       Note, we don't do this in reverse, because we won't
+	       actually be executing the breakpoint insn anyway.
+	       We'll be (un-)executing the previous instruction.  */
+	    cur_thr->stepping_over_breakpoint = 1;
+	  else if (gdbarch_single_step_through_delay_p (gdbarch)
+		   && gdbarch_single_step_through_delay (gdbarch,
+							 get_current_frame ()))
+	    /* We stepped onto an instruction that needs to be stepped
+	       again before re-inserting the breakpoint, do so.  */
+	    cur_thr->stepping_over_breakpoint = 1;
+	}
+      else
+	{
+	  regcache_write_pc (regcache, addr);
+	}
+
+      if (siggnal != GDB_SIGNAL_DEFAULT)
+	cur_thr->set_stop_signal (siggnal);
     }
-  else
-    {
-      regcache_write_pc (regcache, addr);
-    }
-
-  if (siggnal != GDB_SIGNAL_DEFAULT)
-    cur_thr->set_stop_signal (siggnal);
 
   /* If an exception is thrown from this point on, make sure to
      propagate GDB's knowledge of the executing state to the
@@ -3724,11 +3737,15 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
   /* Even if RESUME_PTID is a wildcard, and we end up resuming fewer
      threads (e.g., we might need to set threads stepping over
      breakpoints first), from the user/frontend's point of view, all
-     threads in RESUME_PTID are now running.  */
-  set_state (resume_target, resume_ptid, THREAD_RUNNING);
+     threads in RESUME_PTID are now running.
+
+     Note that RESUME_PTID may be NULL_PTID when resuming an inferior that
+     (currently) has no threads.  */
+  if (resume_ptid != null_ptid)
+    set_state (resume_target, resume_ptid, THREAD_RUNNING);
 
   infrun_debug_printf ("addr=%s, signal=%s, resume_ptid=%s",
-		       paddress (gdbarch, addr),
+		       hex_string (addr),
 		       gdb_signal_to_symbol_string (siggnal),
 		       resume_ptid.to_string ().c_str ());
 
@@ -3744,6 +3761,9 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
      Ctrl-C from within target_pass_ctrlc).  */
   target_terminal::inferior ();
 
+  /* We don't want the user to see a different selected thread.  */
+  scoped_restore_current_thread restore_thread;
+
   /* In a multi-threaded task we may select another thread and
      then continue or step.
 
@@ -3757,8 +3777,10 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 
   /* If scheduler locking applies, we can avoid iterating over all
      threads.  */
-  if (!non_stop && !schedlock_applies (cur_thr))
+  if (resume_ptid != null_ptid && !non_stop && !schedlock_applies (cur_thr))
     {
+      scoped_restore_current_thread restore;
+
       for (thread_info &tp : all_non_exited_threads (resume_target,
 						     resume_ptid))
 	{
@@ -3779,21 +3801,22 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 
 	  global_thread_step_over_chain_enqueue (&tp);
 	}
-
-      switch_to_thread (cur_thr);
     }
 
-  /* Enqueue the current thread last, so that we move all other
-     threads over their breakpoints first.  */
-  if (cur_thr->stepping_over_breakpoint)
-    global_thread_step_over_chain_enqueue (cur_thr);
+  if (cur_thr != nullptr)
+    {
+      /* Enqueue the current thread last, so that we move all other
+	 threads over their breakpoints first.  */
+      if (cur_thr->stepping_over_breakpoint)
+	global_thread_step_over_chain_enqueue (cur_thr);
 
-  /* If the thread isn't started, we'll still need to set its prev_pc,
-     so that switch_back_to_stepped_thread knows the thread hasn't
-     advanced.  Must do this before resuming any thread, as in
-     all-stop/remote, once we resume we can't send any other packet
-     until the target stops again.  */
-  cur_thr->prev_pc = regcache_read_pc_protected (regcache);
+      /* If the thread isn't started, we'll still need to set its prev_pc,
+	 so that switch_back_to_stepped_thread knows the thread hasn't
+	 advanced.  Must do this before resuming any thread, as in
+	 all-stop/remote, once we resume we can't send any other packet
+	 until the target stops again.  */
+      cur_thr->prev_pc = regcache_read_pc_protected (regcache);
+    }
 
   {
     scoped_disable_commit_resumed disable_commit_resumed ("proceeding");
@@ -3817,25 +3840,23 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 
 	/* In all-stop, but the target is always in non-stop mode.
 	   Start all other threads that are implicitly resumed too.  */
-	for (thread_info &tp : all_non_exited_threads (resume_target,
-						       resume_ptid))
+	if (resume_ptid != null_ptid)
 	  {
-	    switch_to_thread_no_regs (&tp);
-	    proceed_resume_thread_checked (&tp);
+	    for (thread_info &tp : all_non_exited_threads (resume_target,
+							   resume_ptid))
+	      {
+		switch_to_thread_no_regs (&tp);
+		proceed_resume_thread_checked (&tp);
+	      }
 	  }
       }
-    else
+    else if (cur_thr != nullptr)
       proceed_resume_thread_checked (cur_thr);
 
     disable_commit_resumed.reset_and_commit ();
   }
 
   finish_state.release ();
-
-  /* If we've switched threads above, switch back to the previously
-     current thread.  We don't want the user to see a different
-     selected thread.  */
-  switch_to_thread (cur_thr);
 
   /* Tell the event loop to wait for it to stop.  If the target
      supports asynchronous execution, it'll do this from within

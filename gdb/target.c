@@ -3830,6 +3830,18 @@ target_pass_ctrlc (void)
 	    }
 	}
     }
+
+  /* Inferior may not (currently) have threads.  If we didn't find a
+     target with running threads, pass it to the current inferior's
+     target.  */
+  inferior *inf = current_inferior ();
+  if (inf != nullptr)
+    {
+      inf->top_target ()->pass_ctrlc ();
+      return;
+    }
+
+  warning (_("Dropping interrupt request."));
 }
 
 /* See target.h.  */

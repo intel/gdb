@@ -58,6 +58,7 @@
 #include "cli/cli-style.h"
 #include "gdbsupport/selftest.h"
 #include "finish-thread-state.h"
+#include "event-top.h"
 
 /* Local functions: */
 
@@ -383,18 +384,21 @@ post_create_inferior (int from_tty, bool set_pspace_solib_ops)
   /* Now that we know the register layout, retrieve current PC.  But
      if the PC is unavailable (e.g., we're opening a core file with
      missing registers info), ignore it.  */
-  thread_info *thr = inferior_thread ();
+  if (inferior_ptid != null_ptid)
+    {
+      thread_info *thr = inferior_thread ();
 
-  thr->clear_stop_pc ();
-  try
-    {
-      regcache *rc = get_thread_regcache (thr);
-      thr->set_stop_pc (regcache_read_pc (rc));
-    }
-  catch (const gdb_exception_error &ex)
-    {
-      if (ex.error != NOT_AVAILABLE_ERROR)
-	throw;
+      thr->clear_stop_pc ();
+      try
+	{
+	  regcache *rc = get_thread_regcache (thr);
+	  thr->set_stop_pc (regcache_read_pc (rc));
+	}
+      catch (const gdb_exception_error &ex)
+	{
+	  if (ex.error != NOT_AVAILABLE_ERROR)
+	    throw;
+	}
     }
 
   if (set_pspace_solib_ops)
@@ -2904,6 +2908,26 @@ attach_command (const char *args, int from_tty)
        before the attach continuation runs and the command is really
        finished.  */
   target_terminal::inferior ();
+
+  /* If the attach does not create a thread, there's nothing to stop.
+
+     Also leave setting up any inferior it created to the target.  */
+  if (inferior_ptid == null_ptid)
+    {
+      target_terminal::ours_for_output ();
+
+      /* We disabled stdin in prepare_execution_command ().  There won't
+	 be any normal_stop () to enable them again.  Do so now.  */
+      if (async_exec == 0)
+	{
+	  SWITCH_THRU_ALL_UIS ()
+	    {
+	      async_enable_stdin ();
+	    }
+	}
+
+      return;
+    }
 
   inferior->needs_setup = true;
 

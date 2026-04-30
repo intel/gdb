@@ -25,7 +25,7 @@
 
 load_lib sycl.exp
 
-standard_testfile .cpp
+standard_testfile kernel-multithread-pagefault-write.cpp
 
 set sycl_device_list [init_sycl_devices_list]
 if {[llength $sycl_device_list] == 0} {

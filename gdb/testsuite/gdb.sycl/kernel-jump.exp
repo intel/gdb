@@ -57,7 +57,9 @@ foreach device $sycl_device_list {
 	gdb_continue_to_breakpoint "hit breakpoint at line 3 again" \
 	    ".*$srcfile:$inside_kernel_3.*"
 
-	setup_kfail "JIRA IGDB/3408" "*-*-*"
+	if {[require_sycl_device $device "gpu" "Intel*"]} {
+	    setup_kfail "JIRA IGDB/3408" "*-*-*"
+	}
 	gdb_test "jump ${inside_kernel_2}" ".*Breakpoint.* $srcfile:$inside_kernel_2.*" \
 	    "Jump to line 2 at BP"
 

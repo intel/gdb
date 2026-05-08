@@ -58,20 +58,15 @@ foreach device_info ${device_list} {
 	# Test homogeneous derived type.
 	# Already fixed on latest driver.
 	if {[require_openmp_device "GPU"]} {
-	    setup_kfail "JIRA GSD/9596" "*-*-*"
+	    setup_kfail "JIRA CMPLRLLVM/74349" "*-*-*"
 	}
 	if { ${gcc_with_broken_stride} } { setup_kfail *-*-* gcc/92775 }
 	gdb_test "p point_dimension" "= \\\(2, 2, 2, 2, 2, 2, 2, 2, 2\\\)"
 
-	# Test mixed type derived type.
-	# Already fixed on latest driver.
-	if {[require_openmp_device "GPU"]} {
-	    setup_kfail "JIRA GSD/9596" "*-*-*"
-	}
 	if { ${gcc_with_broken_stride} } { setup_kfail *-*-* gcc/92775 }
 	gdb_test "p point_mixed_dimension" "= \\\(3, 3, 3, 3\\\)"
 
-	setup_kfail "JIRA GSD/9596" "*-*-*"
+	setup_kfail "JIRA CMPLRLLVM/74349" "*-*-*"
 	gdb_test "p cloud_slice" " = \\\(\\\( x = 1, y = 2, z = 3 \\\)\\\)"
     }
 }

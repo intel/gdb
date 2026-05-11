@@ -57,8 +57,6 @@ set kernel_ln [gdb_get_line_number "kernel-line"]
 
 set output_path [standard_output_file ""]
 
-set gsd_10020 0
-
 # Clear any previous error captures, and return the number of cards
 # found by coregen.
 proc reset_error_captures {} {
@@ -189,15 +187,10 @@ proc test_other_thread {tid simd_lane} {
 		"#4$::fill main::$::fill at $::srcfile:$::kernel_ln.*"] \
 	"backtrace at spin-line"
 
-	if {! $::gsd_10020} {
-	    # CR0.1 bit 15 should be clear.
-	    setup_kfail "JIRA GSD/10020" "*-*-*"
-	    if {! [gdb_assert {{[get_integer_valueof "\$cr0\[1\]" "0"] \
-				& [expr 1 << 15]} == 0} \
-				"CR0.1 bit 15 is clear"]} {
-		set ::gsd_10020 1
-	    }
-	}
+	# CR0.1 bit 15 should be clear.
+	gdb_assert {{[get_integer_valueof "\$cr0\[1\]" "0"] & [expr 1 << 15]} \
+		    == 0} \
+		   "CR0.1 bit 15 is clear"
 
 	gdb_test "frame 4"
 	set in_elem2 [get_integer_valueof "in_elem2" 0]

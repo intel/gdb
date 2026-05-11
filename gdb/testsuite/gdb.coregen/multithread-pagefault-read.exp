@@ -173,9 +173,9 @@ proc test_pf_thread {tid} {
 		"#4$::fill kernel$::fill at $::srcfile:$::kernel_ln.*"] \
 	    "backtrace at pagefault-line"
 
-	# CR0.1 bit 15 should be set.
-	gdb_assert {[get_integer_valueof "\$cr0\[1\]" "0"] & [expr 1 << 15]} \
-	     "CR0.1 bit 15 is set"
+	# Crashing thread should have siginfo set with proper values.
+	gdb_test "print \$_siginfo" \
+	    "= \{si_signo = 11, si_errno = 0, si_code = 1, _sigfault = \{si_addr = 0x0, _addr_lsb = 16\}\}"
 
 	set wid [get_integer_valueof "\*pWID" 0]
 	set expected_x4 [expr $wid + 138]
@@ -212,10 +212,8 @@ proc test_other_thread {tid simd_lane} {
 		"#4$::fill kernel$::fill at $::srcfile:$::kernel_ln.*"] \
 	    "backtrace at spin-line"
 
-	# CR0.1 bit 15 should be clear.
-	gdb_assert {{[get_integer_valueof "\$cr0\[1\]" "0"] & [expr 1 << 15]} \
-		     == 0} \
-		   "CR0.1 bit 15 is clear"
+	# Non-crashing thread should not have a siginfo.
+	gdb_test "print \$_siginfo" "Unable to read siginfo"
 
 	gdb_test "frame 4"
 	set wid [get_integer_valueof "myWid" 0]
@@ -237,9 +235,6 @@ proc read_corefile {corefile} {
 	    "#0$::fill fourth $::fill at $::srcfile:$::pf_ln" \
 	    "$::pf_ln${::ws}while \(count \> 0\) count--;.*"] \
 	"load corefile"
-
-    gdb_test "print \$_siginfo" \
-	"= \{si_signo = 11, si_errno = 0, si_code = 1, _sigfault = \{si_addr = 0x0, _addr_lsb = 16\}\}"
 
     # Only one thread triggered a faulting read request.  Coregen adds
     # crashed threads first, so we expect thread 1 is at pagefault-line.

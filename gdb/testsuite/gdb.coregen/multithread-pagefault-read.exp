@@ -238,6 +238,7 @@ proc test_other_thread {tid simd_lane} {
 proc read_corefile {corefile} {
     # Load the core file into debugger, and try some commands.
     clean_restart
+    setup_kfail "JIRA IGDB/6976" "*-*-*"
     set lines 0
     set pf_line 0
     set spin_line 0
@@ -268,7 +269,9 @@ proc read_corefile {corefile} {
 	    # all other cases the test failed.  If this is false positive,
 	    # we don't fail here but have a gdb_assert further down,
 	    # because otherwise we would never see KPASS.
-	    if {"$lines" == "3"} {
+	    # When IGDB/6976 reproduces, we get 2 lines and stop at pf_line
+	    # or spin_line.
+	    if {"$lines" == "3"  || "$lines" == "2"} {
 		if {"$pf_line" == "1"} {
 		    pass $gdb_test_name
 		} else {

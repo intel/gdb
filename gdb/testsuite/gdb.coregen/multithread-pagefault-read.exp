@@ -143,6 +143,11 @@ proc translate_error_capture {errorfile} {
     verbose -log "Translate error capture:\n$output\n"
     set lines [split $output "\n"]
     foreach line $lines {
+	if {[regexp {Crash reason\: GPU HANG\: .*} $line ]} {
+	    setup_kfail "JIRA GSD/12360" "*-*-*"
+	    fail "crash reason found"
+	    return ""
+	}
 	if {[regexp \
 		{Crash reason\: page fault \@ 0x0000000000000000, ccs[0-9]+ in multithread-pag.* \[.*\]} \
 		$line ]} {

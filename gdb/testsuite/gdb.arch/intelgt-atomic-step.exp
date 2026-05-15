@@ -50,6 +50,10 @@ proc step_over_atomic {displaced_stepping device} {
 	    exp_continue
 	}
 	-re -wrap "" {
+	    if {"$atomic_address" == "0"} {
+		untested "Cannot find atomic address"
+		return
+	    }
 	    pass $gdb_test_name
 	}
     }

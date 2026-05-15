@@ -106,6 +106,10 @@ foreach device $sycl_device_list {
 		exp_continue
 	    }
 	    -re -wrap "" {
+		if {"$atomic_address" == "0"} {
+		    untested "Cannot find atomic address"
+		    return
+		}
 		pass $gdb_test_name
 	    }
 	}

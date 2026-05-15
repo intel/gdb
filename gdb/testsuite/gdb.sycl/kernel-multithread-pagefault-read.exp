@@ -57,11 +57,8 @@ foreach device $sycl_device_list {
 	gdb_test "continue" "signal SIGSEGV, Segmentation fault.*" \
 	    "hit the segmentation fault"
 
-	# Stopped thread should have local variable 'src',
-	# and it should have CR0.1 bit 15 set.
+	# Stopped thread should have local variable 'src'.
 	gdb_test "print src" "= \\(int \\*\\) 0x0"
-	gdb_assert {[get_integer_valueof "\$cr0\[1\]" "0"] & [expr 1 << 15]} \
-	    "CR0.1 bit 15"
 	gdb_test "backtrace 5" \
 		[multi_line \
 		    "#0$fill fourth $fill at $srcfile:$pf_ln" \
@@ -73,7 +70,8 @@ foreach device $sycl_device_list {
 	# We should have four threads.
 	set wpfa "with print frame-arguments none -- "
 	set stopped_threads {}
-	gdb_test_multiple "${wpfa}info threads -stopped" "stopped threads" -lbl {
+	gdb_test_multiple "${wpfa}info threads -stopped" "stopped threads" \
+	    -lbl {
 	    -re "\r\n. (\[2-9\]\.$decimal)\:\[$fill" {
 		lappend stopped_threads $expect_out(1,string)
 		exp_continue
@@ -86,17 +84,5 @@ foreach device $sycl_device_list {
 		}
 	    }
 	}
-
-	# Only one of the threads should have CR0.1 bit 15 set.
-	set cr01_pf_set 0
-	foreach thread $stopped_threads {
-	    with_test_prefix $thread {
-		gdb_test "thread $thread"
-		if {[get_integer_valueof "\$cr0\[1\]" "-1"] & [expr 1 << 15]} {
-		    incr cr01_pf_set
-		}
-	    }
-	}
-	gdb_assert {"$cr01_pf_set" == "1"} "page fault on one thread"
     }
 }

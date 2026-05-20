@@ -659,6 +659,9 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 
   bool is_systolic = is_systolic_exception (device_id, cr0[1]);
   bool is_oob = is_oob_exception (device_id, cr0[1]);
+  bool is_force_exception
+    = (cr0[1] & ((1 << intelgt_cr0_1_force_exception_status)
+		 | (1 << intelgt_cr0_1_external_halt_status))) != 0;
   const auto [intelgt_shared_function_exception_bit, sfe_symbol]
     = intelgt_shared_function_exception_data (device_id);
 
@@ -685,6 +688,11 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 	   tp->id.to_string ().c_str (),
 	   ze_thread_id_str (thread).c_str (), cr0[0], cr0[1],
 	   ex_keywords.c_str (), cr0[2]);
+
+  /* Always clear force exception/external halt on first
+     call (prevent re-reporting).  */
+  cr0[1] &= ~(1 << intelgt_cr0_1_force_exception_status);
+  cr0[1] &= ~(1 << intelgt_cr0_1_external_halt_status);
 
   if ((cr0[1] & (1 << intelgt_shared_function_exception_bit)) != 0)
     {
@@ -724,18 +732,10 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 
   if (is_systolic)
     {
-      signal = GDB_SIGNAL_SYSTOLIC;
-      return TARGET_STOPPED_BY_NO_REASON;
-    }
-
-  if ((cr0[1] & ((1 << intelgt_cr0_1_force_exception_status)
-		 | (1 << intelgt_cr0_1_external_halt_status))) != 0)
-    {
-      cr0[1] &= ~(1 << intelgt_cr0_1_force_exception_status);
-      cr0[1] &= ~(1 << intelgt_cr0_1_external_halt_status);
+      cr0[1] &= ~(1 << intelgt_cr0_1_systolic_exception_status);
       intelgt_write_cr0 (regcache, 1, cr0[1]);
 
-      signal = GDB_SIGNAL_INT;
+      signal = GDB_SIGNAL_SYSTOLIC;
       return TARGET_STOPPED_BY_NO_REASON;
     }
 
@@ -783,6 +783,16 @@ intelgt_ze_target::get_stop_reason (thread_info *tp, gdb_signal &signal)
 	  return TARGET_STOPPED_BY_SW_BREAKPOINT;
 	}
     }
+
+    /* Handle force exception only when no other exception is reported.  */
+    if (is_force_exception)
+      {
+	/* Bits already cleared above; only writing register here.  */
+	intelgt_write_cr0 (regcache, 1, cr0[1]);
+
+	signal = GDB_SIGNAL_INT;
+	return TARGET_STOPPED_BY_NO_REASON;
+      }
 
   signal = GDB_SIGNAL_UNKNOWN;
   return TARGET_STOPPED_BY_NO_REASON;

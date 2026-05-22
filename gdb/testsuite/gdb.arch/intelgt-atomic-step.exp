@@ -60,6 +60,8 @@ proc step_over_atomic {displaced_stepping device} {
     if {[is_xe2 $device]
 	&& [string match -nocase "*0xe223*" $device]} {
 	setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+    } elseif {[is_xe3 $device]} {
+	setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
     }
     gdb_assert {$atomic_address} "found atomic address"
 
@@ -67,6 +69,8 @@ proc step_over_atomic {displaced_stepping device} {
     if {[is_xe2 $device]
 	&& [string match -nocase "*0xe223*" $device]} {
 	setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+    } elseif {[is_xe3 $device]} {
+	setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
     }
     gdb_continue_to_breakpoint "continue to bp at atomic instruction"
 
@@ -83,6 +87,8 @@ proc step_over_atomic {displaced_stepping device} {
     if {[is_xe2 $device]
 	&& [string match -nocase "*0xe223*" $device]} {
 	setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+    } elseif {[is_xe3 $device]} {
+	setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
     }
     gdb_test "nexti" "${hex}\[\\t\\s\].*\[\r\n\]+${decimal}${fill}" \
 	"step over atomic at $curr_pc"
@@ -92,6 +98,8 @@ proc step_over_atomic {displaced_stepping device} {
     if {[is_xe2 $device]
 	&& [string match -nocase "*0xe223*" $device]} {
 	setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+    } elseif {[is_xe3 $device]} {
+	setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
     }
     if {($displaced_stepping eq "on" && $pc eq $next_pc)
 	|| ($displaced_stepping eq "off" && $pc > $next_pc)} {
@@ -103,6 +111,8 @@ proc step_over_atomic {displaced_stepping device} {
     if {[is_xe2 $device]
 	&& [string match -nocase "*0xe223*" $device]} {
 	setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+    } elseif {[is_xe3 $device]} {
+	setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
     }
     # Make sure that the application computes correct results.
     gdb_test_multiple "continue" "correct matrix multiplication" {
@@ -176,6 +186,8 @@ foreach device $sycl_device_list {
 	    if {[is_xe2 $device]
 		&& [string match -nocase "*0xe223*" $device]} {
 		setup_kfail "JIRA CMPLRLLVM/70519" "*-*-*"
+	    } elseif {[is_xe3 $device]} {
+		 setup_kfail "JIRA CMPLRLLVM/72023" "*-*-*"
 	    }
 	    gdb_test_multiple "continue" "hit the BP inside the kernel" {
 		-re -wrap "hit Temporary breakpoint.*" {

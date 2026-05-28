@@ -452,20 +452,6 @@ static const char *amd64_tilecfg_names[] = {
     "tilecfg"
 };
 
-/* APX register?  */
-
-static int
-amd64_apx_regnum_p (struct gdbarch *gdbarch, int regnum)
-{
-  i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
-  int r16_regnum = tdep->r16_regnum;
-  if (r16_regnum < 0)
-    return 0;
-
-  regnum -= r16_regnum;
-  return regnum >= 0 && regnum < tdep->num_apx_regs;
-}
-
 /* Return the name of register REGNUM.  */
 
 static const char *
@@ -484,8 +470,6 @@ amd64_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
     return amd64_ymm_avx512_names[regnum - tdep->ymm16_regnum];
   else if (i386_dword_regnum_p (gdbarch, regnum))
     return tdep->dword_names[regnum - tdep->eax_regnum];
-  else if (amd64_apx_regnum_p (gdbarch, regnum))
-    return amd64_apx_names[regnum - tdep->r16_regnum];
   else
     return i386_pseudo_register_name (gdbarch, regnum);
 }
@@ -570,8 +554,11 @@ amd64_raw_byte_register (i386_gdbarch_tdep *tdep, int regnum, int *part)
   else
     {
       *part = 0;
-      if (gpnum >= 16)
-	gpnum += tdep->r16_regnum - 16;
+      if (gpnum >= AMD64_NUM_GPRS)
+	{
+	  gdb_assert (tdep->r16_regnum != -1);
+	  gpnum += tdep->r16_regnum - 16;
+	}
     }
   return gpnum;
 }

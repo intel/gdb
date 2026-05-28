@@ -824,7 +824,7 @@ static int xsave_xmm_avx512_offset[] =
 
 static int xsave_apx_egpr_offset[] =
 {
-  0 * 8,			/* r11...r31 registers.  */
+  0 * 8,			/* r16...r31 registers.  */
   1 * 8,
   2 * 8,
   3 * 8,

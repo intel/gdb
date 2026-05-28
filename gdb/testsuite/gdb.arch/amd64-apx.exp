@@ -68,11 +68,11 @@ standard_testfile
 
 if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
 	{debug additional_flags=-mapxf}] } {
-    return -1
+    return
 }
 
 if { ![runto_main] } {
-    return -1
+    return
 }
 
 set line [gdb_get_line_number "break here"]

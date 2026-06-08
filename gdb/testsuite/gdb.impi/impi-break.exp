@@ -69,6 +69,8 @@ proc test_per_rank {rank device} {
     for {set i 1} {$i <= $num_kernel_locations} {incr i} {
 	if {[is_xe_hpg $device]} {
 	    setup_kfail "JIRA IGDB/5448" "*-*-*"
+	} elseif {$rank == 1 && [is_xe2 $device]} {
+	    setup_kfail "JIRA CMPLRLLVM/73229" "*-*-*"
 	}
 	if {[gdb_test -prompt $::impi_gdb_prompt "continue" \
 		"\\\[$rank\\\]$fill$srcfile:$bp_locations_kernel($i).*" \
@@ -79,6 +81,9 @@ proc test_per_rank {rank device} {
 	}
     }
 
+    if {$rank == 1 && [is_xe2 $device]} {
+	setup_kfail "JIRA CMPLRLLVM/73229" "*-*-*"
+    }
     impi_gdb_continue_to_breakpoint 1 "line after kernel" \
 	"$srcfile:$line_after_kernel.*"
 

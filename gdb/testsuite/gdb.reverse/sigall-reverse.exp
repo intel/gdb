@@ -40,6 +40,8 @@ proc test_one_sig {nextsig} {
     if {$this_sig_supported} {
 	if { $thissig == "IO" } {
 	    setup_xfail "i*86-pc-linuxoldld-gnu" "i*86-pc-linuxaout-gnu"
+	} else {
+	    setup_kfail "JIRA IGDB/7032" "*-*-*"
 	}
 	gdb_test_multiple "continue" "get signal $thissig" {
 	    -wrap -re \
@@ -63,6 +65,7 @@ proc test_one_sig {nextsig} {
     }
 
     if {$need_another_continue} {
+	setup_kfail "JIRA IGDB/7032" "*-*-*"
 	if { $thissig == "URG" } {
 	    setup_xfail "i*86-pc-linuxoldld-gnu" "i*86-pc-linuxaout-gnu"
 	}
@@ -84,6 +87,7 @@ proc test_one_sig {nextsig} {
 
     if {$missed_handler == "0"} {
 	set testmsg "advance to $nextsig"
+	setup_kfail "JIRA IGDB/7032" "*-*-*"
         gdb_test_multiple "signal 0" $testmsg {
 	    -re "Breakpoint.*gen_$nextsig.*kill.*$gdb_prompt $" {
 	        pass $testmsg
@@ -101,11 +105,13 @@ proc test_one_sig {nextsig} {
 proc test_one_sig_reverse {prevsig} {
     global gdb_prompt
 
+    setup_kfail "JIRA IGDB/7032" "*-*-*"
     gdb_test "reverse-continue" "Breakpoint .* handle_$prevsig.*" \
 	"reverse to handler of $prevsig"
 
     set saw_signal 0
     set testmsg "reverse to gen_$prevsig"
+    setup_kfail "JIRA IGDB/7032" "*-*-*"
     gdb_test_multiple "reverse-continue" $testmsg {
 	-re "Breakpoint.*handle_.*$gdb_prompt " {
 	    pass "$testmsg (un-handled)"
@@ -249,12 +255,15 @@ with_test_prefix "sig-test-1" {
 gdb_test "handle SIGTERM stop print" \
     "SIGTERM\[ \t\]*Yes\[ \t\]*Yes\[ \t\]*Yes.*"
 gdb_test "b handle_TERM" "Breakpoint \[0-9\]+ .*"
+setup_kfail "JIRA IGDB/7032" "*-*-*"
 gdb_test "continue" \
     "Continuing.*Program received signal SIGTERM.*" \
     "get signal TERM"
+setup_kfail "JIRA IGDB/7032" "*-*-*"
 gdb_test "continue" "Breakpoint.*handle_TERM.*" "send signal TERM"
 
 with_timeout_factor 2 {
+    setup_kfail "JIRA IGDB/7032" "*-*-*"
     gdb_test "continue" "\[process \[0-9\]+ .*" "continue to signal exit" \
 	"The next instruction is syscall exit_group.* program...y. or n. " \
 	"yes"

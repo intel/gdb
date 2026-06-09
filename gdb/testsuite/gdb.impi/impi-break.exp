@@ -87,6 +87,9 @@ proc test_per_rank {rank device} {
     impi_gdb_continue_to_breakpoint 1 "line after kernel" \
 	"$srcfile:$line_after_kernel.*"
 
+    if {$rank == 1 && [is_xe2 $device]} {
+	setup_kfail "JIRA CMPLRLLVM/73229" "*-*-*"
+    }
     # Set breakpoint at the end of the main-function.
     impi_gdb_breakpoint "$srcfile:${::line_at_end}" {message}
 
@@ -137,10 +140,17 @@ save_vars { env(ZE_FLAT_DEVICE_HIERARCHY) } {
 
 		# Run all ranks to the last breakpoint.
 		global line_at_end
+		if {[is_xe2 $device]} {
+		    setup_kfail "JIRA CMPLRLLVM/73229" "*-*-*"
+		}
 		impi_gdb_continue_to_breakpoint $ranks "last breakpoint" \
 		    "$srcfile:$line_at_end"
 
-		impi_continue_sycl_program_to_termination $ranks
+		set kfail ""
+		if {[is_xe2 $device]} {
+		    set kfail "JIRA CMPLRLLVM/73229"
+		}
+		impi_continue_sycl_program_to_termination $ranks "" "$kfail"
 	    }
 	}
     }

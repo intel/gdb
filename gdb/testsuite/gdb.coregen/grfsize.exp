@@ -158,7 +158,7 @@ proc read_corefile {corefile grfsize lastreg} {
 		"$::pf_ln${::ws}num \\+= \\*src;.*"] \
 	"load corefile"
 
-    # Compare GRF register with FRAMEDESC register.
+    # Compare GRF register with FRAMEDESC registger.
     gdb_test_multiple "print /x ${lastreg}" "print /x ${lastreg}" {
 	-re " = \{($::hex), ($::hex), ($::hex), ($::hex), .*" {
 	    gdb_assert {[get_hexadecimal_valueof \

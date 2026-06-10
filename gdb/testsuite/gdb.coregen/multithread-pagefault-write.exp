@@ -161,9 +161,9 @@ proc test_pf_thread {tid simd_lane} {
 		"#4$::fill main::$::fill at $::srcfile:$::kernel_ln.*"] \
 	    "backtrace at pagefault-line"
 
-	# Crashing thread should have siginfo set with proper values.
-	gdb_test "print \$_siginfo" \
-	    "= \{si_signo = 11, si_errno = 0, si_code = 1, _sigfault = \{si_addr = 0x0, _addr_lsb = 16\}\}"
+	# CR0.1 bit 15 should be set.
+	gdb_assert {[get_integer_valueof "\$cr0\[1\]" "0"] & [expr 1 << 15]} \
+	    "CR0.1 bit 15 is set"
 
 	set y4 [get_integer_valueof "\*y4" 0]
 	set expected_x4 [expr $y4 + 138]
@@ -187,8 +187,10 @@ proc test_other_thread {tid simd_lane} {
 		"#4$::fill main::$::fill at $::srcfile:$::kernel_ln.*"] \
 	"backtrace at spin-line"
 
-	# Non-crashing thread should not have a siginfo.
-	gdb_test "print \$_siginfo" "Unable to read siginfo"
+	# CR0.1 bit 15 should be clear.
+	gdb_assert {{[get_integer_valueof "\$cr0\[1\]" "0"] & [expr 1 << 15]} \
+		    == 0} \
+		   "CR0.1 bit 15 is clear"
 
 	gdb_test "frame 4"
 	set in_elem2 [get_integer_valueof "in_elem2" 0]
@@ -208,6 +210,9 @@ proc read_corefile {corefile} {
 	    "Warning: The location reported for the signal may be inaccurate." \
 	    "#0$::ws$::fill at ${::fill}${::srcfile}:$::pf_spin_ln.*"] \
 	"load corefile"
+
+    gdb_test "print \$_siginfo" \
+	"= \{si_signo = 11, si_errno = 0, si_code = 1, _sigfault = \{si_addr = 0x0, _addr_lsb = 16\}\}"
 
     set threads [get_integer_valueof "\$_inferior_thread_count" 0]
     if {[gdb_assert {$threads == 4} "threads count"]} {

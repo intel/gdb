@@ -31,6 +31,10 @@ fourth (int x4, int *pWID)
 {
   int result = x4 * (*pWID);
 
+  /* In this function, one thread attempts to read through a nullptr, while
+     others are spinning.  We expect all the threads to stop before exit,
+     due to the faulting read.  */
+
   if (*pWID == FAILING_WID)
     {
       /* Spin a while, before triggering pagefault,
@@ -41,18 +45,17 @@ fourth (int x4, int *pWID)
       /* Memory access and page fault detection may be asynchronous,
 	 so we use 'plus and assign' operator to force the page fault
 	 detection at that line.  */
-      result += *src;  /* pagefault-line */
+      result += *src;
+      return result;
     }
   else
     {
-      /* Spin a very long time, to let the faulting
-	 thread trigger a pagefault.  Counter ensures
-	 this does not run infinitely.  */
-      size_t count = 1e6;
+      /* Spin a very long time, waiting for the faulting thread.
+	 Counter ensures this does not run infinitely.  */
+      size_t count = 1e8;
       while (count > 0) count--;  /* spin-line */
+      return result;
     }
-
-  return result;
 }
 
 int
@@ -90,7 +93,7 @@ kernel (int argc, char *argv[], int *in, int *out)
 	  = bufferOut.get_access<sycl::access::mode::write> (cgh);
 
 	cgh.parallel_for (dataRange, [=] (sycl::id<1> wiID)
-				[[sycl::reqd_sub_group_size (SUB_GROUP_SIZE)]]
+			  [[sycl::reqd_sub_group_size (SUB_GROUP_SIZE)]]
 	  {
 	    int elem = accessorIn[wiID];
 	    int myWid = wiID;
@@ -126,5 +129,4 @@ main (int argc, char *argv[])
   kernel (argc, argv, in, out);
 
   return 0;
-
 }

@@ -258,7 +258,7 @@ foreach device $sycl_device_list {
     # Check the version string.
     set output [exec $::coregen_app --version]
     verbose -log "CoreGen version: $output"
-    gdb_assert {[string first "Intel(R) corefilegen-gpu 202" $output] != -1} \
+    gdb_assert {[string first "Intel(R) Core File Generator for GPU (202" $output] != -1} \
 	"CoreGen version"
 
     # Reset previous error captures (if any).

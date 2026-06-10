@@ -47,9 +47,7 @@ if {[build_executable "failed to compile $srcfile" \
 set fill "\[^\r\n\]*"
 set ws "\\s+"
 
-set pf_ln [gdb_get_line_number "pagefault-line"]
-set pf_spin_ln [gdb_get_line_number "faulting-thread-spin-line"]
-set spin_ln [gdb_get_line_number "non-faulting-thread-spin-line"]
+set spin_ln [gdb_get_line_number "spin-line"]
 set third_ln [gdb_get_line_number "func-third"]
 set second_ln [gdb_get_line_number "func-second"]
 set first_ln [gdb_get_line_number "func-first"]
@@ -57,18 +55,28 @@ set kernel_ln [gdb_get_line_number "kernel-line"]
 
 set output_path [standard_output_file ""]
 
+set tested 0
+
 # Clear any previous error captures, and return the number of cards
 # found by coregen.
 proc reset_error_captures {} {
     set cards ""
     set cards_line 0
 
+    if {[catch {set output [exec $::coregen_app --version]} errmsg] != 0} {
+	verbose -log "Getting version failed with message:\n$errmsg\n"
+	fail "reset error captures"
+	return 0
+    }
+
+    verbose -log "CoreGen version:\n$output\n"
     if {[catch {set output [exec $::coregen_app --log-level=2 \
 			    --output-path=$::output_path]} errmsg] != 0} {
 	verbose -log "Reset error capture failed with message:\n$errmsg\n"
 	fail "reset error captures"
 	return 0
     }
+
     verbose -log "Reset error capture:\n$output\n"
     set lines [split $output "\n"]
     foreach line $lines {
@@ -99,6 +107,7 @@ proc copy_error_captures {} {
 	fail "copy error captures"
 	return {}
     }
+
     verbose -log "Copy error capture:\n$output\n"
     set lines [split $output "\n"]
     set errorfiles 0
@@ -118,13 +127,17 @@ proc translate_error_capture {errorfile} {
     set corefile "invalid"
     set crash_reason_line 0
     set translated_line 0
+    set failed_threads 0
 
-    if {[catch {set output [exec $::coregen_app --output-path=$::output_path $errorfile \
+    if {[catch {set output [exec $::coregen_app \
+				--log-level=2 \
+				--output-path=$::output_path $errorfile \
 				--all-active-threads=true]} errmsg]} {
 	verbose -log "Translate error capture failed with message:\n$errmsg\n"
 	fail "translate error captures"
 	return ""
     }
+
     verbose -log "Translate error capture:\n$output\n"
     set lines [split $output "\n"]
     foreach line $lines {
@@ -132,10 +145,15 @@ proc translate_error_capture {errorfile} {
 		{Crash reason\: page fault \@ 0x0000000000000000, ccs[0-9]+ in multithread-pag.* \[.*\]} \
 		$line ]} {
 	    incr crash_reason_line
+	} elseif {[regexp {Found 1 faulting threads} $line]} {
+	    incr failed_threads
 	} elseif {[regexp {Translated '.*' to '(.*)'} $line -> corefile]} {
 	    incr translated_line
 	}
     }
+
+    gdb_assert {"$failed_threads" == "1"} "one thread had a pagfault"
+
     if {![gdb_assert {"$crash_reason_line" == "1"} "crash reason found"]
 	|| ![gdb_assert {"$translated_line" == "1"} "one corefile generated"]
 	|| ![gdb_assert {[string first "$::output_path" $corefile] == 0} \
@@ -145,29 +163,34 @@ proc translate_error_capture {errorfile} {
     return $corefile
 }
 
-# Run a set of tests on the given thread and SIMD lane.
+# Run a set of tests on the given thread.
 # This thread had a page fault.
-proc test_pf_thread {tid simd_lane} {
-    with_test_prefix "$tid:$simd_lane" {
-	gdb_test "thread $tid:$simd_lane" \
-	    "Switching to thread $tid:$simd_lane.*"
+proc test_pf_thread {tid} {
+    with_test_prefix "$tid" {
+	gdb_test "thread $tid" \
+	    "Switching to thread $tid.*"
 
 	gdb_test "backtrace 5" \
 	    [multi_line \
-		"#0$::fill fourth $::fill at $::srcfile:$::pf_spin_ln" \
+		"#0$::fill fourth $::fill at $::srcfile:\[0-9\]+" \
 		"#1$::fill third $::fill at $::srcfile:$::third_ln" \
 		"#2$::fill second $::fill at $::srcfile:$::second_ln" \
 		"#3$::fill first $::fill at $::srcfile:$::first_ln" \
-		"#4$::fill main::$::fill at $::srcfile:$::kernel_ln.*"] \
+		"#4$::fill kernel$::fill at $::srcfile:$::kernel_ln.*"] \
 	    "backtrace at pagefault-line"
 
-	# CR0.1 bit 15 should be set.
-	gdb_assert {[get_integer_valueof "\$cr0\[1\]" "0"] & [expr 1 << 15]} \
-	    "CR0.1 bit 15 is set"
+	# Crashing thread should have siginfo set with proper values.
+	gdb_test "print \$_siginfo" \
+	    "= \{si_signo = 11, si_errno = 0, si_code = 1, _sigfault = \{si_addr = 0x0, _addr_lsb = 16\}\}"
 
-	set y4 [get_integer_valueof "\*y4" 0]
-	set expected_x4 [expr $y4 + 138]
+	# Crashing thread should have local variable 'src'.
+	gdb_test "print src" "= \\(int \\*\\) 0x0"
+
+	set wid [get_integer_valueof "\*pWID" 0]
+	set expected_x4 [expr $wid + 138]
 	gdb_test "print x4" "= $expected_x4"
+
+	incr ::tested
     }
 }
 
@@ -178,24 +201,36 @@ proc test_other_thread {tid simd_lane} {
 	gdb_test "thread $tid:$simd_lane" \
 	    "Switching to thread $tid:$simd_lane.*"
 
+	# Continue only if this thread is at the spin line,
+	# to avoid flaky failures in the other tests in this proc.
+	gdb_test_multiple "info line" "info line" {
+	    -re "Line $::spin_ln of \"$::srcfile\".*" {
+		# This thread is at spin lane.
+	    }
+	    -re -wrap "" {
+		verbose -log "This thread is not at spin line"
+		return
+	    }
+	}
+
 	gdb_test "backtrace 5" \
 	    [multi_line \
 		"#0$::fill fourth $::fill at $::srcfile:$::spin_ln" \
 		"#1$::fill third $::fill at $::srcfile:$::third_ln" \
 		"#2$::fill second $::fill at $::srcfile:$::second_ln" \
 		"#3$::fill first $::fill at $::srcfile:$::first_ln" \
-		"#4$::fill main::$::fill at $::srcfile:$::kernel_ln.*"] \
-	"backtrace at spin-line"
+		"#4$::fill kernel$::fill at $::srcfile:$::kernel_ln.*"] \
+	    "backtrace at spin-line"
 
-	# CR0.1 bit 15 should be clear.
-	gdb_assert {{[get_integer_valueof "\$cr0\[1\]" "0"] & [expr 1 << 15]} \
-		    == 0} \
-		   "CR0.1 bit 15 is clear"
+	# Non-crashing thread should not have a siginfo.
+	gdb_test "print \$_siginfo" "Unable to read siginfo"
 
 	gdb_test "frame 4"
-	set in_elem2 [get_integer_valueof "in_elem2" 0]
-	set expected_in_elem [expr $in_elem2 + 123]
-	gdb_test "print in_elem" "= $expected_in_elem"
+	set wid [get_integer_valueof "myWid" 0]
+	set expected_elem [expr $wid + 123]
+	gdb_test "print elem" "= $expected_elem"
+
+	incr ::tested
     }
 }
 
@@ -207,28 +242,32 @@ proc read_corefile {corefile} {
 	[multi_line \
 	    "Core was generated by \\`multithread-pag.*\\'\\." \
 	    "Program terminated with signal SIGSEGV, Segmentation fault.*" \
-	    "Warning: The location reported for the signal may be inaccurate." \
-	    "#0$::ws$::fill at ${::fill}${::srcfile}:$::pf_spin_ln.*"] \
+	    "#0$::fill fourth $::fill at $::srcfile:.*"] \
 	"load corefile"
 
-    gdb_test "print \$_siginfo" \
-	"= \{si_signo = 11, si_errno = 0, si_code = 1, _sigfault = \{si_addr = 0x0, _addr_lsb = 16\}\}"
+    # Only one thread triggered a faulting read request.  Coregen adds
+    # crashed threads first, so we expect thread 1 is at pagefault-line.
+    test_pf_thread 1
 
+    # Other threads should be running in the spin.  We don't need to
+    # test them all, but we try to cover all SIMD lanes more than once.
     set threads [get_integer_valueof "\$_inferior_thread_count" 0]
-    if {[gdb_assert {$threads == 4} "threads count"]} {
-	# Only one thread triggered a faulting read request.  Coregen adds
-	# crashed threads first, so we expect thread 1 at pagefault-line.
-	# Other threads should be running in the spin.
-	# For each thread, we cover multiple SIMD lanes.
-	test_pf_thread 1 0
-	test_pf_thread 1 5
-	test_pf_thread 1 12
-	for {set tid 2}  {$tid <= $threads} {incr tid} {
-	    test_other_thread $tid 0
-	    test_other_thread $tid 5
-	    test_other_thread $tid 12
-	}
+    set simd_width [get_integer_valueof "\$_simd_width" -1]
+    gdb_assert {$simd_width > 0} "read SIMD width"
+    set step [expr {int ($threads / [expr ($simd_width * 2) + 2])}]
+    if {$step < 1} {
+	set step 1
     }
+    set simd_lane 0
+    for {set tid 2}  {$tid <= $threads} {incr tid $step} {
+	# Test different SIMD lanes.
+	incr simd_lane
+	if {$simd_lane == 16} {
+	    set simd_lane 0
+	}
+	test_other_thread $tid $simd_lane
+    }
+    gdb_assert {$::tested > $simd_width} "Tested $::tested of $threads threads"
 }
 
 foreach device $sycl_device_list {

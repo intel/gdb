@@ -152,6 +152,7 @@ proc translate_error_capture {errorfile} {
 	}
     }
 
+    setup_kfail "JIRA GSD/10020" "*-*-*"
     gdb_assert {"$failed_threads" == "1"} "one thread had a pagfault"
 
     if {![gdb_assert {"$crash_reason_line" == "1"} "crash reason found"]

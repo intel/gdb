@@ -666,6 +666,21 @@ public:
   /* Private data used by the process_stratum target.  */
   std::unique_ptr<private_inferior> priv;
 
+  /* The wait status for a process event.
+
+     This is TARGET_WAITKIND_IGNORE until we get a process event and will
+     be reset to this once the event has been handled.  */
+  target_waitstatus waitstatus;
+
+  /* Hide the above process event when received during stop_all_threads ()
+     and unhide it again when resuming that inferior.
+
+     This looks hacky, and I'd say it is hacky, but it matches exactly
+     what we had done previously by attaching a process event to the last,
+     artificially-kept-alive thread, and then setting that thread's
+     internal state to stopped instead of event pending.  */
+  bool waitstatus_hidden = false;
+
   /* HAS_EXIT_CODE is true if the inferior exited with an exit code.
      In this case, the EXIT_CODE field is also valid.  */
   bool has_exit_code = false;

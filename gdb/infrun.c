@@ -3552,6 +3552,15 @@ proceed_resume_thread_checked (thread_info *tp)
       return;
     }
 
+  if (!tp->inf->waitstatus_hidden
+      && (tp->inf->waitstatus.kind () != TARGET_WAITKIND_IGNORE))
+    {
+      infrun_debug_printf ("[%s] inferior has pending wait status %s",
+			   tp->ptid.to_string ().c_str (),
+			   tp->inf->waitstatus.to_string ().c_str ());
+      return;
+    }
+
   if (tp->internal_state () != THREAD_INT_STOPPED)
     {
       infrun_debug_printf ("[%s] resumed",
@@ -3838,6 +3847,16 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 	INFRUN_SCOPED_DEBUG_START_END
 	  ("resuming threads, all-stop-on-top-of-non-stop");
 
+	/* Unhide any process event that had been received during
+	   stop_all_threads () so we can now report it when resuming the
+	   inferior.  */
+	for (inferior *inf : all_non_exited_inferiors (resume_target))
+	  {
+	    if ((resume_ptid == minus_one_ptid)
+		|| (resume_ptid.pid () == inf->pid))
+	      inf->waitstatus_hidden = false;
+	  }
+
 	/* In all-stop, but the target is always in non-stop mode.
 	   Start all other threads that are implicitly resumed too.  */
 	if (resume_ptid != null_ptid)
@@ -3851,18 +3870,25 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 	  }
       }
     else if (cur_thr != nullptr)
-      proceed_resume_thread_checked (cur_thr);
+      {
+	/* Unhide any process event that had been received during
+	   stop_all_threads () so we can now report it when resuming the
+	   inferior.  */
+	cur_thr->inf->waitstatus_hidden = false;
+
+	proceed_resume_thread_checked (cur_thr);
+      }
 
     disable_commit_resumed.reset_and_commit ();
   }
 
   finish_state.release ();
 
-  /* Tell the event loop to wait for it to stop.  If the target
-     supports asynchronous execution, it'll do this from within
-     target_resume.  */
-  if (!target_can_async_p ())
-    mark_async_event_handler (infrun_async_inferior_event_token);
+  /* Tell the event loop to wait for it to stop.
+
+     We can not rely on target_resume in case of process events on targets
+     without any threads.  */
+  mark_async_event_handler (infrun_async_inferior_event_token);
 }
 
 
@@ -4112,10 +4138,18 @@ do_target_wait_1 (inferior *inf, ptid_t ptid,
      the wait code relies on it - doing so is always a mistake.  */
   switch_to_inferior_no_thread (inf);
 
-  /* First check if there is a resumed thread with a wait status
-     pending.  */
+  /* First check if there is a process event or a resumed thread with a
+     wait status pending.  */
   if (ptid == minus_one_ptid || ptid.is_pid ())
     {
+      if (!inf->waitstatus_hidden
+	  && (inf->waitstatus.kind () != TARGET_WAITKIND_IGNORE))
+	{
+	  *status = inf->waitstatus;
+	  inf->waitstatus.set_ignore ();
+	  return ptid_t (inf->pid);
+	}
+
       tp = random_pending_event_thread (inf, ptid);
     }
   else
@@ -4818,11 +4852,10 @@ fetch_inferior_event ()
 		   stop_all_threads_if_all_stop_mode call above must
 		   have seen the process-exit event, as it will see
 		   one stop for each and every (running) thread of the
-		   process.  Look at the pending statuses of all
-		   threads, and see if we have a process-exit status.
-		   If so, prefer handling it now and report the
-		   inferior exit to the user instead of reporting the
-		   original thread exit.
+		   process.  Handling that stop would have propagated the
+		   process event to the thread's inferior.  If so, prefer
+		   handling it now and report the inferior exit to the
+		   user instead of reporting the original thread exit.
 
 		   Do not do this if are handling any other kind of
 		   event, like e.g., a breakpoint hit, which the user
@@ -4832,32 +4865,23 @@ fetch_inferior_event ()
 		   skip this "prefer process-exit" if such a
 		   catchpoint is installed.  */
 		if (ecs.ws.kind () == TARGET_WAITKIND_THREAD_EXITED
-		    && !non_stop && exists_non_stop_target ())
+		    && !non_stop && exists_non_stop_target ()
+		    && ((inf->waitstatus.kind () == TARGET_WAITKIND_EXITED)
+			|| (inf->waitstatus.kind ()
+			    == TARGET_WAITKIND_SIGNALLED)))
 		  {
-		    for (thread_info &thread : inf->non_exited_threads ())
-		      {
-			if (thread.has_pending_waitstatus ()
-			    && ((thread.pending_waitstatus ().kind ()
-				 == TARGET_WAITKIND_EXITED)
-				|| (thread.pending_waitstatus ().kind ()
-				    == TARGET_WAITKIND_SIGNALLED)))
-			  {
-			    /* Found a pending process-exit event.
-			       Prefer handling and reporting it now
-			       over the thread-exit event.  */
-			    infrun_debug_printf
-			      ("found pending process-exit event, preferring it");
-			    ecs.ws = thread.pending_waitstatus ();
-			    thread.clear_pending_waitstatus ();
-			    ecs.event_thread = nullptr;
-			    ecs.ptid = thread.ptid;
-			    /* Re-record the last target status.  */
-			    set_last_target_status (ecs.target, ecs.ptid,
-						    ecs.ws);
-			    handle_process_exited (&ecs);
-			    break;
-			  }
-		      }
+		    /* Found a pending process-exit event.  Prefer
+		       handling and reporting it now over the thread-exit
+		       event.  */
+		    infrun_debug_printf
+		      ("found pending process-exit event, preferring it");
+		    ecs.ws = inf->waitstatus;
+		    inf->waitstatus.set_ignore ();
+		    ecs.event_thread = nullptr;
+		    ecs.ptid = ptid_t (inf->pid);
+		    /* Re-record the last target status.  */
+		    set_last_target_status (ecs.target, ecs.ptid, ecs.ws);
+		    handle_process_exited (&ecs);
 		  }
 	      }
 
@@ -5383,6 +5407,37 @@ poll_one_curr_target (struct target_waitstatus *ws)
   return event_ptid;
 }
 
+/* Poll one event out of any target.  */
+
+static wait_one_event
+poll_one ()
+{
+  for (inferior *inf : all_inferiors ())
+    {
+      process_stratum_target *target = inf->process_target ();
+      if (target == nullptr
+	  || !target->is_async_p ())
+	continue;
+
+      switch_to_inferior_no_thread (inf);
+
+      wait_one_event event;
+      event.target = target;
+      event.ptid = poll_one_curr_target (&event.ws);
+
+      if (event.ws.kind () == TARGET_WAITKIND_NO_RESUMED)
+	{
+	  /* If nothing is resumed, remove the target from the
+	     event loop.  */
+	  target_async (false);
+	}
+      else if (event.ws.kind () != TARGET_WAITKIND_IGNORE)
+	return event;
+    }
+
+  return wait_one_event {};
+}
+
 /* Wait for one event out of any target.  */
 
 static wait_one_event
@@ -5560,47 +5615,26 @@ handle_one (const wait_one_event &event)
       /* All resumed threads exited.  */
       return true;
     }
-  else if (event.ws.kind () == TARGET_WAITKIND_THREAD_EXITED
-	   || event.ws.kind () == TARGET_WAITKIND_EXITED
+  else if (event.ws.kind () == TARGET_WAITKIND_EXITED
 	   || event.ws.kind () == TARGET_WAITKIND_SIGNALLED)
     {
-      /* One thread/process exited/signalled.  */
+      /* One process exited/signaled.  */
+      inferior *inf = find_inferior_pid (event.target, event.ptid.pid ());
+      gdb_assert (inf->waitstatus.kind () == TARGET_WAITKIND_IGNORE);
+      inf->waitstatus = event.ws;
 
-      thread_info *t = nullptr;
+      /* Set the threads as internally stopped to avoid another stop
+	 attempt on them.  */
+      ptid_t ptid (inf->pid);
+      switch_to_inferior_no_thread (inf);
+      mark_internally_stopped_threads (event.target, ptid, event.ws);
+    }
+  else if (event.ws.kind () == TARGET_WAITKIND_THREAD_EXITED)
+    {
+      /* One thread exited.  Don't bother creating the thread if we do not
+	 know about it already; simply ignore the event.  */
 
-      /* The target may have reported just a pid.  If so, try
-	 the first non-exited thread.  */
-      if (event.ptid.is_pid ())
-	{
-	  int pid  = event.ptid.pid ();
-	  inferior *inf = find_inferior_pid (event.target, pid);
-	  for (thread_info &tp : inf->non_exited_threads ())
-	    {
-	      t = &tp;
-	      break;
-	    }
-
-	  /* If there is no available thread, the event would
-	     have to be appended to a per-inferior event list,
-	     which does not exist (and if it did, we'd have
-	     to adjust run control command to be able to
-	     resume such an inferior).  We assert here instead
-	     of going into an infinite loop.  */
-	  gdb_assert (t != nullptr);
-
-	  infrun_debug_printf
-	    ("using %s", t->ptid.to_string ().c_str ());
-	}
-      else
-	{
-	  t = event.target->find_thread (event.ptid);
-	  /* Check if this is the first time we see this thread.
-	     Don't bother adding if it individually exited.  */
-	  if (t == nullptr
-	      && event.ws.kind () != TARGET_WAITKIND_THREAD_EXITED)
-	    t = add_thread (event.target, event.ptid);
-	}
-
+      thread_info *t = event.target->find_thread (event.ptid);
       if (t != nullptr)
 	{
 	  /* Set the threads as internally stopped to avoid another
@@ -5611,14 +5645,11 @@ handle_one (const wait_one_event &event)
 	  save_waitstatus (t, event.ws);
 	  t->stop_requested = false;
 
-	  if (event.ws.kind () == TARGET_WAITKIND_THREAD_EXITED)
+	  if (displaced_step_finish (t, event.ws)
+	      != DISPLACED_STEP_FINISH_STATUS_OK)
 	    {
-	      if (displaced_step_finish (t, event.ws)
-		  != DISPLACED_STEP_FINISH_STATUS_OK)
-		{
-		  gdb_assert_not_reached ("displaced_step_finish on "
-					  "exited thread failed");
-		}
+	      gdb_assert_not_reached ("displaced_step_finish on "
+				      "exited thread failed");
 	    }
 	}
     }
@@ -5789,6 +5820,12 @@ stop_all_threads (const char *reason, inferior *inf)
   infrun_debug_show_threads ("non-exited threads",
 			     all_non_exited_threads ());
 
+  /* Hide process events, both old events that had been received on a
+     previous stop_all_threads () and new events that will be received
+     below.  */
+  for (inferior *inferior : all_non_exited_inferiors ())
+    inferior->waitstatus_hidden = true;
+
   scoped_restore_current_thread restore_thread;
 
   /* Enable thread events on relevant targets.  */
@@ -5892,7 +5929,34 @@ stop_all_threads (const char *reason, inferior *inf)
 	    }
 
 	  if (waits_needed == 0)
-	    break;
+	    {
+	      /* Poll process (exited/signalled) events.
+
+		 GDB used to keep the last thread of an inferior alive
+		 even though it received a thread exited event, so it
+		 could attach the process exited/signalled event to that
+		 last thread.
+
+		 If we encountered this while stopping threads, since the
+		 stopped threads are set internally stopped, this hid
+		 those events from the event queue until we resumed the
+		 thread again.
+
+		 We now remove those last threads.  To preserve the
+		 existing behavior, we poll any pending events (which
+		 should only be process events since there are no threads
+		 to stop).  */
+	      for (;;)
+		{
+		  wait_one_event event = poll_one ();
+		  if (event.target == nullptr)
+		    break;
+		  if (handle_one (event))
+		    break;
+		}
+
+	      break;
+	    }
 
 	  /* If we find new threads on the second iteration, restart
 	     over.  We want to see two iterations in a row with all

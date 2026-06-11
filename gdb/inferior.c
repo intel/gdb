@@ -375,6 +375,7 @@ inferior_appeared (struct inferior *inf, int pid)
   inf->pid = pid;
   inf->has_exit_code = false;
   inf->exit_code = 0;
+  inf->waitstatus.set_ignore ();
 
   notify_inferior_appeared (inf);
 }

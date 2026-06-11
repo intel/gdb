@@ -35,10 +35,7 @@ fourth (int x4, int *y4)
       while (count > 0) count--;
       int *src = nullptr;
       *src = result;  /* pagefault-line */
-      /* Spin a very long time, to let the faulting write trigger the SIGSEGV.
-	 Counter ensures this does not run infinitely.  */
-      count = 1e8;
-      while (count > 0) count--;  /* faulting-thread-spin-line */
+      return result;  /* faulting-thread-returning */
     }
   else
     {
@@ -46,9 +43,9 @@ fourth (int x4, int *y4)
 	 Counter ensures this does not run infinitely.  */
       size_t count = 1e8;
       while (count > 0) count--;  /* non-faulting-thread-spin-line */
+      return result;  /* non-faulting-thread-returning */
     }
 
-  return result;  /* line after pagefault */
 }
 
 int

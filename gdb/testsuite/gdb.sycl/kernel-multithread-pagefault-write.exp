@@ -33,7 +33,6 @@ if {[build_executable "failed to compile $srcfile" \
 set fill "\[^\r\n\]*"
 set ws "\\s+"
 
-set pf_spin_ln [gdb_get_line_number "faulting-thread-spin-line"]
 set third_ln [gdb_get_line_number "func-third"]
 set second_ln [gdb_get_line_number "func-second"]
 set first_ln [gdb_get_line_number "func-first"]
@@ -63,7 +62,7 @@ foreach device $sycl_device_list {
 	setup_kfail "JIRA GSD/10020" "*-*-*"
 	gdb_test "backtrace 5" \
 		[multi_line \
-		    "#0$fill fourth $fill at $srcfile:$pf_spin_ln" \
+		    "#0$fill fourth $fill at $srcfile:$::decimal" \
 		    "#1$fill third $fill at $srcfile:$third_ln" \
 		    "#2$fill second $fill at $srcfile:$second_ln" \
 		    "#3$fill first $fill at $srcfile:$first_ln" \

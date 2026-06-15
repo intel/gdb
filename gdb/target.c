@@ -2767,7 +2767,8 @@ default_mourn_inferior (struct target_ops *self)
 void
 target_mourn_inferior (ptid_t ptid)
 {
-  gdb_assert (ptid.pid () == inferior_ptid.pid ());
+  gdb_assert (ptid == null_ptid || ptid.pid () == current_inferior ()->pid);
+  gdb_assert (ptid == null_ptid || ptid.pid () == inferior_ptid.pid ());
   current_inferior ()->top_target ()->mourn_inferior ();
 }
 

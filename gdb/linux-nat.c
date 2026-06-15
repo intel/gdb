@@ -3732,13 +3732,14 @@ linux_nat_target::mourn_inferior ()
 {
   LINUX_NAT_SCOPED_DEBUG_ENTER_EXIT;
 
-  int pid = inferior_ptid.pid ();
+  inferior *inf = current_inferior ();
+  int pid = inf->pid;
 
   purge_lwp_list (pid);
 
   close_proc_mem_file (pid);
 
-  if (! forks_exist_p (current_inferior ()))
+  if (! forks_exist_p (inf))
     /* Normal case, no other forks available.  */
     inf_ptrace_target::mourn_inferior ();
   else

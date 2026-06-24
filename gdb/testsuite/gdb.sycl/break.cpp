@@ -74,6 +74,9 @@ struct ParallelFor
       int b = 0; /* kernel.4 */
       int c = 0; /* kernel.5 */
       int d = 0; /* kernel.6 */
+      int e = 0; /* kernel.7 */
+      int f = 0; /* kernel.8 */
+      int g = 0; /* kernel.9 */
     }
 
   /* Test that we're not leaking kernel breakpoints into the host.  */

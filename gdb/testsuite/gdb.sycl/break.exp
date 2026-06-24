@@ -78,6 +78,9 @@ foreach device $sycl_device_list {
 	set kernel_4 [gdb_get_line_number "kernel.4"]
 	set kernel_5 [gdb_get_line_number "kernel.5"]
 	set kernel_6 [gdb_get_line_number "kernel.6"]
+	set kernel_7 [gdb_get_line_number "kernel.7"]
+	set kernel_8 [gdb_get_line_number "kernel.8"]
+	set kernel_9 [gdb_get_line_number "kernel.9"]
 
 	# The user-defined kernel function is wrapped by an actual kernel
 	# provided by the compiler when offloading to a device, so the
@@ -227,7 +230,6 @@ foreach device $sycl_device_list {
 	    set bp_dis [get_integer_valueof "\$bpnum" invalid "disable bp"]
 	    gdb_breakpoint $srcfile:$kernel_5 -message
 	    set bp_del [get_integer_valueof "\$bpnum" invalid "delete bp"]
-	    gdb_breakpoint $srcfile:$kernel_6 -message
 
 	    gdb_continue_to_breakpoint "kernel.3" ".*kernel.3.*"
 	    gdb_continue_to_breakpoint "kernel.4" ".*kernel.4.*"
@@ -236,11 +238,53 @@ foreach device $sycl_device_list {
 	    gdb_continue_to_breakpoint "kernel.5" ".*kernel.5.*"
 	    gdb_test_no_output "delete $bp_del"
 
-	    # We hit kernel.6 once for each workgroup.
-	    gdb_continue_to_breakpoint "kernel.6.1" ".*kernel.6.*"
-	    gdb_continue_to_breakpoint "kernel.6.2" ".*kernel.6.*"
+	    # Until here, the first thread to reach the breakpoint
+	    # stopped, and the other thread cannot be ahead of it.
 
-	    gdb_test "continue" "$inferior_exited_re normally.*"
+	    gdb_breakpoint "$kernel_6 if (gid == 0)" -message
+	    gdb_breakpoint "$kernel_7 if (id.get (0) > 0)" -message
+	    gdb_breakpoint "$kernel_8 if (gid < 0)" -message
+	    gdb_breakpoint "$kernel_9 if (gid >= 0)" -message
+
+	    # The conditions we define apply to one, both, or none of the
+	    # threads.  This allows threads to proceed independently and
+	    # report events out of order.  E.g. one thread may hit the
+	    # breakpoint at kernel.6, fail condition evaluation, and
+	    # proceed to kernel.7 before the other thread reaches
+	    # kernel.6.
+	    set bp_6 0
+	    set bp_7 0
+	    set bp_8 0
+	    set bp_9 0
+	    gdb_test_multiple "continue" "conditional breakpoints" {
+		-re -wrap "hit Breakpoint.*kernel.6.*" {
+		    incr bp_6
+		    send_gdb "continue\n"
+		    exp_continue
+		}
+		-re -wrap "hit Breakpoint.*kernel.7.*" {
+		    incr bp_7
+		    send_gdb "continue\n"
+		    exp_continue
+		}
+		-re -wrap "hit Breakpoint.*kernel.8.*" {
+		    incr bp_8
+		    send_gdb "continue\n"
+		    exp_continue
+		}
+		-re -wrap "hit Breakpoint.*kernel.9.*" {
+		    incr bp_9
+		    send_gdb "continue\n"
+		    exp_continue
+		}
+		-re -wrap "$inferior_exited_re normally.*" {
+		    gdb_assert {$bp_6 eq 1} "$gdb_test_name: kernel.6"
+		    gdb_assert {$bp_7 eq 1} "$gdb_test_name: kernel.7"
+		    gdb_assert {$bp_8 eq 0} "$gdb_test_name: kernel.8"
+		    gdb_assert {$bp_9 eq 2} "$gdb_test_name: kernel.9"
+		    pass "$gdb_test_name: exited normally"
+		}
+	    }
 	}
     }
 }

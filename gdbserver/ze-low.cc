@@ -1729,6 +1729,16 @@ ze_target::async (bool enable)
 }
 
 int
+ze_target::start_non_stop (bool enable)
+{
+  if (!enable)
+    error (_("Cannot run in all-stop mode."));
+
+  async (enable);
+  return 0;
+}
+
+int
 ze_target::create_inferior (const char *program,
 			    const std::string &args)
 {

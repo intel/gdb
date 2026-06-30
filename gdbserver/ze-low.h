@@ -321,7 +321,8 @@ public:
   bool supports_range_stepping () override { return true; }
   bool supports_multi_process () override { return true; }
   bool supports_non_stop () override { return true; }
-  int start_non_stop (bool enable) override { async (enable); return 0; }
+  bool always_non_stop () override { return true; }
+  int start_non_stop (bool enable) override;
 
   bool async (bool enable) override;
 

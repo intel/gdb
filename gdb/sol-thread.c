@@ -1,6 +1,7 @@
 /* Solaris threads debugging interface.
 
    Copyright (C) 1996-2026 Free Software Foundation, Inc.
+   Copyright (C) 2020-2026 Intel Corporation.
 
    This file is part of GDB.
 

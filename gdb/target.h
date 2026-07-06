@@ -1,6 +1,7 @@
 /* Interface between GDB and target environments, including files and processes
 
    Copyright (C) 1990-2026 Free Software Foundation, Inc.
+   Copyright (C) 2021-2026 Intel Corporation.
 
    Contributed by Cygnus Support.  Written by John Gilmore.
 

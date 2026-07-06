@@ -1,6 +1,7 @@
 /* Parser for linespec for the GNU debugger, GDB.
 
    Copyright (C) 1986-2026 Free Software Foundation, Inc.
+   Copyright (C) 2019-2026 Intel Corporation.
 
    This file is part of GDB.
 

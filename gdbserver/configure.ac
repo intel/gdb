@@ -1,5 +1,6 @@
 dnl Autoconf configure script for GDB server.
 dnl Copyright (C) 2000-2026 Free Software Foundation, Inc.
+dnl Copyright (C) 2020-2026 Intel Corporation.
 dnl
 dnl This file is part of GDB.
 dnl

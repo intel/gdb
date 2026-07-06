@@ -1,6 +1,7 @@
 /* GDB routines for manipulating objfiles.
 
    Copyright (C) 1992-2026 Free Software Foundation, Inc.
+   Copyright (C) 2023-2026 Intel Corporation.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
 

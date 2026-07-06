@@ -1,5 +1,6 @@
 /* MI Command Set - varobj commands.
    Copyright (C) 2000-2026 Free Software Foundation, Inc.
+   Copyright (C) 2023-2026 Intel Corporation.
 
    Contributed by Cygnus Solutions (a Red Hat company).
 

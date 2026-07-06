@@ -1,5 +1,6 @@
 /* Interface for common GDB/MI data
    Copyright (C) 2005-2026 Free Software Foundation, Inc.
+   Copyright (C) 2024-2026 Intel Corporation.
 
    This file is part of GDB.
 

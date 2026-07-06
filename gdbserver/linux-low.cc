@@ -1,5 +1,6 @@
 /* Low level interface to ptrace, for the remote server for GDB.
    Copyright (C) 1995-2026 Free Software Foundation, Inc.
+   Copyright (C) 2021-2026 Intel Corporation.
 
    This file is part of GDB.
 

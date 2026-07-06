@@ -1,6 +1,7 @@
 /* Target-dependent code for s390.
 
    Copyright (C) 2001-2026 Free Software Foundation, Inc.
+   Copyright (C) 2025-2026 Intel Corporation.
 
    This file is part of GDB.
 

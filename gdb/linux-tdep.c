@@ -1,6 +1,7 @@
 /* Target-dependent code for GNU/Linux, architecture independent.
 
    Copyright (C) 2009-2026 Free Software Foundation, Inc.
+   Copyright (C) 2022-2026 Intel Corporation.
 
    This file is part of GDB.
 
